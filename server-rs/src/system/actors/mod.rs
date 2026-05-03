@@ -10,6 +10,7 @@ use tokio::sync::oneshot;
 
 pub mod manager;
 pub mod audit_actor;
+<<<<<<< HEAD
 pub mod memory_actor;
 pub mod security_actor;
 
@@ -24,6 +25,8 @@ pub enum SecurityAction {
     /// PII detection: Scan text for sensitive data.
     PiiCheck { text: String },
 }
+=======
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
 
 /// ### 🧬 Protocol: SystemMessage
 /// Unified message enumeration for the Sovereign Actor Kernel.
@@ -54,6 +57,7 @@ pub enum SystemMessage {
 
     /// System-wide shutdown signal to drain actors.
     Shutdown,
+<<<<<<< HEAD
 
     /// Request a security validation (Budget, Shell, PII).
     SecurityCheck {
@@ -61,6 +65,8 @@ pub enum SystemMessage {
         action: SecurityAction,
         resp: oneshot::Sender<Result<bool, AppError>>,
     },
+=======
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
 }
 
 /// Registry of MPSC senders for system actors.
@@ -68,5 +74,8 @@ pub enum SystemMessage {
 pub struct ActorRegistry {
     pub audit: tokio::sync::mpsc::UnboundedSender<SystemMessage>,
     pub memory: tokio::sync::mpsc::UnboundedSender<SystemMessage>,
+<<<<<<< HEAD
     pub security: tokio::sync::mpsc::Sender<SystemMessage>, // Bounded for reliability
+=======
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
 }

@@ -27,7 +27,11 @@ use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
 use std::sync::Arc;
 use tokio::sync::{broadcast, OnceCell};
+<<<<<<< HEAD
 use crate::system::actors::{ActorRegistry, SecurityAction};
+=======
+use crate::system::actors::ActorRegistry;
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
 use tracing::{info, error, debug};
 
 pub mod hubs;
@@ -630,7 +634,11 @@ impl AppState {
             };
 
             if let Err(e) = actors.audit.send(msg) {
+<<<<<<< HEAD
                 tracing::error!("🚨 [Kernel] Failed to dispatch audit message: {:?}", e);
+=======
+                error!("🚨 [Kernel] Failed to dispatch audit message: {:?}", e);
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
                 return Err(AppError::InternalServerError("Audit dispatcher failure".to_string()));
             }
 
@@ -642,6 +650,7 @@ impl AppState {
         }
     }
 
+<<<<<<< HEAD
     /// ### 🧠 [Kernel] Sovereign Memory Save
     /// Dispatches a memory persistence request to the background MemoryActor.
     pub async fn save_memory_sovereign(
@@ -764,6 +773,8 @@ impl AppState {
         }
     }
 
+=======
+>>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
     /// ### 📡 Observability: System Broadcast (broadcast_sys)
     /// Publishes a high-priority system event to all connected telemetry 
     /// consumers (WebSockets, OTel exporters).
