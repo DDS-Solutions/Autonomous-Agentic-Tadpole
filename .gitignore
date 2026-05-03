@@ -1,0 +1,23 @@
+# Rust build artifacts
+target/
+debug/
+release/
+
+# Node.js dependencies
+node_modules/
+
+# Environment and Secrets
+.env
+*.key
+*.pem
+
+# IDEs and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Tadpole Temporary Files
+tmp/
+*.log
+.agent/
