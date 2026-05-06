@@ -75,6 +75,11 @@ impl AgentRunner {
             agent.economics.cost_usd += turn_cost;
             // [Health Monitoring] Reset failure count on success
             agent.health.failure_count = 0;
+            
+            // ### 🔗 Swarm Connectivity: Cleanup
+            // Clear the active mission link so the agent returns to an idle state in the visualizer.
+            agent.state.active_mission = None;
+
             // Status is handled by update_status() at the end of the run
 
             // Record to persistent budget guard
@@ -232,6 +237,10 @@ impl AgentRunner {
             let agent = entry.value_mut();
             agent.health.failure_count += 1;
             agent.health.last_failure_at = Some(chrono::Utc::now());
+
+            // ### 🔗 Swarm Connectivity: Cleanup
+            // Clear the active mission link so the agent returns to an idle state in the visualizer.
+            agent.state.active_mission = None;
 
             let agent_data = agent.clone();
             drop(entry); // Release DashMap lock before async calls

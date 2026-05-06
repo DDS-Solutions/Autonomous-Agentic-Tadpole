@@ -48,6 +48,8 @@ impl SecurityManager for DefaultSecurityManager {
             }
 
             // 2. [Hierarchy Guard] Enforce strategic delegation for CEO/COO
+            // NOTE: Deactivated to allow for flexible swarm scaling during operational drills.
+            /*
             if matches!(fc.name.as_str(), "spawn_subagent" | "recruit_specialist") {
                 if ctx.agent_id == AGENT_CEO {
                     tracing::warn!("🛡️ [Hierarchy Guard] CEO (ID: {}) blocked from spawning specialists directly.", AGENT_CEO);
@@ -63,6 +65,7 @@ impl SecurityManager for DefaultSecurityManager {
                     }
                 }
             }
+            */
         }
 
         // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy first

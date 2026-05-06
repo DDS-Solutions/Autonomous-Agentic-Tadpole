@@ -1,3 +1,15 @@
+/**
+ * @docs ARCHITECTURE:UI-Pages
+ * 
+ * ### AI Assist Note
+ * **Core technical resource for the Tadpole OS Sovereign infrastructure.**
+ * Handles reactive state and high-fidelity user interactions.
+ * 
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[Governance_View]` in observability traces.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { system_api_service } from '../services/system_api_service';
 import { use_settings_store } from '../stores/settings_store';
@@ -222,3 +234,5 @@ export default function Governance_View() {
         </div>
     );
 }
+
+// Metadata: [Governance_View]

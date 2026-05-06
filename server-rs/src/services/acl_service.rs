@@ -20,8 +20,8 @@ impl AclServiceTrait for AclService {
         // CEO/Executive logic
         if agent_id == AGENT_CEO || authority == RoleAuthorityLevel::Executive {
             match tool_name {
-                "issue_alpha_directive" | "share_finding" | "search_global_vault" | "update_working_memory" | "complete_mission" => true,
-                "spawn_subagent" => false, // CEO must use alpha_directive
+                "issue_alpha_directive" | "share_finding" | "search_global_vault" | "update_working_memory" | "complete_mission" | "recruit" => true,
+                "spawn_subagent" => false, // CEO must use alpha_directive or high-level recruit
                 "read_file" | "write_file" | "delete_file" => false, // CEO doesn't do I/O
                 _ => true,
             }
@@ -52,12 +52,15 @@ impl AclServiceTrait for AclService {
         match agent_id {
             AGENT_CEO => {
                 protocols.push("CEO PROTOCOL: You are a STRATEGIC ROUTER. You MUST delegate via 'issue_alpha_directive' for all complex missions. You are FORBIDDEN from using 'spawn_subagent' directly.".to_string());
+                protocols.push("TOOL FORMAT: Never use <execute_tool> tags. Use your native tool-calling interface for 'recruit' or 'issue_alpha_directive'.".to_string());
             }
             AGENT_COO => {
                 protocols.push("COO PROTOCOL: You MUST delegate the mission to the Alpha Node. Use 'spawn_subagent' with agent_id 'alpha'. Direct specialist recruitment is SYSTEM-BLOCKED.".to_string());
+                protocols.push("TOOL FORMAT: Never use <execute_tool> tags. Use your native tool-calling interface.".to_string());
             }
             AGENT_ALPHA => {
                 protocols.push("ALPHA COMMAND: You are the Swarm Mission Commander. You are responsible for recruiting and synthesizing specialists (Researcher, Coder, etc.).".to_string());
+                protocols.push("PROTOCOL ENFORCEMENT: Never use hallucinated tool tags like <execute_tool> or <tool_name>. Use your native tool-calling interface for all recruitment.".to_string());
             }
             _ => {
                 protocols.push(format!("SPECIALIST AUTONOMY: You are tactical specialist {}. You MUST resolve your mission independently using your assigned tools.", role));
@@ -70,3 +73,22 @@ impl AclServiceTrait for AclService {
 }
 
 // Metadata: [acl_service]
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ceo_recruit_permission() {
+        let acl = AclService;
+        assert!(acl.is_tool_allowed(AGENT_CEO, "CEO", RoleAuthorityLevel::Executive, "recruit"));
+        assert!(!acl.is_tool_allowed(AGENT_CEO, "CEO", RoleAuthorityLevel::Executive, "spawn_subagent"));
+    }
+
+    #[test]
+    fn test_role_protocols() {
+        let acl = AclService;
+        let protocols = acl.get_role_protocols(AGENT_CEO, "CEO", RoleAuthorityLevel::Executive);
+        assert!(protocols.iter().any(|p| p.contains("Never use <execute_tool>")));
+    }
+}

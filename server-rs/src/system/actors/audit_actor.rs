@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:SecurityAudit**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[audit_actor]` in tracing logs.
+
 //! @docs ARCHITECTURE:SecurityAudit
 //!
 //! ### Audit Actor (Sequential Sink)
@@ -60,3 +70,5 @@ impl AuditActor {
         info!("🛡️ [AuditActor] Shutdown complete.");
     }
 }
+
+// Metadata: [audit_actor]

@@ -1,6 +1,16 @@
 //! @docs ARCHITECTURE:Registry
 //! 
 //! ### AI Assist Note
+//! **! @docs ARCHITECTURE:Registry**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[registry]` in tracing logs.
+
+//! @docs ARCHITECTURE:Registry
+//! 
+//! ### AI Assist Note
 //! **Tool Registry**: Centralizes the management of all available agent 
 //! capabilities. Uses the **Zero-Trust Tool Trait** to ensure that every 
 //! tool is isolated and audited.
@@ -17,7 +27,7 @@ pub const BUILTIN_TOOLS: &[&str] = &[
     "notify_discord", "fetch_url", "read_file", "write_file", "list_files", 
     "delete_file", "search_mission_knowledge", "read_codebase_file", 
     "list_file_symbols", "get_symbol_body", "update_working_memory",
-    "recruit_specialist", "get_agent_metrics", "script_builder", "pin_mission"
+    "recruit_specialist", "recruit", "get_agent_metrics", "script_builder", "pin_mission"
 ];
 
 pub struct ToolRegistry {
@@ -44,5 +54,7 @@ impl ToolRegistry {
         self.handlers.values().map(|t| t.metadata()).collect()
     }
 }
+
+// Metadata: [registry]
 
 // Metadata: [registry]

@@ -36,7 +36,8 @@ export default function Engine_Dashboard() {
         active_agents, 
         max_depth, 
         tpm, 
-        recruit_count 
+        recruit_count,
+        memory_total
     } = useEngineStatus();
     const { settings } = use_settings_store();
     const { is_swarm_pulse_detached, toggle_swarm_pulse_detachment } = use_tab_store();
@@ -50,7 +51,7 @@ export default function Engine_Dashboard() {
         },
         { 
             label: i18n.t('engine_dashboard.label_memory'), 
-            value: `${memory.toFixed(1)}GB`, 
+            value: `${(memory / (1024 * 1024 * 1024)).toFixed(1)}GB`, 
             icon: HardDrive, 
             color: 'text-emerald-400' 
         },
@@ -131,7 +132,7 @@ export default function Engine_Dashboard() {
                                 <div className={`h-1 w-full rounded-full bg-zinc-800 overflow-hidden`}>
                                     <div
                                         className={`h-full bg-current transition-all duration-100 ${stat.color}`}
-                                        style={{ width: stat.label === i18n.t('engine_dashboard.label_cpu') ? `${cpu}%` : stat.label === i18n.t('engine_dashboard.label_memory') ? `${(memory / 16) * 100}%` : '50%' }}
+                                        style={{ width: stat.label === i18n.t('engine_dashboard.label_cpu') ? `${cpu}%` : stat.label === i18n.t('engine_dashboard.label_memory') ? `${(memory / (memory_total || 16 * 1024 * 1024 * 1024)) * 100}%` : '50%' }}
                                     />
                                 </div>
                             </div>

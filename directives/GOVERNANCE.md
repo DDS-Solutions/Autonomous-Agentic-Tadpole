@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[GOVERNANCE]` in audit logs.
+>
+> ### AI Assist Note
+> ⚖️ Sovereign Governance Charter: Autonomous Agentic Tadpole
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # ⚖️ Sovereign Governance Charter: Autonomous Agentic Tadpole
 
 ## 1. The Aletheia Protocol (Self-Correction Loop)
@@ -23,3 +36,5 @@ All autonomous actions must pass through the triple-gate verification loop:
 
 ## 5. Escalation Policy
 If the **Kernel** detects a systemic fault that it cannot self-heal after 3 attempts, it MUST pause all operations and alert Entity 0 with a high-fidelity diagnostic dossier.
+
+[//]: # (Metadata: [GOVERNANCE])

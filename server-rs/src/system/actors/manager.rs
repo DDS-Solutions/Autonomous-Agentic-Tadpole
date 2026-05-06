@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:SovereignKernel**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[manager]` in tracing logs.
+
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### Actor Manager (Lifecycle Orchestrator)
@@ -57,3 +67,5 @@ pub async fn spawn_system_actors(app_state: &Arc<AppState>) -> ActorRegistry {
         skill: skill_tx,
     }
 }
+
+// Metadata: [manager]

@@ -1,0 +1,79 @@
+openapi: 3.0.0
+info:
+  title: Tadpole OS Sovereign API
+  version: 1.1.5
+paths:
+  /v1/agents:
+    get:
+      summary: Get all agents
+    post:
+      summary: Create agent
+  /v1/agents/graph:
+    get:
+      summary: Get agent graph
+  /v1/infra/nodes:
+    get:
+      summary: Get infrastructure nodes
+  /v1/infra/nodes/discover:
+    post:
+      summary: Discover new nodes
+  /v1/model-manager/providers:
+    get:
+      summary: Get model providers
+  /v1/skills:
+    get:
+      summary: Get all skills
+  /v1/skills/manifests:
+    get:
+      summary: Get skill manifests
+  /v1/benchmarks:
+    get:
+      summary: Get benchmarks
+    post:
+      summary: Run benchmark
+  /v1/continuity/jobs:
+    get:
+      summary: Get scheduled jobs
+    post:
+      summary: Create job
+  /v1/docs/knowledge:
+    get:
+      summary: Search knowledge base
+  /v1/system/compute-profile:
+    get:
+      summary: Get compute profile
+  /v1/governance/blueprints:
+    get:
+      summary: Get governance blueprints
+    post:
+      summary: Create blueprint
+  /v1/env-schema:
+    get:
+      summary: Get environment schema
+  /v1/engine/health:
+    get:
+      summary: Engine health check
+  /v1/engine/deploy:
+    post:
+      summary: Deploy engine
+  /v1/engine/kill:
+    post:
+      summary: Terminate engine
+  /v1/engine/ws:
+    get:
+      summary: Websocket gateway
+  /v1/engine/live-voice:
+    get:
+      summary: Live voice stream
+  /v1/engine/transcribe:
+    post:
+      summary: Transcribe audio
+  /v1/engine/speak:
+    post:
+      summary: Text to speech
+  /v1/api/pull:
+    post:
+      summary: Pull model from registry
+  /v1/intelligence/analyze:
+    post:
+      summary: Tactical UI Analysis

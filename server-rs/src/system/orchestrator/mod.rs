@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:Autonomy**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
+
 //! @docs ARCHITECTURE:Autonomy
 //!
 //! ### Autonomous Orchestrator
@@ -68,26 +78,50 @@ impl Orchestrator {
             // Future: Push to FAULT_REGISTRY table here
         }
 
-        // Also fail missions that have been active but have no associated "busy" agents
+        // 7. Also fail missions that have been active but have no associated "busy" agents
         // (i.e., the agent process died without the mission finishing)
         let ghost_missions: Vec<String> = sqlx::query_scalar(
             "SELECT id FROM mission_history 
              WHERE status = 'active' 
-             AND id NOT IN (SELECT active_mission FROM agents WHERE status = 'busy')"
+             AND id NOT IN (
+                 SELECT json_extract(active_mission, '$.id') 
+                 FROM agents 
+                 WHERE status IN ('busy', 'active', 'thinking')
+             )"
         )
         .fetch_all(pool)
         .await
         .map_err(crate::error::AppError::Sqlx)?;
 
         for mid in ghost_missions {
-            warn!("👻 [Orchestrator] Detected ghost mission: {}. Marking as failed.", mid);
-            sqlx::query("UPDATE mission_history SET status = 'failed' WHERE id = ?")
-                .bind(&mid)
-                .execute(pool)
-                .await
-                .map_err(crate::error::AppError::Sqlx)?;
+            // CRITICAL SECOND CHECK: Verify against live in-memory registry
+            // The DB might be lagging during high-load swarm recruitment.
+            let mut is_truly_ghost = true;
+            for entry in self.app_state.registry.agents.iter() {
+                let agent = entry.value();
+                if let Some(active_mission) = &agent.state.active_mission {
+                    if let Some(agent_mid) = active_mission.get("id").and_then(|v| v.as_str()) {
+                        if agent_mid == mid {
+                            debug!("🛡️ [Orchestrator] Ghost mission candidate {} is active in registry for agent {}. Skipping reap.", mid, agent.identity.id);
+                            is_truly_ghost = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if is_truly_ghost {
+                warn!("👻 [Orchestrator] Detected ghost mission: {}. Marking as failed.", mid);
+                sqlx::query("UPDATE mission_history SET status = 'failed' WHERE id = ?")
+                    .bind(&mid)
+                    .execute(pool)
+                    .await
+                    .map_err(crate::error::AppError::Sqlx)?;
+            }
         }
 
         Ok(())
     }
 }
+
+// Metadata: [mod]

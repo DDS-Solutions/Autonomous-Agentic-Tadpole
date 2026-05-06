@@ -1,4 +1,16 @@
 /**
+ * @docs ARCHITECTURE:UI-Services
+ * 
+ * ### AI Assist Note
+ * **@docs ARCHITECTURE:Agent**
+ * Handles reactive state and high-fidelity user interactions.
+ * 
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[browser_inference]` in observability traces.
+ */
+
+/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
@@ -84,7 +96,13 @@ class BrowserInferenceService {
         }
 
         this.status = 'thinking';
-        const input = `SYSTEM: You are a Browser Specialist Agent. Analyze the following UI state and answer the user query concisely.
+        
+        // Dynamic system prompt based on whether it's a direct user query or a sentinel scan
+        const system_prompt = prompt.includes('SENTINEL_SCAN') 
+            ? "You are a Sentinel Monitor. Detect UI anomalies, errors, or high entropy. If you find a critical issue, include 'ESCALATE_TO_ARCHITECT' in your response."
+            : "You are a Browser Specialist Agent. Analyze the following UI state and answer the user query concisely.";
+
+        const input = `SYSTEM: ${system_prompt}
 UI_STATE:
 ${dom_summary}
 
@@ -93,16 +111,42 @@ ASSISTANT:`;
 
         try {
             const output = await this.pipe(input, {
-                max_new_tokens: 128,
-                temperature: 0.7,
+                max_new_tokens: 256,
+                temperature: 0.2, // Lower temp for more deterministic analysis
             });
             this.status = 'idle';
-            return output[0].generated_text.split('ASSISTANT:')[1]?.trim() || "Analysis complete.";
+            const text = output[0].generated_text.split('ASSISTANT:')[1]?.trim() || "Analysis complete.";
+            
+            // Handle Autonomous Escalation
+            if (text.includes('ESCALATE_TO_ARCHITECT')) {
+                await this.escalate_to_architect(text, dom_summary);
+            }
+            
+            return text;
         } catch (err) {
             this.status = 'error';
             console.error('🧠 [BrowserSpecialist] Inference failed:', err);
             return "ERROR: Local inference failed.";
         }
+    }
+
+    /**
+     * Escalates a high-entropy state to the local computer models.
+     */
+    private async escalate_to_architect(reason: string, context: string) {
+        console.warn('🧠 [BrowserSpecialist] HIGH ENTROPY DETECTED. Escalating to Computer Architect...');
+        
+        const { event_bus } = await import('./event_bus');
+        event_bus.emit_log({
+            source: 'System',
+            text: `🚨 SENTINEL ALERT: High entropy detected in UI. Escalating to Architect core for remediation. Reason: ${reason.substring(0, 100)}...`,
+            severity: 'error',
+            metadata: {
+                escalation_reason: reason,
+                ui_context: context,
+                type: 'NEURAL_HANDOFF'
+            }
+        });
     }
 
     get_status(): InferenceStatus {
@@ -111,3 +155,5 @@ ASSISTANT:`;
 }
 
 export const browser_inference_service = new BrowserInferenceService();
+
+// Metadata: [browser_inference]

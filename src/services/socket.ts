@@ -20,6 +20,7 @@ import { event_bus } from './event_bus';
 import { get_settings, use_settings_store } from '../stores/settings_store';
 import type { Message_Part, Swarm_Pulse } from '../types';
 import { decode } from '@msgpack/msgpack';
+import { sanitize_payload } from '../utils/security_utils';
 
 /** Payload for agent update/status events from the WebSocket. */
 export interface Agent_Update_Event {
@@ -43,8 +44,10 @@ export interface Engine_Health_Event {
     max_depth?: number;
     tpm?: number;
     recruit_count?: number;
+    activeProcesses?: number;
     cpu?: number;
     memory?: number;
+    memory_total?: number;
     latency?: number;
     [key: string]: unknown;
 }
@@ -297,7 +300,28 @@ class Tadpole_OS_Socket_Client {
                     } else if (header === 0x02) {
                         // Swarm Pulse (MessagePack)
                         try {
-                            const pulse = decode(payload) as Swarm_Pulse;
+                            const raw = decode(payload) as any;
+                            
+                            // Fully recursive normalization function to ensure fields match TS interfaces 
+                            // regardless of MessagePack serialization strategy (Array vs Map)
+                            const normalize_pulse = (data: any): Swarm_Pulse => {
+                                if (Array.isArray(data)) {
+                                    return {
+                                        timestamp: data[0],
+                                        nodes: (data[1] || []).map((n: any) => Array.isArray(n) ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } : n),
+                                        edges: (data[2] || []).map((e: any) => Array.isArray(e) ? { source: e[0], target: e[1] } : e)
+                                    };
+                                } else {
+                                    // Even if top-level is a Map, children might be Arrays depending on rmp-serde recursion config
+                                    return {
+                                        timestamp: data.timestamp || 0,
+                                        nodes: (data.nodes || []).map((n: any) => Array.isArray(n) ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } : n),
+                                        edges: (data.edges || []).map((e: any) => Array.isArray(e) ? { source: e[0], target: e[1] } : e)
+                                    };
+                                }
+                            };
+
+                            const pulse = normalize_pulse(raw);
                             this.pulse_listeners.forEach(l => l(pulse));
                         } catch (e) {
                             console.error('[Tadpole_OS] Failed to decode swarm pulse:', e);
@@ -338,7 +362,9 @@ class Tadpole_OS_Socket_Client {
         }
     }
 
-    private async handle_socket_message(data: Record<string, unknown>): Promise<void> {
+    private async handle_socket_message(raw_data: Record<string, unknown>): Promise<void> {
+        // SEC-02: Sanitize all incoming telemetry data before it reaches the event bus or stores.
+        const data = sanitize_payload(raw_data);
         const { use_agent_store, use_sovereign_store, use_trace_store } = await this.get_store_bindings();
         const sovereign_store = use_sovereign_store.getState();
 

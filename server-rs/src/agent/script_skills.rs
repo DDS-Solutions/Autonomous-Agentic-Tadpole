@@ -587,3 +587,7 @@ This is the body content."#;
         );
     }
 }
+
+// Metadata: [script_skills]
+
+// Metadata: [script_skills]

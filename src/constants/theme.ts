@@ -33,7 +33,7 @@ export const THEME_COLORS = {
     // Special Effects
     GLOW_CYAN: 'rgba(34, 211, 238, 0.4)',
     GLOW_ROSE: 'rgba(244, 63, 94, 0.4)',
-    NEURAL_GRID: 'rgba(255, 255, 255, 0.05)',
+    NEURAL_GRID: 'rgba(255, 255, 255, 0.15)',
     
     // Backgrounds (Matching zinc-950/900)
     DARK_BG: '#09090b',
@@ -42,7 +42,7 @@ export const THEME_COLORS = {
 
 export const GRAPH_THEME = {
     NODE_RADIUS: 5,
-    LINK_WIDTH: 1,
+    LINK_WIDTH: 1.5,
     PARTICLE_SPEED: 0.005,
     LABEL_FONT: 'Inter, system-ui',
     TELEMETRY_BG: 'rgba(255, 255, 255, 0.1)',

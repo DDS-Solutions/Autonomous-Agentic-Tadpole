@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react';
 import { Cpu, HardDrive, Activity, Server } from 'lucide-react';
 import { api_request } from '../../services/base_api_service';
+import { useEngineStatus } from '../../hooks/use_engine_status';
 
 interface ComputeProfile {
     cpu_usage: number;
@@ -22,10 +23,30 @@ interface ComputeProfile {
 }
 
 export function Hardware_Load() {
+    const { 
+        cpu: socket_cpu, 
+        memory: socket_memory, 
+        memory_total: socket_memory_total, 
+        active_processes: socket_processes,
+        is_online
+    } = useEngineStatus();
+
     const [profile, setProfile] = useState<ComputeProfile | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // Use socket data if online, otherwise fallback to REST polling
     useEffect(() => {
+        if (is_online && socket_memory_total > 0) {
+            setProfile({
+                cpu_usage: socket_cpu,
+                memory_used: socket_memory,
+                memory_total: socket_memory_total,
+                active_processes: socket_processes,
+                gpu_usage: null
+            });
+            return;
+        }
+
         const controller = new AbortController();
         let is_mounted = true;
 
@@ -54,7 +75,7 @@ export function Hardware_Load() {
             controller.abort();
             clearInterval(interval);
         };
-    }, []);
+    }, [is_online, socket_cpu, socket_memory, socket_memory_total, socket_processes]);
 
     if (error) {
         return (

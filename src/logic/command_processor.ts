@@ -19,6 +19,8 @@ import { use_workspace_store } from '../stores/workspace_store';
 import { use_sovereign_store } from '../stores/sovereign_store';
 import { get_settings } from '../stores/settings_store';
 import type { Agent } from '../types';
+import { browser_inference_service } from '../services/browser_inference';
+import { use_browser_specialist_store } from '../stores/browser_specialist_store';
 
 /** Return value from process_command indicating if the log should be cleared. */
 export interface Command_Result {
@@ -56,6 +58,37 @@ export async function process_command(
     const cmd = parts[0].toLowerCase();
     const args = parts.slice(1);
 
+    const settings = get_settings();
+
+    // 1.1 Tactical Interception (Sentinel Tier)
+    // If sentinel_mode is enabled and it's not a slash command, 
+    // let the Browser Specialist decide if it can handle it.
+    if (settings.sentinel_mode && !cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#')) {
+        const is_tactical = check_if_tactical(command_text);
+        if (is_tactical) {
+            console.log(`${telemetry_source} [TieredRouting] Tactical intent detected. Routing to Browser Specialist.`);
+            event_bus.emit_log({ source: 'System', text: '🧠 Browser Specialist analyzing tactical intent...', severity: 'info' });
+            
+            const specialist_store = use_browser_specialist_store.getState();
+            const analysis = await specialist_store.analyze_dom(command_text);
+            
+            event_bus.emit_log({ 
+                source: 'Agent', 
+                agent_id: 'Browser Specialist', 
+                text: analysis, 
+                severity: 'success' 
+            });
+            
+            // If the specialist detects high entropy or suggests escalation
+            if (analysis.toLowerCase().includes('escalate') || analysis.toLowerCase().includes('architect')) {
+                event_bus.emit_log({ source: 'System', text: '⚠️ Tactical threshold exceeded. Escalating to Computer Architect...', severity: 'warning' });
+                // Fall through to standard routing
+            } else {
+                return { should_clear_logs: false };
+            }
+        }
+    }
+
     // Build O(1) lookup indexes for agent resolution (name + id + partial match)
     const agent_by_name = new Map<string, Agent>();
     const agent_by_id = new Map<string, Agent>();
@@ -74,11 +107,21 @@ export async function process_command(
             return null;
         }
         const lower = name_or_id.toLowerCase();
+        
+        // 1. Exact Match (Name or ID)
         const found = agent_by_name.get(lower)
             || agent_by_id.get(name_or_id)
-            || agents.find(a => a.name.toLowerCase().includes(lower)); // partial match fallback
+            // 2. Inclusion Match (e.g. "@alpha" matches "Alpha (CEO)")
+            || agents.find(a => a.name.toLowerCase().includes(lower))
+            // 3. ID Prefix Match (e.g. "@1" matches ID "1")
+            || agents.find(a => a.id === name_or_id || a.id.startsWith(name_or_id));
+
         if (!found) {
-            event_bus.emit_log({ source: 'System', text: `Agent "${name_or_id}" not found. Available: ${agents.map(a => a.name).slice(0, 8).join(', ')}...`, severity: 'error' });
+            event_bus.emit_log({ 
+                source: 'System', 
+                text: `Agent "${name_or_id}" not found. Available: ${agents.map(a => a.name).slice(0, 10).join(', ')}...`, 
+                severity: 'error' 
+            });
             return null;
         }
         return found;
@@ -372,7 +415,7 @@ export async function process_command(
 
             // Check for conversational targeting (@agent)
             if (cmd.startsWith('@')) {
-                const target_name = cmd.substring(1);
+                const target_name = cmd.substring(1).replace(/:$/, '');
                 const agent = find_agent(target_name);
                 if (agent) {
                     const message = args.join(' ');
@@ -497,6 +540,19 @@ export async function process_command(
     }
 }
 
+
+/**
+ * Heuristic-based tactical intent detection.
+ * In a full implementation, this would be a small classification model call.
+ */
+function check_if_tactical(text: string): boolean {
+    const tactical_keywords = [
+        'status', 'healthy', 'screen', 'see', 'button', 'ui', 'view', 
+        'what is this', 'where is', 'show me', 'look at'
+    ];
+    const lower = text.toLowerCase();
+    return tactical_keywords.some(k => lower.includes(k));
+}
 
 // Metadata: [command_processor]
 

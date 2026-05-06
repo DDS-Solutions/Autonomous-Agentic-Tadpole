@@ -371,11 +371,6 @@ impl OpenAIProvider {
             .first()
             .ok_or_else(|| AppError::InternalServerError("No completion return from OpenAI".to_string()))?;
 
-        let mut output_text = choice.message.content.clone().unwrap_or_default();
-        if output_text.is_empty() {
-            tracing::warn!("⚠️ [OpenAI] Provider returned 200 OK but EMPTY content for model '{}'.", self.config.model_id);
-        }
-
         let mut function_calls = Vec::new();
         if let Some(tool_calls) = &choice.message.tool_calls {
             for tc in tool_calls {
@@ -386,6 +381,11 @@ impl OpenAIProvider {
                     args,
                 });
             }
+        }
+
+        let mut output_text = choice.message.content.clone().unwrap_or_default();
+        if output_text.is_empty() && function_calls.is_empty() {
+            tracing::warn!("⚠️ [OpenAI] Provider returned 200 OK but EMPTY content and NO tool calls for model '{}'.", self.config.model_id);
         }
 
         // ### 🛠️ Recovery & Cleanup: Polyglot Tool Extraction

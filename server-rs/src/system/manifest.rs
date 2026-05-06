@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:SovereignKernel**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[manifest]` in tracing logs.
+
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### Sovereign State Manifest
@@ -24,6 +34,8 @@ impl SovereignStateManifest {
         // 3. Capability Pulse
         let snapshot = state.registry.skills.snapshot();
         let script_skills = snapshot.skills.len();
+        let workflow_skills = snapshot.workflows.len();
+        let hook_skills = snapshot.hooks.len();
         let native_skills = state.registry.skill_registry.manifests.len();
         let mcp_tools = state.registry.mcp_host.list_tools(&[], &snapshot.skills).await.len();
 
@@ -41,7 +53,7 @@ impl SovereignStateManifest {
             "### SOVEREIGN STATE MANIFEST\n\
              - **Swarm Vitality**: {} Active, {} Idle agents currently provisioned.\n\
              - **Financial Governance**: ${:.4} remaining in global mission budget.\n\
-             - **Capability Density**: {} custom scripts, {} native skills, {} MCP tools operational.\n\
+             - **Capability Density**: {} scripts, {} workflows, {} hooks, {} native, {} MCP tools operational.\n\
              - **Security Pulse**: Last Audit: {}\n\
              - **Environment**: sovereign_root=\"{}\"\n\
              - **Policy**: Auto-Approve Safe Skills: {}\n\
@@ -50,6 +62,8 @@ impl SovereignStateManifest {
             idle_agents, 
             remaining_budget, 
             script_skills, 
+            workflow_skills,
+            hook_skills,
             native_skills, 
             mcp_tools, 
             audit_summary,
@@ -58,5 +72,7 @@ impl SovereignStateManifest {
         )
     }
 }
+
+// Metadata: [manifest]
 
 // Metadata: [manifest]

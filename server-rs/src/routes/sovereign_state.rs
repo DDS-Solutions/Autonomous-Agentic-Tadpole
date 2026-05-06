@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Gateways
+//! 
+//! ### AI Assist Note
+//! **! Sovereign State API — Multiversal Session Tree**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[sovereign_state]` in tracing logs.
+
 //! Sovereign State API — Multiversal Session Tree
 //!
 //! Provides high-fidelity access to branched session history and 
@@ -95,3 +105,5 @@ pub async fn append_session_node(
         "node_id": node_id
     })))
 }
+
+// Metadata: [sovereign_state]

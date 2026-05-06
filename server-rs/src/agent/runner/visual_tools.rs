@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Registry
+//! 
+//! ### AI Assist Note
+//! **@docs ARCHITECTURE:Runner**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[visual_tools]` in tracing logs.
+
 /**
  * @docs ARCHITECTURE:Runner
  * 
@@ -108,3 +118,5 @@ impl AgentRunner {
         }
     }
 }
+
+// Metadata: [visual_tools]

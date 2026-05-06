@@ -96,3 +96,5 @@ mod tests {
 }
 
 // Metadata: [registry]
+
+// Metadata: [registry]

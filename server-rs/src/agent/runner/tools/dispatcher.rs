@@ -1,6 +1,16 @@
 //! @docs ARCHITECTURE:Registry
 //! 
 //! ### AI Assist Note
+//! **! @docs ARCHITECTURE:Registry**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[dispatcher]` in tracing logs.
+
+//! @docs ARCHITECTURE:Registry
+//! 
+//! ### AI Assist Note
 //! **Zero-Trust Dispatcher**: Orchestrates tool registration and execution 
 //! via categorical handlers. Enforces the **Tool Context Isolation** pattern.
 
@@ -35,7 +45,7 @@ impl Dispatcher {
 
         // 3. Swarm Tools
         let swarm_handler = Arc::new(SwarmHandler);
-        let swarm_tools = &["spawn_subagent", "issue_alpha_directive", "recruit_specialist"];
+        let swarm_tools = &["spawn_subagent", "issue_alpha_directive", "recruit_specialist", "recruit"];
 
         // 4. Metrics & External
         let aux_handler = Arc::new(AuxHandler);
@@ -159,7 +169,7 @@ impl CategoricalHandler for SwarmHandler {
         match name {
             "spawn_subagent" => runner.handle_spawn_subagent(&run_ctx, &fc, usage).await,
             "issue_alpha_directive" => runner.handle_alpha_directive(&run_ctx, &fc).await.map_err(ToolExecutionError::from),
-            "recruit_specialist" => {
+            "recruit_specialist" | "recruit" => {
                 // In the current architecture, recruit_specialist is handled by the MCP/SystemDelegate logic in mod.rs,
                 // but we bridge it here for completeness if invoked directly.
                 runner.handle_spawn_subagent(&run_ctx, &fc, usage).await
@@ -215,5 +225,7 @@ impl CategoricalHandler for EvolutionHandler {
         }
     }
 }
+
+// Metadata: [dispatcher]
 
 // Metadata: [dispatcher]

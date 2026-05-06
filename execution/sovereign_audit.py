@@ -52,7 +52,7 @@ AUDIT_SUITE = [
     },
     {
         "name": "Security Scan (P0)",
-        "cmd": ["python", ".agent/skills/vulnerability-scanner/scripts/security_scan.py", "."],
+        "cmd": ["python", "execution/security_scan.py", "."],
         "critical": True
     },
     {
@@ -64,6 +64,11 @@ AUDIT_SUITE = [
         "name": "Sovereign Awakening (P1)",
         "cmd": ["python", "execution/awaken.py", "--check"],
         "critical": True
+    },
+    {
+        "name": "Frontend Integrity (P2)",
+        "cmd": ["python", "execution/ui_integrity_audit.py", "."],
+        "critical": False
     },
     {
         "name": "API Reference Consistency",

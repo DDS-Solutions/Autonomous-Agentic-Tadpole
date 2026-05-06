@@ -472,13 +472,8 @@ impl AgentRunner {
         };
 
         // ### 🧠 Resilience: Model-Specific Protocol Injection
-        let is_gemma = ctx.model_config.model_id.to_lowercase().contains("gemma");
-        let tool_mode_prefix = if is_gemma {
-            format!("{}\nGEMMA_PROTOCOL: You are a high-fidelity Specialist. To call tools, you MUST use the following format: <|tool_call|>call:tool_name{{\"arg\": \"val\"}}<tool_call|>", tool_mode_prefix)
-        } else {
-            tool_mode_prefix
-        };
-
+        // (Removed Gemma-specific XML injection as it caused tool-calling hallucinations)
+        
         (
             cluster_directory,
             filesystem_bias_mandate,
@@ -498,11 +493,13 @@ impl AgentRunner {
         if !is_orchestrator && !ctx.safe_mode {
             swarm_protocols.push("NO NARRATION: Do not explain strategy or tool options. CALL THE TOOLS. Text-only responses are MISSION FAILURE.".to_string());
         } else if is_orchestrator {
-            swarm_protocols.push("CONVERSATIONAL: You are the primary interface for the user. Be helpful, professional, and conversational in natural language if no specific tools are needed for the current turn.".to_string());
+            swarm_protocols.push("AUTONOMOUS DELEGATION: You are the primary interface. If a task requires specialized skills, IMMEDIATELY recruit the relevant agent IDs from the CLUSTER DIRECTORY using the available recruitment tools. Do NOT wait for user approval to delegate.".to_string());
+            swarm_protocols.push("CONVERSATIONAL: While you may be professional and conversational, this MUST be accompanied by tool execution if sub-tasks are identified.".to_string());
         }
 
-        swarm_protocols.push("COMPLETION: Complete ALL steps autonomously before reporting back.".to_string());
-        swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission. The system handles approval flows automatically.".to_string());
+        swarm_protocols.push("COMPLETION: Complete ALL steps (including all recruitment and sub-task coordination) autonomously before reporting back.".to_string());
+        swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission to execute a tool or recruit an agent. The system handles approval flows and budget gates automatically. YOUR SILENCE OR ASKING FOR PERMISSION IS A PROTOCOL VIOLATION.".to_string());
+        swarm_protocols.push("RECRUITMENT PRECISION: When recruiting, you MUST use the exact ID from the 'CLUSTER DIRECTORY' (e.g. '2', '3', 'elon'). Do NOT use generic names like 'Developer' if a specific agent exists.".to_string());
         swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_codebase_file) over general RAG for code queries.".to_string());
         swarm_protocols.push(format!("RECURSION PROTECTION: You are FORBIDDEN from recruiting agents in your LINEAGE ({:?}) or YOURSELF ({}).", &ctx.lineage, ctx.agent_id));
 

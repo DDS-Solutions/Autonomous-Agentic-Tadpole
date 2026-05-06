@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { Save, Server, Monitor, Cpu, Shield, Store, ExternalLink } from 'lucide-react';
+import { Save, Server, Monitor, Cpu, Shield, Store, ExternalLink, Zap, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { use_model_store } from '../stores/model_store';
 import { get_settings, save_settings } from '../stores/settings_store';
@@ -488,6 +488,85 @@ export default function Settings(): React.ReactElement {
                                     {is_swarm_scanning ? 'Scanning Cluster...' : 'Swarm Discovery Active'}
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Sovereign Neural Handoff (IMR-02) */}
+            <div className="space-y-4">
+                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                    <Zap size={14} className="text-amber-500" />
+                    {i18n.t('settings.header_neural_handoff')}
+                </h2>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 space-y-6 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.1] transition-opacity">
+                        <Zap size={120} />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                        {/* Browser Specialist Model */}
+                        <div className="space-y-2">
+                            <Tooltip content={i18n.t('settings.tooltip_browser_model')} position="top">
+                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_browser_model')}</label>
+                            </Tooltip>
+                            <input
+                                type="text"
+                                name="browser_specialist_model_id"
+                                value={settings_state.browser_specialist_model_id}
+                                onChange={handle_change}
+                                placeholder="onnx-community/Gemma-2b-it-v2"
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-mono"
+                            />
+                        </div>
+
+                        {/* Computer Architect URL */}
+                        <div className="space-y-2">
+                            <Tooltip content={i18n.t('settings.tooltip_computer_url')} position="top">
+                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_computer_url')}</label>
+                            </Tooltip>
+                            <input
+                                type="text"
+                                name="computer_architect_url"
+                                value={settings_state.computer_architect_url}
+                                onChange={handle_change}
+                                placeholder="http://localhost:11434"
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-mono"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-6 pt-2 relative z-10">
+                        {/* Toggle Handoff */}
+                        <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-700/50 flex-1 group/toggle">
+                            <div className="flex flex-col">
+                                <Tooltip content={i18n.t('settings.tooltip_enable_handoff')} position="top">
+                                    <span className="text-sm font-bold text-zinc-200 cursor-help">{i18n.t('settings.label_enable_handoff')}</span>
+                                </Tooltip>
+                                <span className="text-[10px] text-zinc-500 uppercase tracking-tighter">Tactical ↔ Strategic Escalation</span>
+                            </div>
+                            <button
+                                onClick={() => set_settings_state({...settings_state, enable_neural_handoff: !settings_state.enable_neural_handoff})}
+                                className={`w-12 h-6 rounded-full transition-colors relative ${settings_state.enable_neural_handoff ? 'bg-amber-500' : 'bg-zinc-700'}`}
+                            >
+                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings_state.enable_neural_handoff ? 'left-7' : 'left-1'}`} />
+                            </button>
+                        </div>
+
+                        {/* Toggle Sentinel */}
+                        <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-700/50 flex-1 group/toggle">
+                            <div className="flex flex-col">
+                                <Tooltip content={i18n.t('settings.tooltip_sentinel_mode')} position="top">
+                                    <span className="text-sm font-bold text-zinc-200 cursor-help">{i18n.t('settings.label_sentinel_mode')}</span>
+                                </Tooltip>
+                                <span className="text-[10px] text-zinc-500 uppercase tracking-tighter">Real-time UI Integrity</span>
+                            </div>
+                            <button
+                                onClick={() => set_settings_state({...settings_state, sentinel_mode: !settings_state.sentinel_mode})}
+                                className={`w-12 h-6 rounded-full transition-colors relative ${settings_state.sentinel_mode ? 'bg-green-500' : 'bg-zinc-700'}`}
+                            >
+                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings_state.sentinel_mode ? 'left-7' : 'left-1'}`} />
+                            </button>
                         </div>
                     </div>
                 </div>

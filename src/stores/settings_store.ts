@@ -39,6 +39,10 @@ export interface Tadpole_Settings {
     default_budget_usd: number;
     is_safe_mode: boolean;
     privacy_mode: boolean;
+    browser_specialist_model_id: string;
+    computer_architect_url: string;
+    enable_neural_handoff: boolean;
+    sentinel_mode: boolean;
 }
 
 interface Settings_State {
@@ -97,6 +101,10 @@ export const use_settings_store = create<Settings_State>()(
                 default_budget_usd: 1.0,
                 is_safe_mode: true, // Default to safe mode for stabilization
                 privacy_mode: false,
+                browser_specialist_model_id: 'onnx-community/Gemma-2b-it-v2',
+                computer_architect_url: 'http://localhost:11434',
+                enable_neural_handoff: true,
+                sentinel_mode: false,
             } as unknown as Tadpole_Settings,
 
             save_settings: (new_settings) => {
@@ -176,5 +184,7 @@ export const use_settings_store = create<Settings_State>()(
 // Backward compatibility helpers for non-reactive code
 export const get_settings = (): Tadpole_Settings => use_settings_store.getState().settings;
 export const save_settings = (s: Tadpole_Settings): string | null => use_settings_store.getState().save_settings(s);
+
+// Metadata: [settings_store]
 
 // Metadata: [settings_store]

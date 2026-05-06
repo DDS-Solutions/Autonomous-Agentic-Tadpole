@@ -1,4 +1,17 @@
 > [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[README]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
 > **Sovereign Status**: This repository is currently operating under the **Autonomous Agentic Tadpole** protocol.
 > - **Kernel**: Hybrid Actor-Based (Rust)
 > - **Intelligence**: Self-Directed Orchestrator
@@ -77,5 +90,7 @@ Watch the audit logs as the **Orchestrator** begins its first cycle:
   <br />
   <sub>Licensed under MIT. Sovereign Intelligence for all.</sub>
 </div>
+
+[//]: # (Metadata: [README])
 
 [//]: # (Metadata: [README])

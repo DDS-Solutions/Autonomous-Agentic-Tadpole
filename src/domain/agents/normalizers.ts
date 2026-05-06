@@ -68,6 +68,7 @@ interface RobustAgentDto extends Partial<AgentDto> {
  * 2. **Dual-Case Support**: Checks both camelCase (API) and snake_case (Internal/Mock) properties.
  */
 export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, existing_agent?: Agent): Agent => {
+    console.debug('[Normalizer] Normalizing agent DTO:', dto.id);
     const d = dto as RobustAgentDto;
     
     const get_val = <T>(key_wire: keyof RobustAgentDto, key_domain: keyof RobustAgentDto, fallback: T): T => {
@@ -176,6 +177,7 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
  * Transforms a raw memory entry into a structured domain model.
  */
 export const normalize_agent_memory_entry = (raw: Raw_Agent_Memory_Entry): Agent_Memory_Entry => {
+    console.debug('[Normalizer] Normalizing agent memory entry:', raw.id);
     return {
         id: raw.id,
         text: raw.text || raw.content || '',
@@ -184,5 +186,7 @@ export const normalize_agent_memory_entry = (raw: Raw_Agent_Memory_Entry): Agent
         metadata: raw.metadata || {}
     };
 };
+
+// Metadata: [normalizers]
 
 // Metadata: [normalizers]

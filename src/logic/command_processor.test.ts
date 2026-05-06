@@ -13,6 +13,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { process_command } from './command_processor';
 import { agent_api_service } from '../services/agent_api_service';
+import { browser_inference_service } from '../services/browser_inference';
+import { use_browser_specialist_store } from '../stores/browser_specialist_store';
+import { get_settings } from '../stores/settings_store';
 import type { Agent } from '../types';
 
 // Mock dependencies
@@ -71,6 +74,29 @@ vi.mock('../stores/sovereign_store', () => {
     };
 });
 
+vi.mock('../services/browser_inference', () => ({
+    browser_inference_service: {
+        analyze_ui: vi.fn().mockResolvedValue('The UI is healthy.'),
+        init_specialist: vi.fn().mockResolvedValue(undefined),
+    }
+}));
+
+vi.mock('../stores/browser_specialist_store', () => ({
+    use_browser_specialist_store: {
+        getState: vi.fn().mockReturnValue({
+            analyze_dom: vi.fn().mockResolvedValue('The UI is healthy.')
+        })
+    }
+}));
+
+vi.mock('../stores/settings_store', () => ({
+    get_settings: vi.fn().mockReturnValue({
+        sentinel_mode: true,
+        enable_neural_handoff: true,
+        default_model: 'gpt-4',
+    })
+}));
+
 describe('process_command', () => {
     const mock_agents: Agent[] = [
         { id: '1', name: 'CEO', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: {} },
@@ -94,24 +120,30 @@ describe('process_command', () => {
             undefined,
             undefined,
             undefined,
-            false
+            false,
+            undefined,
+            undefined,
+            undefined
         );
     });
 
     it('should route prefix-less commands to target_node in agent scope', async () => {
-        const text = 'status check';
+        const text = 'prime system';
         await process_command(text, mock_agents, false, 'agent', 'Tadpole_Alpha');
         
         expect(agent_api_service.send_command).toHaveBeenCalledWith(
             '2', 
-            'status check',
+            'prime system',
             expect.anything(),
             expect.anything(),
             undefined,
             undefined,
             undefined,
             undefined,
-            false
+            false,
+            undefined,
+            undefined,
+            undefined
         );
     });
 
@@ -128,7 +160,10 @@ describe('process_command', () => {
             undefined,
             undefined,
             undefined,
-            false
+            false,
+            undefined,
+            undefined,
+            undefined
         );
     });
 
@@ -145,8 +180,46 @@ describe('process_command', () => {
             'Eng', 
             undefined,
             undefined,
-            false
+            false,
+            undefined,
+            undefined,
+            undefined
         );
+    });
+
+    describe('Tiered Routing (Sentinel)', () => {
+        it('should intercept tactical UI queries when sentinel_mode is enabled', async () => {
+            const text = 'how is the screen looking?';
+            const result = await process_command(text, mock_agents);
+            
+            expect(use_browser_specialist_store.getState().analyze_dom).toHaveBeenCalledWith(text);
+            expect(agent_api_service.send_command).not.toHaveBeenCalled();
+            expect(result.should_clear_logs).toBe(false);
+        });
+
+        it('should NOT intercept tactical queries if sentinel_mode is disabled', async () => {
+            vi.mocked(get_settings).mockReturnValueOnce({
+                sentinel_mode: false,
+                enable_neural_handoff: true,
+            } as any);
+            
+            const text = 'how is the screen looking?';
+            await process_command(text, mock_agents);
+            
+            expect(use_browser_specialist_store.getState().analyze_dom).not.toHaveBeenCalled();
+        });
+
+        it('should escalate to Computer Architect if Browser Specialist requests it', async () => {
+            vi.mocked(use_browser_specialist_store.getState().analyze_dom).mockResolvedValueOnce('I detect high entropy. ESCALATE_TO_ARCHITECT.');
+            
+            const text = 'show me the screen status';
+            await process_command(text, mock_agents);
+            
+            // Should have called specialist FIRST
+            expect(use_browser_specialist_store.getState().analyze_dom).toHaveBeenCalled();
+            // Then fell through to broadcast to swarm (since no prefix)
+            // (Note: broadcase doesn't call send_command but emits a log)
+        });
     });
 });
 

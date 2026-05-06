@@ -368,7 +368,7 @@ pub async fn sync_mission(
 pub async fn get_swarm_graph_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let graph = get_swarm_graph(&state.resources.pool)
+    let graph = get_swarm_graph(&state)
         .await?;
     Ok(Json(graph))
 }

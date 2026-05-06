@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**Core technical resource for the Tadpole OS Sovereign infrastructure.**
+Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.
+- **Telemetry Link**: Search `[deep_scan]` in system logs.
+"""
+
 import os
 import re
 
@@ -54,3 +66,5 @@ if __name__ == "__main__":
     print(f"[Nexus] Scan complete. Found {len(findings)} potential faults.")
     generate_report(findings, OUTPUT)
     print(f"[Nexus] Report generated at: {OUTPUT}")
+
+# Metadata: [deep_scan]

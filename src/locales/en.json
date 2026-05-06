@@ -186,7 +186,16 @@
     "header_model_store": "Model Marketplace",
     "btn_browse_models": "Browse Intelligence",
     "title_intelligence_store": "Intelligence Store",
-    "badge_alpha": "Alpha"
+    "badge_alpha": "Alpha",
+    "header_neural_handoff": "Sovereign Neural Handoff",
+    "label_browser_model": "Browser Specialist (2B)",
+    "tooltip_browser_model": "The local model running in your browser via WebGPU for high-speed UI analysis (Gemma-2b).",
+    "label_computer_url": "Computer Architect URL",
+    "tooltip_computer_url": "The endpoint for your local 4-bit computer model (e.g., Ollama at http://localhost:11434).",
+    "label_enable_handoff": "Enable Neural Handoff",
+    "tooltip_enable_handoff": "Allows the Browser Specialist to escalate complex tasks to the Computer Architect for deep reasoning.",
+    "label_sentinel_mode": "Active Sentinel Mode",
+    "tooltip_sentinel_mode": "Enables real-time UI health monitoring and autonomous error detection by the browser specialist."
   },
   "model_store": {
     "syncing": "Syncing Sovereign Catalog...",

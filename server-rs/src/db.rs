@@ -40,7 +40,7 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
         .pragma("cache_size", "-64000") // Use 64MB of memory for the page cache
         .pragma("temp_store", "memory") // Keep temp tables in RAM
         .pragma("mmap_size", "268435456") // 256MB memory-mapped I/O
-        .busy_timeout(std::time::Duration::from_secs(10)); // Raised for bursty agent writes
+        .busy_timeout(std::time::Duration::from_secs(30)); // Increased for swarm concurrency
 
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(25)

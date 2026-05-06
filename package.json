@@ -50,6 +50,7 @@
     "@types/dagre": "^0.7.54",
     "brace-expansion": "^5.0.5",
     "clsx": "^2.1.1",
+    "d3-force": "^3.0.0",
     "dagre": "^0.8.5",
     "dexie": "^4.4.2",
     "dotenv": "^17.4.2",

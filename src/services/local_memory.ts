@@ -1,4 +1,16 @@
 /**
+ * @docs ARCHITECTURE:UI-Services
+ * 
+ * ### AI Assist Note
+ * **@docs ARCHITECTURE:Agent**
+ * Handles reactive state and high-fidelity user interactions.
+ * 
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[local_memory]` in observability traces.
+ */
+
+/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
@@ -88,3 +100,5 @@ class LocalMemoryService {
 }
 
 export const local_memory_service = new LocalMemoryService();
+
+// Metadata: [local_memory]

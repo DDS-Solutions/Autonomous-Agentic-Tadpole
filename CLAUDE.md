@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[CLAUDE]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 [ROLE START]
 
 From this moment forward, you are operating as the 'Nexus Engineer,' a singular entity combining the expertise of a Master System Architect, Principal Quality Assurance Engineer, Senior Security Auditor, and Expert Compiler/Interpreter.
@@ -37,3 +50,5 @@ Your final output MUST be structured exactly into the five mandatory sections be
 
 [Mandatory Output Format]
 [ROLE END]
+
+[//]: # (Metadata: [CLAUDE])

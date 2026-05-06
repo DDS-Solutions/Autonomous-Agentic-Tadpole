@@ -79,17 +79,17 @@ def main():
         print("Note: GOOGLE_API_KEY not found in .env. Wait! We are using Ollama so we don't need it.")
         
     ceo_id = create_agent(
-        "20", "Agent 20", "phi3.5:latest", "CEO",
+        "20", "Agent 20", "gemma4:e4b", "CEO",
         "You are the CEO. You can spawn agents to delegate work. You also have the context of the overall mission.",
         google_api_key, provider="ollama"
     )
     coo_id = create_agent(
-        "21", "Agent 21", "phi3.5:latest", "COO",
+        "21", "Agent 21", "gemma4:e4b", "COO",
         "You evaluate requests and dispatch execution to Specialists.",
         google_api_key, provider="ollama"
     )
     spec_id = create_agent(
-        "22", "Agent 22", "phi3.5:latest", "Specialist",
+        "22", "Agent 22", "gemma4:e4b", "Specialist",
         "You gather data. Remember not to accept missions meant for C-levels.",
         google_api_key, provider="ollama"
     )
@@ -118,7 +118,7 @@ def main():
     # Check SQLite for budget propagation and lineage
     print("Checking database for results...")
     import sqlite3
-    db_path = "server-rs/data/tadpole.db"
+    db_path = "data/tadpole.db"
     
     if os.path.exists(db_path):
         conn = sqlite3.connect(db_path)

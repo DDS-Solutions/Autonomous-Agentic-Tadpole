@@ -303,6 +303,30 @@ impl AgentRunner {
         )
         .await?;
 
+        // We update the in-memory registry so the high-speed PulseCollector 
+        // (telemetry loop) can detect the active mission link.
+        if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
+            let agent = entry.value_mut();
+            agent.state.active_mission = Some(serde_json::json!({
+                "id": mission.id,
+                "title": mission.title
+            }));
+            agent.health.status = "busy".to_string();
+            
+            // ### 🗄️ Persistence: Database Sync
+            // We MUST save to the database immediately so the Orchestrator
+            // (Safety Valve) can see that this agent is engaged and doesn't
+            // mark the mission as a "ghost".
+            let _ = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent).await;
+
+            // Broadcast the agent update so other UI components (like the sidebar) sync
+            self.state.emit_event(serde_json::json!({
+                "type": "agent:update",
+                "agent_id": agent_id,
+                "data": *agent
+            }));
+        }
+
         Ok(mission)
     }
 }

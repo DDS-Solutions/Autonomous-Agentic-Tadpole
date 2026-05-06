@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[SYSTEM_MAP]` in audit logs.
+>
+> ### AI Assist Note
+> 🗺️ TadpoleOS System Architecture Map
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # 🗺️ TadpoleOS System Architecture Map
 **Version**: 1.1.57 (Sovereign Kernel)
 **Context**: This map bridges the gap between legacy architectural requests and the current Rust-based actor infrastructure.
@@ -29,3 +42,5 @@
 
 ---
 **Directive**: Autonomous agents should prioritize auditing the `server-rs` directory for technical debt and `tokio` blocking operations.
+
+[//]: # (Metadata: [SYSTEM_MAP])

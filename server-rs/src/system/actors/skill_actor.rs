@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:SovereignKernel**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[skill_actor]` in tracing logs.
+
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### SkillScanner Actor
@@ -102,5 +112,7 @@ impl SkillScannerActor {
         Ok(count)
     }
 }
+
+// Metadata: [skill_actor]
 
 // Metadata: [skill_actor]

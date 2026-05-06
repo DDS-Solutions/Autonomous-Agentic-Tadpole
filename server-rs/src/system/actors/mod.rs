@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Infrastructure
+//! 
+//! ### AI Assist Note
+//! **! @docs ARCHITECTURE:SovereignKernel**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
+
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### Actor Message Protocol
@@ -113,3 +123,5 @@ pub struct ActorRegistry {
     #[allow(dead_code)]
     pub skill: tokio::sync::mpsc::Sender<SystemMessage>,
 }
+
+// Metadata: [mod]

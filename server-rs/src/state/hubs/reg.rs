@@ -62,8 +62,10 @@ impl RegistryHub {
                 let agent = kv.value();
                 let id = &agent.identity.id;
  
-                // Skip root/orchestrator nodes for the specialist directory
-                if id == "1" || id == "2" || id == "alpha" || id == "general" {
+                // Skip only the generic 'general' node for the specialist directory.
+                // Root/Orchestrator nodes (1, 2, alpha) are now included to allow
+                // cross-hierarchical recruitment by the CEO.
+                if id == "general" {
                     return None;
                 }
  

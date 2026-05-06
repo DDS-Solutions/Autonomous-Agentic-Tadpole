@@ -24,11 +24,13 @@ export interface Engine_Status {
     health: Engine_Health_Event | null;
     cpu: number;
     memory: number;
+    memory_total: number;
     latency: number;
     active_agents: number;
     max_depth: number;
     tpm: number;
     recruit_count: number;
+    active_processes: number;
 }
 
 /**
@@ -46,11 +48,13 @@ export function useEngineStatus(): Engine_Status {
     const [metrics, set_metrics] = useState({
         cpu: 0,
         memory: 0,
+        memory_total: 0,
         latency: 0,
         active_agents: 0,
         max_depth: 0,
         tpm: 0,
-        recruit_count: 0
+        recruit_count: 0,
+        active_processes: 0
     });
 
     useEffect(() => {
@@ -66,11 +70,13 @@ export function useEngineStatus(): Engine_Status {
             set_metrics({
                 cpu: Number.isFinite(h.cpu) ? h.cpu! : 0,
                 memory: Number.isFinite(h.memory) ? h.memory! : 0,
+                memory_total: Number.isFinite(h.memory_total) ? h.memory_total! : 0,
                 latency: Number.isFinite(h.latency) ? h.latency! : 0,
                 active_agents: Number.isFinite(h.active_agents) ? h.active_agents! : (Number.isFinite(h.agent_count) ? h.agent_count! : 0),
                 max_depth: Number.isFinite(h.max_depth) ? h.max_depth! : 0,
                 tpm: Number.isFinite(h.tpm) ? h.tpm! : 0,
-                recruit_count: Number.isFinite(h.recruit_count) ? h.recruit_count! : 0
+                recruit_count: Number.isFinite(h.recruit_count) ? h.recruit_count! : 0,
+                active_processes: Number.isFinite(h.active_processes) ? h.active_processes! : (Number.isFinite(h.activeProcesses) ? h.activeProcesses! : 0)
             });
         });
 

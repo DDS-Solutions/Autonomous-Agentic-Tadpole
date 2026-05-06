@@ -179,7 +179,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, is_pulse_active:
                     if is_pulse_active {
                         if let Ok(pulse) = result {
                             // MessagePack binary encoding
-                            if let Ok(encoded) = rmp_serde::to_vec(&*pulse) {
+                            if let Ok(encoded) = rmp_serde::encode::to_vec_named(&*pulse) {
                                 // Prepend header 0x02 (Swarm Pulse)
                                 let mut bin = Vec::with_capacity(encoded.len() + 1);
                                 bin.push(0x02);

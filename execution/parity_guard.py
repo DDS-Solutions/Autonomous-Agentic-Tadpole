@@ -44,6 +44,8 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+ROOT = Path(__file__).resolve().parent.parent
+
 def print_result(check, status, message):
     icon = "[OK]" if status else "[FAIL]"
     print(f"{icon} [{check}] {message}")
@@ -238,7 +240,7 @@ def check_api_docs_parity(root, fix=False):
             return 0
 
 def check_parity(root_dir, fix=False):
-    root = Path(root_dir)
+    root = ROOT
     router_path = root / "server-rs" / "src" / "router.rs"
     openapi_path = root / "docs" / "openapi.yaml"
     api_ref_path = root / "docs" / "API_REFERENCE.md"

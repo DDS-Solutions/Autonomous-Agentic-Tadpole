@@ -41,6 +41,7 @@ pub async fn kill_agents(
     for mut entry in state.registry.agents.iter_mut() {
         let current_status = entry.health.status.as_str();
         if current_status == "active"
+            || current_status == "busy"
             || current_status == "thinking"
             || current_status == "coding"
             || current_status == "speaking"

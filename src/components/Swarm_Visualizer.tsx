@@ -20,6 +20,7 @@ import { THEME_COLORS, GRAPH_THEME } from '../constants/theme';
 import { i18n } from '../i18n';
 import { tadpole_os_socket } from '../services/socket';
 import { type Swarm_Pulse } from '../types';
+import { forceCenter, forceManyBody } from 'd3-force';
 
 /**
  * Swarm_Visualizer
@@ -73,12 +74,20 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 const agent = agents.find(a => a.id === pulse_node.id);
                 const existing = current.nodes.find(n => n.id === pulse_node.id);
                 
+                // ### ⚓ Anchor Logic: Mission Hub Stabilization
+                // We lock the Mission Hub (status 4) to the origin (0,0) using fixed 
+                // coordinate properties (fx, fy). This prevents the entire swarm 
+                // from drifting away when specialists are recruited.
+                const is_hub = pulse_node.status === 4;
+                
                 return {
                     ...pulse_node,
-                    name: agent?.name || pulse_node.id,
+                    name: agent?.name || (is_hub ? `MISSION_HUB: ${pulse_node.id.substring(0, 8)}` : pulse_node.id),
                     // Preserve position/velocity from the D3 force engine
-                    x: existing?.x ?? (Math.random() - 0.5) * 200,
-                    y: existing?.y ?? (Math.random() - 0.5) * 200,
+                    x: existing?.x ?? (Math.random() - 0.5) * 50,
+                    y: existing?.y ?? (Math.random() - 0.5) * 50,
+                    fx: is_hub ? 0 : undefined,
+                    fy: is_hub ? 0 : undefined,
                     vx: existing?.vx,
                     vy: existing?.vy
                 };
@@ -90,20 +99,46 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 target: edge.target
             }));
 
-            // Check if structure changed (additions/deletions)
+            // Check if structure or state changed (additions/deletions or status/battery shifts)
+            const state_changed = new_nodes.some((node, i) => {
+                const prev = current.nodes[i];
+                return !prev || node.id !== prev.id || node.status !== prev.status || node.battery !== prev.battery;
+            });
+
             const structure_changed = 
                 new_nodes.length !== current.nodes.length || 
-                new_links.length !== current.links.length;
+                new_links.length !== current.links.length ||
+                state_changed;
+
+            const first_pulse = current.nodes.length === 0 && new_nodes.length > 0;
 
             graph_data_ref.current = { nodes: new_nodes, links: new_links };
 
-            if (structure_changed) {
+            if (structure_changed || first_pulse) {
                 set_graph_structure_version((v: number) => v + 1);
             }
         });
 
         return () => unsubscribe();
     }, [agents]);
+
+    // ### 🛠️ Force Engine Calibration
+    // Configures the D3 force simulation to maintain a stable, centered cluster.
+    // Prevents "Swarm Drift" by anchoring the global center of mass.
+    useEffect(() => {
+        if (!fg_ref.current) return;
+        
+        const fg = fg_ref.current;
+        // Add a strong centering force to prevent the swarm from floating away
+        fg.d3Force('center', forceCenter(0, 0));
+        // Add a stronger charge to keep agents separated but clustered
+        fg.d3Force('charge', forceManyBody().strength(-150));
+        // Add a link force to pull agents toward the hub
+        fg.d3Force('link')?.distance(80).strength(1.5);
+        
+        // Initial zoom to fit
+        setTimeout(() => fg.zoomToFit(400, 50), 500);
+    }, []);
 
     // ### 🎨 High-Performance Rendering: Fast-Path Canvas Pipeline
     // To handle swarms with 100+ agents without saturating the Main Thread, 
@@ -116,7 +151,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
         const font_size = 11 / global_scale;
         const radius = GRAPH_THEME.NODE_RADIUS;
         
-        const status_color = node.status === 1 ? THEME_COLORS.BUSY : (node.status === 2 ? THEME_COLORS.ERROR : (node.status === 3 ? THEME_COLORS.DEGRADED : THEME_COLORS.IDLE));
+        const status_color = node.status === 1 ? THEME_COLORS.BUSY : (node.status === 2 ? THEME_COLORS.ERROR : (node.status === 3 ? THEME_COLORS.DEGRADED : (node.status === 4 ? THEME_COLORS.GLOW_CYAN : THEME_COLORS.IDLE)));
 
         // 🛡️ Drawing Layer 1: Glow Halo
         if (node.status === 1 || node.status === 2) {
@@ -188,7 +223,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 // velocityDecay: (0.3) provides 'viscosity' to prevent 
                 // erratic jitter during high-frequency pulse updates.
                 d3AlphaDecay={0.02}
-                d3VelocityDecay={0.3}
+                d3VelocityDecay={0.6}
                 cooldownTicks={100}
                 onNodeClick={(node: GraphNode) => {
                     // Focus Agent Logs & Scope
@@ -217,6 +252,10 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
                             {/* eslint-disable-next-line react-hooks/refs */}
                             {i18n.t('swarm_visualizer.nodes_online', { count: current_node_count })}
+                        </p>
+                        <div className="w-px h-2 bg-zinc-800" />
+                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+                            EDGES: {graph_data_ref.current.links.length}
                         </p>
                     </div>
                 </div>

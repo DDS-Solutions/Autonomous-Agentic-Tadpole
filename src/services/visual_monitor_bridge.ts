@@ -1,4 +1,16 @@
 /**
+ * @docs ARCHITECTURE:UI-Services
+ * 
+ * ### AI Assist Note
+ * **@docs ARCHITECTURE:Agent**
+ * Handles reactive state and high-fidelity user interactions.
+ * 
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[visual_monitor_bridge]` in observability traces.
+ */
+
+/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
@@ -59,3 +71,5 @@ class VisualMonitorBridge {
 }
 
 export const visual_monitor_bridge = new VisualMonitorBridge();
+
+// Metadata: [visual_monitor_bridge]

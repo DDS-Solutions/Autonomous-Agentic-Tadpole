@@ -232,6 +232,8 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
                 .map(|kv| (kv.key().clone(), kv.value().clone()))
                 .collect();
 
+            let profile = heartbeat_state.resources.hardware_profiler.get_profile();
+
             heartbeat_state.emit_event(serde_json::json!({
                 "type": "engine:health",
                 "uptime": boot_instant.elapsed().as_secs(),
@@ -240,6 +242,10 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
                 "maxDepth": swarm_depth,
                 "tpm": tpm,
                 "recruitCount": recruits,
+                "cpu": profile.cpu_usage,
+                "memory": profile.memory_used,
+                "memory_total": profile.memory_total,
+                "activeProcesses": profile.active_processes,
                 "timestamp": chrono::Utc::now().to_rfc3339(),
                 "initialization": registry_snapshot
             }));

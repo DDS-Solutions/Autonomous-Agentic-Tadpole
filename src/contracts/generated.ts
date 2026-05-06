@@ -51,3 +51,7 @@ export type SkillParameter = { type: string; required: boolean | null; default: 
 export type SkillHooks = { before_execute: string | null; after_execute: string | null }
 
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
+
+// Metadata: [generated]
+
+// Metadata: [generated]

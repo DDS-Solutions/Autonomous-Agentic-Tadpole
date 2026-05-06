@@ -45,7 +45,7 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
             // Agent status: (idle | running | throttled | failed)
             // Pulse status: 0: idle, 1: busy, 2: error, 3: degraded
             let status = match agent.health.status.as_str() {
-                "running" => 1,
+                "active" | "busy" | "running" | "thinking" => 1,
                 "failed" => 2,
                 "throttled" => 3,
                 _ => 0, // idle
@@ -97,9 +97,20 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
             }
         }
 
+        // 🧠 Swarm Persistence: Ensure mission hubs remain visible even if agents are idle.
+        // We track 'ghost_missions' in the state to preserve topology during transitions.
+        let mut ghost_missions = state.comms.active_runners.iter()
+            .map(|kv| kv.key().clone())
+            .collect::<HashSet<String>>();
+
+        // Merge with current active missions from this pulse
+        for mid in &active_missions {
+            ghost_missions.insert(mid.clone());
+        }
+
         // 4. Synthesize Mission Nodes (Central Anchors)
         // This ensures the UI visualizer has valid targets for mission edges.
-        for mission_id in active_missions {
+        for mission_id in ghost_missions {
             pulse.nodes.push(PulseNode {
                 id: mission_id,
                 x: 0.0,
@@ -114,7 +125,15 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
         // 5. Broadcast the pulse
         // Note: Broadcasts the Arc<SwarmPulse>. Encoding happens in the WS handler
         // to avoid double-encoding overhead if multiple clients are listening.
+        let node_count = pulse.nodes.len();
+        let edge_count = pulse.edges.len();
         let _ = state.comms.pulse_tx.send(Arc::new(pulse));
+
+        // Periodically log activity for diagnostics (every 100 pulses ~ 10s)
+        static PULSE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if PULSE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 100 == 0 {
+            tracing::debug!("💓 [Telemetry] Pulse broadcast: {} nodes, {} edges active.", node_count, edge_count);
+        }
     }
 }
 

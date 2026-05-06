@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//! 
+//! ### AI Assist Note
+//! **! Security Foundation & Hardening Utilities**
+//! This module implements high-fidelity logic for the Sovereign Reality layer.
+//! 
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[security]` in tracing logs.
+
 //! Security Foundation & Hardening Utilities
 //!
 //! Provides the core primitives for path validation, sensitive-ID
@@ -256,5 +266,7 @@ mod tests {
         assert!(validate_shell_command("ls /etc/shadow").is_err());
     }
 }
+
+// Metadata: [security]
 
 // Metadata: [security]
