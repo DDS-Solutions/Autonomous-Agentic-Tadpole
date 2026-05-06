@@ -14,6 +14,7 @@
 //!   exceeding the capture window.
 //! - **Trace Scope**: `server-rs::agent::openai`
 
+use crate::agent::runner::parser::PolyglotParser;
 use crate::agent::types::{ModelConfig, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use once_cell::sync::Lazy;
@@ -101,6 +102,7 @@ pub struct OpenAIProvider {
 
 /// Regex for extracting tool calls from raw text (Groq/Llama 3 style)
 /// Enhanced to handle hallucinated '=' or '(' after the function name, and extra closing tags.
+#[allow(dead_code)]
 static FUNCTION_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?s)<function=([a-zA-Z0-9_-]+)[^\{]*(\{.*?\})[^>]*>?").expect("Static tool-call parser regex MUST be valid."));
 
@@ -258,18 +260,36 @@ impl OpenAIProvider {
             },
         };
 
-        let res = self
+        let mut request = self
             .client
-            .post(url)
+            .post(&url)
             .header(header::AUTHORIZATION, format!("Bearer {}", self.api_key))
-            .json(&request_body)
+            .json(&request_body);
+
+        // ### 🛡️ Sector Defense: Extended Timeout for Local Models
+        // Local models (Ollama/Mercury) can be slow on consumer hardware during heavy inference. 
+        // We extend the timeout to 300s to prevent premature mission failure.
+        if url.contains("127.0.0.1") || url.contains("localhost") {
+            request = request.timeout(std::time::Duration::from_secs(300));
+        }
+
+        let res = request
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    tracing::error!("🕒 [OpenAI] Request timed out for URL: {}. Model might be too slow for current hardware.", url);
+                } else if e.is_connect() {
+                    tracing::error!("🔌 [OpenAI] Failed to connect to URL: {}. Is the provider service (Ollama/Mercury) running?", url);
+                }
+                AppError::from(e)
+            })?;
 
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await?;
-
+            tracing::error!("📡 [OpenAI] Request failed with status {}: {}", status, error_text);
+            
             // ### 🧠 Resilience: Dynamic Quantization Fallback (OML-01)
             // Intercept OOM (Out Of Memory) from local providers (Ollama, vLLM, Mercury).
             // Logic: If the primary high-precision model (e.g. Llama-3-70b) fails 
@@ -312,54 +332,14 @@ impl OpenAIProvider {
                             "🛠️ [OpenAI] Native tool failure detected. Generation: {}",
                             failed_gen
                         );
-                        // 1. Attempt manual regex parsing of the failed generation
-                        if let Some(caps) = FUNCTION_REGEX.captures(failed_gen) {
-                            let name = caps
-                                .get(1)
-                                .map(|m| m.as_str().to_string())
-                                .unwrap_or_default();
-                            let args_str = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-
-                            let mut json_str = args_str.trim().to_string();
-                            // Cleanup hallucinated chars commonly added by Llama models
-                            if json_str.ends_with(')') {
-                                json_str.pop();
-                            }
-                            if json_str.starts_with('(') {
-                                json_str.remove(0);
-                            }
-                            let json_str = json_str.trim();
-
-                            let mut final_json = json_str.to_string();
-                            if !final_json.starts_with('{') {
-                                final_json.insert(0, '{');
-                            }
-                            if !final_json.ends_with('}') {
-                                final_json.push('}');
-                            }
-
-                            let args: serde_json::Value = serde_json::from_str(&final_json)
-                                .unwrap_or_else(|e| {
-                                    tracing::warn!("🛠️ [Recovery] Failed to parse natively intercepted JSON ({}): {}", e, final_json);
-                                    serde_json::json!({})
-                                });
-
-                            tracing::info!("🛠️ [OpenAI] Successfully intercepted and recovered tool call '{}' natively.", name);
-
-                            let mut recovered_text = failed_gen.to_string();
-                            if let Some(mat) = caps.get(0) {
-                                let raw_match = mat.as_str();
-                                tracing::debug!(
-                                    "🛠️ [OpenAI] Stripping recovered tool tag: {}",
-                                    raw_match
-                                );
-                                recovered_text =
-                                    recovered_text.replace(raw_match, "").trim().to_string();
-                            }
-
+                        // 1. Attempt Polyglot extraction from the failed generation
+                        let recovered_calls = PolyglotParser::extract(failed_gen);
+                        if !recovered_calls.is_empty() {
+                            tracing::info!("🛠️ [OpenAI] Successfully recovered {} tool calls via PolyglotParser.", recovered_calls.len());
+                            let recovered_text = PolyglotParser::scrub_tool_calls(failed_gen);
                             return Ok((
                                 recovered_text,
-                                vec![ToolCall { name, args }],
+                                recovered_calls,
                                 None,
                             ));
                         }
@@ -392,6 +372,9 @@ impl OpenAIProvider {
             .ok_or_else(|| AppError::InternalServerError("No completion return from OpenAI".to_string()))?;
 
         let mut output_text = choice.message.content.clone().unwrap_or_default();
+        if output_text.is_empty() {
+            tracing::warn!("⚠️ [OpenAI] Provider returned 200 OK but EMPTY content for model '{}'.", self.config.model_id);
+        }
 
         let mut function_calls = Vec::new();
         if let Some(tool_calls) = &choice.message.tool_calls {
@@ -405,39 +388,12 @@ impl OpenAIProvider {
             }
         }
 
-        // ### 🛠️ Recovery & Cleanup: Tag-based Tool Extraction
-        while let Some(caps) = FUNCTION_REGEX.captures(&output_text) {
-            let name = caps
-                .get(1)
-                .map(|m| m.as_str().to_string())
-                .unwrap_or_default();
-            let args_str = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-
-            let mut json_str = args_str.trim().to_string();
-            // JSON bracket healing
-            if !json_str.starts_with('{') {
-                json_str.insert(0, '{');
-            }
-            if !json_str.ends_with('}') {
-                json_str.push('}');
-            }
-
-            let args: serde_json::Value = serde_json::from_str(&json_str).unwrap_or_else(|_| {
-                tracing::warn!(
-                    "🛠️ [Recovery] Failed to parse recovered JSON from raw format: {}",
-                    json_str
-                );
-                serde_json::json!({})
-            });
-
-            tracing::info!("🛠️ [Recovery] Extracted function call from tags: {}", name);
-            function_calls.push(ToolCall { name, args });
-
-            // Remove the raw tool call from the output text
-            if let Some(mat) = caps.get(0) {
-                let raw_match = mat.as_str();
-                output_text = output_text.replace(raw_match, "").trim().to_string();
-            }
+        // ### 🛠️ Recovery & Cleanup: Polyglot Tool Extraction
+        let poly_calls = PolyglotParser::extract(&output_text);
+        if !poly_calls.is_empty() {
+            tracing::info!("🛠️ [Polyglot] Extracted {} additional tool calls.", poly_calls.len());
+            function_calls.extend(poly_calls);
+            output_text = PolyglotParser::scrub_tool_calls(&output_text);
         }
 
         let token_usage = parsed.usage.map(|u| TokenUsage {

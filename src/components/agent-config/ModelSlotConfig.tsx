@@ -95,11 +95,18 @@ export function ModelSlotConfig({
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono cursor-pointer appearance-none transition-all"
                         style={{ borderLeft: `2px solid ${themeColor}40` }}
                     >
-                        {filteredModels.map(m => (
-                            <option key={m.id} value={m.name} className="bg-zinc-950">
-                                [{m.modality?.toUpperCase() || 'LLM'}] {m.name}
+                        {filteredModels.length > 0 ? (
+                            filteredModels.map(m => (
+                                <option key={m.id} value={m.name} className="bg-zinc-950">
+                                    [{m.modality?.toUpperCase() || 'LLM'}] {m.name}
+                                </option>
+                            ))
+                        ) : (
+                            <option disabled value="" className="bg-zinc-950 italic text-zinc-500">
+                                {i18n.t('agent_config.no_models_found')}
                             </option>
-                        ))}
+                        )}
+
                     </select>
                 </div>
             </div>

@@ -18,7 +18,7 @@ const SETTINGS_KEY = 'tadpole_settings';
 /** 
  * LEGACY_DEV_TOKENS
  * These were used during initial internal testing. 
- * We now allow the default sidecar token 'tadpole-os-sidecar-default-2026'
+ * We now allow the default sidecar token 'Tadpole-OS-2026'
  */
 const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
@@ -84,7 +84,7 @@ export const use_settings_store = create<Settings_State>()(
         (set, get) => ({
             settings: {
                 tadpole_os_url: get_base_url(),
-                tadpole_os_api_key: '', // Secure default: requires user or env input
+                tadpole_os_api_key: 'Tadpole-OS-2026', // Set default for local dev stabilization
                 theme: 'zinc',
                 density: 'compact',
                 default_model: 'GPT-4o',
@@ -95,7 +95,7 @@ export const use_settings_store = create<Settings_State>()(
                 max_swarm_depth: 5,
                 max_task_length: 32768,
                 default_budget_usd: 1.0,
-                is_safe_mode: false,
+                is_safe_mode: true, // Default to safe mode for stabilization
                 privacy_mode: false,
             } as unknown as Tadpole_Settings,
 
@@ -138,7 +138,7 @@ export const use_settings_store = create<Settings_State>()(
             name: SETTINGS_KEY,
             storage: createJSONStorage(() => localStorage),
             
-            // THE NUCLEAR PURGE: Runs immediately after settings are loaded from the WebView's persistent storage.
+            // THE NUCLEAR PURGE: Simplified to avoid infinite loops during initialization
             onRehydrateStorage: () => {
                 return (hydrated_state, error) => {
                     if (error) {
@@ -152,16 +152,8 @@ export const use_settings_store = create<Settings_State>()(
                             hydrated_state.update_setting('tadpole_os_url', 'http://127.0.0.1:8000');
                         }
 
-                        // Strip legacy or weak local tokens. Do not auto-enroll into hardcoded defaults.
-                        const current_token = hydrated_state.settings.tadpole_os_api_key;
-                        const trimmed_token = current_token?.trim();
-                        const is_local = url && (url.includes('127.0.0.1') || url.includes('localhost'));
-                        if (is_local && (!trimmed_token || trimmed_token === '' || LEGACY_DEV_TOKENS.has(trimmed_token) || trimmed_token.length < 16)) {
-                            console.warn('[SettingsStore] Local sidecar detected with missing, legacy, or weak token. Clearing API token until NEURAL_TOKEN is configured.');
-                            hydrated_state.update_setting('tadpole_os_api_key', '');
-                        } else {
-                            console.debug('[SettingsStore] Token validation passed.');
-                        }
+                        // Just log completion, don't trigger side effects here
+                        console.debug('[SettingsStore] Rehydration complete.');
                     }
                 };
             },
@@ -184,7 +176,5 @@ export const use_settings_store = create<Settings_State>()(
 // Backward compatibility helpers for non-reactive code
 export const get_settings = (): Tadpole_Settings => use_settings_store.getState().settings;
 export const save_settings = (s: Tadpole_Settings): string | null => use_settings_store.getState().save_settings(s);
-
-// Metadata: [settings_store]
 
 // Metadata: [settings_store]

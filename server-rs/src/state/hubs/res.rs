@@ -23,6 +23,7 @@ use crate::agent::memory::VectorMemory;
 use crate::agent::rate_limiter::RateLimiter;
 use crate::types::SubsystemStatus;
 use crate::utils::graph::CodeGraph;
+use crate::services::parser::SymbolParser;
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use reqwest::Client;
@@ -80,6 +81,10 @@ pub struct ResourceHub {
     pub renderer: Arc<dyn crate::agent::runner::service_traits::PromptRendererTrait>,
     /// Base directory for relative path resolution.
     pub base_dir: std::path::PathBuf,
+    /// Global resource arbiter to prevent thread-pool exhaustion during heavy I/O.
+    pub arbiter: Arc<tokio::sync::Semaphore>,
+    /// High-fidelity code parser for symbol extraction.
+    pub parser: Arc<SymbolParser>,
 }
 
 impl ResourceHub {

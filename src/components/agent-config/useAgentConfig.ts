@@ -78,8 +78,11 @@ export function useAgentConfig(
             dispatch({ type: 'UPDATE_SLOT', slot, field: 'model', value: provider_models[0].name });
         } else {
             dispatch({ type: 'UPDATE_SLOT', slot, field: 'model', value: '' });
+            // Attempt a background sync if we have no models for this provider
+            void use_model_store.getState().sync_models();
         }
     }, []);
+
 
     const handleSave = useCallback(async () => {
         const { identity, governance } = state;
@@ -179,7 +182,7 @@ export function useAgentConfig(
                 workflows: active_slot.workflows,
                 mcp_tools: state.mcp_tools,
                 requires_oversight: state.governance.requires_oversight,
-                model_id: active_slot.model,
+                model_id: resolve_technical_model_id(active_slot.model),
                 created_at: new Date().toISOString()
             };
 

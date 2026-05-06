@@ -68,10 +68,10 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
         premark_current_task_fix_migration_if_needed(&pool, &migrator).await?;
     }
 
-    migrator
-        .run(&pool)
-        .await
-        .expect("❌ Failed to run database migrations");
+    if let Err(e) = migrator.run(&pool).await {
+        tracing::error!("❌ Critical failure during database migrations: {}", e);
+        return Err(anyhow::anyhow!("Database migration failure: {}", e));
+    }
 
     tracing::info!("✅ Database migrations applied successfully");
 
@@ -110,7 +110,7 @@ async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
     if let Some(path) = agents_json_path {
         tracing::info!("📂 [Database] Found baseline agents at {:?}", path);
         
-        let content = std::fs::read_to_string(&path)?;
+        let content = tokio::fs::read_to_string(&path).await?;
         let agents: Vec<serde_json::Value> = serde_json::from_str(&content)?;
 
         let mut tx = pool.begin().await?;
@@ -190,12 +190,12 @@ async fn seed_minimal_alpha(pool: &SqlitePool) -> Result<()> {
 /// Ensures default provider configs and model catalogs are available in the data directory.
 async fn seed_baseline_providers() -> Result<()> {
     let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-    let base_dir = std::env::current_dir().unwrap_or_default();
+    let base_dir = std::env::current_dir().map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
     let data_dir = base_dir.join("data");
     
     // Ensure data dir exists
     if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir)?;
+        tokio::fs::create_dir_all(&data_dir).await?;
     }
 
     let files_to_seed = [
@@ -209,7 +209,7 @@ async fn seed_baseline_providers() -> Result<()> {
         if !dest_path.exists() {
             if let Some(src_path) = find_bundled_file(&resource_root, &format!("data/{}", filename)) {
                 tracing::info!("🌱 [System] Seeding {} from {:?}...", filename, src_path);
-                std::fs::copy(&src_path, &dest_path)?;
+                tokio::fs::copy(&src_path, &dest_path).await?;
             }
         }
     }
@@ -220,27 +220,26 @@ async fn seed_baseline_providers() -> Result<()> {
 /// Ensures default workflows (directives) are loaded from the bundle.
 async fn seed_baseline_workflows() -> Result<()> {
     let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-    let base_dir = std::env::current_dir().unwrap_or_default();
+    let base_dir = std::env::current_dir().map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
     let directives_dir = base_dir.join("directives");
 
     if !directives_dir.exists() {
-        std::fs::create_dir_all(&directives_dir)?;
+        tokio::fs::create_dir_all(&directives_dir).await?;
     }
 
     // Copy from bundled data/workflows to directives/
     let bundled_workflows_dir = find_bundled_file(&resource_root, "data/workflows");
 
     if let Some(src_dir) = bundled_workflows_dir {
-        if let Ok(entries) = std::fs::read_dir(&src_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Some(filename) = path.file_name() {
-                        let dest_path = directives_dir.join(filename);
-                        if !dest_path.exists() {
-                            tracing::info!("🌱 [System] Seeding workflow {:?} from {:?}...", filename, path);
-                            std::fs::copy(&path, &dest_path)?;
-                        }
+        let mut entries = tokio::fs::read_dir(&src_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("md") {
+                if let Some(filename) = path.file_name() {
+                    let dest_path = directives_dir.join(filename);
+                    if !dest_path.exists() {
+                        tracing::info!("🌱 [System] Seeding workflow {:?} from {:?}...", filename, path);
+                        tokio::fs::copy(&path, &dest_path).await?;
                     }
                 }
             }
@@ -253,11 +252,11 @@ async fn seed_baseline_workflows() -> Result<()> {
 /// Ensures default MCP configuration is available.
 async fn seed_baseline_mcp_config() -> Result<()> {
     let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-    let base_dir = std::env::current_dir().unwrap_or_default();
+    let base_dir = std::env::current_dir().map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
     let agent_dir = base_dir.join(".agent");
 
     if !agent_dir.exists() {
-        std::fs::create_dir_all(&agent_dir)?;
+        tokio::fs::create_dir_all(&agent_dir).await?;
     }
 
     let mcp_filename = "mcp_config.json";
@@ -266,7 +265,7 @@ async fn seed_baseline_mcp_config() -> Result<()> {
     if !dest_path.exists() {
         if let Some(src_path) = find_bundled_file(&resource_root, &format!(".agent/{}", mcp_filename)) {
             tracing::info!("🌱 [System] Seeding MCP configuration from {:?}...", src_path);
-            std::fs::copy(&src_path, &dest_path)?;
+            tokio::fs::copy(&src_path, &dest_path).await?;
         }
     }
 

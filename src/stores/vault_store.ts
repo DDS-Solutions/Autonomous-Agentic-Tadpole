@@ -110,9 +110,11 @@ export const use_vault_store = create<Vault_State>()(
                 }, 100);
             }
 
+            const saved_key = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_KEY) : null;
+
             return {
-                is_locked: true,
-                master_key: null,
+                is_locked: !saved_key,
+                master_key: saved_key,
                 encrypted_configs: {},
                 inactivity_timeout: DEFAULT_TIMEOUT,
 
@@ -140,6 +142,7 @@ export const use_vault_store = create<Vault_State>()(
                         }
                     }
 
+                    sessionStorage.setItem(SESSION_KEY, password);
                     set({ is_locked: false, master_key: password });
                     
                     if (!is_sync) {
@@ -155,10 +158,7 @@ export const use_vault_store = create<Vault_State>()(
                 },
 
                 reset_vault: () => {
-                    get_vault_channel()?.postMessage({ 
-                        type: 'LOCK', 
-                        sender_id: TAB_ID 
-                    });
+                    sessionStorage.removeItem(SESSION_KEY);
                     set({
                         encrypted_configs: {},
                         is_locked: true,
@@ -168,6 +168,7 @@ export const use_vault_store = create<Vault_State>()(
                 },
 
                 lock: (is_sync = false) => {
+                    sessionStorage.removeItem(SESSION_KEY);
                     if (auto_lock_timer) clearTimeout(auto_lock_timer);
                     if (!is_sync) {
                         get_vault_channel()?.postMessage({ 

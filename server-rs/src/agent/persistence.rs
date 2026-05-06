@@ -27,8 +27,8 @@ use sqlx::SqlitePool;
 const PROVIDERS_FILE: &str = "data/infra_providers.json";
 const MODELS_FILE: &str = "data/infra_models.json";
 
-const DEFAULT_PROVIDER: &str = "google";
-const DEFAULT_MODEL_ID: &str = "gemini-1.5-pro";
+const DEFAULT_PROVIDER: &str = "ollama";
+const DEFAULT_MODEL_ID: &str = "gemma4:e4b";
 const DEFAULT_CATEGORY: &str = "user";
 
 async fn read_json_file<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {

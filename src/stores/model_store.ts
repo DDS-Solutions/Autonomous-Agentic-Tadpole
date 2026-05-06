@@ -58,7 +58,7 @@ export interface Model_State {
 }
 
 // Initial models from static list
-const INITIAL_MODELS: Model_Entry[] = (MODEL_OPTIONS || []).map(m => {
+const STATIC_INITIAL_MODELS: Model_Entry[] = (MODEL_OPTIONS || []).map(m => {
     let provider: string = PROVIDERS.LOCAL;
     let modality: Model_Entry['modality'] = 'llm';
     const lower = (m || '').toLowerCase();
@@ -80,6 +80,14 @@ const INITIAL_MODELS: Model_Entry[] = (MODEL_OPTIONS || []).map(m => {
 
     return { id: Crypto_Service.generate_id(), name: m, provider, modality };
 });
+
+// Explicitly add foundational local models to prevent empty states
+const CORE_LOCAL_MODELS: Model_Entry[] = [
+    { id: 'gemma4:e4b', name: 'Gemma 4 (Local)', provider: PROVIDERS.OLLAMA, modality: 'llm' },
+    { id: 'llama3:8b', name: 'Llama 3 (8B)', provider: PROVIDERS.OLLAMA, modality: 'llm' },
+];
+
+const INITIAL_MODELS = [...STATIC_INITIAL_MODELS, ...CORE_LOCAL_MODELS];
 
 /**
  * use_model_store
@@ -169,51 +177,86 @@ export const use_model_store = create<Model_State>()(
             sync_models: async () => {
                 try {
                     const raw_models = (await tadpole_os_service.get_models()) || [];
-                    const backend_models: Model_Entry[] = (raw_models as Record<string, unknown>[]).map(bm => ({
-                        ...bm,
-                        id: bm.id as string,
-                        name: (bm.name || bm.id) as string,
-                        provider: (bm.provider || bm.provider_id || bm.providerId || 'local') as string,
-                        provider_id: (bm.provider_id || bm.providerId || bm.provider || 'local') as string,
-                        modality: (bm.modality || 'llm') as Model_Entry['modality'],
-                        input_tokens: bm.input_tokens as number | undefined,
-                        output_tokens: bm.output_tokens as number | undefined,
-                        capabilities: bm.capabilities as Model_Entry['capabilities']
-                    } as Model_Entry));
+                    const backend_models: Model_Entry[] = (raw_models as Record<string, unknown>[]).map(bm => {
+                        // Normalize provider strings from backend
+                        let provider = (bm.provider || bm.provider_id || bm.providerId || 'local') as string;
+                        const lower_p = provider.toLowerCase();
+                        if (lower_p === 'ollama') provider = PROVIDERS.OLLAMA;
+                        if (lower_p === 'openai') provider = PROVIDERS.OPENAI;
+                        if (lower_p === 'anthropic') provider = PROVIDERS.ANTHROPIC;
+                        if (lower_p === 'google' || lower_p === 'gemini') provider = PROVIDERS.GOOGLE;
+                        if (lower_p === 'groq') provider = PROVIDERS.GROQ;
+
+                        return {
+                            ...bm,
+                            id: bm.id as string,
+                            name: (bm.name || bm.id) as string,
+                            provider,
+                            provider_id: (bm.provider_id || bm.providerId || bm.provider || 'local') as string,
+                            modality: (bm.modality || 'llm') as Model_Entry['modality'],
+                            input_tokens: bm.input_tokens as number | undefined,
+                            output_tokens: bm.output_tokens as number | undefined,
+                            capabilities: bm.capabilities as Model_Entry['capabilities']
+                        } as Model_Entry;
+                    });
                     
                     const models = get().models || [];
                     const deleting_ids = get().deleting_ids || new Set();
-                    const filtered_models = models.filter(m => 
-                        (backend_models || []).some(bm => bm.id === m.id) || deleting_ids.has(m.id)
-                    );
+                    
+                    // Non-Destructive Merge: 
+                    // 1. Keep local models that are NOT yet on the backend (Drafts)
+                    // 2. Keep models being deleted
+                    // 3. Update existing models from backend
+                    // 4. Add new models from backend
+                    const final_models = [...models];
+                    let changed = false;
 
-                    const final_models = [...filtered_models];
-                    let changed = filtered_models.length !== models.length;
-
+                    // Update or Add from Backend
                     backend_models.forEach((bm) => {
-                        const existing = final_models.find(m => m.id === bm.id);
-                        if (!existing && !deleting_ids.has(bm.id)) {
-                            final_models.push(bm);
-                            changed = true;
-                        } else if (existing) {
+                        const existing_idx = final_models.findIndex(m => m.id === bm.id || m.name === bm.name);
+                        if (existing_idx === -1) {
+                            if (!deleting_ids.has(bm.id)) {
+                                final_models.push(bm);
+                                changed = true;
+                            }
+                        } else {
+                            const existing = final_models[existing_idx];
                             // Authoritative Update: Backend always wins for routing critical fields
                             if (existing.provider !== bm.provider || 
                                 existing.modality !== bm.modality || 
                                 existing.name !== bm.name ||
                                 JSON.stringify(existing.capabilities) !== JSON.stringify(bm.capabilities)) {
-                                Object.assign(existing, bm);
+                                final_models[existing_idx] = { ...existing, ...bm };
                                 changed = true;
                             }
                         }
                     });
 
-                    if (changed) {
-                        set({ models: final_models });
+                    // Prune local models that were EXPLICITLY removed from backend 
+                    // (only if they aren't in INITIAL_MODELS or being deleted)
+                    const initial_names = new Set(INITIAL_MODELS.map(m => m.name));
+                    const pruned_models = final_models.filter(m => {
+                        if (deleting_ids.has(m.id)) return true;
+                        if (initial_names.has(m.name)) return true; // Keep built-in models
+                        if (backend_models.some(bm => bm.id === m.id || bm.name === m.name)) return true;
+                        
+                        // If it's not on backend and not built-in, and we have models on backend, 
+                        // it might be a stale local-only entry. But let's be cautious.
+                        if (backend_models.length > 0) {
+                            changed = true;
+                            return false; 
+                        }
+                        return true;
+                    });
+
+                    if (changed || pruned_models.length !== final_models.length) {
+                        set({ models: pruned_models });
                     }
                 } catch (error) {
                     log_error('ModelStore', 'Backend Sync Failed', error);
                 }
             },
+
 
             sync_defaults: (providers_length) => {
                 const models = get().models || [];
@@ -265,15 +308,17 @@ export const use_model_store = create<Model_State>()(
 
 // ── Cross-Tab Synchronization ────────────────────────────────
 if (sync_channel) {
-    // Initial fingerprint
     let last_broadcast = JSON.stringify(use_model_store.getState().models);
+    let sync_timeout: ReturnType<typeof setTimeout> | null = null;
 
     sync_channel.onmessage = (event) => {
         const { type, payload } = event.data;
         if (type === 'models:sync') {
-            // Update fingerprint BEFORE setting state to prevent local subscribe from echoing back
-            last_broadcast = JSON.stringify(payload);
-            use_model_store.setState({ models: payload });
+            const current_json = JSON.stringify(payload);
+            if (current_json !== last_broadcast) {
+                last_broadcast = current_json;
+                use_model_store.setState({ models: payload });
+            }
         }
     };
 
@@ -281,7 +326,13 @@ if (sync_channel) {
         const current = JSON.stringify(state.models);
         if (current !== last_broadcast) {
             last_broadcast = current;
-            sync_channel.postMessage({ type: 'models:sync', payload: state.models });
+            
+            // Debounce broadcast to prevent telemetry storms during bulk updates
+            if (sync_timeout) clearTimeout(sync_timeout);
+            sync_timeout = setTimeout(() => {
+                sync_channel.postMessage({ type: 'models:sync', payload: state.models });
+                sync_timeout = null;
+            }, 100);
         }
     });
 }

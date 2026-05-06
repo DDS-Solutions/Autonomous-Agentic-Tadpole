@@ -1,15 +1,15 @@
 [
   {
     "api_key": null,
-    "audio_model": null,
-    "base_url": "http://127.0.0.1:11434/v1",
-    "custom_headers": {},
-    "default_config": null,
-    "external_id": null,
+    "audioModel": null,
+    "baseUrl": "http://127.0.0.1:11434/v1",
+    "customHeaders": {},
+    "defaultConfig": null,
+    "externalId": null,
     "icon": "🦙",
     "id": "ollama",
     "name": "Ollama",
     "protocol": "ollama",
-    "supports_steering_vectors": false
+    "supportsSteeringVectors": false
   }
 ]

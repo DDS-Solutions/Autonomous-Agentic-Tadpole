@@ -41,6 +41,7 @@ export const MODEL_OPTIONS = [
     "Grok 4.1",
     // Google
     "Gemini 1.5 Flash",
+    "Gemma 4 (Local)",
     // DeepSeek
     "DeepSeek V3.2",
     "DeepSeek R1",

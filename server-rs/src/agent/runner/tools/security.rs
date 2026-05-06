@@ -88,10 +88,12 @@ impl SecurityManager for DefaultSecurityManager {
                 }
             }
             if !manifest_requires {
-                if let Some(skill) = runner.state.registry.skills.skills.get(&fc.name) {
-                    if skill.oversight_required {
-                        manifest_requires = true;
-                    }
+                let requires_oversight = {
+                    let snapshot = runner.state.registry.skills.snapshot();
+                    snapshot.skills.get(&fc.name).map(|s| s.oversight_required).unwrap_or(false)
+                };
+                if requires_oversight {
+                    manifest_requires = true;
                 }
             }
 

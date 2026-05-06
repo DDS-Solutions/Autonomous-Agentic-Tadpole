@@ -10,6 +10,7 @@
  * - **Telemetry Link**: Search for `[Model_Manager]` or `INVENTORY_SYNC` in UI logs.
  */
 
+import React from 'react';
 import { use_vault_store } from '../stores/vault_store';
 import { use_provider_store } from '../stores/provider_store';
 import Provider_Config_Panel from '../components/Provider_Config_Panel';
@@ -24,7 +25,7 @@ import {
     Add_Node_Dialog
 } from '../components/model';
 
-export default function Model_Manager(): React.ReactElement {
+export default function Model_Manager() {
     const { is_locked } = use_vault_store();
     const { providers } = use_provider_store();
 

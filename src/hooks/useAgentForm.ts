@@ -23,6 +23,7 @@ import type {
 export interface Agent_Config_State {
     main_tab: 'cognition' | 'memory' | 'governance';
     active_tab: Agent_Model_Slot_Key;
+    active_model_slot: 1 | 2 | 3;
     identity: {
         name: string;
         role: string;
@@ -76,7 +77,11 @@ export function config_reducer(state: Agent_Config_State, action: Agent_Config_A
         case 'SET_MAIN_TAB':
             return { ...state, main_tab: action.payload };
         case 'SET_TAB':
-            return { ...state, active_tab: action.payload };
+            return { 
+                ...state, 
+                active_tab: action.payload,
+                active_model_slot: action.payload === 'primary' ? 1 : action.payload === 'secondary' ? 2 : 3
+            };
         case 'UPDATE_IDENTITY':
             return {
                 ...state,

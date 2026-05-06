@@ -181,6 +181,7 @@ impl AgentRunner {
         skill: &crate::agent::script_skills::SkillDefinition,
         _usage: &mut Option<crate::agent::types::TokenUsage>,
     ) -> Result<(), AppError> {
+        let snapshot = self.state.registry.skills.snapshot();
         let result = self
             .state
             .registry
@@ -189,7 +190,7 @@ impl AgentRunner {
                 &skill.name,
                 fc.args.clone(),
                 ctx.workspace_root.clone(),
-                &self.state.registry.skills.skills,
+                &snapshot.skills,
             )
             .await;
 
@@ -391,9 +392,18 @@ impl AgentRunner {
 
         tracing::info!("💻 [System] Agent {} requesting shell execution: {}", ctx.agent_id, command_str);
 
-        // 1. Security Scanner
-        if let Err(e) = crate::utils::security::validate_shell_command(command_str) {
-            tracing::warn!("🛡️ [Security] Shell execution BLOCKED by basic scanner: {}", e);
+        // 1. Tokenize & Validate
+        let parts: Vec<String> = command_str.split_whitespace().map(|s| s.to_string()).collect();
+        if parts.is_empty() {
+            *output_text = "(SHELL FAILED: Command is empty)".to_string();
+            return Ok(());
+        }
+
+        let bin = &parts[0];
+        let args = &parts[1..];
+
+        if let Err(e) = crate::utils::security::validate_tokenized_command(bin, args) {
+            tracing::warn!("🛡️ [Security] Shell execution BLOCKED by tokenized scanner: {}", e);
             *output_text = format!("(SECURITY BLOCKED: {})", e);
             return Ok(());
         }
@@ -436,6 +446,9 @@ impl AgentRunner {
         }
 
         self.broadcast_agent(ctx, &format!("💻 System: running '{}'...", command_str), "info");
+        
+        let _permit = self.state.resources.arbiter.acquire().await
+            .map_err(|e| AppError::InternalServerError(format!("Resource arbiter failure: {}", e)))?;
 
         // 3. Execution
         let shell = if cfg!(windows) { "powershell" } else { "sh" };

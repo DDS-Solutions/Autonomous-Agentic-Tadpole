@@ -156,9 +156,9 @@ async fn async_main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 2. Initialize Tracing & Load Env
-    startup::init_tracing();
+    // 2. Load Env & Initialize Tracing
     startup::load_environment();
+    startup::init_tracing();
 
     let is_fast_path = args.iter().any(|arg| arg == "--status");
 
@@ -229,6 +229,9 @@ async fn async_main() -> anyhow::Result<()> {
     };
 
     // --- [STAGE: RUN] ---
+    // OPEN THE BOOT GATE: Signal all waiting tasks that the engine is now MISSION-READY.
+    app_state.notify_boot_complete();
+
     // Start the Axum server and listen for incoming connections.
     axum::serve(
         listener,

@@ -51,6 +51,7 @@ export default function Skills() {
         delete_skill_script,
         save_workflow,
         delete_workflow,
+        scan_workspace_skills,
         error: store_error
     } = use_skill_store();
 
@@ -91,6 +92,19 @@ export default function Skills() {
         message: '',
         on_confirm: () => {}
     });
+
+    const handle_scan = async () => {
+        set_is_saving(true);
+        try {
+            const ingested = await scan_workspace_skills();
+            // Optional: Show a toast or notification
+            console.log(`Ingested ${ingested} skills`);
+        } catch (err) {
+            set_save_error((err as Error).message || "Failed to scan workspace");
+        } finally {
+            set_is_saving(false);
+        }
+    };
 
     const handle_import_click = () => {
         const input = document.createElement('input');
@@ -233,17 +247,23 @@ export default function Skills() {
     };
 
     const filtered_scripts = scripts.filter(s => 
-        s.name.toLowerCase().includes(search_query.toLowerCase()) || 
-        s.description.toLowerCase().includes(search_query.toLowerCase())
+        s.category === active_category && (
+            s.name.toLowerCase().includes(search_query.toLowerCase()) || 
+            s.description.toLowerCase().includes(search_query.toLowerCase())
+        )
     );
 
     const filtered_workflows = workflows.filter(w => 
-        w.name.toLowerCase().includes(search_query.toLowerCase())
+        w.category === active_category && (
+            w.name.toLowerCase().includes(search_query.toLowerCase())
+        )
     );
 
     const filtered_hooks = hooks.filter(h => 
-        h.name.toLowerCase().includes(search_query.toLowerCase()) ||
-        h.description.toLowerCase().includes(search_query.toLowerCase())
+        h.category === active_category && (
+            h.name.toLowerCase().includes(search_query.toLowerCase()) ||
+            h.description.toLowerCase().includes(search_query.toLowerCase())
+        )
     );
 
     const filtered_mcp = mcp_tools.filter(t => 
@@ -293,6 +313,7 @@ export default function Skills() {
                     set_active_category,
                     set_search_query,
                     handle_import_click,
+                    on_scan: handle_scan,
                     on_create_skill: () => set_editing_skill({ name: '', description: '', execution_command: '', schema: {}, category: 'user' }),
                     on_create_workflow: () => set_editing_workflow({ name: '', content: '', category: 'user' })
                 }}

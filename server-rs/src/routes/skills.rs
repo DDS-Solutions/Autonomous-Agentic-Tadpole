@@ -28,14 +28,11 @@ use crate::error::AppError;
 use crate::state::AppState;
 use serde::Serialize;
 
-/// Discriminator for agent capabilities.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CapabilityType {
     Script,
     Workflow,
-    Hook,
-    Manifest,
     Unknown,
 }
 
@@ -50,16 +47,6 @@ impl From<&std::path::Path> for CapabilityType {
     }
 }
 
-/// Unified summary of an agent capability for UI consumption.
-#[derive(Debug, Serialize, Clone)]
-pub struct CapabilitySummary {
-    pub name: String,
-    pub description: String,
-    pub r#type: CapabilityType,
-    pub category: String,
-    pub metadata: serde_json::Value,
-}
-
 /// GET /v1/skills
 ///
 /// Unified endpoint for all agent abilities:
@@ -70,61 +57,39 @@ pub struct CapabilitySummary {
 pub async fn list_all_skills(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let mut summaries = Vec::new();
+    let mut manifests = Vec::new();
+    let mut scripts = Vec::new();
+    let mut workflows = Vec::new();
+    let mut hooks = Vec::new();
+
+    let snapshot = state.registry.skills.snapshot();
 
     // 1. Collect Manifests
     for kv in state.registry.skill_registry.manifests.iter() {
-        let manifest = kv.value();
-        summaries.push(CapabilitySummary {
-            name: manifest.name.clone(),
-            description: manifest.description.clone(),
-            r#type: CapabilityType::Manifest,
-            category: "system".to_string(),
-            metadata: json!(manifest),
-        });
+        manifests.push(kv.value().clone());
     }
 
     // 2. Collect Script Skills
-    for kv in state.registry.skills.skills.iter() {
-        let skill = kv.value();
-        summaries.push(CapabilitySummary {
-            name: skill.name.clone(),
-            description: skill.description.clone(),
-            r#type: CapabilityType::Script,
-            category: skill.category.clone(),
-            metadata: json!(skill),
-        });
+    for entry in snapshot.skills.iter() {
+        scripts.push(entry.value().clone());
     }
 
     // 3. Collect Workflows
-    for kv in state.registry.skills.workflows.iter() {
-        let wf = kv.value();
-        summaries.push(CapabilitySummary {
-            name: wf.name.clone(),
-            description: "Passive multi-step workflow".to_string(),
-            r#type: CapabilityType::Workflow,
-            category: wf.category.clone(),
-            metadata: json!(wf),
-        });
+    for entry in snapshot.workflows.iter() {
+        workflows.push(entry.value().clone());
     }
 
     // 4. Collect Hooks
-    for kv in state.registry.skills.hooks.iter() {
-        let hook = kv.value();
-        summaries.push(CapabilitySummary {
-            name: hook.name.clone(),
-            description: hook.description.clone(),
-            r#type: CapabilityType::Hook,
-            category: hook.category.clone(),
-            metadata: json!(hook),
-        });
+    for entry in snapshot.hooks.iter() {
+        hooks.push(entry.value().clone());
     }
-
-    summaries.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(Json(json!({
         "status": "success",
-        "capabilities": summaries
+        "manifests": manifests,
+        "scripts": scripts,
+        "workflows": workflows,
+        "hooks": hooks
     })))
 }
 
@@ -159,6 +124,27 @@ pub async fn get_manifest(
             name
         )))
     }
+}
+
+/// POST /v1/skills/scan
+///
+/// Triggers an autonomous workspace scan to discover new capabilities (README.md, SKILL.md).
+#[tracing::instrument(skip(state), name = "capability_hub::scan")]
+pub async fn scan_workspace_skills(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let count = state.scan_workspace_skills_sovereign().await?;
+    
+    state.broadcast_sys(
+        &format!("Autonomous scan complete. Ingested {} new capabilities.", count),
+        "success",
+        None,
+    );
+
+    Ok(Json(json!({
+        "status": "success",
+        "ingested_count": count
+    })))
 }
 
 /// POST /v1/skills/scripts
@@ -462,7 +448,7 @@ pub async fn resolve_capability_proposal(
         state
             .registry
             .skills
-            .register_capability(&cap_type, data, "agent_generated")
+            .register_capability(&cap_type, data, "ai")
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Failed to register capability: {}", e))

@@ -48,8 +48,16 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
 
     if (patch.theme_color !== undefined) dto.themeColor = patch.theme_color;
     if (patch.active_model_slot !== undefined) dto.activeModelSlot = patch.active_model_slot;
-    if (patch.model_config2 !== undefined) dto.modelConfig2 = patch.model_config2;
-    if (patch.model_config3 !== undefined) dto.modelConfig3 = patch.model_config3;
+    if (patch.model_2 !== undefined) dto.model2 = patch.model_2;
+    if (patch.model_3 !== undefined) dto.model3 = patch.model_3;
+    if (patch.model_config2 !== undefined) {
+        dto.modelConfig2 = patch.model_config2;
+        dto.model2 = patch.model_config2.modelId;
+    }
+    if (patch.model_config3 !== undefined) {
+        dto.modelConfig3 = patch.model_config3;
+        dto.model3 = patch.model_config3.modelId;
+    }
     if (patch.budget_usd !== undefined) dto.budgetUsd = patch.budget_usd;
     
     if (patch.skills !== undefined) dto.skills = patch.skills;

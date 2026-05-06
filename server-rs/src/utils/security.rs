@@ -13,15 +13,32 @@ use std::path::{Path, PathBuf};
 pub struct SafePath(PathBuf);
 
 impl SafePath {
-    pub fn from_trusted(p: PathBuf) -> Self {
+    /// Internal: Creates a SafePath from a trusted source.
+    pub(crate) fn from_trusted(p: PathBuf) -> Self {
         Self(p)
     }
+
+    /// Public: Validates a path relative to a base directory.
+    #[allow(dead_code)]
+    pub fn validate(base: &Path, user_path: &str) -> Result<Self, AppError> {
+        validate_path(base, user_path)
+    }
+
     pub fn as_path(&self) -> &Path {
         &self.0
     }
+
     #[allow(dead_code)]
     pub fn to_path_buf(&self) -> PathBuf {
         self.0.clone()
+    }
+
+    /// Sanitizes a path string for use in breadcrumbs to prevent traversal injection.
+    #[allow(dead_code)]
+    pub fn sanitize_breadcrumb(path: &str) -> String {
+        path.chars()
+            .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '.' || *c == '/' || *c == '\\')
+            .collect()
     }
 }
 
@@ -119,7 +136,58 @@ pub fn redact_secrets(input: &str) -> String {
     output
 }
 
-/// Validates a shell command against a ZERO-TRUST whitelist.
+/// Validates a shell command against a ZERO-TRUST whitelist using tokenized arguments.
+/// 
+/// ### 🛡️ SEC-03: Tokenized Validation
+/// Accepts a binary and an array of arguments to prevent shell meta-character 
+/// injection. Validates each token individually against a whitelist.
+pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppError> {
+    let lower_bin = bin.to_lowercase();
+
+    // 1. Whitelist of Allowed Base Binaries
+    let allowed_binaries = [
+        "ls", "cd", "pwd", "cat", "echo", "grep", "find", 
+        "cargo", "npm", "git", "python", "node", "rustc",
+        "mkdir", "cp", "mv", "touch", "test", "powershell", "sh"
+    ];
+
+    if !allowed_binaries.contains(&lower_bin.as_str()) {
+        return Err(AppError::Forbidden(format!("Binary '{}' is not in the authorized whitelist", bin)));
+    }
+
+    // 2. Scan arguments for dangerous patterns
+    let dangerous_patterns = ["$(", "`", "${", "|", ">", "<", ";", "&"];
+    let restricted_paths = ["/etc", "/root", "/var", "/bin", "/usr", "C:\\Windows"];
+
+    for arg in args {
+        let lower_arg = arg.to_lowercase();
+        
+        // Block meta-characters even in arguments (defense in depth)
+        for pattern in dangerous_patterns {
+            if lower_arg.contains(pattern) {
+                return Err(AppError::Forbidden(format!("Dangerous meta-character '{}' detected in argument: {}", pattern, arg)));
+            }
+        }
+
+        // Block access to system paths
+        for path in restricted_paths {
+            if lower_arg.contains(path) {
+                return Err(AppError::Forbidden(format!("Attempt to access restricted system path: {}", arg)));
+            }
+        }
+
+        // Block specific dangerous flags
+        if lower_arg == "--erase" || lower_arg == "--delete" || lower_arg == "-rf" {
+            return Err(AppError::Forbidden(format!("Dangerous flag detected: {}", arg)));
+        }
+    }
+
+    Ok(())
+}
+
+/// [LEGACY] Validates a raw shell command string against a ZERO-TRUST whitelist.
+/// Prefer `validate_tokenized_command` where possible.
+#[allow(dead_code)]
 pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
     let lower = command.to_lowercase();
 

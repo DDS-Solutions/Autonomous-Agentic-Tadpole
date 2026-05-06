@@ -32,6 +32,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface SessionLeaf {
+    id: string;
+    role: string;
+    content: string;
+    created_at: string;
+}
+
+const TELEMETRY_SOURCE = '[SovereignStore]';
+
 export type Sovereign_Scope = 'agent' | 'cluster' | 'swarm';
 
 export type Message_Part = 
@@ -61,6 +70,9 @@ interface Sovereign_State {
     target_agent: string;
     target_cluster: string;
     is_detached: boolean;
+    active_node_id: string | null;
+    active_mission_id: string | null;
+    session_leaves: SessionLeaf[];
 
     // Actions
     add_message: (msg: Omit<Chat_Message, 'id' | 'timestamp'> & { id?: string, timestamp?: string }) => void;
@@ -72,12 +84,16 @@ interface Sovereign_State {
     set_target_agent: (name: string) => void;
     set_target_cluster: (name: string) => void;
     set_detached: (is_detached: boolean) => void;
+    set_active_node: (node_id: string | null) => void;
+    set_active_mission: (mission_id: string | null) => void;
+    fetch_session_history: (mission_id: string, leaf_id: string) => Promise<void>;
+    fetch_mission_leaves: (mission_id: string) => Promise<void>;
     clear_history: () => void;
 }
 
 type Persisted_Sovereign_State = Pick<
     Sovereign_State,
-    'active_scope' | 'selected_agent_id' | 'target_agent' | 'target_cluster' | 'is_detached'
+    'active_scope' | 'selected_agent_id' | 'target_agent' | 'target_cluster' | 'is_detached' | 'active_node_id' | 'active_mission_id'
 >;
 
 // Cross-window synchronization
@@ -93,6 +109,9 @@ export const use_sovereign_store = create<Sovereign_State>()(
             target_agent: 'Agent of Nine',
             target_cluster: '',
             is_detached: false,
+            active_node_id: null,
+            active_mission_id: null,
+            session_leaves: [],
 
             add_message: (msg) => {
                 const new_msg = {
@@ -192,6 +211,57 @@ export const use_sovereign_store = create<Sovereign_State>()(
                 chat_channel?.postMessage({ type: 'SET_DETACHED', payload: is_detached });
             },
 
+            set_active_node: (active_node_id) => {
+                set({ active_node_id });
+                chat_channel?.postMessage({ type: 'SET_ACTIVE_NODE', payload: active_node_id });
+            },
+
+            set_active_mission: (active_mission_id) => {
+                set({ active_mission_id });
+                chat_channel?.postMessage({ type: 'SET_ACTIVE_MISSION', payload: active_mission_id });
+            },
+
+            fetch_session_history: async (mission_id, leaf_id) => {
+                try {
+                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/nodes/${leaf_id}/history`, {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const history_messages = data.history.map((n: any) => ({
+                            id: n.id,
+                            sender_id: n.role === 'user' ? '0' : '1',
+                            sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
+                            text: n.content,
+                            timestamp: n.created_at || new Date().toISOString(),
+                            scope: 'agent',
+                            target_node: n.mission_id
+                        }));
+                        set({ messages: history_messages, active_node_id: leaf_id });
+                    }
+                } catch (err) {
+                    console.error(`${TELEMETRY_SOURCE} Failed to fetch multiversal history:`, err);
+                }
+            },
+
+            fetch_mission_leaves: async (mission_id) => {
+                try {
+                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/leaves`, {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        set({ session_leaves: data.leaves });
+                    }
+                } catch (err) {
+                    console.error(`${TELEMETRY_SOURCE} Failed to fetch mission leaves:`, err);
+                }
+            },
+
             clear_history: () => {
                 set({ messages: [], message_index_by_id: {} });
                 chat_channel?.postMessage({ type: 'CLEAR_HISTORY' });
@@ -205,7 +275,9 @@ export const use_sovereign_store = create<Sovereign_State>()(
                 selected_agent_id: state.selected_agent_id,
                 target_agent: state.target_agent,
                 target_cluster: state.target_cluster,
-                is_detached: state.is_detached
+                is_detached: state.is_detached,
+                active_node_id: state.active_node_id,
+                active_mission_id: state.active_mission_id
             }),
             migrate: (persisted_state: unknown) => {
                 const state = (persisted_state || {}) as { logs?: Record<string, unknown>[] };
@@ -269,6 +341,12 @@ if (chat_channel) {
                 break;
             case 'SET_DETACHED':
                 use_sovereign_store.setState({ is_detached: payload as boolean });
+                break;
+            case 'SET_ACTIVE_NODE':
+                use_sovereign_store.setState({ active_node_id: payload as string | null });
+                break;
+            case 'SET_ACTIVE_MISSION':
+                use_sovereign_store.setState({ active_mission_id: payload as string | null });
                 break;
             case 'CLEAR_HISTORY':
                 use_sovereign_store.setState({ messages: [], message_index_by_id: {} });

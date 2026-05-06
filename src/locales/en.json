@@ -947,6 +947,7 @@
     "slot_primary": "PRIMARY COGNITIVE SECTOR",
     "slot_secondary": "SECONDARY COGNITIVE SECTOR",
     "slot_tertiary": "TERTIARY COGNITIVE SECTOR",
+    "no_models_found": "No models found for this provider. Sync infrastructure?",
     "label_skills": "Primary Skills ({{count}})",
     "tooltip_skills": "Primary skills and tools available to this neural slot during mission execution.",
     "label_workflows": "Workflows ({{count}})",

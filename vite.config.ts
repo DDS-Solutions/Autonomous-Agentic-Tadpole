@@ -30,6 +30,28 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    watch: {
+      ignored: [
+        '**/data/**',
+        '**/server-rs/**',
+        '**/execution/**',
+        '**/directives/**',
+        '**/hooks/**',
+        '**/scratch/**',
+        '**/.agent/**',
+        '**/audit_full_report.json',
+        '**/version.json',
+        '**/db/**',
+        '**/logs/**',
+        '**/.tmp/**',
+        '**/.git/**',
+        '**/node_modules/**',
+        '**/*.db*',
+        '**/*.sqlite*',
+        '**/*.log',
+        '**/.env*'
+      ]
+    },
     // ─── Security Headers ────────────────────────────────────────────────────
     // Injects production-grade security headers on every dev-server response.
     // These are also applied via the configureServer plugin below.

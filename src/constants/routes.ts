@@ -30,6 +30,7 @@ const Template_Store = lazy(() => import('../pages/Template_Store'));
 const Security_Dashboard = lazy(() => import('../pages/Security_Dashboard'));
 const Ops_Dashboard = lazy(() => import('../pages/Ops_Dashboard'));
 const Model_Store = lazy(() => import('../pages/Model_Store'));
+const Governance_View = lazy(() => import('../pages/Governance_View'));
 
 export interface Route_Config {
   path: string;
@@ -56,6 +57,7 @@ export const APP_ROUTES: Route_Config[] = [
   { path: '/settings', component: Settings, label: 'Settings', icon: 'Settings' },
   { path: '/store', component: Template_Store, label: 'Store', icon: 'ShoppingBag' },
   { path: '/security', component: Security_Dashboard, label: 'Security', icon: 'Lock' },
+  { path: '/governance', component: Governance_View, label: 'Governance', icon: 'Scale' },
 ];
 
 export const get_route_by_path = (path: string) => {

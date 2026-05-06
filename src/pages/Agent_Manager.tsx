@@ -39,7 +39,17 @@ export default function Agent_Manager() {
     const [is_creating, set_is_creating] = useState(false);
     const [search_query, set_search_query] = useState('');
     const [filter_role, set_filter_role] = useState<string>('all');
-    const [active_tab, set_active_tab] = useState<'user' | 'ai'>('user');
+    const [active_tab, set_active_tab] = useState<'user' | 'ai'>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('tadpole-agent-manager-sector');
+            if (saved === 'user' || saved === 'ai') return saved;
+        }
+        return 'user';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('tadpole-agent-manager-sector', active_tab);
+    }, [active_tab]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -269,6 +279,7 @@ export default function Agent_Manager() {
 
             {selected_agent && (
                 <AgentConfigPanel
+                    key={selected_agent.id}
                     agent={selected_agent}
                     onClose={() => {
                         set_selected_agent(null);

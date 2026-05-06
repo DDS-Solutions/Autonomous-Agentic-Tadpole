@@ -24,11 +24,11 @@ export type AgentCapabilities = { skills: string[]; workflows: string[]; mcpTool
 
 export type AgentState = { activeMission: JsonValue | null; currentTask: string | null; workingMemory: JsonValue; currentReasoningTurn: number }
 
-export type ModelConfig = { provider: ModelProvider; model_id?: string; api_key?: string | null; base_url?: string | null; system_prompt?: string | null; temperature: number | null; max_tokens?: number | null; external_id?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcp_tools?: string[] | null; steering_vectors?: string[] | null; reasoning_depth?: number | null; act_threshold?: number | null; max_turns?: number | null; connector_configs?: ConnectorConfig[] | null; extra_parameters?: Partial<{ [key in string]: JsonValue }> | null }
+export type ModelConfig = { modelId?: string; provider: ModelProvider; systemPrompt?: string | null; apiKey?: string | null; baseUrl?: string | null; temperature?: number | null; maxTokens?: number | null; topP?: number | null; externalId?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcpTools?: string[] | null; steeringVectors?: string[] | null; reasoningDepth?: number | null; actThreshold?: number | null; maxTurns?: number | null; connectorConfigs?: ConnectorConfig[] | null; extraParameters?: Partial<{ [key in string]: JsonValue }> | null }
 
 export type ConnectorConfig = { type: string; uri: string }
 
-export type TokenUsage = { input_tokens?: number; output_tokens?: number; total_tokens?: number }
+export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
 
 /**
  * ### 📡 Protocol: ModelProvider
@@ -51,7 +51,3 @@ export type SkillParameter = { type: string; required: boolean | null; default: 
 export type SkillHooks = { before_execute: string | null; after_execute: string | null }
 
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
-
-// Metadata: [generated]
-
-// Metadata: [generated]

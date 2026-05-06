@@ -89,6 +89,8 @@ export interface Agent_State {
     agents: Agent[];
     is_loading: boolean;
     error: string | null;
+    last_fetch_time: number;
+    boot_time: number;
 
     // Actions
     fetch_agents: (options?: RequestInit) => Promise<void>;
@@ -108,34 +110,66 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
     agents: [],
     is_loading: false,
     error: null,
+    last_fetch_time: 0,
+    boot_time: Date.now(),
 
     /// ### 📡 Remote Orchestration: Fetch Discovery
     /// Retrieves the current agent registry from the backend physical persistence.
     /// Implements a **Mock Fallback** mechanism to ensure the UI remains 
     /// interactive even during early-stage infrastructure boot.
     fetch_agents: async (options: RequestInit = {}): Promise<void> => {
-        set({ is_loading: true, error: null });
+        const now = Date.now();
+        // Rate limit: Max one fetch every 3 seconds to prevent loops
+        if (get().is_loading || (now - get().last_fetch_time < 3000)) return;
+        
+        set({ is_loading: true, error: null, last_fetch_time: now });
         try {
             const live_agents = (await load_agents(options)) || [];
             
             // Handle Mock Fallback: Ensures 'Alpha' agent is always present 
             // for development parity if the server is in a clean-state.
             const has_alpha = (live_agents || []).some(a => a.id === '1');
+            const has_qa = (live_agents || []).some(a => a.id === '99');
             let final_agents: Agent[];
 
-            if (!has_alpha && mock_agents.length > 0) {
-                const mock_agent: Agent = normalize_agent(mock_agents[0] as unknown as Raw_Agent);
-                final_agents = [mock_agent, ...live_agents];
+            if ((!has_alpha || !has_qa) && mock_agents.length > 0) {
+                // Phase 4: Hydrate the full mock swarm if backend is missing critical agents.
+                // We map through all mock agents to ensure the complete roster is available.
+                const hydrated_mock_swarm = (mock_agents as unknown as Raw_Agent[]).map(raw => {
+                    const existing_in_live = (live_agents || []).find(a => a.id === raw.id);
+                    if (existing_in_live) return existing_in_live;
+                    
+                    const existing_in_state = get().agents.find(a => a.id === raw.id);
+                    return existing_in_state || normalize_agent(raw);
+                });
+                final_agents = hydrated_mock_swarm;
             } else {
                 final_agents = live_agents;
             }
 
             set({ agents: final_agents, is_loading: false });
-            // Propagate the new registry to all other open dashboard portals.
-            broadcast_agent_sync({ type: 'agents:replace', payload: final_agents });
+            // Propagate the new registry to all other open dashboard portals if we aren't currently applying a remote sync
+            if (!is_applying_remote_sync) {
+                broadcast_agent_sync({ type: 'agents:replace', payload: final_agents });
+            }
         } catch (err: unknown) {
-            log_error('AgentStore', 'Agent Registry Failure', err);
-            set({ error: 'Failed to load agent registry. Check system logs for details.', is_loading: false });
+            if (err instanceof Error && err.name === 'AbortError') {
+                set({ is_loading: false });
+                return;
+            }
+            log_error('AgentStore', 'Agent Registry Failure (Hydrating from Mocks)', err);
+            
+            // EMERGENCY HYDRATION: Ensure the swarm is visible even if the backend is dead
+            const hydrated_mock_swarm = (mock_agents as unknown as Raw_Agent[]).map(raw => {
+                const existing = get().agents.find(a => a.id === raw.id);
+                return existing || normalize_agent(raw);
+            });
+            set({ agents: hydrated_mock_swarm, is_loading: false });
+
+            // Only set the user-facing error if we are past the boot cooldown (5s)
+            if (Date.now() - get().boot_time > 5000) {
+                set({ error: 'Backend registry offline. Operating in local-only mode.' });
+            }
         }
     },
 
@@ -151,10 +185,12 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
                 a.id === id ? { ...a, ...updates, _local_timestamp: timestamp } : a
             )
         }));
-        broadcast_agent_sync({
-            type: 'agent:update',
-            payload: { id, updates }
-        });
+        if (!is_applying_remote_sync) {
+            broadcast_agent_sync({
+                type: 'agent:update',
+                payload: { id, updates }
+            });
+        }
 
         // 2. Persistence Call
         try {
@@ -170,7 +206,9 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
         set((state: Agent_State) => ({
             agents: [...(state.agents || []), agent]
         }));
-        broadcast_agent_sync({ type: 'agent:add', payload: agent });
+        if (!is_applying_remote_sync) {
+            broadcast_agent_sync({ type: 'agent:add', payload: agent });
+        }
 
         try {
             await agent_api_service.create_agent(agent);
@@ -285,7 +323,18 @@ if (sync_channel) {
                     return { agents: [...agents, message.payload] };
                 });
             } else if (message.type === 'agents:replace') {
-                use_agent_store.setState({ agents: message.payload });
+                const current_agents = use_agent_store.getState().agents;
+                const new_agents = message.payload as Agent[];
+                
+                // Deep equality check is expensive, but we can do a simple identity check
+                // or length + first item check as a heuristic.
+                if (current_agents.length === new_agents.length && 
+                    current_agents[0]?.id === new_agents[0]?.id && 
+                    current_agents[current_agents.length-1]?.id === new_agents[new_agents.length-1]?.id) {
+                    return;
+                }
+
+                use_agent_store.setState({ agents: new_agents });
             }
         } finally {
             is_applying_remote_sync = false;

@@ -230,59 +230,96 @@ export const use_provider_store = create<Provider_State>()(
             },
 
             sync_with_backend: async () => {
+                const state = get() as any;
+                if (state.is_syncing) return;
+                
                 try {
+                    set({ is_syncing: true } as any);
                     console.debug('[ProviderStore] Initiating coordination sync...');
+                    
                     const raw_providers = (await tadpole_os_service.get_providers()) || [];
-                    const backend_providers: Provider_Config[] = (raw_providers as Record<string, unknown>[]).map(bp => ({
-                        ...bp,
-                        id: bp.id as string,
-                        name: (bp.name || bp.id) as string,
-                        api_key: bp.api_key as string | undefined, // Might be null from backend if not persisted
-                        base_url: (bp.base_url || bp.baseUrl) as string | undefined,
-                        external_id: (bp.external_id || bp.externalId) as string | undefined,
-                        custom_headers: (bp.custom_headers || bp.customHeaders) as Record<string, string> | undefined,
-                        audio_model: (bp.audio_model || bp.audioModel) as string | undefined,
-                        persist_to_engine: (bp.persist_to_engine ?? bp.persistToEngine) as boolean | undefined,
-                        supports_steering_vectors: (bp.supports_steering_vectors ?? bp.supportsSteeringVectors) as boolean | undefined
-                    } as Provider_Config));
+                    
+                    // 1. Normalize backend providers to our config shape
+                    const backend_providers: Provider_Config[] = (raw_providers as Record<string, unknown>[]).map(bp => {
+                        const id = String(bp.id || '').toLowerCase();
+                        return {
+                            ...bp,
+                            id,
+                            name: (bp.name || id) as string,
+                            api_key: bp.api_key as string | undefined,
+                            base_url: (bp.base_url || bp.baseUrl) as string | undefined,
+                            external_id: (bp.external_id || bp.externalId) as string | undefined,
+                            protocol: (bp.protocol || 'openai') as Provider_Config['protocol'],
+                            custom_headers: (bp.custom_headers || bp.customHeaders) as Record<string, string> | undefined,
+                            audio_model: (bp.audio_model || bp.audioModel) as string | undefined,
+                            persist_to_engine: (bp.persist_to_engine ?? bp.persistToEngine) as boolean | undefined,
+                            supports_steering_vectors: (bp.supports_steering_vectors ?? bp.supportsSteeringVectors) as boolean | undefined
+                        } as Provider_Config;
+                    });
 
-                    const providers = get().providers || [];
+                    // 2. Reconciliation Map (Prioritize: Backend > DEFAULT_PROVIDERS > Local State)
+                    const provider_map = new Map<string, Provider_Config>();
+                    
+                    // Seed with defaults
+                    DEFAULT_PROVIDERS.forEach(p => provider_map.set(p.id.toLowerCase(), { ...p }));
+                    
+                    // Overlay current local state (to preserve local-only providers or specific overrides)
+                    const current_providers = get().providers || [];
+                    current_providers.forEach(p => {
+                        const id = p.id.toLowerCase();
+                        provider_map.set(id, { ...p, id });
+                    });
+
+                    // Overlay backend state (Source of Truth for connectivity)
                     const deleting_ids = get().deleting_ids || new Set();
-                    const model_store = use_model_store.getState();
-                    const b_providers = backend_providers || [];
+                    backend_providers.forEach(bp => {
+                        const id = bp.id.toLowerCase();
+                        if (deleting_ids.has(id)) return;
 
-                    // Sync Providers
-                    const filtered_providers = providers.filter(p => 
-                        b_providers.some(bp => bp.id === p.id) || deleting_ids.has(p.id)
-                    );
-
-                    const final_providers = [...filtered_providers];
-                    let providers_changed = filtered_providers.length !== providers.length;
-
-                    backend_providers.forEach((bp) => {
-                        const existing = final_providers.find(p => p.id === bp.id);
-                        if (!existing && !deleting_ids.has(bp.id)) {
-                            final_providers.push(bp);
-                            providers_changed = true;
-                        } else if (existing) {
-                            if (bp.base_url && existing.base_url !== bp.base_url) {
-                                existing.base_url = bp.base_url;
-                                existing.protocol = bp.protocol;
-                                providers_changed = true;
-                            }
+                        const existing = provider_map.get(id);
+                        if (existing) {
+                            // Merge backend updates into existing
+                            provider_map.set(id, {
+                                ...existing,
+                                ...bp,
+                                id // keep normalized id
+                            });
+                        } else {
+                            provider_map.set(id, bp);
                         }
                     });
 
-                    if (providers_changed) {
+                    // 3. Finalize and Filter
+                    const final_providers = Array.from(provider_map.values())
+                        .filter(p => !deleting_ids.has(p.id));
+
+                    // Sort to keep UI consistent (Built-ins first, then others)
+                    const built_in_ids = new Set(DEFAULT_PROVIDERS.map(p => p.id));
+                    final_providers.sort((a, b) => {
+                        const a_is_builtin = built_in_ids.has(a.id);
+                        const b_is_builtin = built_in_ids.has(b.id);
+                        if (a_is_builtin && !b_is_builtin) return -1;
+                        if (!a_is_builtin && b_is_builtin) return 1;
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    const current_json = JSON.stringify(current_providers);
+                    const final_json = JSON.stringify(final_providers);
+
+                    if (current_json !== final_json) {
+                        console.log(`[ProviderStore] Registry updated: ${final_providers.length} providers active.`);
                         set({ providers: final_providers });
                     }
 
                     // Coordinate model sync
+                    const model_store = use_model_store.getState();
                     await model_store.sync_models();
                     get().sync_defaults();
 
                 } catch (error) {
                     log_error('ProviderStore', 'Coordination Sync Failed', error);
+                } finally {
+                    set({ is_syncing: false } as any);
                 }
             }
         }),

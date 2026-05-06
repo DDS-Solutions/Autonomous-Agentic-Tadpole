@@ -256,24 +256,7 @@ pub async fn transcribe_audio(
         provider: crate::agent::types::ModelProvider::Groq,
         model_id,
         api_key: Some(api_key.clone()),
-        base_url: None,
-        system_prompt: None,
-        temperature: None,
-        max_tokens: None,
-        external_id: None,
-        rpm: None,
-        rpd: None,
-        tpm: None,
-        tpd: None,
-        skills: None,
-        workflows: None,
-        mcp_tools: None,
-        connector_configs: None,
-        extra_parameters: None,
-        steering_vectors: None,
-        reasoning_depth: None,
-        act_threshold: None,
-        max_turns: None,
+        ..Default::default()
     };
 
     // Use the shared HTTP client from AppState (PERF-01 fix)

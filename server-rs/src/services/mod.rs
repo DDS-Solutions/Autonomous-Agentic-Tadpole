@@ -18,6 +18,7 @@
 pub mod discovery;
 pub mod privacy;
 pub mod acl_service;
+pub mod parser;
 
 #[cfg(test)]
 mod tests;

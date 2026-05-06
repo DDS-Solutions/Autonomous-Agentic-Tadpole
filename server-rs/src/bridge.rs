@@ -32,86 +32,46 @@ pub fn export_bindings() {
     output.push_str(" * - **Telemetry Link**: Not tracked (Static generated types).\n");
     output.push_str(" */\n\n");
     
-    // Individual exports for core roots (recursively includes sub-types if possible, but Specta export::<T> is unit-based)
-    output.push_str(&specta_typescript::export::<EngineAgent>(&config)
-        .expect("Failed to export EngineAgent"));
-    output.push_str("\n\n");
+    macro_rules! export_type {
+        ($t:ty) => {
+            match specta_typescript::export::<$t>(&config) {
+                Ok(s) => {
+                    output.push_str(&s);
+                    output.push_str("\n\n");
+                },
+                Err(e) => tracing::error!("❌ [Bridge] Failed to export {}: {}", stringify!($t), e),
+            }
+        };
+    }
 
-    output.push_str(&specta_typescript::export::<AgentIdentity>(&config)
-        .expect("Failed to export AgentIdentity"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentModels>(&config)
-        .expect("Failed to export AgentModels"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentEconomics>(&config)
-        .expect("Failed to export AgentEconomics"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentHealth>(&config)
-        .expect("Failed to export AgentHealth"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentCapabilities>(&config)
-        .expect("Failed to export AgentCapabilities"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentState>(&config)
-        .expect("Failed to export AgentState"));
-    output.push_str("\n\n");
-    
-    output.push_str(&specta_typescript::export::<ModelConfig>(&config)
-        .expect("Failed to export ModelConfig"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<ConnectorConfig>(&config)
-        .expect("Failed to export ConnectorConfig"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<TokenUsage>(&config)
-        .expect("Failed to export TokenUsage"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<ModelProvider>(&config)
-        .expect("Failed to export ModelProvider"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<RoleBlueprint>(&config)
-        .expect("Failed to export RoleBlueprint"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<AgentConfigUpdate>(&config)
-        .expect("Failed to export AgentConfigUpdate"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<SkillManifest>(&config)
-        .expect("Failed to export SkillManifest"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<DangerLevel>(&config)
-        .expect("Failed to export DangerLevel"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<Permission>(&config)
-        .expect("Failed to export Permission"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<SkillParameter>(&config)
-        .expect("Failed to export SkillParameter"));
-    output.push_str("\n\n");
-
-    output.push_str(&specta_typescript::export::<SkillHooks>(&config)
-        .expect("Failed to export SkillHooks"));
-    output.push_str("\n\n");
+    // Individual exports for core roots
+    export_type!(EngineAgent);
+    export_type!(AgentIdentity);
+    export_type!(AgentModels);
+    export_type!(AgentEconomics);
+    export_type!(AgentHealth);
+    export_type!(AgentCapabilities);
+    export_type!(AgentState);
+    export_type!(ModelConfig);
+    export_type!(ConnectorConfig);
+    export_type!(TokenUsage);
+    export_type!(ModelProvider);
+    export_type!(RoleBlueprint);
+    export_type!(AgentConfigUpdate);
+    export_type!(SkillManifest);
+    export_type!(DangerLevel);
+    export_type!(Permission);
+    export_type!(SkillParameter);
+    export_type!(SkillHooks);
 
     output.push_str("export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];\n");
 
     let export_path = "../src/contracts/generated.ts";
-    std::fs::write(export_path, output)
-        .expect("Failed to write TypeScript bindings to file");
-        
-    tracing::info!("✅ [Bridge] TypeScript bindings exported to: {}", export_path);
+    if let Err(e) = std::fs::write(export_path, output) {
+        tracing::error!("❌ [Bridge] Failed to write TypeScript bindings to file {}: {}", export_path, e);
+    } else {
+        tracing::info!("✅ [Bridge] TypeScript bindings exported to: {}", export_path);
+    }
 }
 
 #[cfg(test)]

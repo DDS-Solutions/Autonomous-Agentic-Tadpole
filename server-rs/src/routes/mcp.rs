@@ -39,9 +39,8 @@ pub async fn list_mcp_tools(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     // For the global list, we return all skills registered in the engine
-    let all_agent_skills: Vec<String> = state
-        .registry
-        .skills
+    let snapshot = state.registry.skills.snapshot();
+    let all_agent_skills: Vec<String> = snapshot
         .skills
         .iter()
         .map(|kv| kv.key().clone())
@@ -50,7 +49,7 @@ pub async fn list_mcp_tools(
     let tools = state
         .registry
         .mcp_host
-        .list_tools(&all_agent_skills, &state.registry.skills.skills)
+        .list_tools(&all_agent_skills, &snapshot.skills)
         .await;
 
     Ok((StatusCode::OK, Json(tools)))
@@ -99,7 +98,8 @@ pub async fn execute_mcp_tool(
         PermissionMode::Allow => {}
     }
 
-    match state.registry.mcp_host.call_tool(&name, arguments, workspace_root, &state.registry.skills.skills).await {
+    let snapshot = state.registry.skills.snapshot();
+    match state.registry.mcp_host.call_tool(&name, arguments, workspace_root, &snapshot.skills).await {
         Ok(McpResult::Raw(output)) => {
             Ok((StatusCode::OK, Json(json!({ "status": "success", "output": output }))).into_response())
         }

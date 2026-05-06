@@ -11,6 +11,12 @@ use crate::error::AppError;
 use tokio::sync::mpsc;
 use std::sync::Arc;
 use tracing::{info, error, debug, warn};
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap());
+static SSN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap());
+static CC_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{4}-\d{4}-\d{4}-\d{4}\b").unwrap());
 
 pub struct SecurityActor {
     receiver: mpsc::Receiver<SystemMessage>,
@@ -67,6 +73,8 @@ impl SecurityActor {
         budget_guard: Arc<BudgetGuard>,
         shell_scanner: Arc<ShellScanner>,
     ) -> Result<bool, AppError> {
+        use crate::utils::normalization::SovereignRefiner;
+
         match action {
             SecurityAction::Spend { amount } => {
                 if let Err(e) = budget_guard.record_usage(agent_id, amount).await {
@@ -76,7 +84,8 @@ impl SecurityActor {
                 Ok(true)
             }
             SecurityAction::Shell { command } => {
-                match shell_scanner.scan(&command) {
+                let refined_command = SovereignRefiner::refine(&command);
+                match shell_scanner.scan(&refined_command) {
                     ScannerResult::Safe => Ok(true),
                     ScannerResult::Risky(reason) => {
                         warn!("🛡️ [SecurityActor] Malicious command blocked for {}: {}", agent_id, reason);
@@ -85,9 +94,29 @@ impl SecurityActor {
                 }
             }
             SecurityAction::PiiCheck { text } => {
-                debug!("🛡️ [SecurityActor] PII Check requested for {} (Not yet implemented)", agent_id);
-                if text.contains("sk-") {
-                    warn!("🛡️ [SecurityActor] Possible API key detected for {}", agent_id);
+                let refined_text = SovereignRefiner::refine(&text);
+                debug!("🛡️ [SecurityActor] PII Check requested for {}", agent_id);
+
+                // 1. Delegate to ShellScanner for specialized secrets
+                match shell_scanner.scan(&refined_text) {
+                    ScannerResult::Safe => {}
+                    ScannerResult::Risky(reason) => {
+                        warn!("🛡️ [SecurityActor] Secret leakage detected in PII check for {}: {}", agent_id, reason);
+                        return Ok(false);
+                    }
+                }
+
+                // 2. Additional PII Patterns (Non-secret)
+                if EMAIL_REGEX.is_match(&refined_text) {
+                    warn!("🛡️ [SecurityActor] PII Leakage (Email Address) detected for {}", agent_id);
+                    return Ok(false);
+                }
+                if SSN_REGEX.is_match(&refined_text) {
+                    warn!("🛡️ [SecurityActor] PII Leakage (SSN) detected for {}", agent_id);
+                    return Ok(false);
+                }
+                if CC_REGEX.is_match(&refined_text) {
+                    warn!("🛡️ [SecurityActor] PII Leakage (Credit Card) detected for {}", agent_id);
                     return Ok(false);
                 }
                 Ok(true)

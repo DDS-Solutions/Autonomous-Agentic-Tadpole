@@ -26,6 +26,7 @@ export interface Tab {
 interface Tab_State {
     tabs: Tab[];
     active_tab_id: string | null;
+    active_tab_sync_source: 'url' | 'ui' | 'sync' | null;
 
     // Actions
     open_tab: (tab: Omit<Tab, 'id' | 'is_detached'>) => void;
@@ -60,6 +61,7 @@ export const use_tab_store = create<Tab_State>()(
                 { id: 'initial-ops', title: 'Operations', path: '/dashboard', icon: 'LayoutDashboard' }
             ],
             active_tab_id: 'initial-ops',
+            active_tab_sync_source: null,
 
             open_tab: (tab_data) => {
                 const tabs = get().tabs || [];
@@ -72,10 +74,11 @@ export const use_tab_store = create<Tab_State>()(
                     if (existing_tab.title !== tab_data.title || existing_tab.icon !== tab_data.icon) {
                         set({ 
                             tabs: (tabs || []).map(t => t.id === existing_tab.id ? { ...t, title: tab_data.title, icon: tab_data.icon } : t),
-                            active_tab_id: existing_tab.id 
+                            active_tab_id: existing_tab.id,
+                            active_tab_sync_source: 'url'
                         });
-                    } else {
-                        set({ active_tab_id: existing_tab.id });
+                    } else if (get().active_tab_id !== existing_tab.id) {
+                        set({ active_tab_id: existing_tab.id, active_tab_sync_source: 'url' });
                     }
                     return;
                 }
@@ -88,7 +91,8 @@ export const use_tab_store = create<Tab_State>()(
                 
                 set({
                     tabs: [...tabs, new_tab],
-                    active_tab_id: new_id
+                    active_tab_id: new_id,
+                    active_tab_sync_source: 'url'
                 });
             },
 
@@ -118,7 +122,7 @@ export const use_tab_store = create<Tab_State>()(
                 const tabs = (get().tabs || []);
                 const tab = tabs.find(t => t.id === id);
                 if (tab) {
-                    set({ active_tab_id: id });
+                    set({ active_tab_id: id, active_tab_sync_source: 'ui' });
                 }
             },
 
@@ -205,19 +209,25 @@ if (sync_channel) {
 
             if (current_fingerprint !== next_fingerprint && tabs && Array.isArray(tabs)) {
                 last_broadcast = next_fingerprint; // Update fingerprint BEFORE setting state
-                use_tab_store.setState({ tabs, active_tab_id }); 
+                use_tab_store.setState({ tabs, active_tab_id, active_tab_sync_source: 'sync' }); 
             }
         }
     };
+
+    let sync_timeout: ReturnType<typeof setTimeout> | null = null;
 
     use_tab_store.subscribe((state) => {
         const current = get_sync_fingerprint(state);
         if (current !== last_broadcast) {
             last_broadcast = current;
-            sync_channel.postMessage({ 
-                type: 'SYNC_STATE_TABS', 
-                payload: { tabs: state.tabs, active_tab_id: state.active_tab_id } 
-            });
+            
+            if (sync_timeout) clearTimeout(sync_timeout);
+            sync_timeout = setTimeout(() => {
+                sync_channel.postMessage({ 
+                    type: 'SYNC_STATE_TABS', 
+                    payload: { tabs: state.tabs, active_tab_id: state.active_tab_id } 
+                });
+            }, 100); // 100ms debounce to prevent broadcast storms
         }
     });
 }

@@ -365,6 +365,15 @@ impl MerkleAuditTrail {
         Ok((verified, total))
     }
 
+    /// Fetches the latest entry from the audit trail.
+    pub async fn get_latest_entry(&self) -> Result<Option<AuditEntry>> {
+        let entry: Option<AuditEntry> =
+            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(entry)
+    }
+
 }
 
 #[cfg(test)]

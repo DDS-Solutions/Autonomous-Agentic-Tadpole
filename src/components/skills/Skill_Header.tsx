@@ -33,6 +33,7 @@ interface Skill_Header_Props {
         handle_import_click: () => void;
         on_create_skill: () => void;
         on_create_workflow: () => void;
+        on_scan: () => void;
     };
     state: {
         active_category: 'user' | 'ai';
@@ -82,6 +83,17 @@ export const Skill_Header: React.FC<Skill_Header_Props> = ({ stats, handlers, st
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <Tooltip content="Autonomous Workspace Scan (README.md)" position="bottom">
+                        <button
+                            onClick={handlers.on_scan}
+                            disabled={state.is_saving}
+                            className={`bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-green-400 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 transition-all hover:border-green-500/50 ${state.is_saving ? 'animate-pulse' : ''}`}
+                        >
+                            <Search className={`w-3.5 h-3.5 ${state.is_saving ? 'animate-spin' : ''}`} /> 
+                            {state.is_saving ? 'Scanning...' : 'Scan Workspace'}
+                        </button>
+                    </Tooltip>
+
                     <Tooltip content={i18n.t('skills.tooltip_import')} position="bottom">
                         <button
                             onClick={handlers.handle_import_click}

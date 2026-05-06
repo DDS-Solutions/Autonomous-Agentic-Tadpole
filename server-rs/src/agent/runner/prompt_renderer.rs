@@ -79,6 +79,9 @@ SWARM PROTOCOL:
 --- GLOBAL OS IDENTITY ---
 {{identity}}
 
+--- SOVEREIGN STATE MANIFEST ---
+{{sovereign_manifest}}
+
 --- LONG-TERM SWARM MEMORY ---
 {{memory}}
 

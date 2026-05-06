@@ -64,13 +64,13 @@ export function useEngineStatus(): Engine_Status {
             
             // Map event fields to UI metrics, with fallback logic for legacy/transient states
             set_metrics({
-                cpu: h.cpu ?? 0,
-                memory: h.memory ?? 0,
-                latency: h.latency ?? 0,
-                active_agents: h.active_agents ?? h.agent_count ?? 0,
-                max_depth: h.max_depth ?? 0,
-                tpm: h.tpm ?? 0,
-                recruit_count: h.recruit_count ?? 0
+                cpu: Number.isFinite(h.cpu) ? h.cpu! : 0,
+                memory: Number.isFinite(h.memory) ? h.memory! : 0,
+                latency: Number.isFinite(h.latency) ? h.latency! : 0,
+                active_agents: Number.isFinite(h.active_agents) ? h.active_agents! : (Number.isFinite(h.agent_count) ? h.agent_count! : 0),
+                max_depth: Number.isFinite(h.max_depth) ? h.max_depth! : 0,
+                tpm: Number.isFinite(h.tpm) ? h.tpm! : 0,
+                recruit_count: Number.isFinite(h.recruit_count) ? h.recruit_count! : 0
             });
         });
 

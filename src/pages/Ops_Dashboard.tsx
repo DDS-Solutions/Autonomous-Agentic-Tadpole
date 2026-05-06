@@ -66,7 +66,7 @@ export default function Ops_Dashboard() {
                 department: params.department || 'Operations',
                 status: 'idle',
                 tokens_used: 0,
-                model: params.model || 'gemini-1.5-flash',
+                model: params.model || 'Gemma 4 (Local)',
                 skills: params.skills || [],
                 workflows: params.workflows || [],
                 cost_usd: 0,
@@ -230,22 +230,11 @@ export default function Ops_Dashboard() {
                                 url="/detached-view?type=agent-status"
                                 on_close={toggle_agent_grid_detachment}
                             >
-                                <div className="h-screen bg-zinc-950 p-6 flex flex-col overflow-hidden">
-                                    <Agent_Status_Grid
-                                        agents={agents_list}
-                                        assigned_agent_ids={assigned_agent_ids}
-                                        available_roles={available_roles}
-                                        clusters={clusters}
-                                        on_skill_trigger={handle_skill_trigger}
-                                        on_model_change={handle_model_change}
-                                        on_model_2_change={handle_model_2_change}
-                                        on_model_3_change={handle_model_3_change}
-                                        on_role_change={handle_role_change}
-                                        on_configure_click={(id: string) => set_config_agent_id(id)}
-                                        handle_agent_update={handle_agent_update}
-                                        on_toggle_cluster={toggle_cluster_active}
-                                    />
-                                </div>
+                                {/* 
+                                  * [NEURAL_RECOVERY]: We no longer portal children if a URL is used. 
+                                  * This prevents double-mounting in React 19 which causes the 'null useState' fault.
+                                  */}
+                                <div className="hidden" aria-hidden="true" />
                             </Portal_Window>
                         )}
                     </div>

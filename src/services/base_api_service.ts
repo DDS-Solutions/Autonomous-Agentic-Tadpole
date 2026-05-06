@@ -19,7 +19,7 @@
 import { get_settings } from '../stores/settings_store';
 import { use_trace_store } from '../stores/trace_store';
 
-export const DEFAULT_TIMEOUT = 30000; // 30 seconds default
+export const DEFAULT_TIMEOUT = 300000; // 5 minutes default (critical for slow-loading local models)
 export const DEPLOY_TIMEOUT = 7200000; // 2 hours for deployment
 export const MAX_RETRIES = 3;
 export const INITIAL_RETRY_DELAY = 1000;
@@ -258,8 +258,3 @@ export async function api_request<T = unknown>(
         throw err;
     }
 }
-
-
-// Metadata: [base_api_service]
-
-// Metadata: [base_api_service]

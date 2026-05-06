@@ -64,6 +64,7 @@ export const tadpole_os_service = {
     get delete_hook() { return mission_api_service.delete_hook; },
     get get_mcp_tools() { return mission_api_service.get_mcp_tools; },
     get execute_mcp_tool() { return mission_api_service.execute_mcp_tool; },
+    get scan_workspace_skills() { return mission_api_service.scan_workspace_skills; },
 
     // System / Engine Domain
     get check_health() { return system_api_service.check_health; },

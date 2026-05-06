@@ -29,7 +29,8 @@ impl BunkerCache {
     pub async fn new(db_path: PathBuf) -> Result<Self, AppError> {
         let options = SqliteConnectOptions::new()
             .filename(db_path)
-            .create_if_missing(true);
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_secs(10));
 
         let pool = SqlitePool::connect_with(options).await?;
 

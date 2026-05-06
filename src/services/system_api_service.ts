@@ -256,7 +256,7 @@ export const system_api_service = {
      */
     test_provider: async (config: Provider_Test_Config): Promise<{ status: string; latency?: number; message?: string }> => {
         try {
-            return await api_request<{ status: string; latency?: number }>(`/v1/infra/providers/${config.id}/test`, {
+            return await api_request<{ status: string; latency?: number }>(`/v1/model-manager/providers/${config.id}/test`, {
                 method: 'POST',
                 body: JSON.stringify(config)
             });
@@ -418,7 +418,7 @@ export const system_api_service = {
      * Returns all registered AI infrastructure providers.
      */
     get_providers: async (): Promise<Record<string, unknown>[]> => {
-        return api_request<Record<string, unknown>[]>('/v1/infra/providers', { method: 'GET' });
+        return api_request<Record<string, unknown>[]>('/v1/model-manager/providers', { method: 'GET' });
     },
 
     /**
@@ -426,7 +426,7 @@ export const system_api_service = {
      * Updates or creates an AI infrastructure provider.
      */
     update_provider: async (id: string, config: Record<string, unknown>): Promise<{ status: string }> => {
-        return api_request<{ status: string }>(`/v1/infra/providers/${id}`, {
+        return api_request<{ status: string }>(`/v1/model-manager/providers/${id}`, {
             method: 'PUT',
             body: JSON.stringify(config)
         });
@@ -437,7 +437,7 @@ export const system_api_service = {
      * Deletes an AI infrastructure provider.
      */
     delete_provider: async (id: string): Promise<void> => {
-        await api_request(`/v1/infra/providers/${id}`, { method: 'DELETE' });
+        await api_request(`/v1/model-manager/providers/${id}`, { method: 'DELETE' });
     },
 
     /**
@@ -450,7 +450,7 @@ export const system_api_service = {
      * reconciles pricing/token mappings for new capabilities (IMR-P2).
      */
     sync_provider_models: async (id: string): Promise<{ status: string; added: number; discovered: number; message: string }> => {
-        return api_request<{ status: string; added: number; discovered: number; message: string }>(`/v1/infra/providers/${id}/sync`, {
+        return api_request<{ status: string; added: number; discovered: number; message: string }>(`/v1/model-manager/providers/${id}/sync`, {
             method: 'POST'
         });
     },
@@ -460,7 +460,7 @@ export const system_api_service = {
      * Updates or creates an AI infrastructure model.
      */
     update_model: async (id: string, entry: Record<string, unknown>): Promise<{ status: string }> => {
-        return api_request<{ status: string }>(`/v1/infra/models/${id}`, {
+        return api_request<{ status: string }>(`/v1/model-manager/models/${id}`, {
             method: 'PUT',
             body: JSON.stringify(entry)
         });
@@ -471,7 +471,7 @@ export const system_api_service = {
      * Deletes an AI infrastructure model entry.
      */
     delete_model: async (id: string): Promise<void> => {
-        await api_request(`/v1/infra/models/${id}`, { method: 'DELETE' });
+        await api_request(`/v1/model-manager/models/${id}`, { method: 'DELETE' });
     },
 
     /**
@@ -479,7 +479,7 @@ export const system_api_service = {
      * Returns all registered AI infrastructure models.
      */
     get_models: async (): Promise<Record<string, unknown>[]> => {
-        return api_request<Record<string, unknown>[]>('/v1/infra/models', { method: 'GET' });
+        return api_request<Record<string, unknown>[]>('/v1/model-manager/models', { method: 'GET' });
     },
 
     /**
@@ -599,7 +599,7 @@ export const system_api_service = {
      * Fetches the curated model catalog from the infrastructure tier.
      */
     get_model_catalog: async (): Promise<Store_Model[]> => {
-        return api_request<Store_Model[]>('/v1/infra/model-store/catalog', { method: 'GET' });
+        return api_request<Store_Model[]>('/v1/model-manager/model-store/catalog', { method: 'GET' });
     },
 
     /**
@@ -607,10 +607,19 @@ export const system_api_service = {
      * Initiates a model pull/download sequence on a specific Bunker node.
      */
     pull_model: async (model_id: string, node_id: string): Promise<{ status: string }> => {
-        return api_request<{ status: string }>('/v1/infra/model-store/pull', {
+        return api_request<{ status: string }>('/v1/model-manager/model-store/pull', {
             method: 'POST',
             body: JSON.stringify({ tag: model_id, node_id: node_id })
         });
+    },
+
+    /**
+     * get_sovereign_manifest
+     * Fetches the real-time Sovereign State Manifest.
+     */
+    get_sovereign_manifest: async (): Promise<string> => {
+        const data = await api_request<{ manifest: string }>('/v1/governance/manifest', { method: 'GET' });
+        return data.manifest;
     },
 
     /**

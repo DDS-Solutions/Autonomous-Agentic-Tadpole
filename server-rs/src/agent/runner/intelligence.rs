@@ -204,8 +204,26 @@ impl AgentRunner {
 
                     if function_calls.is_empty() {
                         tracing::debug!("🏁 [Intelligence] No tool calls for agent {}, breaking loop.", ctx.agent_id);
+                        let mut final_text = scrub_mythos_tags(&output_text);
+                        
+                        // ### 🛡️ [Resilience] Mission Closure Fallback
+                        // If the model produced tool calls and observations but no narrative 
+                        // summary, we perform a "Final Pulse" to ensure the user receives a 
+                        // human-readable report.
+                        if final_text.trim().is_empty() && conversation_history.len() > 2 {
+                            tracing::info!("🔄 [Intelligence] Silent completion detected for {}. Synthesizing final report...", ctx.agent_id);
+                            let closure_prompt = "MISSION_CLOSURE: You have completed the technical steps. \
+                                                  PROVIDE A CONCISE SUMMARY OF YOUR FINDINGS AND ACTIONS TO THE USER NOW. \
+                                                  DO NOT EXECUTE ANY MORE TOOLS.";
+                            
+                            if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, closure_prompt, None).await {
+                                final_text = summary;
+                                self.accumulate_usage(&mut usage, s_usage);
+                            }
+                        }
+
                         return Ok(IntelligenceOutput { 
-                            text: scrub_mythos_tags(&output_text), 
+                            text: final_text, 
                             usage 
                         });
                     }

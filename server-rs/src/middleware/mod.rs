@@ -26,6 +26,7 @@
 //! @docs ARCHITECTURE:Networking
 
 pub mod auth;
+pub mod boot;
 
 pub mod auth_rate_limit;
 pub mod cors;

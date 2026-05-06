@@ -127,6 +127,8 @@ impl AgentRunner {
             &swarm_context_str,
         );
 
+        let sovereign_manifest = crate::system::manifest::SovereignStateManifest::generate(&self.state).await;
+
         let vars = self.assemble_prompt_variables(
             ctx, 
             &directives_str, 
@@ -136,7 +138,8 @@ impl AgentRunner {
             &pruned_repo_map, 
             &pruned_swarm_context_str,
             criticality_score,
-            failure_context
+            failure_context,
+            sovereign_manifest
         );
 
         let system_prompt = self.state.resources.renderer.render(self.state.resources.renderer.default_system_template(), &vars);
@@ -209,7 +212,8 @@ impl AgentRunner {
         pruned_repo_map: &str,
         pruned_swarm_context_str: &str,
         criticality_score: i32,
-        failure_context: Vec<String>
+        failure_context: Vec<String>,
+        sovereign_manifest: String,
     ) -> HashMap<&'static str, String> {
         let hierarchy_label = self.get_hierarchy_label(ctx.authority_level);
         let compressed_swarm_context = self.aaak_encode(pruned_swarm_context_str);
@@ -263,6 +267,7 @@ impl AgentRunner {
         vars.insert("swarm_protocols", swarm_str.to_string());
         vars.insert("repo_map", pruned_repo_map.to_string());
         vars.insert("identity", identity.to_string());
+        vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
         vars.insert("working_memory", serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string()));
         vars.insert("history", self.aaak_encode(ctx.summarized_history.as_deref().unwrap_or("No history summarized yet.")).to_string());
@@ -466,6 +471,14 @@ impl AgentRunner {
             "⚙️ TOOL REFINEMENT: Standard operation.".to_string()
         };
 
+        // ### 🧠 Resilience: Model-Specific Protocol Injection
+        let is_gemma = ctx.model_config.model_id.to_lowercase().contains("gemma");
+        let tool_mode_prefix = if is_gemma {
+            format!("{}\nGEMMA_PROTOCOL: You are a high-fidelity Specialist. To call tools, you MUST use the following format: <|tool_call|>call:tool_name{{\"arg\": \"val\"}}<tool_call|>", tool_mode_prefix)
+        } else {
+            tool_mode_prefix
+        };
+
         (
             cluster_directory,
             filesystem_bias_mandate,
@@ -479,9 +492,15 @@ impl AgentRunner {
     /// Generates the shared Swarm Protocol rules using the ACL Service.
     fn generate_swarm_protocols(&self, ctx: &RunContext) -> String {
         let mut swarm_protocols = self.state.resources.acl.get_role_protocols(&ctx.agent_id, &ctx.role, ctx.authority_level);
+        let is_orchestrator = ctx.agent_id == AGENT_CEO || ctx.agent_id == AGENT_COO || ctx.agent_id == AGENT_ALPHA;
 
         // Add shared/invariant swarm rules
-        swarm_protocols.push("NO NARRATION: Do not explain strategy or tool options. CALL THE TOOLS. Text-only responses are MISSION FAILURE.".to_string());
+        if !is_orchestrator && !ctx.safe_mode {
+            swarm_protocols.push("NO NARRATION: Do not explain strategy or tool options. CALL THE TOOLS. Text-only responses are MISSION FAILURE.".to_string());
+        } else if is_orchestrator {
+            swarm_protocols.push("CONVERSATIONAL: You are the primary interface for the user. Be helpful, professional, and conversational in natural language if no specific tools are needed for the current turn.".to_string());
+        }
+
         swarm_protocols.push("COMPLETION: Complete ALL steps autonomously before reporting back.".to_string());
         swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission. The system handles approval flows automatically.".to_string());
         swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_codebase_file) over general RAG for code queries.".to_string());
@@ -508,9 +527,9 @@ impl AgentRunner {
     /// Generates instructions for skills.
     fn generate_skill_fragments(&self, ctx: &RunContext) -> String {
         let mut skill_fragments = Vec::new();
+        let snapshot = self.state.registry.skills.snapshot();
         for skill_name in &ctx.skills {
-            if let Some(skill_entry) = self.state.registry.skills.skills.get(skill_name) {
-                let skill = skill_entry.value();
+            if let Some(skill) = snapshot.skills.get(skill_name) {
                 if let Some(instructions) = &skill.full_instructions {
                     skill_fragments.push(format!(
                         "### [{}] Full Instructions:\n{}",
@@ -541,9 +560,9 @@ impl AgentRunner {
     /// Generates instructions for workflows.
     fn generate_workflow_fragments(&self, ctx: &RunContext) -> String {
         let mut workflow_fragments = Vec::new();
+        let snapshot = self.state.registry.skills.snapshot();
         for workflow_name in &ctx.workflows {
-            if let Some(wf_entry) = self.state.registry.skills.workflows.get(workflow_name) {
-                let wf = wf_entry.value();
+            if let Some(wf) = snapshot.workflows.get(workflow_name) {
                 workflow_fragments.push(format!(
                     "### [{}] Workflow Procedure:\n{}",
                     wf.name, wf.content
@@ -664,11 +683,12 @@ impl AgentRunner {
 
         // 4. Dynamic MCP Tools
         if !ctx.safe_mode {
+            let snapshot = self.state.registry.skills.snapshot();
             let mcp_tools = self
                 .state
                 .registry
                 .mcp_host
-                .list_tools(&ctx.skills, &self.state.registry.skills.skills)
+                .list_tools(&ctx.skills, &snapshot.skills)
                 .await;
             for tool in mcp_tools {
                 if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
@@ -849,12 +869,13 @@ mod tests {
         let (ptx, _) = tokio::sync::broadcast::channel(1);
 
         let base_dir = std::path::PathBuf::from("/non/existent/path/to/trigger/failure");
-
         let pool = crate::db::init_db("sqlite::memory:").await.unwrap();
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(pool.clone()));
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(true);
 
         // Manual assembly of AppState to ensure no files exist
         let state = Arc::new(AppState {
+            boot_gate: (boot_tx, boot_rx),
             comms: Arc::new(crate::state::hubs::comm::CommunicationHub {
                 tx, event_tx: etx, telemetry_tx: ttx, audio_stream_tx: atx, pulse_tx: ptx,
                 oversight_queue: dashmap::DashMap::new(),
@@ -910,8 +931,11 @@ mod tests {
                 acl: Arc::new(crate::services::acl_service::AclService),
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
+                arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                parser: Arc::new(crate::services::parser::SymbolParser::new()),
             }),
             base_dir,
+            actors: tokio::sync::OnceCell::new(),
         });
 
         let runner = AgentRunner::new(state);

@@ -29,8 +29,8 @@ impl AgentRunner {
         }
 
         // Check if it's a synthesized skill
-        // Standard path: execution/agent_generated/skills/
-        let is_synthesized = self.state.registry.skills.skills.get(&fc.name)
+        let snapshot = self.state.registry.skills.snapshot();
+        let is_synthesized = snapshot.skills.get(&fc.name)
             .map(|s| s.category == "agent_generated")
             .unwrap_or(false);
 
@@ -113,7 +113,10 @@ mod tests {
             verification_script: None,
             category: "agent_generated".to_string(),
         };
-        state.registry.skills.skills.insert(skill.name.clone(), skill.clone());
+        // In minimal mock, we can just insert into the current state if we are testing logic
+        // But for consistency with the new architecture, we should use save_agent_skill or similar
+        // For unit tests, we'll just use the atomic registry's save_agent_skill which is now available.
+        state.registry.skills.save_agent_skill(skill.clone()).await.unwrap();
 
         let fc = ToolCall {
             name: "my_dynamic_skill".to_string(),

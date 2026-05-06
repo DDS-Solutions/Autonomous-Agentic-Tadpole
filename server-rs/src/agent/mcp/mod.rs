@@ -31,6 +31,7 @@ use crate::utils::parser::SymbolExtractor;
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use server_rs_macros::agent_tool;
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -117,7 +118,7 @@ impl McpHost {
     pub async fn list_tools(
         &self,
         agent_skills: &[String],
-        all_skills: &dashmap::DashMap<String, SkillDefinition>,
+        all_skills: &DashMap<String, SkillDefinition>,
     ) -> Vec<McpToolHub> {
         let mut tools: Vec<McpToolHub> = agent_skills
             .iter()
@@ -169,7 +170,7 @@ impl McpHost {
         tool_name: &str,
         arguments: serde_json::Value,
         workspace_root: std::path::PathBuf,
-        all_skills: &dashmap::DashMap<String, SkillDefinition>,
+        all_skills: &DashMap<String, SkillDefinition>,
     ) -> Result<McpResult, AppError> {
         let start_time = std::time::Instant::now();
 
@@ -209,7 +210,7 @@ impl McpHost {
         tool_name: &str,
         arguments: serde_json::Value,
         workspace_root: std::path::PathBuf,
-        all_skills: &dashmap::DashMap<String, SkillDefinition>,
+        all_skills: &DashMap<String, SkillDefinition>,
     ) -> Result<McpResult, AppError> {
         let handler = {
             let registry = self.registry.lock().await;

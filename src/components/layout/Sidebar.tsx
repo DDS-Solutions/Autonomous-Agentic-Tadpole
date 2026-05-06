@@ -27,6 +27,7 @@ export function Sidebar({ nav_item_class }: SidebarProps) {
     const CORE_OPS_ITEMS = [
         { to: '/dashboard', icon: LayoutDashboard, label: 'sidebar.ops_nav', tooltip: 'sidebar.ops_tooltip', end: true },
         { to: '/org-chart', icon: Users, label: 'sidebar.hierarchy_nav', tooltip: 'sidebar.hierarchy_tooltip' },
+        { to: '/governance', icon: Shield, label: 'Governance', tooltip: 'Sovereign State Manifest & Swarm Health' },
         { to: '/missions', icon: Target, label: 'sidebar.missions_nav', tooltip: 'sidebar.missions_tooltip' },
         { to: '/scheduled-jobs', icon: Clock, label: 'sidebar.scheduled_jobs_nav', tooltip: 'sidebar.scheduled_jobs_tooltip' },
         { to: '/oversight', icon: Shield, label: 'sidebar.oversight_nav', tooltip: 'sidebar.oversight_tooltip' },
@@ -105,6 +106,5 @@ export function Sidebar({ nav_item_class }: SidebarProps) {
         </aside>
     );
 }
-
 
 // Metadata: [Sidebar]

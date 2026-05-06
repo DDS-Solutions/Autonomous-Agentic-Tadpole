@@ -121,11 +121,11 @@ export const agent_api_service = {
      * SECURITY NOTE: If a local key is available in the vault, it is injected into the payload.
      * The Rust backend is responsible for redacting this key from systemic logs.
      */
-    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string): Promise<boolean> => {
+    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string): Promise<boolean> => {
         return track_operation('AgentAPI', `Dispatching command to agent: ${agent_id.toUpperCase()}`, async () => {
             const vault_store = use_vault_store.getState();
             const model_store = use_model_store.getState();
-            const body: Task_Payload = { message, cluster_id, department, provider, model_id, budget_usd, external_id, safe_mode, analysis };
+            const body: Task_Payload = { message, cluster_id, department, provider, model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id };
 
             const provider_api_key = await vault_store.get_api_key(provider);
             const is_actually_locked = vault_store.is_locked && !sessionStorage.getItem('tadpole-vault-master-key');
@@ -238,11 +238,11 @@ export const agent_api_service = {
      * Performs a global semantic search across agent memories and mission logs.
      */
     search_memory: async (query: string, agent_id?: string): Promise<{ status: string; entries: Agent_Memory_Entry[] }> => {
-        const url = new URL('/v1/search/memory', window.location.origin);
-        url.searchParams.append('query', query);
-        if (agent_id) url.searchParams.append('agent_id', agent_id);
+        const params = new URLSearchParams();
+        params.append('query', query);
+        if (agent_id) params.append('agent_id', agent_id);
 
-        const result = await api_request<{ status: string; entries: Raw_Agent_Memory_Entry[] }>(url.pathname + url.search, {
+        const result = await api_request<{ status: string; entries: Raw_Agent_Memory_Entry[] }>(`/v1/search/memory?${params.toString()}`, {
             method: 'GET'
         });
         return {

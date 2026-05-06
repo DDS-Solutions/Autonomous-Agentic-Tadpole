@@ -131,6 +131,15 @@ export const mission_api_service = {
      */
     delete_hook: async (name: string): Promise<void> => {
         await api_request(`/v1/skills/hooks/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    },
+
+    /**
+     * Triggers an autonomous workspace scan to discover new capabilities.
+     */
+    scan_workspace_skills: async (): Promise<{ ingested_count: number }> => {
+        return track_operation('MissionAPI', 'Triggering autonomous workspace skill scan', async () => {
+            return api_request<{ ingested_count: number }>('/v1/skills/scan', { method: 'POST' });
+        });
     }
 };
 

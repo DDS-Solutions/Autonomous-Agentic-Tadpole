@@ -79,7 +79,7 @@ impl ParsedDocument {
 }
 
 /// Primary entry point: parse a file at the given path into structured sections.
-pub fn parse_file(path: &Path) -> Result<ParsedDocument, AppError> {
+pub async fn parse_file(path: &Path) -> Result<ParsedDocument, AppError> {
     let ext = path
         .extension()
         .and_then(|s| s.to_str())
@@ -87,18 +87,18 @@ pub fn parse_file(path: &Path) -> Result<ParsedDocument, AppError> {
         .to_lowercase();
 
     match ext.as_str() {
-        "txt" => parse_plaintext(path),
-        "md" => parse_markdown(path),
-        "csv" => parse_csv(path),
-        "pdf" => parse_pdf_text_layer(path),
+        "txt" => parse_plaintext(path).await,
+        "md" => parse_markdown(path).await,
+        "csv" => parse_csv(path).await,
+        "pdf" => parse_pdf_text_layer(path).await,
         _ => Err(AppError::BadRequest(format!("Unsupported file format: .{}", ext))),
     }
 }
 
 // ─── Plain Text ──────────────────────────────────────────────
 
-fn parse_plaintext(path: &Path) -> Result<ParsedDocument, AppError> {
-    let content = std::fs::read_to_string(path).map_err(AppError::Io)?;
+async fn parse_plaintext(path: &Path) -> Result<ParsedDocument, AppError> {
+    let content = tokio::fs::read_to_string(path).await.map_err(AppError::Io)?;
     Ok(ParsedDocument {
         source_path: path.to_string_lossy().to_string(),
         format: "txt".into(),
@@ -111,8 +111,8 @@ fn parse_plaintext(path: &Path) -> Result<ParsedDocument, AppError> {
 
 // ─── Markdown ────────────────────────────────────────────────
 
-fn parse_markdown(path: &Path) -> Result<ParsedDocument, AppError> {
-    let content = std::fs::read_to_string(path).map_err(AppError::Io)?;
+async fn parse_markdown(path: &Path) -> Result<ParsedDocument, AppError> {
+    let content = tokio::fs::read_to_string(path).await.map_err(AppError::Io)?;
     let mut sections = Vec::new();
     let mut current_heading = String::new();
     let mut current_body: Vec<&str> = Vec::new();
@@ -150,8 +150,8 @@ fn parse_markdown(path: &Path) -> Result<ParsedDocument, AppError> {
 
 // ─── CSV ─────────────────────────────────────────────────────
 
-fn parse_csv(path: &Path) -> Result<ParsedDocument, AppError> {
-    let content = std::fs::read_to_string(path).map_err(AppError::Io)?;
+async fn parse_csv(path: &Path) -> Result<ParsedDocument, AppError> {
+    let content = tokio::fs::read_to_string(path).await.map_err(AppError::Io)?;
     let mut lines = content.lines();
 
     let header = lines.next().unwrap_or("");
@@ -190,8 +190,8 @@ fn parse_csv(path: &Path) -> Result<ParsedDocument, AppError> {
 // from PDF stream objects. Full OCR/layout support deferred to Phase 4.5
 // when Tesseract or a Docling binding is introduced.
 
-fn parse_pdf_text_layer(path: &Path) -> Result<ParsedDocument, AppError> {
-    let bytes = std::fs::read(path).map_err(AppError::Io)?;
+async fn parse_pdf_text_layer(path: &Path) -> Result<ParsedDocument, AppError> {
+    let bytes = tokio::fs::read(path).await.map_err(AppError::Io)?;
 
     // Naive text-layer extraction: scan for BT...ET text blocks
     let content = String::from_utf8_lossy(&bytes);

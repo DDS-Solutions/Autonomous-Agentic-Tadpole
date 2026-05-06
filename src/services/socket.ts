@@ -208,6 +208,20 @@ class Tadpole_OS_Socket_Client {
         };
     }
 
+    private custom_event_listeners: ((event: any) => void)[] = [];
+    subscribe_custom_event(listener: (event: any) => void): () => void {
+        this.custom_event_listeners.push(listener);
+        return () => {
+            this.custom_event_listeners = this.custom_event_listeners.filter(l => l !== listener);
+        };
+    }
+
+    send_event(event: any): void {
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(event));
+        }
+    }
+
     get_connection_state(): Connection_State {
         return this.state;
     }
@@ -438,6 +452,9 @@ class Tadpole_OS_Socket_Client {
                 text: `Scheduled Job '${data.job_name}' completed. Cost: $${(data.cost_usd as number || 0).toFixed(4)}`,
                 severity: data.status === 'failed' ? 'error' : 'success'
             });
+        } else {
+            // Handle custom/specialized events
+            this.custom_event_listeners.forEach(l => l(data));
         }
     }
 

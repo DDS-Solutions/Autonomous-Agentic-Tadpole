@@ -52,12 +52,15 @@ export default class Error_Boundary extends Component<Props, State> {
      * rapid telemetry tracing.
      */
     public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error(`[Neural Sector Fault] ${this.props.name || 'Unknown'}:`, error, errorInfo);
+        // [NEURAL_DIAGNOSTICS]: Check for React internal state corruption
+        const is_dispatcher_null = error.message.includes('reading \'useState\'') || error.message.includes('reading \'useRef\'');
+        
+        console.error(`[Neural Sector Fault] ${this.props.name || 'Unknown'} (Dispatcher Corrupt: ${is_dispatcher_null}):`, error, errorInfo);
         
         // Telemetry Injection: Broadcast fault to the system bus
         event_bus.emit_log({
             source: 'System',
-            text: `[Neural Sector Fault] ${this.props.name || 'Core'}: ${error.message}`,
+            text: `[Neural Sector Fault] ${this.props.name || 'Core'}${is_dispatcher_null ? ' (Internal Dispatcher Error)' : ''}: ${error.message}`,
             severity: 'error'
         });
     }

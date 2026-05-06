@@ -30,6 +30,7 @@ interface CognitionSectionProps {
     scripts: Skill_Definition[];
     mcpTools: Mcp_Tool_Hub_Definition[];
     themeColor: string;
+    activeModelSlot: 1 | 2 | 3;
     onSetTab: (tab: Agent_Model_Slot_Key) => void;
     onUpdateSlotField: <K extends keyof Agent_Model_Slot_State>(slot: Agent_Model_Slot_Key, field: K, value: Agent_Model_Slot_State[K]) => void;
     onToggleSkill: (slot: Agent_Model_Slot_Key, kind: 'skills' | 'workflows', value: string) => void;
@@ -55,6 +56,7 @@ export function CognitionSection({
     scripts,
     mcpTools,
     themeColor,
+    activeModelSlot,
     onSetTab,
     onUpdateSlotField,
     onToggleSkill,
@@ -64,26 +66,35 @@ export function CognitionSection({
 }: CognitionSectionProps) {
     const isPaused = agentStatus === 'suspended';
 
-    const renderTabButton = (id: Agent_Model_Slot_Key, label: string, icon: React.ReactNode) => (
-        <button
-            onClick={() => onSetTab(id)}
-            className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all relative overflow-hidden group ${activeTab === id ? 'bg-zinc-800 border-zinc-700 shadow-lg' : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800/30'}`}
-        >
-            {activeTab === id && (
-                <div 
-                    className="absolute top-0 left-0 w-full h-0.5" 
-                    style={{ background: `linear-gradient(to right, transparent, ${themeColor}80, transparent)` }}
-                />
-            )}
-            <div 
-                className={`p-1.5 rounded-lg transition-colors ${activeTab === id ? '' : 'bg-zinc-900 group-hover:bg-zinc-800'}`}
-                style={activeTab === id ? { backgroundColor: `${themeColor}15`, color: themeColor } : {}}
+    const renderTabButton = (id: Agent_Model_Slot_Key, label: string, icon: React.ReactNode) => {
+        const slotIdx = id === 'primary' ? 1 : id === 'secondary' ? 2 : 3;
+        const isActiveForAgent = activeModelSlot === slotIdx;
+
+        return (
+            <button
+                onClick={() => onSetTab(id)}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all relative overflow-hidden group ${activeTab === id ? 'bg-zinc-800 border-zinc-700 shadow-lg' : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800/30'}`}
             >
-                {icon}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] leading-none" style={activeTab === id ? { color: themeColor } : {}}>{label}</span>
-        </button>
-    );
+                {activeTab === id && (
+                    <div 
+                        className="absolute top-0 left-0 w-full h-0.5" 
+                        style={{ background: `linear-gradient(to right, transparent, ${themeColor}80, transparent)` }}
+                    />
+                )}
+                
+                {/* Active Slot LED Indicator */}
+                <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full transition-all duration-300 ${isActiveForAgent ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] scale-110' : 'bg-zinc-800 opacity-0 group-hover:opacity-100'}`} />
+
+                <div 
+                    className={`p-1.5 rounded-lg transition-colors ${activeTab === id ? '' : 'bg-zinc-900 group-hover:bg-zinc-800'}`}
+                    style={activeTab === id ? { backgroundColor: `${themeColor}15`, color: themeColor } : {}}
+                >
+                    {icon}
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] leading-none" style={activeTab === id ? { color: themeColor } : {}}>{label}</span>
+            </button>
+        );
+    };
 
     return (
         <div className="p-4 space-y-6 animate-in fade-in duration-300">

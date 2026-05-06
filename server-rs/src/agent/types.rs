@@ -167,12 +167,13 @@ pub trait Validatable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenUsage {
-    #[serde(default, alias = "inputTokens")]
+    #[serde(default, alias = "input_tokens")]
     pub input_tokens: u32,
-    #[serde(default, alias = "outputTokens")]
+    #[serde(default, alias = "output_tokens")]
     pub output_tokens: u32,
-    #[serde(default, alias = "totalTokens")]
+    #[serde(default, alias = "total_tokens")]
     pub total_tokens: u32,
 }
 
@@ -188,20 +189,21 @@ pub struct SyncManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelCapabilities {
-    #[serde(default, alias = "supportsTools")]
+    #[serde(default, alias = "supports_tools")]
     pub supports_tools: bool,
-    #[serde(default, alias = "supportsVision")]
+    #[serde(default, alias = "supports_vision")]
     pub supports_vision: bool,
-    #[serde(default, alias = "supportsStructuredOutput")]
+    #[serde(default, alias = "supports_structured_output")]
     pub supports_structured_output: bool,
-    #[serde(default, alias = "supportsReasoning")]
+    #[serde(default, alias = "supports_reasoning")]
     pub supports_reasoning: bool,
-    #[serde(default, alias = "supportsHaltingTool")]
+    #[serde(default, alias = "supports_halting_tool")]
     pub supports_halting_tool: bool,
-    #[serde(default, alias = "contextWindow")]
+    #[serde(default, alias = "context_window")]
     pub context_window: u32,
-    #[serde(default, alias = "maxOutputTokens")]
+    #[serde(default, alias = "max_output_tokens")]
     pub max_output_tokens: u32,
 }
 
@@ -316,20 +318,24 @@ impl ModelCapabilities {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelConfig {
-    pub provider: ModelProvider,
-    #[serde(default, alias = "modelId")]
+    #[serde(default, alias = "model_id")]
     pub model_id: String,
-    #[serde(default, alias = "apiKey")]
-    pub api_key: Option<String>,
-    #[serde(default, alias = "baseUrl")]
-    pub base_url: Option<String>,
-    #[serde(default, alias = "systemPrompt")]
+    pub provider: ModelProvider,
+    #[serde(default, alias = "system_prompt")]
     pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default, alias = "base_url")]
+    pub base_url: Option<String>,
+    #[serde(default)]
     pub temperature: Option<f32>,
-    #[serde(default, alias = "maxTokens")]
+    #[serde(default, alias = "max_tokens")]
     pub max_tokens: Option<u32>,
-    #[serde(default, alias = "externalId")]
+    #[serde(default, alias = "top_p")]
+    pub top_p: Option<f32>,
+    #[serde(default, alias = "external_id")]
     pub external_id: Option<String>,
     #[serde(default)]
     pub rpm: Option<u32>,
@@ -339,27 +345,28 @@ pub struct ModelConfig {
     pub tpm: Option<u32>,
     #[serde(default)]
     pub tpd: Option<u32>,
-    #[serde(default, alias = "skills")]
+    #[serde(default)]
     pub skills: Option<Vec<String>>,
     #[serde(default)]
     pub workflows: Option<Vec<String>>,
-    #[serde(default, alias = "mcpTools")]
+    #[serde(default, alias = "mcp_tools")]
     pub mcp_tools: Option<Vec<String>>,
-    #[serde(default, alias = "steeringVectors")]
+    #[serde(default, alias = "steering_vectors")]
     pub steering_vectors: Option<Vec<String>>,
-    #[serde(default, alias = "reasoningDepth")]
+    #[serde(default, alias = "reasoning_depth")]
     pub reasoning_depth: Option<u32>,
-    #[serde(default, alias = "actThreshold")]
+    #[serde(default, alias = "act_threshold")]
     pub act_threshold: Option<f32>,
-    #[serde(default, alias = "maxTurns")]
+    #[serde(default, alias = "max_turns")]
     pub max_turns: Option<u32>,
-    #[serde(default, alias = "connectorConfigs")]
+    #[serde(default, alias = "connector_configs")]
     pub connector_configs: Option<Vec<ConnectorConfig>>,
-    #[serde(default, alias = "extraParameters")]
+    #[serde(default, alias = "extra_parameters")]
     pub extra_parameters: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectorConfig {
     pub r#type: String, 
     pub uri: String,    
@@ -408,25 +415,26 @@ impl ModelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
     pub id: String,
     pub name: String,
     pub icon: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "api_key")]
     pub api_key: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "base_url")]
     pub base_url: Option<String>,
     pub protocol: ModelProvider,
-    #[serde(default)]
+    #[serde(default, alias = "external_id")]
     pub external_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "custom_headers")]
     pub custom_headers: Option<std::collections::HashMap<String, String>>,
-    #[serde(default)]
+    #[serde(default, alias = "default_config")]
     pub default_config: Option<ModelConfig>,
-    #[serde(default, alias = "supportsSteeringVectors")]
+    #[serde(default, alias = "supports_steering_vectors")]
     pub supports_steering_vectors: bool,
-    #[serde(default)]
+    #[serde(default, alias = "audio_model")]
     pub audio_model: Option<String>,
 }
 
@@ -446,9 +454,11 @@ impl Validatable for ProviderConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelEntry {
     pub id: String,
     pub name: String,
+    #[serde(alias = "provider_id")]
     pub provider_id: String,
     #[serde(default)]
     pub provider: Option<ModelProvider>,
@@ -520,15 +530,20 @@ pub struct AgentIdentity {
     pub department: String,
     pub description: String,
     pub category: String,
+    #[serde(alias = "theme_color")]
     pub theme_color: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentEconomics {
+    #[serde(alias = "budget_usd")]
     pub budget_usd: f64,
+    #[serde(alias = "cost_usd")]
     pub cost_usd: f64,
+    #[serde(alias = "tokens_used")]
     pub tokens_used: u32,
+    #[serde(alias = "token_usage")]
     pub token_usage: TokenUsage,
 }
 
@@ -536,20 +551,29 @@ pub struct AgentEconomics {
 #[serde(rename_all = "camelCase")]
 pub struct AgentHealth {
     pub status: String,
+    #[serde(alias = "failure_count")]
     pub failure_count: u32,
+    #[serde(alias = "last_failure_at")]
     pub last_failure_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(alias = "heartbeat_at")]
     pub heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModels {
+    #[serde(alias = "model_id")]
     pub model_id: Option<String>,
     pub model: ModelConfig,
+    #[serde(alias = "model_2")]
     pub model_2: Option<String>,
+    #[serde(alias = "model_3")]
     pub model_3: Option<String>,
+    #[serde(alias = "model_config2")]
     pub model_config2: Option<ModelConfig>,
+    #[serde(alias = "model_config3")]
     pub model_config3: Option<ModelConfig>,
+    #[serde(alias = "active_model_slot")]
     pub active_model_slot: Option<i32>,
 }
 
@@ -558,16 +582,22 @@ pub struct AgentModels {
 pub struct AgentCapabilities {
     pub skills: Vec<String>,
     pub workflows: Vec<String>,
+    #[serde(alias = "mcp_tools")]
     pub mcp_tools: Vec<String>,
+    #[serde(alias = "skill_manifest")]
     pub skill_manifest: Option<crate::agent::skill_manifest::SkillManifest>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentState {
+    #[serde(alias = "active_mission")]
     pub active_mission: Option<serde_json::Value>,
+    #[serde(alias = "current_task")]
     pub current_task: Option<String>,
+    #[serde(alias = "working_memory")]
     pub working_memory: serde_json::Value,
+    #[serde(alias = "current_reasoning_turn")]
     pub current_reasoning_turn: u32,
 }
 

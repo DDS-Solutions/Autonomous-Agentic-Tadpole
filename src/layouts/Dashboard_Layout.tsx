@@ -28,8 +28,8 @@ import { ExternalLink } from 'lucide-react';
 import { i18n } from '../i18n';
 import { use_notification_store } from '../stores/notification_store';
 import { event_bus } from '../services/event_bus';
-import { use_sovereign_store } from '../stores/sovereign_store';
 import { use_agent_store } from '../stores/agent_store';
+import { APP_ROUTES } from '../constants/routes';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
 const Lineage_Stream = lazy(() => import('../components/Lineage_Stream').then(module => ({ default: module.Lineage_Stream })));
@@ -47,33 +47,68 @@ const Toast_Center = lazy(() => import('../components/ui/Toast_Center').then(mod
 export default function Dashboard_Layout() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { 
-        tabs, 
-        active_tab_id, 
-        is_system_log_detached, 
-        toggle_system_log_detachment, 
-        is_trace_stream_detached, 
-        toggle_trace_stream_detachment, 
-        is_lineage_stream_detached, 
-        toggle_lineage_stream_detachment 
-    } = use_tab_store();
-    use_sovereign_store();
+
+    // Use granular selectors to prevent redundant re-renders of the entire layout shell
+    const tabs = use_tab_store(s => s.tabs);
+    const active_tab_id = use_tab_store(s => s.active_tab_id);
+    const active_tab_sync_source = use_tab_store(s => s.active_tab_sync_source);
+    const is_system_log_detached = use_tab_store(s => s.is_system_log_detached);
+    const toggle_system_log_detachment = use_tab_store(s => s.toggle_system_log_detachment);
+    const is_trace_stream_detached = use_tab_store(s => s.is_trace_stream_detached);
+    const toggle_trace_stream_detachment = use_tab_store(s => s.toggle_trace_stream_detachment);
+    const is_lineage_stream_detached = use_tab_store(s => s.is_lineage_stream_detached);
+    const toggle_lineage_stream_detachment = use_tab_store(s => s.toggle_lineage_stream_detachment);
+
     const [is_command_palette_open, set_is_command_palette_open] = useState(false);
 
     // Synchronize tab store with URL on first load and browser navigation
     useEffect(() => {
         // Guard: Detached windows should never trigger a navigation update
-        // as they are dedicated views and should not influence global routing.
         if (location.pathname.startsWith('/detached')) {
             return;
         }
 
         const active_tab = (tabs || []).find(t => t.id === active_tab_id);
         if (active_tab && active_tab.path !== location.pathname) {
-            navigate(active_tab.path);
+            // Only navigate if the change came from the UI (click) or a remote SYNC (other tab).
+            // If the source is 'url', it means the URL already matches (or is the driver), so we skip to avoid loops.
+            if (active_tab_sync_source === 'ui' || active_tab_sync_source === 'sync') {
+                const target_path = active_tab.path === '/' ? '/dashboard' : active_tab.path.replace(/\/$/, '');
+                const current_path = location.pathname === '/' ? '/dashboard' : location.pathname.replace(/\/$/, '');
+                
+                if (target_path !== current_path) {
+                    console.debug('[DashboardLayout] Syncing navigation to active tab (Source:', active_tab_sync_source, '):', target_path);
+                    navigate(target_path);
+                }
+            }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- navigate on tab switch only, not on every tabs/navigate change
-    }, [active_tab_id]);
+    }, [active_tab_id, location.pathname, navigate, tabs, active_tab_sync_source]);
+
+    // Synchronize Tab Store with URL (URL -> Tab)
+    useEffect(() => {
+        // Guard: Detached windows should never trigger a store update from URL
+        if (location.pathname.startsWith('/detached')) {
+            return;
+        }
+
+        const normalized_path = location.pathname === '/' ? '/dashboard' : location.pathname.replace(/\/$/, '');
+        const route = APP_ROUTES.find(r => r.path === normalized_path);
+        
+        if (route) {
+            const { tabs: current_tabs, active_tab_id: current_active_id, open_tab } = use_tab_store.getState();
+            const active_tab = (current_tabs || []).find(t => t.id === current_active_id);
+            
+            // Only open/switch tab if the URL doesn't match the current active tab
+            if (!active_tab || active_tab.path !== normalized_path) {
+                console.debug('[DashboardLayout] URL changed, updating tab state for:', normalized_path);
+                open_tab({
+                    title: i18n.t(route.label) || route.label,
+                    path: normalized_path,
+                    icon: route.icon
+                });
+            }
+        }
+    }, [location.pathname]);
 
     // ── Connection Status ──────────────────────────────────
     useEffect(() => {
@@ -108,7 +143,6 @@ export default function Dashboard_Layout() {
                 entry.text.toLowerCase().includes('injection');
 
             if (is_high_priority) {
-                // Determine persistence based on user preference (Manual dismissal for Governance/Security)
                 const is_persistent = 
                     entry.text.toLowerCase().includes('budget') || 
                     entry.text.toLowerCase().includes('injection') ||
@@ -175,7 +209,6 @@ export default function Dashboard_Layout() {
         </div>
     );
 
-
     return (
         <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-700/30">
             <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-green-600 text-white px-4 py-2 rounded shadow-lg">
@@ -199,7 +232,6 @@ export default function Dashboard_Layout() {
                                 return null;
                             }
 
-                            // Content shared between portal and inline
                             const content = (
                                 <Error_Boundary name={`Sector: ${tab.title}`}>
                                     <Suspense fallback={<div className="p-8 text-zinc-500 font-mono text-xs animate-pulse">{i18n.t('layout.initializing_sector')}</div>}>
@@ -211,24 +243,19 @@ export default function Dashboard_Layout() {
                             if (is_detached) {
                                 return (
                                     <React.Fragment key={tab.id}>
-                                        {/* Render Portal Window (Native Browser Window) */}
                                         <Portal_Window 
                                             id={tab.id} 
                                             title={tab.title} 
                                             url={`/detached-view?type=tab&path=${encodeURIComponent(tab.path)}&id=${tab.id}`}
                                             on_close={() => use_tab_store.getState().toggle_tab_detachment(tab.id)}
                                         >
-                                            <div className="h-screen bg-zinc-950 p-6 flex flex-row gap-6 overflow-hidden">
-                                                <div className="flex-1 relative overflow-auto custom-scrollbar">
-                                                    {content}
-                                                </div>
-                                                <Suspense fallback={shell_fallback}>
-                                                    <Observability_Sidebar is_detached_context />
-                                                </Suspense>
-                                            </div>
+                                            {/* 
+                                              * [NEURAL_RECOVERY]: We no longer portal children if a URL is used. 
+                                              * This prevents double-mounting in React 19 which causes the 'null useState' fault.
+                                              */}
+                                            <div className="hidden" aria-hidden="true" />
                                         </Portal_Window>
 
-                                        {/* Placeholder in Main Layout */}
                                         <div
                                             className={clsx(
                                                 "absolute inset-0 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm z-20",
@@ -282,7 +309,6 @@ export default function Dashboard_Layout() {
                         />
                     </Suspense>
 
-                    {/* Global Detached System Log */}
                     {is_system_log_detached && (
                         <Portal_Window
                             id="system-log-detached"
@@ -290,15 +316,10 @@ export default function Dashboard_Layout() {
                             url="/detached-view?type=system-log"
                             on_close={toggle_system_log_detachment}
                         >
-                            <div className="h-screen bg-zinc-950 p-6 flex flex-col">
-                                <Suspense fallback={shell_fallback}>
-                                    <System_Log is_detached_view />
-                                </Suspense>
-                            </div>
+                            <div className="hidden" aria-hidden="true" />
                         </Portal_Window>
                     )}
 
-                    {/* Global Detached Trace Stream */}
                     {is_trace_stream_detached && (
                         <Portal_Window
                             id="trace-stream-detached"
@@ -306,15 +327,10 @@ export default function Dashboard_Layout() {
                             url="/detached-view?type=trace-stream"
                             on_close={toggle_trace_stream_detachment}
                         >
-                            <div className="h-screen bg-zinc-950 p-0 flex flex-col">
-                                <Suspense fallback={shell_fallback}>
-                                    <Neural_Waterfall is_detached_view />
-                                </Suspense>
-                            </div>
+                            <div className="hidden" aria-hidden="true" />
                         </Portal_Window>
                     )}
 
-                    {/* Global Detached Lineage Stream */}
                     {is_lineage_stream_detached && (
                         <Portal_Window
                             id="lineage-stream-detached"
@@ -322,11 +338,7 @@ export default function Dashboard_Layout() {
                             url="/detached-view?type=lineage-stream"
                             on_close={toggle_lineage_stream_detachment}
                         >
-                            <div className="h-screen bg-zinc-950 p-0 flex flex-col">
-                                <Suspense fallback={shell_fallback}>
-                                    <Lineage_Stream is_detached_view />
-                                </Suspense>
-                            </div>
+                            <div className="hidden" aria-hidden="true" />
                         </Portal_Window>
                     )}
                 </div>
@@ -336,9 +348,8 @@ export default function Dashboard_Layout() {
                 </Suspense>
             </main>
         </div>
-    )
+    );
 }
 
 // Metadata: [Dashboard_Layout]
-
 // Metadata: [Dashboard_Layout]

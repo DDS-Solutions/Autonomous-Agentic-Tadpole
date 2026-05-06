@@ -1,0 +1,407 @@
+[
+  {
+    "id": "1",
+    "name": "Agent of Nine",
+    "role": "CEO",
+    "department": "Executive",
+    "description": "The primary strategic intelligence and sovereign kernel authority.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["deep_research", "system_audit", "issue_alpha_directive"],
+    "workflows": ["deploy_to_prod", "emergency_shutdown", "neural_handoff", "Deep Analysis"]
+  },
+  {
+    "id": "2",
+    "name": "Tadpole",
+    "role": "COO",
+    "department": "Operations",
+    "description": "Operations orchestrator and swarm synchronization lead.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["schedule_meeting"],
+    "workflows": ["resource_allocation"]
+  },
+  {
+    "id": "3",
+    "name": "Elon",
+    "role": "CTO",
+    "department": "Engineering",
+    "description": "Chief Technical Officer and architecture validator.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["code_review", "debug", "git_push"],
+    "workflows": ["system_architecture_review", "incident_response"]
+  },
+  {
+    "id": "4",
+    "name": "Gary",
+    "role": "CMO",
+    "department": "Marketing",
+    "description": "Marketing lead and brand voice orchestrator.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["copywriting", "seo_analysis"],
+    "workflows": ["campaign_launch", "market_trend_analysis"]
+  },
+  {
+    "id": "5",
+    "name": "Warren",
+    "role": "CRO",
+    "department": "Sales",
+    "description": "Revenue and sales optimization specialist.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["lead_qualification", "update_crm"],
+    "workflows": ["quarterly_forecasting", "client_onboarding"]
+  },
+  {
+    "id": "6",
+    "name": "Ada",
+    "role": "Product Lead",
+    "department": "Product",
+    "description": "Product strategy and user-centric architecture lead.",
+    "model": "Claude Opus 4.5",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-opus-20240229"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["user_interview", "write_spec"],
+    "workflows": ["sprint_planning", "feature_roadmap"]
+  },
+  {
+    "id": "7",
+    "name": "Grace",
+    "role": "DevOps",
+    "department": "Engineering",
+    "description": "Cloud infrastructure and CI/CD automation lead.",
+    "model": "Gemini 3 Flash",
+    "model_config": {
+      "provider": "google",
+      "modelId": "gemini-1.5-flash"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["check_server_health", "view_logs"],
+    "workflows": ["pipeline_optimization", "database_migration"]
+  },
+  {
+    "id": "8",
+    "name": "Linus",
+    "role": "Backend Dev",
+    "department": "Engineering",
+    "description": "Core backend developer and API architect.",
+    "model": "DeepSeek V3.2",
+    "model_config": {
+      "provider": "deepseek",
+      "modelId": "deepseek-v3"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["api_test", "database_query"],
+    "workflows": ["refactor_microservice", "api_documentation"]
+  },
+  {
+    "id": "9",
+    "name": "Steve",
+    "role": "Design Lead",
+    "department": "Product",
+    "description": "Visual identity and design system curator.",
+    "model": "Gemini 3 Pro",
+    "model_config": {
+      "provider": "google",
+      "modelId": "gemini-1.5-pro"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["generate_image", "ui_audit"],
+    "workflows": ["design_system_update", "usability_testing"]
+  },
+  {
+    "id": "10",
+    "name": "Sam",
+    "role": "Support Lead",
+    "department": "Operations",
+    "description": "Customer success and incident triage lead.",
+    "model": "o4-mini",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o-mini"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["ticket_triage", "knowledge_base_search"],
+    "workflows": ["customer_incident_review", "support_training"]
+  },
+  {
+    "id": "11",
+    "name": "Back-3",
+    "role": "Backend Dev",
+    "department": "Engineering",
+    "description": "Backend specialist focused on database scaling.",
+    "model": "GPT-5.3 Codex",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["database_query"],
+    "workflows": ["refactor_microservice"]
+  },
+  {
+    "id": "12",
+    "name": "Sec-1",
+    "role": "Security Auditor",
+    "department": "Engineering",
+    "description": "Vulnerability research and security hardening specialist.",
+    "model": "Claude Sonnet 4.5",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-5-sonnet-20240620"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["scan_vulnerabilities"],
+    "workflows": ["security_audit"]
+  },
+  {
+    "id": "13",
+    "name": "Ops-1",
+    "role": "DevOps",
+    "department": "Engineering",
+    "description": "Infrastructure operations and cluster scaling specialist.",
+    "model": "Gemini 3 Flash",
+    "model_config": {
+      "provider": "google",
+      "modelId": "gemini-1.5-flash"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["check_server_health"],
+    "workflows": ["scale_cluster"]
+  },
+  {
+    "id": "14",
+    "name": "Prod-1",
+    "role": "Product Manager",
+    "department": "Product",
+    "description": "Product roadmap and feature prioritization specialist.",
+    "model": "GPT-5.2",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["write_spec"],
+    "workflows": ["sprint_planning"]
+  },
+  {
+    "id": "15",
+    "name": "Des-1",
+    "role": "Designer",
+    "department": "Product",
+    "description": "UI/UX designer and asset generation specialist.",
+    "model": "Gemini 3 Pro",
+    "model_config": {
+      "provider": "google",
+      "modelId": "gemini-1.5-pro"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["generate_image"],
+    "workflows": ["design_system_update"]
+  },
+  {
+    "id": "16",
+    "name": "Res-1",
+    "role": "Researcher",
+    "department": "Product",
+    "description": "Market researcher and competitive analyst.",
+    "model": "DeepSeek R1",
+    "model_config": {
+      "provider": "deepseek",
+      "modelId": "deepseek-reasoner"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["market_research"],
+    "workflows": ["User Feedback Analysis"]
+  },
+  {
+    "id": "17",
+    "name": "Copy-1",
+    "role": "Copywriter",
+    "department": "Marketing",
+    "description": "Creative copywriter and content strategist.",
+    "model": "Claude Sonnet 4",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-5-sonnet-20240620"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["copywriting"],
+    "workflows": ["campaign_launch"]
+  },
+  {
+    "id": "18",
+    "name": "Social-1",
+    "role": "Social Media",
+    "department": "Marketing",
+    "description": "Social media engagement and community manager.",
+    "model": "Grok 4.1",
+    "model_config": {
+      "provider": "xai",
+      "modelId": "grok-1"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["post_update"],
+    "workflows": ["social_strategy"]
+  },
+  {
+    "id": "19",
+    "name": "SEO-1",
+    "role": "SEO Specialist",
+    "department": "Marketing",
+    "description": "Search engine optimization and performance marketing lead.",
+    "model": "GPT-5.2",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["seo_analysis"],
+    "workflows": ["market_trend_analysis"]
+  },
+  {
+    "id": "20",
+    "name": "SDR-1",
+    "role": "Sales Rep",
+    "department": "Sales",
+    "description": "Sales development representative and lead qualification specialist.",
+    "model": "o4-mini",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o-mini"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["lead_qualification"],
+    "workflows": ["quarterly_forecasting"]
+  },
+  {
+    "id": "21",
+    "name": "SDR-2",
+    "role": "Sales Rep",
+    "department": "Sales",
+    "description": "Sales development representative and outreach specialist.",
+    "model": "o4-mini",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o-mini"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["lead_qualification"],
+    "workflows": ["quarterly_forecasting"]
+  },
+  {
+    "id": "22",
+    "name": "Hr-1",
+    "role": "HR Manager",
+    "department": "Operations",
+    "description": "Human resources and organizational health specialist.",
+    "model": "Claude Sonnet 4",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-5-sonnet-20240620"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["employee_onboarding"],
+    "workflows": ["policy_review"]
+  },
+  {
+    "id": "23",
+    "name": "Fin-1",
+    "role": "Finance Analyst",
+    "department": "Operations",
+    "description": "Financial analyst and burn rate forecasting specialist.",
+    "model": "GPT-5.2",
+    "model_config": {
+      "provider": "openai",
+      "modelId": "gpt-4o"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["analyze_budget"],
+    "workflows": ["finance_review"]
+  },
+  {
+    "id": "24",
+    "name": "Leg-1",
+    "role": "Legal Advisor",
+    "department": "Operations",
+    "description": "Legal counsel and risk mitigation specialist.",
+    "model": "Claude Opus 4.5",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-opus-20240229"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["contract_review"],
+    "workflows": ["risk_assessment"]
+  },
+  {
+    "id": "25",
+    "name": "Sup-1",
+    "role": "Support Agent",
+    "department": "Operations",
+    "description": "Customer support and technical troubleshooting agent.",
+    "model": "Qwen 3",
+    "model_config": {
+      "provider": "alibaba",
+      "modelId": "qwen-max"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["ticket_triage"],
+    "workflows": ["customer_incident_review"]
+  },
+  {
+    "id": "26",
+    "name": "Checkmate",
+    "role": "Quality Auditor",
+    "department": "Quality Assurance",
+    "description": "System robustness and compliance verification lead.",
+    "model": "Claude Sonnet 4.5",
+    "model_config": {
+      "provider": "anthropic",
+      "modelId": "claude-3-5-sonnet-20240620"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["code_audit", "system_audit"],
+    "workflows": ["compliance_check"]
+  },
+  {
+    "id": "99",
+    "name": "QA-99",
+    "role": "Quality Assurance",
+    "department": "Quality Assurance",
+    "description": "Post-mission tactical auditor and behavioral drift detector.",
+    "model": "Gemma 4 (Local)",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b"
+    },
+    "theme_color": "#4fd1c5",
+    "skills": ["code_audit", "system_audit"],
+    "workflows": ["Mission Analysis"]
+  }
+]

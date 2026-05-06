@@ -13,6 +13,7 @@
 
 console.debug("[FormState] Domain logic loaded");
 
+import { resolve_technical_model_id } from '../../utils/model_utils';
 import type { Agent, AgentFormState, AgentPatch, Department } from '../../contracts/agent';
 import { resolve_provider } from '../../utils/model_utils';
 
@@ -29,6 +30,7 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
     return {
         main_tab: 'cognition',
         active_tab: agent.active_model_slot === 2 ? 'secondary' : agent.active_model_slot === 3 ? 'tertiary' : 'primary',
+        active_model_slot: agent.active_model_slot || 1,
         identity: {
             name: agent.name,
             role: agent.role,
@@ -44,29 +46,29 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 provider: primary_provider,
                 model: agent.model,
                 temperature: agent.model_config?.temperature ?? 0.7,
-                system_prompt: agent.model_config?.systemPrompt ?? '',
-                reasoning_depth: agent.model_config?.reasoningDepth ?? 1,
-                act_threshold: agent.model_config?.actThreshold ?? 0.9,
+                system_prompt: (agent.model_config as any)?.systemPrompt ?? (agent.model_config as any)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config as any)?.reasoningDepth ?? (agent.model_config as any)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config as any)?.actThreshold ?? (agent.model_config as any)?.act_threshold ?? 0.9,
                 skills: agent.model_config?.skills ?? agent.skills ?? [],
                 workflows: agent.model_config?.workflows ?? agent.workflows ?? []
             },
             secondary: {
                 provider: secondary_provider,
-                model: agent.model_2 ?? 'Claude Opus 4.5',
+                model: agent.model_2 || '',
                 temperature: agent.model_config2?.temperature ?? 0.5,
-                system_prompt: agent.model_config2?.systemPrompt ?? '',
-                reasoning_depth: agent.model_config2?.reasoningDepth ?? 1,
-                act_threshold: agent.model_config2?.actThreshold ?? 0.9,
+                system_prompt: (agent.model_config2 as any)?.systemPrompt ?? (agent.model_config2 as any)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config2 as any)?.reasoningDepth ?? (agent.model_config2 as any)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config2 as any)?.actThreshold ?? (agent.model_config2 as any)?.act_threshold ?? 0.9,
                 skills: agent.model_config2?.skills ?? [],
                 workflows: agent.model_config2?.workflows ?? []
             },
             tertiary: {
                 provider: tertiary_provider,
-                model: agent.model_3 ?? 'LLaMA 4 Maverick',
+                model: agent.model_3 || '',
                 temperature: agent.model_config3?.temperature ?? 0.9,
-                system_prompt: agent.model_config3?.systemPrompt ?? '',
-                reasoning_depth: agent.model_config3?.reasoningDepth ?? 1,
-                act_threshold: agent.model_config3?.actThreshold ?? 0.9,
+                system_prompt: (agent.model_config3 as any)?.systemPrompt ?? (agent.model_config3 as any)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config3 as any)?.reasoningDepth ?? (agent.model_config3 as any)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config3 as any)?.actThreshold ?? (agent.model_config3 as any)?.act_threshold ?? 0.9,
                 skills: agent.model_config3?.skills ?? [],
                 workflows: agent.model_config3?.workflows ?? []
             }
@@ -110,7 +112,7 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
         model_2: slots.secondary.model,
         model_3: slots.tertiary.model,
         model_config: {
-            modelId: slots.primary.model,
+            modelId: resolve_technical_model_id(slots.primary.model),
             provider: slots.primary.provider,
             temperature: slots.primary.temperature,
             systemPrompt: slots.primary.system_prompt,
@@ -120,7 +122,7 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             workflows: slots.primary.workflows
         },
         model_config2: {
-            modelId: slots.secondary.model,
+            modelId: resolve_technical_model_id(slots.secondary.model),
             provider: slots.secondary.provider,
             temperature: slots.secondary.temperature,
             systemPrompt: slots.secondary.system_prompt,
@@ -130,7 +132,7 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             workflows: slots.secondary.workflows
         },
         model_config3: {
-            modelId: slots.tertiary.model,
+            modelId: resolve_technical_model_id(slots.tertiary.model),
             provider: slots.tertiary.provider,
             temperature: slots.tertiary.temperature,
             systemPrompt: slots.tertiary.system_prompt,
@@ -139,7 +141,7 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             skills: slots.tertiary.skills,
             workflows: slots.tertiary.workflows
         },
-        active_model_slot: state.active_tab === 'primary' ? 1 : state.active_tab === 'secondary' ? 2 : 3,
+        active_model_slot: state.active_model_slot,
         skills: Array.from(new Set([
             ...slots.primary.skills,
             ...slots.secondary.skills,

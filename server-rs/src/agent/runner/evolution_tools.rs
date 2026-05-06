@@ -32,7 +32,7 @@ impl AgentRunner {
         tokio::fs::create_dir_all(skill_dir).await.map_err(AppError::Io)?;
 
         let skill_file_path = format!("{}/{}.py", skill_dir, safe_name);
-        let meta_file_path = format!("{}/{}.json", skill_dir, safe_name);
+        let _meta_file_path = format!("{}/{}.json", skill_dir, safe_name);
 
         // Security: Prevent overwriting existing manual tools
         if std::path::Path::new(&skill_file_path).exists() {
@@ -61,20 +61,25 @@ impl AgentRunner {
         // Write Python script
         tokio::fs::write(&skill_file_path, code).await.map_err(AppError::Io)?;
 
-        // Write Skill Manifest
-        let manifest = serde_json::json!({
-            "name": safe_name,
-            "description": description,
-            "execution_command": format!("python execution/agent_generated/skills/{}.py", safe_name),
-            "schema": schema,
-            "requires_oversight": true
-        });
-        let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| AppError::InternalServerError(e.to_string()))?;
-        tokio::fs::write(&meta_file_path, manifest_json).await.map_err(AppError::Io)?;
+        // Write Skill Manifest via Atomic Registry
+        let skill_def = crate::agent::script_skills::SkillDefinition {
+            id: None,
+            name: safe_name.clone(),
+            description: description.to_string(),
+            execution_command: format!("python execution/agent_generated/skills/{}.py", safe_name),
+            schema: schema.clone(),
+            oversight_required: true,
+            doc_url: None,
+            tags: None,
+            full_instructions: None,
+            negative_constraints: None,
+            verification_script: None,
+            category: "agent_generated".to_string(),
+        };
 
-        // Phase 4: Dynamic Registry Refresh
-        if let Err(e) = self.state.registry.skills.reload_all().await {
-            tracing::error!("🚨 [Evolution] Failed to hot-reload registry after synthesis: {:?}", e);
+        if let Err(e) = self.state.registry.skills.save_agent_skill(skill_def).await {
+            tracing::error!("🚨 [Evolution] Failed to save/register skill manifest: {:?}", e);
+            return Err(ToolExecutionError::AppError(e));
         }
 
         self.emit_evolution_event(ctx, "synthesis", &safe_name, "Created new autonomous micro-script.");
@@ -101,7 +106,7 @@ impl AgentRunner {
 
         let safe_name = skill_name.to_lowercase().replace(' ', "_");
         let skill_file_path = format!("execution/agent_generated/skills/{}.py", safe_name);
-        let meta_file_path = format!("execution/agent_generated/skills/{}.json", safe_name);
+        let _meta_file_path = format!("execution/agent_generated/skills/{}.json", safe_name);
 
         // Security: Ensure the skill exists before refactoring (to prevent random file writes)
         if !std::path::Path::new(&skill_file_path).exists() {
@@ -142,20 +147,18 @@ impl AgentRunner {
 
         tokio::fs::write(&skill_file_path, code).await.map_err(AppError::Io)?;
 
-        // Phase 4: Dynamic Registry Refresh
-        if let Err(e) = self.state.registry.skills.reload_all().await {
-            tracing::error!("🚨 [Evolution] Failed to hot-reload registry after refactor: {:?}", e);
-        }
-
-        // Update description if provided
-        if let Some(desc) = description {
-            if let Ok(content) = tokio::fs::read_to_string(&meta_file_path).await {
-                if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    json["description"] = serde_json::json!(desc);
-                    let pretty = serde_json::to_string_pretty(&json).map_err(|e| AppError::InternalServerError(e.to_string()))?;
-                    tokio::fs::write(&meta_file_path, pretty).await.map_err(|e: std::io::Error| AppError::Io(e))?;
-                }
+        // Update Manifest via Atomic Registry
+        let snapshot = self.state.registry.skills.snapshot();
+        if let Some(skill_ref) = snapshot.skills.get(&safe_name) {
+            let mut skill = skill_ref.clone();
+            if let Some(desc) = description {
+                skill.description = desc.to_string();
             }
+            if let Err(e) = self.state.registry.skills.save_agent_skill(skill).await {
+                tracing::error!("🚨 [Evolution] Failed to update skill manifest: {:?}", e);
+            }
+        } else {
+             tracing::warn!("⚠️ [Evolution] Skill manifest not found in registry during refactor: {}", safe_name);
         }
 
         self.emit_evolution_event(ctx, "refactor", skill_name, "Improved logic and updated tool definition.");

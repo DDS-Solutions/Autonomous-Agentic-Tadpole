@@ -76,7 +76,7 @@ impl FilesystemAdapter {
             ));
         }
 
-        Ok(candidate)
+        Ok(canonical_candidate)
     }
 
     pub async fn write_file(&self, filename: &str, content: &str) -> Result<()> {

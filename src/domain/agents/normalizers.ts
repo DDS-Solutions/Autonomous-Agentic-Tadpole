@@ -10,8 +10,6 @@
  * - **Telemetry Link**: Search `[Normalizer]` in UI traces.
  */
 
-console.debug("[Normalizer] Domain logic loaded");
-
 import type { 
     Agent, 
     AgentDto, 
@@ -22,6 +20,8 @@ import type {
     Agent_Voice_Engine,
     Agent_Stt_Engine
 } from '../../contracts/agent';
+import { resolve_friendly_model_name } from '../../utils/model_utils';
+import { get_settings } from '../../stores/settings_store';
 
 /**
  * RobustAgentDto
@@ -121,6 +121,15 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         return [];
     };
 
+    const settings = get_settings();
+    const default_model = settings.default_model || 'Gemma 4 (Local)';
+
+    // Model Resolution logic: prefer friendly Name, fallback to ID, resolve if needed.
+    const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
+    const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
+    const raw_model_final = model_name_wire || model_id_wire || default_model;
+    const model = resolve_friendly_model_name(raw_model_final);
+
     return {
         id: dto.id || existing_agent?.id || 'unknown',
         name: get_non_empty_string('name', 'name', 'Unnamed Agent'),
@@ -129,7 +138,7 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         description: get_val('description', 'description', ''),
         status: status,
         tokens_used: get_val('tokensUsed', 'tokens_used', 0),
-        model: get_val('modelId', 'model', get_val('model', 'model', 'Unknown')),
+        model: model,
         model_config: get_val('modelConfig', 'model_config', undefined),
         workspace_path: workspace_path || get_val('workspace', 'workspace_path', undefined),
         current_task: current_task || undefined,
@@ -140,8 +149,8 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         budget_usd: get_val('budgetUsd', 'budget_usd', 0),
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
-        model_2: get_val('model2', 'model_2', undefined),
-        model_3: get_val('model3', 'model_3', undefined),
+        model_2: resolve_friendly_model_name(get_val('model2', 'model_2', undefined)),
+        model_3: resolve_friendly_model_name(get_val('model3', 'model_3', undefined)),
         model_config2: get_val('modelConfig2', 'model_config2', undefined),
         model_config3: get_val('modelConfig3', 'model_config3', undefined),
         active_model_slot: (get_val('activeModelSlot', 'active_model_slot', 1) as 1 | 2 | 3),
@@ -175,7 +184,5 @@ export const normalize_agent_memory_entry = (raw: Raw_Agent_Memory_Entry): Agent
         metadata: raw.metadata || {}
     };
 };
-
-// Metadata: [normalizers]
 
 // Metadata: [normalizers]

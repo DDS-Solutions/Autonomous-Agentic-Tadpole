@@ -104,7 +104,7 @@ pub fn load_environment() {
     if let Err(e) = crate::env_schema::validate_and_report(std::path::Path::new(".env.schema")) {
         tracing::error!("🚨 [EnvSchema] Validation failed: {}", e);
         if !cfg!(debug_assertions) {
-            panic!("{}", e);
+            std::process::exit(1);
         }
     }
 
@@ -178,14 +178,17 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
                 .resources
                 .set_subsystem_status("CodeGraph", crate::types::SubsystemStatus::Warming(0.1));
             let graph_lock = state_for_graph.resources.get_code_graph().await;
-            let mut graph = graph_lock.write();
-            graph.scan();
+            let module_count = tokio::task::spawn_blocking(move || {
+                let mut graph = graph_lock.write();
+                graph.scan();
+                graph.modules.len()
+            }).await.unwrap_or(0);
             state_for_graph
                 .resources
                 .set_subsystem_status("CodeGraph", crate::types::SubsystemStatus::Ready);
             tracing::info!(
                 "[Hydra-RS] In-memory code graph warmed up ({} modules indexed)",
-                graph.modules.len()
+                module_count
             );
         });
     }

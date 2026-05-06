@@ -214,8 +214,9 @@ impl AgentRunner {
             reasoning_depth: slot_cfg.reasoning_depth,
             act_threshold: slot_cfg.act_threshold,
             max_turns: slot_cfg.max_turns,
-            connector_configs: None,
-            extra_parameters: None,
+            connector_configs: Some(a.connector_configs.clone()),
+            extra_parameters: slot_cfg.extra_parameters.clone(),
+            ..Default::default()
         };
 
         if let Some(default) = &provider_config.default_config {

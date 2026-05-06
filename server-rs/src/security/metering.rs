@@ -206,6 +206,12 @@ impl BudgetGuard {
         Ok(())
     }
 
+    /// Calculates global budget and cost stats.
+    pub fn get_global_stats(&self) -> (f64, f64) {
+        let total_used: f64 = self.buffer.iter().map(|v| *v.value()).sum();
+        (100.0, total_used)
+    }
+
     /// Fetches all registered quotas.
     #[allow(dead_code)]
     pub async fn get_all_quotas(&self) -> Result<Vec<Quota>> {

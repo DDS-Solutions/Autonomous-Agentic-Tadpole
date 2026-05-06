@@ -1,0 +1,177 @@
+﻿cargo :     Checking server-rs v1.1.57 (D:\Autonomous-Agentic-Tadpole\server-rs)
+At line:1 char:1
++ cargo check 2>&1 | Out-File -Encoding utf8 errors.txt
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking se...pole\server-rs):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: unused imports: `debug`, `error`, and `info`
+  --> src\state\mod.rs:31:15
+   |
+31 | use tracing::{info, error, debug};
+   |               ^^^^  ^^^^^  ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `error`
+  --> src\system\actors\audit_actor.rs:11:21
+   |
+11 | use tracing::{info, error};
+   |                     ^^^^^
+
+warning: unused import: `error`
+  --> src\system\actors\memory_actor.rs:12:21
+   |
+12 | use tracing::{info, error, debug};
+   |                     ^^^^^
+
+warning: unused import: `SkillDefinition`
+  --> src\system\actors\skill_actor.rs:10:51
+   |
+10 | use crate::agent::script_skills::{parse_skill_md, SkillDefinition};
+   |                                                   ^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::Path`
+  --> src\system\actors\skill_actor.rs:14:5
+   |
+14 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused variable: `meta_file_path`
+  --> src\agent\runner\evolution_tools.rs:35:13
+   |
+35 |         let meta_file_path = format!("{}/{}.json", skill_dir, safe_name);
+   |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_meta_file_path`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `meta_file_path`
+   --> src\agent\runner\evolution_tools.rs:109:13
+    |
+109 |         let meta_file_path = format!("execution/agent_generated/skills/{}.json", safe_name);
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_meta_file_path`
+
+warning: unused variable: `secret_redactor`
+   --> src\state\mod.rs:344:13
+    |
+344 |         let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::from_env());
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_secret_redactor`
+
+warning: fields `start_line` and `end_line` are never read
+  --> src\services\parser.rs:19:9
+   |
+16 | pub struct ParsedSymbol {
+   |            ------------ fields in this struct
+...
+19 |     pub start_line: usize,
+   |         ^^^^^^^^^^
+20 |     pub end_line: usize,
+   |         ^^^^^^^^
+   |
+   = note: `ParsedSymbol` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored 
+during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `save_memory_sovereign`, `query_memory_sovereign`, and `check_security_sovereign` are never used
+   --> src\state\mod.rs:759:18
+    |
+ 67 | impl AppState {
+    | ------------- methods in this implementation
+...
+759 |     pub async fn save_memory_sovereign(
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+...
+791 |     pub async fn query_memory_sovereign(
+    |                  ^^^^^^^^^^^^^^^^^^^^^^
+...
+817 |     pub async fn check_security_sovereign(
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `Spend`, `Shell`, and `PiiCheck` are never constructed
+  --> src\system\actors\mod.rs:22:5
+   |
+20 | pub enum SecurityAction {
+   |          -------------- variants in this enum
+21 |     /// Budget metering: Record a spend amount.
+22 |     Spend { amount: f64 },
+   |     ^^^^^
+23 |     /// Command sanitization: Scan a shell command for malicious intent.
+24 |     Shell { command: String },
+   |     ^^^^^
+25 |     /// PII detection: Scan text for sensitive data.
+26 |     PiiCheck { text: String },
+   |     ^^^^^^^^
+   |
+   = note: `SecurityAction` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead 
+code analysis
+
+warning: multiple variants are never constructed
+  --> src\system\actors\mod.rs:44:5
+   |
+32 | pub enum SystemMessage {
+   |          ------------- variants in this enum
+...
+44 |     MemoryQuery {
+   |     ^^^^^^^^^^^
+...
+51 |     MemorySave {
+   |     ^^^^^^^^^^
+...
+58 |     MemoryAppend {
+   |     ^^^^^^^^^^^^
+...
+68 |     MemoryTraverse {
+   |     ^^^^^^^^^^^^^^
+...
+74 |     MemoryBranch {
+   |     ^^^^^^^^^^^^
+...
+80 |     Shutdown,
+   |     ^^^^^^^^
+...
+83 |     SecurityCheck {
+   |     ^^^^^^^^^^^^^
+...
+90 |     SkillScan {
+   |     ^^^^^^^^^
+   |
+   = note: `SystemMessage` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead 
+code analysis
+
+warning: fields `memory`, `security`, and `skill` are never read
+   --> src\system\actors\mod.rs:100:9
+    |
+ 98 | pub struct ActorRegistry {
+    |            ------------- fields in this struct
+ 99 |     pub audit: tokio::sync::mpsc::UnboundedSender<SystemMessage>,
+100 |     pub memory: tokio::sync::mpsc::UnboundedSender<SystemMessage>,
+    |         ^^^^^^
+101 |     pub security: tokio::sync::mpsc::Sender<SystemMessage>, // Bounded for reliability
+    |         ^^^^^^^^
+102 |     pub skill: tokio::sync::mpsc::UnboundedSender<SystemMessage>,
+    |         ^^^^^
+    |
+    = note: `ActorRegistry` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead 
+code analysis
+
+warning: associated functions `validate` and `sanitize_breadcrumb` are never used
+  --> src\utils\security.rs:22:12
+   |
+15 | impl SafePath {
+   | ------------- associated functions in this implementation
+...
+22 |     pub fn validate(base: &Path, user_path: &str) -> Result<Self, AppError> {
+   |            ^^^^^^^^
+...
+36 |     pub fn sanitize_breadcrumb(path: &str) -> String {
+   |            ^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_shell_command` is never used
+   --> src\utils\security.rs:188:8
+    |
+188 | pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `server-rs` (bin "server-rs") generated 15 warnings (run `cargo fix --bin "server-rs" -p server-rs` to apply 
+8 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.39s

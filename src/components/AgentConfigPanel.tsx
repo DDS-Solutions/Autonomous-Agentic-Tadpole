@@ -242,6 +242,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                     {mainTab === 'cognition' && (
                         <CognitionSection
                             activeTab={activeTab}
+                            activeModelSlot={state.active_model_slot}
                             slots={slots}
                             agentStatus={agent?.status || 'idle'}
                             providers={providers}

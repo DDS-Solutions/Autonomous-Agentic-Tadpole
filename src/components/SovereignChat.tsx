@@ -37,7 +37,8 @@ import {
     Target as TargetIcon,
     ChevronDown,
     GripVertical,
-    Activity
+    Activity,
+    GitBranch
 } from 'lucide-react';
 import clsx from 'clsx';
 import { use_settings_store } from '../stores/settings_store';
@@ -58,6 +59,13 @@ import { Chat_Input_Bar } from './chat/Chat_Input_Bar';
 import { type Voice_Status } from '../services/voice_client';
 
 const TELEMETRY_SOURCE = '[SovereignChat]';
+
+interface SessionLeaf {
+    id: string;
+    role: string;
+    content: string;
+    created_at: string;
+}
 
 /**
  * SovereignChat
@@ -86,18 +94,28 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
     const set_target_agent = use_sovereign_store(s => s.set_target_agent);
     const set_target_cluster = use_sovereign_store(s => s.set_target_cluster);
 
+    const active_node_id = use_sovereign_store(s => s.active_node_id);
+    const active_mission_id = use_sovereign_store(s => s.active_mission_id);
+    const session_leaves = use_sovereign_store(s => s.session_leaves);
+    const fetch_session_history = use_sovereign_store(s => s.fetch_session_history);
+    const fetch_mission_leaves = use_sovereign_store(s => s.fetch_mission_leaves);
+
     const target_node = active_scope === 'cluster' ? target_cluster : target_agent;
 
-    const { agents } = use_agent_store();
-    const { clusters } = use_workspace_store();
+    const agents = use_agent_store(s => s.agents);
+    const is_agents_loading = use_agent_store(s => s.is_loading);
+    const fetch_agents = use_agent_store(s => s.fetch_agents);
+    const clusters = use_workspace_store(s => s.clusters);
     const [voice_status, set_voice_status] = useState<Voice_Status>('idle');
     const [popup_blocked, set_popup_blocked] = useState(false);
     const [is_speech_enabled, set_is_speech_enabled] = useState(false);
     const [is_speaking, set_is_speaking] = useState(false);
-    const { settings, update_setting } = use_settings_store();
+    const settings = use_settings_store(s => s.settings);
+    const update_setting = use_settings_store(s => s.update_setting);
     const is_safe_mode = settings.is_safe_mode;
     const [open_dropdown, set_open_dropdown] = useState<'agent' | 'cluster' | null>(null);
     const [show_transcript, set_show_transcript] = useState(false);
+    const [show_branches, set_show_branches] = useState(false);
     const [input_text, set_input_text] = useState('');
     const last_spoken_id_ref = useRef<string | null>(null);
     const speak_start_timeout_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,10 +124,17 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
 
     // Subscribe to voice status changes for UI feedback
     useEffect(() => {
-        voice_client.on_status_change(status => {
+        const unsubscribe = voice_client.on_status_change(status => {
             console.debug(`${TELEMETRY_SOURCE} Voice status transition: ${status}`);
             set_voice_status(status);
         });
+        return () => {
+            try {
+                if (unsubscribe && typeof unsubscribe === 'function') unsubscribe();
+            } catch (err) {
+                console.warn('[SovereignChat] Voice unsubscribe cleanup failed:', err);
+            }
+        };
     }, []);
 
     const {
@@ -145,8 +170,14 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
 
     // Conservative auto-selection: only if absolutely no target is set and agents exist
     useEffect(() => {
-        const is_ungetTarget = !target_agent || target_agent.toLowerCase() === 'ceo';
-        if (agents.length > 0 && !selected_agent_id && is_ungetTarget) {
+        if (agents.length === 0) return;
+        
+        // If we already have a selection, don't change it based on background syncs
+        if (selected_agent_id) return;
+
+        const is_ungetTarget = !target_agent || target_agent.toLowerCase() === 'ceo' || target_agent === 'Agent of Nine';
+        
+        if (is_ungetTarget) {
             // Find CEO by role check instead of literal name
             const ceo = agents.find(a => a.role?.toLowerCase().includes('ceo') || a.name.toLowerCase().includes('nine'));
             if (ceo) {
@@ -208,12 +239,15 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
         };
     }, [messages, is_speech_enabled, selected_agent_id, agents]);
 
-    const fetch_agents = use_agent_store(s => s.fetch_agents);
+    const has_init_fetched = useRef(false);
     useEffect(() => {
-        if (agents.length === 0) {
-            fetch_agents();
+        if (!has_init_fetched.current) {
+            has_init_fetched.current = true;
+            if (agents.length === 0 && !is_agents_loading) {
+                fetch_agents();
+            }
         }
-    }, [agents.length, fetch_agents]);
+    }, [agents.length, fetch_agents, is_agents_loading]);
     
     // Header interaction: Toggle between maximized and minimized states
     const handle_header_click = () => {
@@ -408,6 +442,14 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                             setTargetCluster={set_target_cluster}
                             clusters={clusters}
                             onMinimize={perform_minimize_transform}
+                            // Multiversal Props
+                            activeNodeId={active_node_id}
+                            activeMissionId={active_mission_id}
+                            sessionLeaves={session_leaves}
+                            onFetchHistory={fetch_session_history}
+                            onFetchLeaves={fetch_mission_leaves}
+                            showBranches={show_branches}
+                            setShowBranches={set_show_branches}
                             // Portal-specific props
                             containerProps={{}}
                         />
@@ -475,6 +517,14 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                             onMinimize={perform_minimize_transform}
                             dragControls={drag_controls}
                             onHeaderClick={handle_header_click}
+                            // Multiversal Props
+                            activeNodeId={active_node_id}
+                            activeMissionId={active_mission_id}
+                            sessionLeaves={session_leaves}
+                            onFetchHistory={fetch_session_history}
+                            onFetchLeaves={fetch_mission_leaves}
+                            showBranches={show_branches}
+                            setShowBranches={set_show_branches}
                         />
                     </motion.div>
                 )}
@@ -545,6 +595,13 @@ interface SovereignChatContentProps {
     dragControls?: DragControls;
     onHeaderClick?: () => void;
     containerProps?: React.HTMLAttributes<HTMLDivElement>;
+    activeNodeId: string | null;
+    activeMissionId: string | null;
+    sessionLeaves: SessionLeaf[];
+    onFetchHistory: (mission_id: string, leaf_id: string) => Promise<void>;
+    onFetchLeaves: (mission_id: string) => Promise<void>;
+    showBranches: boolean;
+    setShowBranches: (show: boolean) => void;
 }
 
 const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
@@ -581,7 +638,14 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
     onMinimize,
     dragControls,
     onHeaderClick,
-    containerProps
+    containerProps,
+    activeNodeId,
+    activeMissionId,
+    sessionLeaves,
+    onFetchHistory,
+    onFetchLeaves,
+    showBranches,
+    setShowBranches
 }) => {
     const scroll_ref = useRef<HTMLDivElement>(null);
 
@@ -664,6 +728,22 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                             <Activity size={16} />
                         </button>
                     </Tooltip>
+                    <Tooltip content="Multiversal Branches" position="top">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowBranches(!showBranches);
+                                if (!showBranches && activeMissionId) onFetchLeaves(activeMissionId);
+                            }}
+                            className={clsx(
+                                "p-2 rounded-lg transition-all active:scale-95",
+                                showBranches ? "text-purple-400 bg-purple-500/10 border border-purple-500/30" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
+                            )}
+                            aria-label="Toggle multiversal branches"
+                        >
+                            <GitBranch size={16} />
+                        </button>
+                    </Tooltip>
                     {!isDetached && (
                         <Tooltip content={i18n.t('chat.minimize_tooltip')} position="top">
                             <button
@@ -701,6 +781,49 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                     </Tooltip>
                 </div>
             </div>
+
+            {/* Branch Selector Dropdown */}
+            <AnimatePresence>
+                {showBranches && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="bg-zinc-950 border-b border-zinc-800/50 overflow-hidden relative z-30"
+                    >
+                        <div className="p-3 flex flex-col gap-2">
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Active Timeline Branches</span>
+                            {sessionLeaves.length === 0 ? (
+                                <span className="text-[10px] text-zinc-700 italic">No parallel branches detected. Use @fork to split reality.</span>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                                    {sessionLeaves.map((leaf) => (
+                                        <button
+                                            key={leaf.id}
+                                            onClick={() => {
+                                                if (activeMissionId) onFetchHistory(activeMissionId, leaf.id);
+                                                setShowBranches(false);
+                                            }}
+                                            className={clsx(
+                                                "text-left p-2 rounded border transition-all flex items-center justify-between group",
+                                                activeNodeId === leaf.id 
+                                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400" 
+                                                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
+                                            )}
+                                        >
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-[10px] font-mono truncate">{leaf.content.substring(0, 30)}...</span>
+                                                <span className="text-[8px] opacity-50">{new Date(leaf.created_at).toLocaleString()}</span>
+                                            </div>
+                                            {activeNodeId === leaf.id && <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Neural Lineage Breadcrumbs */}
             {activeScope === 'agent' && (

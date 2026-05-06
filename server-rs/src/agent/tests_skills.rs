@@ -47,7 +47,7 @@ async fn test_skills_registry_save_and_sanitize() -> Result<(), Box<dyn Error>> 
 
     // Verify it is in the in-memory map
     assert!(
-        registry.skills.contains_key(&weird_name),
+        registry.snapshot().skills.contains_key(&weird_name),
         "Skill must be in memory with exact name"
     );
 
@@ -56,20 +56,20 @@ async fn test_skills_registry_save_and_sanitize() -> Result<(), Box<dyn Error>> 
     // by reloading the registry and ensuring our weird name still parses
     let new_registry = ScriptSkillsRegistry::new().await?;
     assert!(
-        new_registry.skills.contains_key(&weird_name),
+        new_registry.snapshot().skills.contains_key(&weird_name),
         "Skill must persist and load properly"
     );
 
     // Clean up
     registry.delete_skill(&weird_name).await?;
     assert!(
-        !registry.skills.contains_key(&weird_name),
+        !registry.snapshot().skills.contains_key(&weird_name),
         "Skill must be removed from memory"
     );
 
     let cleanup_registry = ScriptSkillsRegistry::new().await?;
     assert!(
-        !cleanup_registry.skills.contains_key(&weird_name),
+        !cleanup_registry.snapshot().skills.contains_key(&weird_name),
         "Skill must be removed from disk"
     );
 
@@ -91,12 +91,13 @@ async fn test_workflows_registry_save_and_delete() -> Result<(), Box<dyn Error>>
     };
 
     registry.save_workflow(workflow.clone()).await?;
-    assert!(registry.workflows.contains_key(&workflow_name));
+    assert!(registry.snapshot().workflows.contains_key(&workflow_name));
 
     let loaded_registry = ScriptSkillsRegistry::new().await?;
-    assert!(loaded_registry.workflows.contains_key(&workflow_name));
+    let snapshot = loaded_registry.snapshot();
+    assert!(snapshot.workflows.contains_key(&workflow_name));
     assert_eq!(
-        loaded_registry
+        snapshot
             .workflows
             .get(&workflow_name)
             .unwrap()
@@ -105,7 +106,7 @@ async fn test_workflows_registry_save_and_delete() -> Result<(), Box<dyn Error>>
     );
 
     registry.delete_workflow(&workflow_name).await?;
-    assert!(!registry.workflows.contains_key(&workflow_name));
+    assert!(!registry.snapshot().workflows.contains_key(&workflow_name));
 
     Ok(())
 }

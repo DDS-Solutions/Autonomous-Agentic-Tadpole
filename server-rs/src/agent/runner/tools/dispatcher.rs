@@ -39,7 +39,7 @@ impl Dispatcher {
 
         // 4. Metrics & External
         let aux_handler = Arc::new(AuxHandler);
-        let aux_tools = &["get_agent_metrics", "notify_discord", "fetch_url", "script_builder", "search_web", "execute_shell"];
+        let aux_tools = &["get_agent_metrics", "notify_discord", "fetch_url", "script_builder", "search_web", "execute_shell", "visual_inspect_ui", "save_to_local_memory", "search_local_memory"];
 
         // 5. Evolution Tools
         let evolution_handler = Arc::new(EvolutionHandler);
@@ -192,6 +192,9 @@ impl CategoricalHandler for AuxHandler {
                 runner.handle_execute_shell(&run_ctx, &fc, &mut output).await?;
                 Ok(output)
             }
+            "visual_inspect_ui" => runner.handle_visual_inspect(&run_ctx, &fc).await,
+            "save_to_local_memory" => runner.handle_save_local_memory(&run_ctx, &fc).await,
+            "search_local_memory" => runner.handle_search_local_memory(&run_ctx, &fc).await,
             _ => Err(ToolExecutionError::ExecutionFailed(format!("AuxHandler cannot handle '{}'", name)))
         }
     }

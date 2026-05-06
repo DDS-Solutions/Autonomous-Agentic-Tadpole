@@ -36,6 +36,7 @@ mod lifecycle;
 mod metrics_tools;
 mod mission_tools;
 mod oversight;
+pub(crate) mod parser;
 pub(crate) mod prompt_renderer;
 mod provider;
 mod refinement;
@@ -43,6 +44,7 @@ pub(crate) mod service_traits;
 mod swarm;
 mod swarm_persistence;
 pub mod synthesis;
+mod visual_tools;
 pub mod tools;
 mod workflow;
 

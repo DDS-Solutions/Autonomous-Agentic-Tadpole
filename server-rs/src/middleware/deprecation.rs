@@ -27,7 +27,7 @@ use axum::{
 pub async fn deprecation_middleware(req: Request<Body>, next: Next) -> Response {
     // Check for deprecated routes
     // Currently targeting /v1/infra/providers as a test case for swarm-wide migration.
-    let is_deprecated = req.uri().path().contains("/infra/providers");
+    let is_deprecated = req.uri().path().starts_with("/v1/infra/providers") || req.uri().path().starts_with("/v1/infra/models");
     let path = if is_deprecated {
         Some(req.uri().path().to_string())
     } else {

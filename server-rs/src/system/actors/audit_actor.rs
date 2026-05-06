@@ -7,16 +7,16 @@
 
 use crate::security::audit::MerkleAuditTrail;
 use crate::system::actors::SystemMessage;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{info, error};
+use tokio::sync::mpsc::Receiver;
+use tracing::info;
 
 pub struct AuditActor {
-    receiver: UnboundedReceiver<SystemMessage>,
+    receiver: Receiver<SystemMessage>,
     audit_trail: MerkleAuditTrail,
 }
 
 impl AuditActor {
-    pub fn new(receiver: UnboundedReceiver<SystemMessage>, audit_trail: MerkleAuditTrail) -> Self {
+    pub fn new(receiver: Receiver<SystemMessage>, audit_trail: MerkleAuditTrail) -> Self {
         Self {
             receiver,
             audit_trail,

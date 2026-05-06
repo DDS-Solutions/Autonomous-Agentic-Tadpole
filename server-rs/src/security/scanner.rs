@@ -41,18 +41,24 @@ pub enum ScannerResult {
 /// (Regex) to detect potential secret leakages in agent-generated Python, Bash, or Shell code.
 pub struct ShellScanner {
     redactor: Arc<SecretRedactor>,
+    aggressive: bool,
 }
 
 impl ShellScanner {
     /// Creates a new security scanner with a reference to the global secret redactor.
     pub fn new(redactor: Arc<SecretRedactor>) -> Self {
-        Self { redactor }
+        Self { 
+            redactor,
+            aggressive: std::env::var("AGGRESSIVE_SECURITY").map(|v| v == "true").unwrap_or(false)
+        }
     }
+
 
     /// Mock scanner for tests
     pub fn mock() -> Self {
         Self {
             redactor: Arc::new(SecretRedactor::noop()),
+            aggressive: false,
         }
     }
 
@@ -78,11 +84,10 @@ impl ShellScanner {
             (r"(?i)AIza[0-9A-Za-z-_]{35}", "Google API Key"),
             (r"(?i)ghp_[a-zA-Z0-9]{36}", "GitHub Personal Access Token"),
             (r"(?i)xox[pborsa]-[a-zA-Z0-9-]{10,48}", "Slack Token"),
-            (
-                r"(?i)SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}",
-                "SendGrid API Key",
-            ),
+            (r"(?i)SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}", "SendGrid API Key"),
             (r"(?i)sq0atp-[a-zA-Z0-9_-]{22}", "Square Access Token"),
+            (r"(?i)aws_access_key_id\s*[:=]\s*[A-Z0-9]{20}", "AWS Access Key"),
+            (r"(?i)aws_secret_access_key\s*[:=]\s*[A-Za-z0-9/+=]{40}", "AWS Secret Key"),
         ];
 
         for (pattern, name) in patterns {
@@ -137,6 +142,24 @@ impl ShellScanner {
                         "Potential Command Injection or Redirection detected: {}",
                         name
                     ));
+                }
+            }
+        }
+
+        // 5. Advanced: Look for suspicious shell characters or obfuscation
+        if self.aggressive {
+            let suspicious = [
+                (r"\$\{IFS\}", "Shell IFS Obfuscation"),
+                (r"base64\s+-d", "Base64 Decoding attempt"),
+                (r"curl\s+.*\s+-\|", "Direct Pipe from Curl"),
+                (r"wget\s+.*\s+-O-", "Direct Output from Wget"),
+            ];
+
+            for (pattern, name) in suspicious {
+                if let Ok(re) = Regex::new(pattern) {
+                    if re.is_match(input) {
+                        return ScannerResult::Risky(format!("Aggressive Check: {} detected", name));
+                    }
                 }
             }
         }

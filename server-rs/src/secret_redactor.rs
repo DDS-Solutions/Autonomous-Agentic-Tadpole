@@ -54,11 +54,26 @@ static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
         // 10. Database URLs (PII in connection strings)
         r"(?i)(?:postgres|postgresql|mongodb|mysql|redis)://[a-zA-Z0-9\-_]+:[a-zA-Z0-9\-_]+@[a-zA-Z0-9\-_.]+",
     ];
-    let set = RegexSet::new(&patterns).expect("Tadpole OS Security Heartbeat: Failed to initialize Neural Shield RegexSet. Check static patterns in secret_redactor.rs");
-    let regexes = patterns
+
+    let set = match RegexSet::new(&patterns) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("❌ [SecretRedactor] CRITICAL: Failed to initialize Neural Shield RegexSet. Redaction may be incomplete. Error: {}", e);
+            RegexSet::empty()
+        }
+    };
+
+    let regexes: Vec<Regex> = patterns
         .iter()
-        .map(|p| Regex::new(p).expect("Tadpole OS Security Heartbeat: Failed to initialize Neural Shield Regex. Check patterns in secret_redactor.rs"))
+        .map(|p| match Regex::new(p) {
+            Ok(re) => re,
+            Err(e) => {
+                tracing::error!("❌ [SecretRedactor] Failed to compile pattern '{}': {}", p, e);
+                Regex::new("(?!)").unwrap() // Dummy regex that never matches
+            }
+        })
         .collect();
+
     (set, regexes)
 });
 

@@ -264,5 +264,40 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
                 "required": ["steps"]
             }),
         },
+        ToolDefinitionData {
+            name: "visual_inspect_ui".to_string(),
+            description: "Triggers the Sovereign Browser Specialist to analyze the active dashboard UI state via local inference.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "prompt": { "type": "string", "description": "Specific question or instruction for the UI analysis." }
+                },
+                "required": ["prompt"]
+            }),
+        },
+        ToolDefinitionData {
+            name: "save_to_local_memory".to_string(),
+            description: "Archives critical information to the browser's local vector memory (IndexedDB).".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string", "description": "The information to archive." },
+                    "metadata": { "type": "object", "description": "Optional metadata." }
+                },
+                "required": ["text"]
+            }),
+        },
+        ToolDefinitionData {
+            name: "search_local_memory".to_string(),
+            description: "Performs a semantic search across information stored in the browser's local vector memory.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Search query." },
+                    "limit": { "type": "integer", "description": "Number of results to return (default 5)." }
+                },
+                "required": ["query"]
+            }),
+        },
     ]
 }

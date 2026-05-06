@@ -75,6 +75,15 @@ pub async fn delete_blueprint(
     }
 }
 
+/// ### ⚖️ Governance: System Manifest
+/// Generates and returns the latest Sovereign State Manifest.
+pub async fn get_sovereign_manifest(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let manifest = crate::system::manifest::SovereignStateManifest::generate(&state).await;
+    (StatusCode::OK, Json(serde_json::json!({ "manifest": manifest }))).into_response()
+}
+
 // Metadata: [governance]
 
 // Metadata: [governance]

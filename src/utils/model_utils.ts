@@ -11,7 +11,7 @@
  * - **Telemetry Link**: Look for `resolve_technical_model_id` in call stacks when model switching fails.
  */
 
-const MODEL_MAP: Record<string, string> = {
+export const MODEL_MAP: Record<string, string> = {
     // Groq
     "Llama 3.3 70B (Groq)": "llama-3.3-70b-versatile",
     "Mixtral 8x7B (Groq)": "mixtral-8x7b-32768",
@@ -41,7 +41,14 @@ const MODEL_MAP: Record<string, string> = {
     // DeepSeek
     "DeepSeek V3": "deepseek-v3",
     "DeepSeek R1": "deepseek-r1",
+    // Local
+    "Gemma 4 (Local)": "gemma4:e4b",
 };
+
+// Pre-compute reverse map for performance
+const REVERSE_MODEL_MAP: Record<string, string> = Object.fromEntries(
+    Object.entries(MODEL_MAP).map(([name, id]) => [id, name])
+);
 
 /**
  * Resolves a friendly model name into its technical ID.
@@ -50,6 +57,15 @@ const MODEL_MAP: Record<string, string> = {
 export function resolve_technical_model_id(model_name: string | undefined): string {
     if (!model_name) return 'unknown';
     return MODEL_MAP[model_name] || model_name;
+}
+
+/**
+ * Resolves a technical model ID into its friendly name.
+ * Returns the original ID if no mapping is found.
+ */
+export function resolve_friendly_model_name(model_id: string | undefined): string {
+    if (!model_id) return 'Unknown';
+    return REVERSE_MODEL_MAP[model_id] || model_id;
 }
 
 /**

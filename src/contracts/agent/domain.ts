@@ -134,6 +134,7 @@ export interface Task_Payload {
   swarm_lineage?: string[];
   recent_findings?: string;
   traceparent?: string;
+  parent_node_id?: string;
 }
 
 export type AgentPatch = Partial<Agent>;

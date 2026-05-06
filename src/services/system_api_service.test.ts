@@ -262,25 +262,25 @@ describe('system_api_service', () => {
         it('get_providers', async () => {
             vi.mocked(api_request).mockResolvedValueOnce([]);
             await system_api_service.get_providers();
-            expect(api_request).toHaveBeenCalledWith('/v1/infra/providers', { method: 'GET' });
+            expect(api_request).toHaveBeenCalledWith('/v1/model-manager/providers', { method: 'GET' });
         });
 
         it('update_provider', async () => {
             vi.mocked(api_request).mockResolvedValueOnce({status: 'ok'});
             await system_api_service.update_provider('p1', {k: 'v'});
-            expect(api_request).toHaveBeenCalledWith('/v1/infra/providers/p1', expect.objectContaining({ method: 'PUT' }));
+            expect(api_request).toHaveBeenCalledWith('/v1/model-manager/providers/p1', expect.objectContaining({ method: 'PUT' }));
         });
         
         it('get_models', async () => {
             vi.mocked(api_request).mockResolvedValueOnce([]);
             await system_api_service.get_models();
-            expect(api_request).toHaveBeenCalledWith('/v1/infra/models', { method: 'GET' });
+            expect(api_request).toHaveBeenCalledWith('/v1/model-manager/models', { method: 'GET' });
         });
 
         it('update_model', async () => {
             vi.mocked(api_request).mockResolvedValueOnce({status: 'ok'});
             await system_api_service.update_model('m1', {k: 'v'});
-            expect(api_request).toHaveBeenCalledWith('/v1/infra/models/m1', expect.objectContaining({ method: 'PUT' }));
+            expect(api_request).toHaveBeenCalledWith('/v1/model-manager/models/m1', expect.objectContaining({ method: 'PUT' }));
         });
 
         it('get_audit_trail', async () => {

@@ -274,7 +274,10 @@ export async function process_command(
 
             // 3. Trigger API Call
             console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: ${agent.name} (ID: ${agent.id}), Safe_Mode: ${!!is_safe_mode}`);
-            agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode)
+            
+            const active_node_id = use_sovereign_store.getState().active_node_id;
+
+            agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined)
                 .catch(err => {
                     event_bus.emit_log({
                         source: 'System',
@@ -395,7 +398,10 @@ export async function process_command(
                     }, 100);
 
                     console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: @${agent.name}, Safe_Mode: ${!!is_safe_mode}`);
-                    agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode)
+                    
+                    const active_node_id = use_sovereign_store.getState().active_node_id;
+
+                    agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined)
                         .catch(err => {
                             event_bus.emit_log({
                                 source: 'System',
@@ -437,7 +443,9 @@ export async function process_command(
                             });
                         }, 100);
 
-                        agent_api_service.send_command(alpha_agent.id, message, model_id, provider, cluster.id, cluster.department, undefined, undefined, is_safe_mode)
+                        const active_node_id = use_sovereign_store.getState().active_node_id;
+
+                        agent_api_service.send_command(alpha_agent.id, message, model_id, provider, cluster.id, cluster.department, undefined, undefined, is_safe_mode, undefined, undefined, active_node_id || undefined)
                             .catch(err => {
                                 event_bus.emit_log({
                                     source: 'System',

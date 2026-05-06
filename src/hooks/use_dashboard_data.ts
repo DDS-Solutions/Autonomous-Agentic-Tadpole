@@ -25,15 +25,30 @@ export function useDashboardData() {
     const { nodes, fetch_nodes, discover_nodes, is_loading: nodes_loading } = use_node_store();
     const [logs, set_logs] = useState<log_entry[]>(() => event_bus.get_history());
     const logs_end_ref = useRef<HTMLDivElement>(null);
-
+    const is_fetching_ref = useRef(false);
     const agents_count = (agents_list || []).length;
 
     useEffect(() => {
+        // Guard: Prevent double-initialization in React 19 Strict Mode or rapid re-renders
+        if (is_fetching_ref.current) return;
+        is_fetching_ref.current = true;
+
         const controller = new AbortController();
         const { signal } = controller;
 
-        fetch_agents({ signal });
-        fetch_nodes({ signal });
+        const init_data = async () => {
+            try {
+                await Promise.all([
+                    fetch_agents({ signal }),
+                    fetch_nodes({ signal })
+                ]);
+            } catch (err) {
+                if (err instanceof Error && err.name === 'AbortError') return;
+                console.error('[useDashboardData] Initial fetch failed:', err);
+            }
+        };
+
+        init_data();
         const unsubscribe_telemetry = init_telemetry();
 
         const unsubscribe_logs = event_bus.subscribe_logs((entry) => {
@@ -44,8 +59,10 @@ export function useDashboardData() {
             controller.abort();
             unsubscribe_logs();
             unsubscribe_telemetry();
+            // We don't reset is_fetching_ref.current here to ensure it stays mount-only 
+            // for the duration of the component lifecycle.
         };
-    }, [fetch_agents, fetch_nodes, init_telemetry]);
+    }, []); // Mount-only initialization
 
     // Auto-scroll to bottom of logs
     useEffect(() => {

@@ -60,6 +60,10 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
     let mut app = Router::new()
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            crate::middleware::boot::wait_for_system_ready,
+        ))
         .layer(axum::middleware::from_fn(
             crate::middleware::auth_rate_limit::auth_brute_force_limiter,
         ))
@@ -128,18 +132,36 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/agents", build_agent_routes())
         .nest("/oversight", build_oversight_routes())
         .nest("/infra", build_infra_routes())
+        .nest("/model-manager", build_model_manager_routes())
         .nest("/skills", build_skills_routes())
         .nest("/benchmarks", build_benchmark_routes())
         .nest("/continuity", build_continuity_routes())
         .nest("/docs", build_docs_routes())
         .nest("/system", build_system_routes())
         .nest("/governance", build_governance_routes())
+        .nest("/sovereign", build_sovereign_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/env-schema", get(routes::env_schema::get_env_schema))
         .route_layer(axum::middleware::from_fn_with_state(
             app_state,
             middleware::auth::validate_token,
         ))
+}
+
+fn build_sovereign_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route(
+            "/missions/{mission_id}/nodes/{leaf_id}/history",
+            get(routes::sovereign_state::get_session_history),
+        )
+        .route(
+            "/missions/{mission_id}/leaves",
+            get(routes::sovereign_state::get_mission_leaves),
+        )
+        .route(
+            "/missions/{mission_id}/nodes",
+            post(routes::sovereign_state::append_session_node),
+        )
 }
 
 fn build_governance_routes() -> Router<Arc<AppState>> {
@@ -150,6 +172,7 @@ fn build_governance_routes() -> Router<Arc<AppState>> {
             "/blueprints/{id}",
             axum::routing::delete(routes::governance::delete_blueprint),
         )
+        .route("/manifest", get(routes::governance::get_sovereign_manifest))
 }
 
 fn build_agent_routes() -> Router<Arc<AppState>> {
@@ -207,6 +230,12 @@ fn build_oversight_routes() -> Router<Arc<AppState>> {
 
 fn build_infra_routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/nodes", get(routes::nodes::get_nodes))
+        .route("/nodes/discover", post(routes::nodes::discover_nodes))
+}
+
+fn build_model_manager_routes() -> Router<Arc<AppState>> {
+    Router::new()
         .route("/providers", get(routes::model_manager::get_providers))
         .route(
             "/providers/{id}",
@@ -235,8 +264,6 @@ fn build_infra_routes() -> Router<Arc<AppState>> {
             get(routes::model_manager::get_model_catalog),
         )
         .route("/model-store/pull", post(routes::model_manager::pull_model))
-        .route("/nodes", get(routes::nodes::get_nodes))
-        .route("/nodes/discover", post(routes::nodes::discover_nodes))
 }
 
 fn build_skills_routes() -> Router<Arc<AppState>> {
@@ -247,6 +274,7 @@ fn build_skills_routes() -> Router<Arc<AppState>> {
         .route("/mcp-tools", get(routes::mcp::list_mcp_tools))
         .route("/import", post(routes::skills::import_capability))
         .route("/register", post(routes::skills::register_capability))
+        .route("/scan", post(routes::skills::scan_workspace_skills))
         .route("/proposals", get(routes::skills::list_capability_proposals))
         .route(
             "/proposals/{id}/resolve",

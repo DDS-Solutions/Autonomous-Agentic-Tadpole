@@ -27,12 +27,9 @@ use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
 use std::sync::Arc;
 use tokio::sync::{broadcast, OnceCell};
-<<<<<<< HEAD
+use crate::services::parser::SymbolParser;
 use crate::system::actors::{ActorRegistry, SecurityAction};
-=======
-use crate::system::actors::ActorRegistry;
->>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
-use tracing::{info, error, debug};
+// tracing imports removed (using tracing:: macro paths directly)
 
 pub mod hubs;
 
@@ -63,6 +60,8 @@ pub struct AppState {
     pub base_dir: std::path::PathBuf,
     /// Registry of system actors (late-initialized).
     pub actors: OnceCell<ActorRegistry>,
+    /// Barrier for system boot synchronization.
+    pub boot_gate: (tokio::sync::watch::Sender<bool>, tokio::sync::watch::Receiver<bool>),
 }
 
 impl AppState {
@@ -149,6 +148,8 @@ impl AppState {
             deploy_token: "test-token".to_string(),
         });
 
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
+
         Self {
             comms,
             governance,
@@ -170,9 +171,12 @@ impl AppState {
                 acl: Arc::new(crate::services::acl_service::AclService),
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
+                arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
             actors: OnceCell::new(),
+            boot_gate: (boot_tx, boot_rx),
         }
     }
 
@@ -263,6 +267,8 @@ impl AppState {
             deploy_token: "test-token".to_string(),
         });
 
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
+
         let state = Self {
             comms,
             governance,
@@ -284,9 +290,12 @@ impl AppState {
                 acl: Arc::new(crate::services::acl_service::AclService),
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
+                arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
             actors: OnceCell::new(),
+            boot_gate: (boot_tx, boot_rx),
         };
         state
             .resources
@@ -315,6 +324,7 @@ impl AppState {
     ///    and `SecretRedactor`.
     pub async fn new() -> Result<Self, AppError> {
         dotenvy::dotenv().ok();
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
 
         let (tx, _) = broadcast::channel(1000);
         let (event_tx, _) = broadcast::channel(1000);
@@ -568,9 +578,12 @@ impl AppState {
                 acl: Arc::new(crate::services::acl_service::AclService),
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
+                arbiter: Arc::new(tokio::sync::Semaphore::new(16)),
+                parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
             actors: OnceCell::new(),
+            boot_gate: (boot_tx, boot_rx),
         };
 
         // 🧬 [Evolution] Passive Hot-Reloading Loop
@@ -633,12 +646,8 @@ impl AppState {
                 resp: tx,
             };
 
-            if let Err(e) = actors.audit.send(msg) {
-<<<<<<< HEAD
+            if let Err(e) = actors.audit.send(msg).await {
                 tracing::error!("🚨 [Kernel] Failed to dispatch audit message: {:?}", e);
-=======
-                error!("🚨 [Kernel] Failed to dispatch audit message: {:?}", e);
->>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
                 return Err(AppError::InternalServerError("Audit dispatcher failure".to_string()));
             }
 
@@ -650,9 +659,9 @@ impl AppState {
         }
     }
 
-<<<<<<< HEAD
     /// ### 🧠 [Kernel] Sovereign Memory Save
     /// Dispatches a memory persistence request to the background MemoryActor.
+    #[allow(dead_code)]
     pub async fn save_memory_sovereign(
         &self,
         text: &str,
@@ -671,7 +680,7 @@ impl AppState {
                 resp: tx,
             };
 
-            if let Err(e) = actors.memory.send(msg) {
+            if let Err(e) = actors.memory.send(msg).await {
                 tracing::error!("🚨 [Kernel] Failed to dispatch memory save: {:?}", e);
                 return Err(AppError::InternalServerError("Memory dispatcher failure".to_string()));
             }
@@ -685,6 +694,7 @@ impl AppState {
 
     /// ### 🧠 [Kernel] Sovereign Memory Query
     /// Dispatches a vector search request to the background MemoryActor.
+    #[allow(dead_code)]
     pub async fn query_memory_sovereign(
         &self,
         query: &str,
@@ -698,7 +708,7 @@ impl AppState {
                 resp: tx,
             };
 
-            if let Err(e) = actors.memory.send(msg) {
+            if let Err(e) = actors.memory.send(msg).await {
                 tracing::error!("🚨 [Kernel] Failed to dispatch memory query: {:?}", e);
                 return Err(AppError::InternalServerError("Memory dispatcher failure".to_string()));
             }
@@ -711,6 +721,7 @@ impl AppState {
 
     /// ### 🛡️ [Kernel] Sovereign Security Check
     /// Dispatches a security validation request to the background SecurityActor.
+    #[allow(dead_code)]
     pub async fn check_security_sovereign(
         &self,
         agent_id: &str,
@@ -772,9 +783,6 @@ impl AppState {
             }
         }
     }
-
-=======
->>>>>>> 25d8ad2cee17df5bb53efec00f6716d4f03d43a7
     /// ### 📡 Observability: System Broadcast (broadcast_sys)
     /// Publishes a high-priority system event to all connected telemetry 
     /// consumers (WebSockets, OTel exporters).
@@ -945,6 +953,110 @@ impl AppState {
             tracing::error!("🚨 [System] Failed to flush budget data: {}", e);
         }
     }
+
+    /// ### 🏁 Boot: Wait for Boot (wait_for_boot)
+    /// Blocks until the system boot sequence is officially complete.
+    pub async fn wait_for_boot(&self) {
+        let mut rx = self.boot_gate.1.clone();
+        if *rx.borrow() {
+            return;
+        }
+        let _ = rx.changed().await;
+    }
+
+    /// ### 🏁 Boot: Notify Boot Complete (notify_boot_complete)
+    /// Signals all waiting tasks that the engine is now MISSION-READY.
+    pub fn notify_boot_complete(&self) {
+        let _ = self.boot_gate.0.send(true);
+        tracing::info!("🏁 [Engine] Boot sequence complete. System is MISSION-READY.");
+    }
+
+    /// ### 🧬 Evolution: Scan Workspace Skills (scan_workspace_skills_sovereign)
+    /// Triggers a recursive scan of the workspace for autonomously generated 
+    /// Python/JS skills.
+    pub async fn scan_workspace_skills_sovereign(&self) -> Result<usize, AppError> {
+        self.registry.skills.reload_all().await
+            .map_err(|e| AppError::InternalServerError(format!("Failed to scan skills: {}", e)))?;
+        
+        let snapshot = self.registry.skills.snapshot();
+        Ok(snapshot.skills.len() + snapshot.workflows.len() + snapshot.hooks.len())
+    }
+
+    /// ### 🧠 State: Traverse Session History (traverse_session_history_sovereign)
+    /// Reconstructs the linear history for a specific branch tip.
+    pub async fn traverse_session_history_sovereign(&self, leaf_id: &str) -> Result<Vec<serde_json::Value>, AppError> {
+        let history = sqlx::query(
+            r#"
+            WITH RECURSIVE branch AS (
+                SELECT id, mission_id, parent_id, role, content, metadata, created_at
+                FROM mission_nodes
+                WHERE id = ?1
+                UNION ALL
+                SELECT m.id, m.mission_id, m.parent_id, m.role, m.content, m.metadata, m.created_at
+                FROM mission_nodes m
+                JOIN branch b ON m.id = b.parent_id
+            )
+            SELECT * FROM branch ORDER BY created_at ASC
+            "#
+        )
+        .bind(leaf_id)
+        .fetch_all(&self.resources.pool)
+        .await
+        .map_err(|e| AppError::InternalServerError(format!("Failed to traverse session history: {}", e)))?;
+
+        let result: Vec<_> = history.into_iter().map(|row| {
+            use sqlx::Row;
+            serde_json::json!({
+                "id": row.get::<String, _>("id"),
+                "role": row.get::<String, _>("role"),
+                "content": row.get::<String, _>("content"),
+                "metadata": row.get::<Option<String>, _>("metadata").and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            })
+        }).collect();
+
+        Ok(result)
+    }
+
+    /// ### 🧠 State: Append Session Node (append_session_node_sovereign)
+    /// Appends a new node to the session tree.
+    pub async fn append_session_node_sovereign(
+        &self,
+        mission_id: &str,
+        parent_id: Option<String>,
+        role: &str,
+        content: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<String, AppError> {
+        let node_id = uuid::Uuid::new_v4().to_string();
+        let metadata_str = metadata.map(|m| m.to_string());
+
+        sqlx::query(
+            r#"
+            INSERT INTO mission_nodes (id, mission_id, parent_id, role, content, metadata)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#
+        )
+        .bind(&node_id)
+        .bind(mission_id)
+        .bind(parent_id)
+        .bind(role)
+        .bind(content)
+        .bind(metadata_str)
+        .execute(&self.resources.pool)
+        .await
+        .map_err(|e| AppError::InternalServerError(format!("Failed to append session node: {}", e)))?;
+
+        // Update active leaf in mission_history
+        sqlx::query("UPDATE mission_history SET active_node_id = ?1 WHERE id = ?2")
+            .bind(&node_id)
+            .bind(mission_id)
+            .execute(&self.resources.pool)
+            .await
+            .ok(); // Non-fatal if update fails
+
+        Ok(node_id)
+    }
 }
 
 impl Default for AppState {
@@ -1035,7 +1147,11 @@ impl Default for AppState {
             acl: Arc::new(crate::services::acl_service::AclService),
             renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
             base_dir: std::path::PathBuf::from("data"),
+            arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+            parser: Arc::new(SymbolParser::new()),
         });
+
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
 
         Self {
             comms,
@@ -1045,6 +1161,7 @@ impl Default for AppState {
             resources,
             base_dir: std::path::PathBuf::from("data"),
             actors: OnceCell::new(),
+            boot_gate: (boot_tx, boot_rx),
         }
     }
 }

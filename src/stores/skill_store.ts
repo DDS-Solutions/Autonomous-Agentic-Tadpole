@@ -105,6 +105,7 @@ export interface Skill_Actions {
     delete_workflow: (name: string) => Promise<void>;
     save_hook: (hook: Hook_Definition) => Promise<void>;
     delete_hook: (name: string) => Promise<void>;
+    scan_workspace_skills: () => Promise<number>;
     handle_pulse: (tool_name: string, status: 'success' | 'error', latency: number) => void;
 }
 
@@ -212,6 +213,21 @@ export const use_skill_store = create<Skill_State & Skill_Actions>()((set, get) 
             const message = error instanceof Error ? error.message : String(error);
             set({ error: message });
             log_error('SkillStore', 'Hook Deletion Failed', error);
+        }
+    },
+    
+    scan_workspace_skills: async () => {
+        set({ is_loading: true, error: null });
+        try {
+            const result = await tadpole_os_service.scan_workspace_skills();
+            await get().fetch_skills();
+            set({ is_loading: false });
+            return result.ingested_count;
+        } catch (_error: unknown) {
+            const message = _error instanceof Error ? _error.message : String(_error);
+            set({ error: message, is_loading: false });
+            log_error('SkillStore', 'Workspace Scan Failed', _error);
+            return 0;
         }
     },
 

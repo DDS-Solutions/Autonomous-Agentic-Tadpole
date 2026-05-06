@@ -39,6 +39,7 @@ pub mod templates;
 pub mod ws;
 pub mod system;
 pub mod governance;
+pub mod sovereign_state;
 
 #[cfg(test)]
 mod agent_tests;

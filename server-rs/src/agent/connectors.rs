@@ -119,7 +119,7 @@ impl ConnectorTrait for FsConnector {
                 // Dispatches the file to a specialized parser (e.g., Markdown 
                 // block-aware or PDF structure-aware) to maintain context 
                 // boundaries during chunking.
-                match crate::agent::parser::parse_file(path) {
+                match crate::agent::parser::parse_file(path).await {
                     Ok(doc) => {
                         // Use structured chunks for better embedding quality.
                         // Standard chunk size of 1500 characters optimized for 

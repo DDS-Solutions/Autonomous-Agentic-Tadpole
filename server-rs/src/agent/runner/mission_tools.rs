@@ -542,6 +542,8 @@ impl AgentRunner {
         }
 
         let adapter = &ctx.fs_adapter;
+        let _permit = self.state.resources.arbiter.acquire().await
+            .map_err(|e| ToolExecutionError::ExecutionFailed(format!("Resource arbiter failure: {}", e)))?;
         match adapter.read_file(path_str).await {
             Ok(content) => {
                 let symbols = self.extract_symbols(&content, path_str);
@@ -572,6 +574,8 @@ impl AgentRunner {
         }
 
         let adapter = &ctx.fs_adapter;
+        let _permit = self.state.resources.arbiter.acquire().await
+            .map_err(|e| ToolExecutionError::ExecutionFailed(format!("Resource arbiter failure: {}", e)))?;
         match adapter.read_file(path_str).await {
             Ok(content) => {
                 if let Some(body) = self.extract_symbol_body(&content, symbol_name, path_str) {
@@ -586,91 +590,22 @@ impl AgentRunner {
         }
     }
 
-    /// Internal helper: Extracts a list of symbols using regex patterns based on file extension.
+    /// Internal helper: Extracts a list of symbols using tree-sitter.
     fn extract_symbols(&self, content: &str, path: &str) -> Vec<String> {
-        let ext = std::path::Path::new(path).extension().and_then(|s| s.to_str()).unwrap_or("");
-        let mut symbols = Vec::new();
-
-        match ext {
-            "rs" => {
-                let re = regex::Regex::new(r"(?m)^[ \t]*(?:pub(?:\(.*\))?\s+)?(?:async\s+)?(fn|struct|enum|trait|type|const|static)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-                for cap in re.captures_iter(content) {
-                    symbols.push(format!("[{}] {}", &cap[1], &cap[2]));
-                }
-            }
-            "ts" | "js" | "tsx" | "jsx" => {
-                let re = regex::Regex::new(r"(?m)^[ \t]*(?:export\s+)?(?:async\s+)?(function|class|type|interface|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-                for cap in re.captures_iter(content) {
-                    symbols.push(format!("[{}] {}", &cap[1], &cap[2]));
-                }
-            }
-            "py" => {
-                let re = regex::Regex::new(r"(?m)^[ \t]*(def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-                for cap in re.captures_iter(content) {
-                    symbols.push(format!("[{}] {}", &cap[1], &cap[2]));
-                }
-            }
-            _ => {
-                // Fallback for unknown languages: search for common patterns
-                let re = regex::Regex::new(r"(?m)^[ \t]*(?:function|class|def|fn)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-                for cap in re.captures_iter(content) {
-                    symbols.push(format!("[symbol] {}", &cap[1]));
-                }
-            }
-        }
+        let symbols = self.state.resources.parser.list_symbols(path, content);
         symbols
+            .into_iter()
+            .map(|s| format!("[{}] {}", s.kind, s.name))
+            .collect()
     }
 
-    /// Internal helper: Extracts the body of a specific symbol.
+    /// Internal helper: Extracts the body of a specific symbol using tree-sitter.
     fn extract_symbol_body(&self, content: &str, symbol: &str, path: &str) -> Option<String> {
-        let lines: Vec<&str> = content.lines().collect();
-        let ext = std::path::Path::new(path).extension().and_then(|s| s.to_str()).unwrap_or("");
-
-        // Find the line where the symbol is defined
-        let start_idx = match ext {
-            "py" => lines.iter().position(|l| l.contains(&format!("def {}", symbol)) || l.contains(&format!("class {}", symbol))),
-            "rs" => lines.iter().position(|l| l.contains(&format!("fn {}", symbol)) || l.contains(&format!("struct {}", symbol)) || l.contains(&format!("enum {}", symbol)) || l.contains(&format!("trait {}", symbol))),
-            _ => lines.iter().position(|l| l.contains(&format!("function {}", symbol)) || l.contains(&format!("class {}", symbol)) || l.contains(&format!("const {}", symbol))),
-        };
-
-        if let Some(start) = start_idx {
-            let mut body = Vec::new();
-            let mut brace_count = 0;
-            let mut found_start = false;
-            let mut indent_level = None;
-
-            for line in &lines[start..] {
-                body.push(*line);
-                
-                if ext == "py" {
-                    // Python indentation-based blocks
-                    let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
-                    if !line.trim().is_empty() {
-                        if let Some(level) = indent_level {
-                            if current_indent <= level && body.len() > 1 {
-                                // Block ended
-                                body.pop();
-                                break;
-                            }
-                        } else {
-                            indent_level = Some(current_indent);
-                        }
-                    }
-                } else {
-                    // Brace-based blocks (RS, JS, TS)
-                    brace_count += line.matches('{').count();
-                    brace_count -= line.matches('}').count();
-                    
-                    if line.contains('{') { found_start = true; }
-                    
-                    if found_start && brace_count == 0 {
-                        break;
-                    }
-                }
-            }
-            return Some(body.join("\n"));
-        }
-        None
+        let symbols = self.state.resources.parser.list_symbols(path, content);
+        symbols
+            .into_iter()
+            .find(|s| s.name == symbol)
+            .map(|s| s.body)
     }
 
     /// Handles `send_mission_directive`: delegates a task to another agent.

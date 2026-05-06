@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Look for `Global OS Hub` in error traces or search `[AppKernel]` in component logs.
  */
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { use_provider_store } from './stores/provider_store';
 import { get_settings } from './stores/settings_store';
@@ -52,11 +52,10 @@ function TabSync(): null {
   const open_tab = use_tab_store(s => s.open_tab); 
   const active_tab_id = use_tab_store(s => s.active_tab_id);
   const tabs = use_tab_store(s => s.tabs);
-  
+  const last_synced_path = useRef<string | null>(null);
+
   useEffect(() => {
-    // 1. Guard: If we are in a detached context (e.g. Sovereign Chat or Detached Shell), 
-    // we should NEVER attempt to synchronize the global tab store 
-    // as it will trigger a recursive navigation loop with the main window.
+    // 1. Guard: If we are in a detached context, never sync the tab store
     if (location.pathname.startsWith('/detached')) {
       return;
     }
@@ -64,21 +63,34 @@ function TabSync(): null {
     const route = get_route_by_path(location.pathname);
     if (!route) return;
 
-    // Preventive check: don't trigger open_tab if the active tab already matches the path
-    const active_tab = (tabs || []).find(t => t.id === active_tab_id);
-    const normalized_target = route.path === '/' ? '/dashboard' : route.path.replace(/\/$/, '');
-    const normalized_active = active_tab ? (active_tab.path === '/' ? '/dashboard' : active_tab.path.replace(/\/$/, '')) : null;
+    // Normalize paths consistently
+    const current_path = location.pathname === '/' ? '/dashboard' : location.pathname.replace(/\/$/, '');
 
-    if (normalized_active === normalized_target) {
+    // Skip if already synced to this URL to break feedback loops
+    if (last_synced_path.current === current_path) {
       return;
     }
 
+    // Peak into store state to check if current active tab already matches this path
+    // We use getState() to avoid making 'tabs' or 'active_tab_id' a dependency of this effect.
+    const state = use_tab_store.getState();
+    const active_tab = (state.tabs || []).find(t => t.id === state.active_tab_id);
+    const active_path = active_tab ? (active_tab.path === '/' ? '/dashboard' : active_tab.path.replace(/\/$/, '')) : null;
+
+    if (active_path === current_path) {
+      last_synced_path.current = current_path;
+      return;
+    }
+
+    console.debug('[TabSync] URL changed. Synchronizing workspace:', current_path);
+    last_synced_path.current = current_path;
+    
     open_tab({
         title: route.label,
         path: route.path,
         icon: route.icon
     });
-  }, [location.pathname, open_tab, active_tab_id, tabs]);
+  }, [location.pathname, open_tab]);
 
   return null;
 }
@@ -87,13 +99,35 @@ export default function App(): React.ReactElement {
   const sync_defaults = use_provider_store(state => state.sync_defaults);
   const sync_with_backend = use_provider_store(state => state.sync_with_backend);
 
+  const is_init_ref = useRef(false);
+
   useEffect(() => {
-    sync_defaults();
-    sync_with_backend();
+    if (is_init_ref.current) return;
+    is_init_ref.current = true;
+
+    const init = async () => {
+      try {
+        console.debug('[AppKernel] Initializing OS runtime...');
+        sync_defaults();
+        await sync_with_backend();
+        
+        // --- Phase 2: Visual Monitoring ---
+        const { visual_monitor_bridge } = await import('./services/visual_monitor_bridge');
+        visual_monitor_bridge.init();
+      } catch (err) {
+        console.error('[AppKernel] Critical Initialization Failure:', err);
+      }
+    };
+    
+    void init();
 
     const settings = get_settings();
-    document.documentElement.setAttribute('data-theme', settings.theme);
-    document.documentElement.setAttribute('data-density', settings.density);
+    if (document.documentElement.getAttribute('data-theme') !== settings.theme) {
+      document.documentElement.setAttribute('data-theme', settings.theme);
+    }
+    if (document.documentElement.getAttribute('data-density') !== settings.density) {
+      document.documentElement.setAttribute('data-density', settings.density);
+    }
   }, [sync_defaults, sync_with_backend]);
 
 

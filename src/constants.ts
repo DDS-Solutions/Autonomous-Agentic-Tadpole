@@ -20,13 +20,14 @@ export const PROVIDERS = {
     LOCAL: 'local',
 } as const;
 
-export const DEFAULT_PROVIDER = PROVIDERS.GOOGLE;
+export const DEFAULT_PROVIDER = PROVIDERS.OLLAMA;
 
 export const MODEL_IDS = {
     GEMINI_PRO: 'gemini-pro',
     GEMINI_FLASH: 'gemini-2.0-flash',
     CLAUDE_OPUS: 'claude-3-opus-20240229',
     GPT4_O: 'gpt-4o',
+    GEMMA4: 'gemma4:e4b',
 } as const;
 
 

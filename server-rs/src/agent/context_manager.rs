@@ -15,7 +15,12 @@
 
 use crate::agent::runner::{AgentRunner, RunContext};
 use crate::error::AppError;
-use tiktoken_rs::cl100k_base;
+use tiktoken_rs::{cl100k_base, CoreBPE};
+use once_cell::sync::Lazy;
+
+static TOKENIZER: Lazy<CoreBPE> = Lazy::new(|| {
+    cl100k_base().expect("Tadpole Error: Failed to initialize cl100k_base tokenizer. Check tiktoken-rs dependencies.")
+});
 
 pub struct ContextManager;
 
@@ -23,37 +28,56 @@ impl ContextManager {
     /// Applies deterministic rules to reduce history size before LLM summarization.
     ///
     /// Focuses on removing redundant CLI output, conversational filler,
-    /// and collapsing repeated failed attempts.
+    /// and collapsing repeated failed attempts while preserving Atomic Blocks.
     pub fn compact(history: &str) -> String {
-        let mut lines: Vec<String> = history.lines().map(|l| l.to_string()).collect();
+        let lines: Vec<&str> = history.lines().collect();
+        let mut result = Vec::new();
+        
+        let mut in_code_block = false;
+        let mut block_buffer = Vec::new();
 
-        // 1. Collapse repeating "Success" or "Error" lines from tool calls
-        let mut i = 0;
-        while i < lines.len().saturating_sub(1) {
-            let current = lines[i].trim();
-            let next = lines[i + 1].trim();
-
-            if (current.contains("tool_result") && current.contains("Success"))
-                && (next.contains("tool_result") && next.contains("Success"))
-            {
-                lines.remove(i + 1);
-            } else {
-                i += 1;
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // 1. Atomic Block Detection: Code Blocks
+            if trimmed.starts_with("```") {
+                in_code_block = !in_code_block;
+                block_buffer.push(line);
+                if !in_code_block {
+                    // Just finished an atomic block, flush the buffer
+                    result.extend(block_buffer.drain(..));
+                }
+                continue;
             }
+
+            if in_code_block {
+                block_buffer.push(line);
+                continue;
+            }
+
+            // 2. Collapse repeating "Success" or "Error" lines from tool calls
+            if trimmed.contains("tool_result") && trimmed.contains("Success") {
+                if let Some(last) = result.last() {
+                    if last.trim().contains("tool_result") && last.trim().contains("Success") {
+                        continue;
+                    }
+                }
+            }
+
+            result.push(line);
         }
 
-        // 2. Fact-Preservation: Ensure paths and error codes are NEVER pruned
-        // This is handled by ensuring we don't truncate lines containing patterns like '/' or 'Error:'
+        // Safety: Flush any unclosed block buffer
+        result.extend(block_buffer);
 
-        lines.join("\n")
+        result.join("\n")
     }
 }
 
 impl ContextManager {
     /// Calculates the token count of a given text content.
     pub fn calculate_tokens(text: &str) -> usize {
-        let bpe = cl100k_base().expect("Tadpole Error: Failed to initialize cl100k_base tokenizer. Check tiktoken-rs dependencies.");
-        bpe.encode_with_special_tokens(text).len()
+        TOKENIZER.encode_with_special_tokens(text).len()
     }
 
     /// Performs tiered history compression.
@@ -74,9 +98,14 @@ impl ContextManager {
             Self::calculate_tokens(&heuristically_compacted)
         );
 
+        // Generate the Sovereign State Manifest for context anchoring
+        let manifest = crate::system::manifest::SovereignStateManifest::generate(&runner.state).await;
+
         // --- Tier 2: Semantic Summarization ---
         let summarization_prompt = format!(
             "You are the Context Management Engine for Tadpole OS.\n\n\
+             ### CURRENT SYSTEM STATE:\n\
+             {}\n\n\
              ### MISSION OBJECTIVE:\n\
              Summarize the following mission history into a concise, high-density 'Condensed State'. \
              Preserve all critical findings, file paths, and established facts. \
@@ -85,6 +114,7 @@ impl ContextManager {
              {}\n\n\
              ### OUTPUT FORMAT:\n\
              Provide ONLY the condensed summary. Do not include any meta-commentary.",
+            manifest,
             heuristically_compacted
         );
 
