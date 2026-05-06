@@ -17,6 +17,14 @@
 //!   bursty write operations, migration checksum mismatches due to
 //!   manual tampering, or path permission errors on the
 //!   `DATABASE_URL` target.
+//! - **Recovery Protocol (DB-01)**: 
+//!   1. If `SQLITE_BUSY` persists, verify no rogue `sqlite3` processes
+//!      hold a lock. 
+//!   2. If checksum fail, check `Hotfix Reconciler` logic in `db.rs`
+//!      and ensure the `_sqlx_migrations` entry matches the 
+//!      `sqlx::migrate!` binary hash.
+//!   3. For I/O errors, ensure the `.tmp/` or data directory has 
+//!      `0755` permissions for the engine process.
 //! - **Telemetry Link**: Search for `[Database]` or `[SQLx]` in
 //!   `tracing` logs for query performance and migration status.
 //! - **Trace Scope**: `server-rs::db`

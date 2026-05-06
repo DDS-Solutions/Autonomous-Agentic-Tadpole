@@ -13,7 +13,7 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-**Generated**: 2026-05-06 18:35:03
+**Generated**: 2026-05-06 19:02:50
 Welcome to the official API reference for the Tadpole OS Sovereign Engine. All endpoints require a valid `NEURAL_TOKEN` provided via the `Authorization: Bearer <token>` header.
 
 ## Endpoints

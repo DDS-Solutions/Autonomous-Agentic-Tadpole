@@ -1,0 +1,15 @@
+{
+  "id": "mission_codebase_review_2026",
+  "objective": "Perform a comprehensive codebase review and generate a health report.",
+  "constraints": [
+    "Must use sovereign_audit.py as the primary verification gate",
+    "Must check for 100% parity documentation compliance",
+    "Must identify and report all hardcoded secrets or unsafe patterns",
+    "Must provide a prioritized refactor roadmap"
+  ],
+  "priority": "high",
+  "budget_usd": 0.0,
+  "dependencies": [],
+  "is_degraded": false,
+  "directive_ref": "directives/codebase_review.md"
+}

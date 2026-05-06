@@ -21,6 +21,8 @@ import { get_settings } from '../stores/settings_store';
 import type { Agent } from '../types';
 import { browser_inference_service } from '../services/browser_inference';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';
+import { use_trace_store, type Trace_Span } from '../stores/trace_store';
+import { v4 as uuidv4 } from 'uuid';
 
 /** Return value from process_command indicating if the log should be cleared. */
 export interface Command_Result {
@@ -70,7 +72,35 @@ export async function process_command(
             event_bus.emit_log({ source: 'System', text: '🧠 Browser Specialist analyzing tactical intent...', severity: 'info' });
             
             const specialist_store = use_browser_specialist_store.getState();
+            const trace_store = use_trace_store.getState();
+            
+            const span_id = uuidv4().substring(0, 16);
+            const trace_id = trace_store.active_trace_id || uuidv4().replace(/-/g, '');
+            const start_time = performance.now();
+
+            trace_store.add_span({
+                id: span_id,
+                trace_id,
+                name: 'tactical_ui_analysis',
+                agent_id: 'Browser Specialist',
+                mission_id: 'active_session',
+                start_time: Date.now(),
+                status: 'running',
+                attributes: { intent: command_text }
+            });
+
             const analysis = await specialist_store.analyze_dom(command_text);
+            const duration = performance.now() - start_time;
+            
+            trace_store.update_span(span_id, {
+                status: 'success',
+                end_time: Date.now(),
+                attributes: { 
+                    intent: command_text, 
+                    latency_ms: duration,
+                    is_escalated: analysis.toLowerCase().includes('escalate')
+                }
+            });
             
             event_bus.emit_log({ 
                 source: 'Agent', 

@@ -22,6 +22,8 @@ import type {
 } from '../../contracts/agent';
 import { resolve_friendly_model_name } from '../../utils/model_utils';
 import { get_settings } from '../../stores/settings_store';
+import { use_trace_store } from '../../stores/trace_store';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * RobustAgentDto
@@ -68,7 +70,17 @@ interface RobustAgentDto extends Partial<AgentDto> {
  * 2. **Dual-Case Support**: Checks both camelCase (API) and snake_case (Internal/Mock) properties.
  */
 export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, existing_agent?: Agent): Agent => {
-    console.debug('[Normalizer] Normalizing agent DTO:', dto.id);
+    use_trace_store.getState().add_span({
+        id: uuidv4().substring(0, 16),
+        trace_id: use_trace_store.getState().active_trace_id || uuidv4().replace(/-/g, ''),
+        name: '[Normalizer] normalize_agent_dto',
+        agent_id: dto.id || 'system',
+        mission_id: 'system_sync',
+        start_time: Date.now(),
+        end_time: Date.now(),
+        status: 'success',
+        attributes: { agent_id: dto.id }
+    });
     const d = dto as RobustAgentDto;
     
     const get_val = <T>(key_wire: keyof RobustAgentDto, key_domain: keyof RobustAgentDto, fallback: T): T => {
@@ -177,7 +189,17 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
  * Transforms a raw memory entry into a structured domain model.
  */
 export const normalize_agent_memory_entry = (raw: Raw_Agent_Memory_Entry): Agent_Memory_Entry => {
-    console.debug('[Normalizer] Normalizing agent memory entry:', raw.id);
+    use_trace_store.getState().add_span({
+        id: uuidv4().substring(0, 16),
+        trace_id: use_trace_store.getState().active_trace_id || uuidv4().replace(/-/g, ''),
+        name: '[Normalizer] normalize_memory_entry',
+        agent_id: 'system',
+        mission_id: raw.mission_id || 'system_sync',
+        start_time: Date.now(),
+        end_time: Date.now(),
+        status: 'success',
+        attributes: { memory_id: raw.id }
+    });
     return {
         id: raw.id,
         text: raw.text || raw.content || '',

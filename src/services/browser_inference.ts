@@ -26,6 +26,7 @@
  */
 
 import { pipeline, env } from '@huggingface/transformers';
+import { vram_monitor_service } from './vram_monitor';
 
 // Configure transformers.js to use local cache and wasm/webgpu
 env.allowLocalModels = false;
@@ -110,6 +111,13 @@ USER: ${prompt}
 ASSISTANT:`;
 
         try {
+            // Check for Resource Guard (VRAM Pressure)
+            const memory_status = vram_monitor_service.get_status();
+            if (memory_status.is_throttled) {
+                console.warn('🧠 [BrowserSpecialist] INFERENCE BLOCKED: Resource Guard active due to high VRAM pressure.');
+                return "RESOURCE_GUARD: System memory pressure is too high for local inference. Please close other applications or wait for stabilization.";
+            }
+
             const output = await this.pipe(input, {
                 max_new_tokens: 256,
                 temperature: 0.2, // Lower temp for more deterministic analysis

@@ -8,6 +8,14 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: LocalStorage corruption, rehydration failure, or invalid URL structure blocking backend connectivity.
+ * - **Recovery Protocol (SET-01)**:
+ *   1. If rehydration loops occur, clear `tadpole_settings` from 
+ *      localStorage via console.
+ *   2. If backend connectivity fails, verify that `tadpole_os_url` 
+ *      does not contain internal Tauri strings and resolves to 
+ *      `127.0.0.1:8000`.
+ *   3. For "Nuclear Rehydration" failures, use the `Nuclear Purge` 
+ *      manual override in the Ops Dashboard.
  * - **Telemetry Link**: Search for `[SettingsStore]` in traces or check `tadpole_settings` in browser devtools.
  */
 

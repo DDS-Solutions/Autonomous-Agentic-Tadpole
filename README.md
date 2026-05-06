@@ -29,6 +29,7 @@
   [![Kernel](https://img.shields.io/badge/Kernel-Hybrid--Actor-emerald?style=for-the-badge&logo=rust)](docs/ARCHITECTURE.md)
   [![Autonomy](https://img.shields.io/badge/Autonomy-Self--Directed-blue?style=for-the-badge)](directives/AUTONOMY_MANIFEST.md)
   [![Governance](https://img.shields.io/badge/Protocol-Aletheia-orange?style=for-the-badge)](directives/GOVERNANCE.md)
+  [![Intelligence](https://img.shields.io/badge/Core-Dual--Neural-purple?style=for-the-badge)](docs/ARCHITECTURE.md)
 
   [🚀 Mission Manifest](directives/AUTONOMY_MANIFEST.md) • [⚖️ Governance Charter](directives/GOVERNANCE.md) • [🏗️ Actor Architecture](docs/ARCHITECTURE.md)
 
@@ -43,6 +44,13 @@ The heart of the system is a decoupled Rust kernel that offloads critical I/O an
 - **Audit Actor**: A sequential, single-threaded cryptographic sink that ensures the non-repudiation of the Merkle Audit Trail without blocking agent cognition.
 - **Memory Actor**: An isolated persistence layer for high-dimensional vector search and relational institutional memory.
 - **Autonomous Orchestrator**: A background intelligence loop that scans the environment, evaluates mission health, and dispatches agents to fulfill the **Sovereign Charter**.
+
+### 🧠 Core Capabilities
+- **Sovereign Neural Handoff**: A tiered intelligence stack where tactical UI reasoning is processed by a local **Browser Specialist** (Gemma-2b via WebGPU) and escalated to a **Computer Architect** (Gemma-9B) for strategic remediation.
+- **VRAM Resource Governance**: Integrated **Resource Guard** technology that monitors GPU pressure and automatically throttles inference to maintain system stability.
+- **Aletheia Verification**: Every agent decision is validated against the **Merkle Audit Trail**, ensuring 100% non-repudiation and zero-drift compliance.
+- **Zero-Latency Monitoring**: Real-time DOM analysis and anomaly detection without external network roundtrips.
+- **Deep Observability**: Structured **Trace Spans** provide high-resolution timing and lineage for every neural escalation and mission turn.
 
 ---
 
