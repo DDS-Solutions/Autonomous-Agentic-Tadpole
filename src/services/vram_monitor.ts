@@ -70,8 +70,10 @@ class VramMonitor {
             }
 
             // 2. Check Browser Memory (JS Heap)
-            if ((performance as any).memory) {
-                const mem = (performance as any).memory;
+            // performance.memory is a non-standard Chrome extension, not in the TS DOM lib
+            const perf_with_memory = performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } };
+            if (perf_with_memory.memory) {
+                const mem = perf_with_memory.memory;
                 const heap_pressure = mem.usedJSHeapSize / mem.jsHeapSizeLimit;
                 pressure = Math.max(pressure, heap_pressure);
             }

@@ -115,6 +115,7 @@ impl AgentRunner {
             safe_mode,
             analysis: payload.analysis.unwrap_or(false),
             traceparent: payload.traceparent.clone(),
+            trace_id: payload.traceparent.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: payload.recent_findings.clone(),
             working_memory: a.state.working_memory.clone(),
@@ -123,12 +124,29 @@ impl AgentRunner {
             backlog: None,
             primary_goal: payload.primary_goal.clone().or_else(|| Some(payload.message.clone())),
             budget_usd,
+            budget_limit_usd: 10.0,
             current_cost_usd,
             reasoning_depth: resolved_config.reasoning_depth.unwrap_or(1),
             act_threshold: resolved_config.act_threshold.unwrap_or(0.9),
             max_turns: resolved_config.max_turns.unwrap_or(20),
             authority_level: crate::agent::types::RoleAuthorityLevel::from_role(&a.identity.role),
             resource_weights: crate::utils::data_weighting::DataWeighting::default_weights(),
+            security_policy: serde_json::json!({
+                "allowed_imports": ["os", "sys", "json", "requests"],
+                "network_access": !safe_mode,
+                "fs_sandbox": true
+            }),
+            active_node_id: {
+                let node_id = if mission_id != "system-internal" && !mission_id.is_empty() {
+                    match crate::agent::mission::get_mission_by_id(&self.state.resources.pool, mission_id).await {
+                        Ok(Some(m)) => m.active_node_id,
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                std::sync::Arc::new(parking_lot::Mutex::new(node_id))
+            },
         })
     }
 

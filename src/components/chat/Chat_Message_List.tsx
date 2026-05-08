@@ -13,10 +13,13 @@
 
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, User, Zap } from 'lucide-react';
+import { Bot, User, Zap, GitBranch } from 'lucide-react';
 import clsx from 'clsx';
 import { type Message_Part } from '../../stores/sovereign_store';
 import { i18n } from '../../i18n';
+import { ArtifactPromotionCard } from './ArtifactPromotionCard';
+
+const ARTIFACT_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/g;
 
 export interface Chat_Message {
     id: string;
@@ -33,6 +36,7 @@ export interface Chat_Message {
 
 interface Chat_Message_Item_Props {
     msg: Chat_Message;
+    onRevert?: (node_id: string) => void;
 }
 
 /**
@@ -42,7 +46,7 @@ interface Chat_Message_Item_Props {
  * NOTE: Using msg object comparison to support streaming updates where the ID 
  * remains constant but content (text/parts) evolves.
  */
-const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg }) => {
+const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }) => {
     // Robust date parsing for UNIX seconds vs milliseconds vs ISO
     const render_time = useMemo(() => {
         try {
@@ -128,11 +132,37 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg }) => {
                         <Zap size={8} className="text-green-400" />
                     </div>
                 )}
+                
+                {/* Artifact Promotion Detection */}
+                {msg.sender_id !== '0' && ARTIFACT_REGEX.test(msg.text) && (
+                    <ArtifactPromotionCard 
+                        name={`tool_${msg.id.slice(0, 4)}`}
+                        content={msg.text.match(ARTIFACT_REGEX)?.[0].replace(/```.*?\n|```/g, '') || ''}
+                        agentId={msg.agent_id || msg.sender_id}
+                        missionId={typeof msg.scope === 'string' && msg.scope !== 'global' ? msg.scope : undefined}
+                    />
+                )}
             </div>
-            <div className="flex flex-row items-center gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase tracking-tighter whitespace-nowrap">
+            <div className="flex flex-row items-center gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase tracking-tighter whitespace-nowrap group-hover:text-zinc-400 transition-colors">
                 <span>{render_time}</span>
                 <span>•</span>
                 <span className="text-zinc-400">{i18n.t(`chat.scope_${msg.scope}`)}</span>
+                
+                {msg.sender_id !== '0' && (
+                    <>
+                        <span className="hidden group-hover:inline">•</span>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRevert?.(msg.id);
+                            }}
+                            className="hidden group-hover:flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
+                        >
+                            <GitBranch size={8} />
+                            <span>Revert to this tip</span>
+                        </button>
+                    </>
+                )}
             </div>
         </motion.div>
     );
@@ -147,6 +177,7 @@ interface Chat_Message_List_Props {
     max_rendered: number;
     active_scope: string;
     target_node: string;
+    onRevert?: (node_id: string) => void;
 }
 
 /**
@@ -158,6 +189,7 @@ export const Chat_Message_List = React.memo<Chat_Message_List_Props>(({
     max_rendered,
     active_scope,
     target_node,
+    onRevert,
 }) => {
     const rendered = useMemo(() => {
         if (messages.length <= max_rendered) return messages;
@@ -188,7 +220,7 @@ export const Chat_Message_List = React.memo<Chat_Message_List_Props>(({
                 </div>
             )}
             {(rendered || []).map((msg) => (
-                <Chat_Message_Item key={msg.id} msg={msg} />
+                <Chat_Message_Item key={msg.id} msg={msg} onRevert={onRevert} />
             ))}
         </>
     );

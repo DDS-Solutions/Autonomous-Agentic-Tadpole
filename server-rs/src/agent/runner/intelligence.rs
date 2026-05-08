@@ -189,6 +189,19 @@ impl AgentRunner {
                         }
                         output_text.push_str(&turn_text);
                         conversation_history.push(format!("ASSISTANT: {}", turn_text));
+                        
+                        // --- 📔 Journaling: Record Assistant node ---
+                        let parent_id = ctx.active_node_id.lock().clone();
+                        if let Ok(new_id) = self.append_to_journal(ctx, "assistant", &turn_text, parent_id, None).await {
+                            *ctx.active_node_id.lock() = Some(new_id);
+                        }
+
+                        // ### 📡 [Streamdown] Broadcast Partial Turn Completion
+                        self.broadcast_agent_stream(
+                            ctx,
+                            &turn_text,
+                            false // not final
+                        );
                     }
 
                     // 🛡️ [Sentinel Gate]
@@ -285,6 +298,12 @@ impl AgentRunner {
 
                     if !observation_buffer.is_empty() {
                         conversation_history.push(format!("OBSERVATION: {}", observation_buffer));
+
+                        // --- 📔 Journaling: Record Tool node ---
+                        let parent_id = ctx.active_node_id.lock().clone();
+                        if let Ok(new_id) = self.append_to_journal(ctx, "tool", &observation_buffer, parent_id, None).await {
+                            *ctx.active_node_id.lock() = Some(new_id);
+                        }
                     }
 
                         if mission_completed {
@@ -305,6 +324,7 @@ impl AgentRunner {
             }
         }
 
+        self.broadcast_agent_stream(ctx, &output_text, true);
         self.broadcast_agent(ctx, "Neural Pulse: Turn finalized", "pulse");
 
         Ok(IntelligenceOutput {

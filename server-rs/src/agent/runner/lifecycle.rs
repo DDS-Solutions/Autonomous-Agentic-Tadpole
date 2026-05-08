@@ -285,23 +285,28 @@ impl AgentRunner {
         )
         .await?;
 
-        crate::agent::mission::update_mission(
+        let _ = crate::agent::mission::update_mission(
             &self.state.resources.pool,
             &mission.id,
             crate::agent::types::MissionStatus::Active,
             0.0,
         )
-        .await?;
-        crate::agent::mission::log_step(
-            &self.state.resources.pool,
-            &mission.id,
-            agent_id,
-            "User",
-            &payload.message,
-            "info",
-            None,
-        )
-        .await?;
+        .await;
+
+        // --- 📔 Journaling: Record initial User node ---
+        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+        let msg = crate::system::actors::SystemMessage::MemoryAppend {
+            mission_id: mission.id.clone(),
+            parent_id: None, // Root node
+            role: "user".to_string(),
+            content: payload.message.clone(),
+            metadata: None,
+            resp: resp_tx,
+        };
+        if let Some(actors) = self.state.actors.get() {
+            let _ = actors.memory.send(msg).await;
+            let _ = resp_rx.await; // Wait for initial node to be recorded
+        }
 
         // We update the in-memory registry so the high-speed PulseCollector 
         // (telemetry loop) can detect the active mission link.

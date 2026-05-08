@@ -50,8 +50,6 @@ function RouteLoading(): React.ReactElement {
 function TabSync(): null {
   const location = useLocation();
   const open_tab = use_tab_store(s => s.open_tab); 
-  const active_tab_id = use_tab_store(s => s.active_tab_id);
-  const tabs = use_tab_store(s => s.tabs);
   const last_synced_path = useRef<string | null>(null);
 
   useEffect(() => {

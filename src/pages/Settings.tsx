@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { Save, Server, Monitor, Cpu, Shield, Store, ExternalLink, Zap, Activity } from 'lucide-react';
+import { Save, Server, Monitor, Cpu, Shield, Store, ExternalLink, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { use_model_store } from '../stores/model_store';
 import { get_settings, save_settings } from '../stores/settings_store';

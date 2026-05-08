@@ -63,6 +63,7 @@ export interface Handoff_Event {
 
 /** Payload for MCP tool pulse events. */
 export interface Mcp_Pulse_Event {
+    tool: string;
     status: 'success' | 'error';
     latency: number;
 }
@@ -70,12 +71,14 @@ export interface Mcp_Pulse_Event {
 /** 
  * SEC-Telemetry: Structured headers for binary pulse decoding.
  */
-export enum Telemetry_Packet_Header {
-    AUDIO_STREAM = 0x01,
-    SWARM_PULSE = 0x02,
-    NEURAL_TRACE = 0x03, 
-    METRICS_SNAPSHOT = 0x04
-}
+export const Telemetry_Packet_Header = {
+    AUDIO_STREAM: 0x01,
+    SWARM_PULSE: 0x02,
+    NEURAL_TRACE: 0x03, 
+    METRICS_SNAPSHOT: 0x04
+} as const;
+
+export type Telemetry_Packet_Header = typeof Telemetry_Packet_Header[keyof typeof Telemetry_Packet_Header];
 
 /** Maximum number of reconnect attempts before giving up. */
 const MAX_RETRIES = 10;
@@ -219,15 +222,15 @@ class Tadpole_OS_Socket_Client {
         };
     }
 
-    private custom_event_listeners: ((event: any) => void)[] = [];
-    subscribe_custom_event(listener: (event: any) => void): () => void {
+    private custom_event_listeners: ((event: Record<string, unknown>) => void)[] = [];
+    subscribe_custom_event(listener: (event: Record<string, unknown>) => void): () => void {
         this.custom_event_listeners.push(listener);
         return () => {
             this.custom_event_listeners = this.custom_event_listeners.filter(l => l !== listener);
         };
     }
 
-    send_event(event: any): void {
+    send_event(event: Record<string, unknown>): void {
         if (this.socket?.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify(event));
         }
@@ -351,21 +354,21 @@ class Tadpole_OS_Socket_Client {
 
     private handle_swarm_pulse(payload: ArrayBuffer): void {
         try {
-            const raw = decode(payload) as any;
+            const raw = decode(payload) as Record<string, unknown>;
             
             // Fully recursive normalization function to ensure fields match TS interfaces 
-            const normalize_pulse = (data: any): Swarm_Pulse => {
-                const nodes_raw = Array.isArray(data) ? data[1] : data.nodes;
-                const edges_raw = Array.isArray(data) ? data[2] : data.edges;
+            const normalize_pulse = (data: Record<string, unknown>): Swarm_Pulse => {
+                const nodes_raw = Array.isArray(data) ? (data as unknown[])[1] : data.nodes;
+                const edges_raw = Array.isArray(data) ? (data as unknown[])[2] : data.edges;
 
                 return {
-                    timestamp: (Array.isArray(data) ? data[0] : data.timestamp) || 0,
-                    nodes: (nodes_raw || []).map((n: any) => Array.isArray(n) 
-                        ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } 
-                        : n),
-                    edges: (edges_raw || []).map((e: any) => Array.isArray(e) 
-                        ? { source: e[0], target: e[1] } 
-                        : e)
+                    timestamp: Number(Array.isArray(data) ? (data as unknown[])[0] : data.timestamp) || 0,
+                    nodes: ((nodes_raw || []) as unknown[]).map((n) => Array.isArray(n) 
+                        ? { id: String((n as unknown[])[0]), x: Number((n as unknown[])[1]), y: Number((n as unknown[])[2]), status: Number((n as unknown[])[3]), battery: Number((n as unknown[])[4]), signal: Number((n as unknown[])[5]), progress: Number((n as unknown[])[6]) } 
+                        : n as Swarm_Pulse['nodes'][0]),
+                    edges: ((edges_raw || []) as unknown[]).map((e) => Array.isArray(e) 
+                        ? { source: String((e as unknown[])[0]), target: String((e as unknown[])[1]) } 
+                        : e as Swarm_Pulse['edges'][0])
                 };
             };
 

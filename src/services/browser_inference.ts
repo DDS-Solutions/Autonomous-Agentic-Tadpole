@@ -35,7 +35,7 @@ env.useBrowserCache = true;
 env.remoteHost = 'https://huggingface.co';
 
 // SEC-401: Explicitly omit credentials to prevent 401s from stale browser cookies
-// @ts-ignore
+// @ts-expect-error -- env.fetch_init is not in the published Transformers.js type definitions
 env.fetch_init = { 
     credentials: 'omit',
     headers: {
@@ -66,7 +66,7 @@ class BrowserInferenceService {
         if (this.pipe && this.embedding_pipe) return;
         if (this.init_promise) return this.init_promise;
         this.status = 'loading';
-        console.log('🧠 [BrowserSpecialist] Initializing local AI specialist...');
+        console.debug('🧠 [BrowserSpecialist] Initializing local AI specialist...');
 
         this.init_promise = (async () => {
             // Device priority chain: webgpu → wasm → cpu
@@ -75,18 +75,18 @@ class BrowserInferenceService {
 
             for (const device of device_chain) {
                 try {
-                    console.log(`🧠 [BrowserSpecialist] Trying device: ${device}`);
+                    console.debug(`🧠 [BrowserSpecialist] Trying device: ${device}`);
                     
                     // Initialize both pipelines with fetch_init: { credentials: 'omit' } to prevent 401s
                     const [gen, embed] = await Promise.all([
                         pipeline('text-generation', this.model_id, { 
                             device,
-                            // @ts-ignore
+                            // @ts-expect-error -- fetch_init not in pipeline options type
                             fetch_init: { credentials: 'omit' }
                         }),
                         pipeline('feature-extraction', this.embed_model_id, { 
                             device,
-                            // @ts-ignore
+                            // @ts-expect-error -- fetch_init not in pipeline options type
                             fetch_init: { credentials: 'omit' }
                         }),
                     ]);
@@ -94,7 +94,7 @@ class BrowserInferenceService {
                     this.pipe = gen as TextGenerationPipeline;
                     this.embedding_pipe = embed as FeatureExtractionPipeline;
                     this.status = 'idle';
-                    console.log(`🧠 [BrowserSpecialist] ✅ Ready on device: ${device}`);
+                    console.debug(`🧠 [BrowserSpecialist] ✅ Ready on device: ${device}`);
                     return; // success — exit loop
                 } catch (err) {
                     last_err = err;
@@ -132,7 +132,9 @@ class BrowserInferenceService {
         }
 
         try {
-            const output = await this.embedding_pipe(text, {
+            // Non-null assertion: init_specialist() above guarantees embedding_pipe is set,
+            // or it throws — so we are safe to assert here.
+            const output = await this.embedding_pipe!(text, {
                 pooling: 'mean',
                 normalize: true,
             });
@@ -175,7 +177,8 @@ ASSISTANT:`;
                 return "RESOURCE_GUARD: System memory pressure is too high for local inference. Please close other applications or wait for stabilization.";
             }
 
-            const output = await this.pipe(input, {
+            // Non-null assertion: init_specialist() above guarantees pipe is set, or it throws.
+            const output = await this.pipe!(input, {
                 max_new_tokens: 256,
                 temperature: 0.2, // Lower temp for more deterministic analysis
             });
@@ -223,7 +226,8 @@ RULES:
 - If unsure, return the first 3 candidates.
 ASSISTANT: [`;
 
-            const output = await this.pipe(prompt, {
+            // Non-null assertion: init_specialist() above guarantees pipe is set, or it throws.
+            const output = await this.pipe!(prompt, {
                 max_new_tokens: 64,
                 temperature: 0.1,
             });

@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { process_command } from './command_processor';
 import { agent_api_service } from '../services/agent_api_service';
-import { browser_inference_service } from '../services/browser_inference';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';
 import { get_settings } from '../stores/settings_store';
 import type { Agent } from '../types';
@@ -99,8 +98,8 @@ vi.mock('../stores/settings_store', () => ({
 
 describe('process_command', () => {
     const mock_agents: Agent[] = [
-        { id: '1', name: 'CEO', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: {} },
-        { id: '2', name: 'Tadpole_Alpha', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: {} }
+        { id: '1', name: 'CEO', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' } },
+        { id: '2', name: 'Tadpole_Alpha', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' } }
     ];
 
     beforeEach(() => {

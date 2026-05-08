@@ -31,19 +31,21 @@ export function Hardware_Load() {
         is_online
     } = useEngineStatus();
 
-    const [profile, setProfile] = useState<ComputeProfile | null>(null);
+    const [rest_profile, setRestProfile] = useState<ComputeProfile | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Use socket data if online, otherwise fallback to REST polling
+    // Derive profile: use socket data if online, otherwise use REST fallback
+    const profile = (is_online && socket_memory_total > 0) ? {
+        cpu_usage: socket_cpu,
+        memory_used: socket_memory,
+        memory_total: socket_memory_total,
+        active_processes: socket_processes,
+        gpu_usage: null
+    } : rest_profile;
+
+    // Use REST polling only if offline or socket data is missing
     useEffect(() => {
         if (is_online && socket_memory_total > 0) {
-            setProfile({
-                cpu_usage: socket_cpu,
-                memory_used: socket_memory,
-                memory_total: socket_memory_total,
-                active_processes: socket_processes,
-                gpu_usage: null
-            });
             return;
         }
 
@@ -57,7 +59,7 @@ export function Hardware_Load() {
                 });
                 
                 if (is_mounted) {
-                    setProfile(data);
+                    setRestProfile(data);
                     setError(null);
                 }
             } catch (e: unknown) {
@@ -75,7 +77,7 @@ export function Hardware_Load() {
             controller.abort();
             clearInterval(interval);
         };
-    }, [is_online, socket_cpu, socket_memory, socket_memory_total, socket_processes]);
+    }, [is_online, socket_memory_total]);
 
     if (error) {
         return (

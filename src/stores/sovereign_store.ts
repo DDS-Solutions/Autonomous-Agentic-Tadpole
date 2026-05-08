@@ -88,6 +88,7 @@ interface Sovereign_State {
     set_active_mission: (mission_id: string | null) => void;
     fetch_session_history: (mission_id: string, leaf_id: string) => Promise<void>;
     fetch_mission_leaves: (mission_id: string) => Promise<void>;
+    revert_to_node: (mission_id: string, node_id: string) => Promise<void>;
     clear_history: () => void;
 }
 
@@ -230,12 +231,12 @@ export const use_sovereign_store = create<Sovereign_State>()(
                     });
                     const data = await response.json();
                     if (data.status === 'success') {
-                        const history_messages = data.history.map((n: any) => ({
+                        const history_messages = data.history.map((n: Record<string, unknown>) => ({
                             id: n.id,
                             sender_id: n.role === 'user' ? '0' : '1',
                             sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
                             text: n.content,
-                            timestamp: n.created_at || new Date().toISOString(),
+                            timestamp: (n.created_at as string) || new Date().toISOString(),
                             scope: 'agent',
                             target_node: n.mission_id
                         }));
@@ -259,6 +260,25 @@ export const use_sovereign_store = create<Sovereign_State>()(
                     }
                 } catch (err) {
                     console.error(`${TELEMETRY_SOURCE} Failed to fetch mission leaves:`, err);
+                }
+            },
+
+            revert_to_node: async (mission_id, node_id) => {
+                try {
+                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/nodes/${node_id}/revert`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        set({ active_node_id: node_id });
+                        // Refresh history for the new tip
+                        await get().fetch_session_history(mission_id, node_id);
+                    }
+                } catch (err) {
+                    console.error(`${TELEMETRY_SOURCE} Time Travel failure:`, err);
                 }
             },
 

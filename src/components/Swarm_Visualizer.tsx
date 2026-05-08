@@ -30,10 +30,20 @@ import { forceCenter, forceManyBody } from 'd3-force';
 
 // Constants moved to src/constants/theme.ts
 
+export const NodeStatus = {
+    IDLE: 0,
+    BUSY: 1,
+    ERROR: 2,
+    DEGRADED: 3,
+    HUB: 4
+} as const;
+
+type NodeStatusType = typeof NodeStatus[keyof typeof NodeStatus];
+
 interface GraphNode {
     id: string;
     name: string;
-    status: number;
+    status: NodeStatusType | number;
     battery: number;
     signal: number;
     progress: number;
@@ -52,7 +62,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     const fg_ref = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
     const graph_data_ref = useRef<{ nodes: GraphNode[], links: GraphLink[] }>({ nodes: [], links: [] });
     // Trigger React state only when the structural topology changes (node/link count)
-    const [, set_graph_structure_version] = React.useState<number>(0);
+    const [graph_metadata, set_graph_metadata] = React.useState<{ nodes: number, links: number }>({ nodes: 0, links: 0 });
     const { agents } = use_agent_store();
     
     // Sovereign Actions for Focus
@@ -64,32 +74,49 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     // Subscribes to the high-speed (10Hz) binary telemetry pulse from the backend.
     // Maps the incoming 'SwarmPulse' protocol buffer records into the local D3 
     // Graph representation while preserving node momentum and position clusters.
+
+    // Stable closure to prevent Event Loop thrashing & socket teardowns
+    const agents_ref = useRef(agents);
+    useEffect(() => { agents_ref.current = agents; }, [agents]);
+
     useEffect(() => {
         // Subscribe to high-speed binary pulses
         const unsubscribe = tadpole_os_socket.subscribe_swarm_pulse((pulse: Swarm_Pulse) => {
             const current = graph_data_ref.current;
             
+            // O(1) lookups eliminate synchronous execution blocking
+            const agents_map = new Map(agents_ref.current.map(a => [a.id, a]));
+            const existing_map = new Map(current.nodes.map(n => [n.id, n]));
+            
             // 1. Map Nodes (Mutate in place to avoid React reconciliation overhead)
             const new_nodes = (pulse.nodes || []).map(pulse_node => {
-                const agent = agents.find(a => a.id === pulse_node.id);
-                const existing = current.nodes.find(n => n.id === pulse_node.id);
+                const agent = agents_map.get(pulse_node.id);
+                const existing = existing_map.get(pulse_node.id);
                 
                 // ### ⚓ Anchor Logic: Mission Hub Stabilization
                 // We lock the Mission Hub (status 4) to the origin (0,0) using fixed 
                 // coordinate properties (fx, fy). This prevents the entire swarm 
                 // from drifting away when specialists are recruited.
-                const is_hub = pulse_node.status === 4;
+                const is_hub = pulse_node.status === NodeStatus.HUB;
+                
+                // Canvas DoS prevention: sanitize string
+                const raw_name = agent?.name || pulse_node.id;
+                const safe_name = raw_name.substring(0, 32).replace(/[^\w\s-]/g, '');
+
+                // NaN Poisoning prevention via strict Type Narrowing
+                const safe_x = Number.isFinite(existing?.x) ? existing!.x : (Math.random() - 0.5) * 50;
+                const safe_y = Number.isFinite(existing?.y) ? existing!.y : (Math.random() - 0.5) * 50;
                 
                 return {
                     ...pulse_node,
-                    name: agent?.name || (is_hub ? `MISSION_HUB: ${pulse_node.id.substring(0, 8)}` : pulse_node.id),
+                    name: is_hub ? `MISSION_HUB: ${safe_name.substring(0, 8)}` : safe_name,
                     // Preserve position/velocity from the D3 force engine
-                    x: existing?.x ?? (Math.random() - 0.5) * 50,
-                    y: existing?.y ?? (Math.random() - 0.5) * 50,
+                    x: safe_x,
+                    y: safe_y,
                     fx: is_hub ? 0 : undefined,
                     fy: is_hub ? 0 : undefined,
-                    vx: existing?.vx,
-                    vy: existing?.vy
+                    vx: Number.isFinite(existing?.vx) ? existing!.vx : undefined,
+                    vy: Number.isFinite(existing?.vy) ? existing!.vy : undefined
                 };
             });
 
@@ -115,12 +142,12 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
             graph_data_ref.current = { nodes: new_nodes, links: new_links };
 
             if (structure_changed || first_pulse) {
-                set_graph_structure_version((v: number) => v + 1);
+                set_graph_metadata({ nodes: new_nodes.length, links: new_links.length });
             }
         });
 
         return () => unsubscribe();
-    }, [agents]);
+    }, []);
 
     // ### 🛠️ Force Engine Calibration
     // Configures the D3 force simulation to maintain a stable, centered cluster.
@@ -151,27 +178,34 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
         const font_size = 11 / global_scale;
         const radius = GRAPH_THEME.NODE_RADIUS;
         
-        const status_color = node.status === 1 ? THEME_COLORS.BUSY : (node.status === 2 ? THEME_COLORS.ERROR : (node.status === 3 ? THEME_COLORS.DEGRADED : (node.status === 4 ? THEME_COLORS.GLOW_CYAN : THEME_COLORS.IDLE)));
+        const safe_x = Number.isFinite(node.x) ? node.x! : 0;
+        const safe_y = Number.isFinite(node.y) ? node.y! : 0;
+
+        const status_color = 
+            node.status === NodeStatus.BUSY ? THEME_COLORS.BUSY : 
+            (node.status === NodeStatus.ERROR ? THEME_COLORS.ERROR : 
+            (node.status === NodeStatus.DEGRADED ? THEME_COLORS.DEGRADED : 
+            (node.status === NodeStatus.HUB ? THEME_COLORS.GLOW_CYAN : THEME_COLORS.IDLE)));
 
         // 🛡️ Drawing Layer 1: Glow Halo
-        if (node.status === 1 || node.status === 2) {
+        if (node.status === NodeStatus.BUSY || node.status === NodeStatus.ERROR) {
              ctx.beginPath();
-             ctx.arc(node.x ?? 0, node.y ?? 0, radius * 1.6, 0, 2 * Math.PI, false);
-             ctx.fillStyle = node.status === 1 ? THEME_COLORS.GLOW_CYAN : THEME_COLORS.GLOW_ROSE;
+             ctx.arc(safe_x, safe_y, radius * 1.6, 0, 2 * Math.PI, false);
+             ctx.fillStyle = node.status === NodeStatus.BUSY ? THEME_COLORS.GLOW_CYAN : THEME_COLORS.GLOW_ROSE;
              ctx.fill();
         }
 
         // 🛡️ Drawing Layer 2: Core Neural Identity
         ctx.beginPath();
-        ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI, false);
+        ctx.arc(safe_x, safe_y, radius, 0, 2 * Math.PI, false);
         ctx.fillStyle = status_color;
         ctx.fill();
         
         // 🛡️ Drawing Layer 3: Busy Pulse Animation
-        if (node.status === 1) {
+        if (node.status === NodeStatus.BUSY) {
              const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
              ctx.beginPath();
-             ctx.arc(node.x ?? 0, node.y ?? 0, radius + (pulse * 3), 0, 2 * Math.PI, false);
+             ctx.arc(safe_x, safe_y, radius + (pulse * 3), 0, 2 * Math.PI, false);
              ctx.strokeStyle = `rgba(34, 211, 238, ${0.8 - pulse})`;
              ctx.lineWidth = 1 / global_scale;
              ctx.stroke();
@@ -183,7 +217,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             ctx.fillStyle = 'white';
-            ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + radius + 4);
+            ctx.fillText(label, safe_x, safe_y + radius + 4);
         }
         
         // 🛡️ Drawing Layer 5: Resource Telemetry (Bars)
@@ -191,15 +225,17 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
         const bar_h = 2 / global_scale;
         if (global_scale > 1.5) {
             ctx.fillStyle = GRAPH_THEME.TELEMETRY_BG;
-            ctx.fillRect((node.x ?? 0) - bar_w/2, (node.y ?? 0) - radius - 5, bar_w, bar_h);
+            ctx.fillRect(safe_x - bar_w/2, safe_y - radius - 5, bar_w, bar_h);
             ctx.fillStyle = node.battery > 20 ? THEME_COLORS.SUCCESS : THEME_COLORS.ERROR;
-            ctx.fillRect((node.x ?? 0) - bar_w/2, (node.y ?? 0) - radius - 5, bar_w * (node.battery / 100), bar_h);
+            ctx.fillRect(safe_x - bar_w/2, safe_y - radius - 5, bar_w * (node.battery / 100), bar_h);
         }
 
         ctx.restore(); // Restore context state
     }, []);
 
-    const current_node_count = graph_data_ref.current.nodes.length;
+    // graph_metadata is used to trigger re-renders and provide stable counts
+    const current_node_count = graph_metadata.nodes;
+    const current_link_count = graph_metadata.links;
 
     return (
         <div className="w-full h-full relative bg-zinc-950 rounded-[2.5rem] border border-zinc-900/50 shadow-2xl overflow-hidden group">
@@ -226,14 +262,17 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 d3VelocityDecay={0.6}
                 cooldownTicks={100}
                 onNodeClick={(node: GraphNode) => {
+                    // XSS prevention: sanitize store target
+                    const safe_target = (node.name || node.id).replace(/[^\w\s-]/g, '');
+
                     // Focus Agent Logs & Scope
                     set_selected_agent_id(node.id);
                     set_scope('agent');
-                    set_target_agent(node.name || node.id);
+                    set_target_agent(safe_target);
                     
                     // Center View on Node
-                    if (node.x !== undefined && node.y !== undefined) {
-                        fg_ref.current?.centerAt(node.x, node.y, 400);
+                    if (Number.isFinite(node.x) && Number.isFinite(node.y)) {
+                        fg_ref.current?.centerAt(node.x!, node.y!, 400);
                         fg_ref.current?.zoom(2.5, 400);
                     }
                 }}
@@ -255,7 +294,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                         </p>
                         <div className="w-px h-2 bg-zinc-800" />
                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
-                            EDGES: {graph_data_ref.current.links.length}
+                            EDGES: {current_link_count}
                         </p>
                     </div>
                 </div>

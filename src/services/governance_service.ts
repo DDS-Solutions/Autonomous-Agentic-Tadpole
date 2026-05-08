@@ -33,28 +33,31 @@ class Governance_Service {
 
     private init_listeners() {
         // Event-driven sync: Listen for telemetry pulses from the socket
-        tadpole_os_socket.subscribe_custom_event((data: any) => {
+        tadpole_os_socket.subscribe_custom_event((data: Record<string, unknown>) => {
             if (data.type === 'GOVERNANCE_PULSE' && data.quotas) {
-                this.update_quotas(this.map_quotas(data.quotas));
+                this.update_quotas(this.map_quotas(data.quotas as Record<string, unknown>));
             }
         });
     }
 
-    private map_quotas(q: any): GovernanceQuotas {
+    private map_quotas(q: Record<string, unknown>): GovernanceQuotas {
+        const defense = q.system_defense as Record<string, unknown> | undefined;
         return {
-            total_budget: q.total_budget || 0,
-            total_spent: q.total_spent || 0,
-            efficiency: q.efficiency || (q.total_budget ? q.total_spent / q.total_budget : 0),
-            remaining: q.remaining || 0,
-            agent_quotas: q.agent_quotas || [],
+            total_budget: Number(q.total_budget) || 0,
+            total_spent: Number(q.total_spent) || 0,
+            efficiency: Number(q.efficiency) || (q.total_budget ? Number(q.total_spent) / Number(q.total_budget) : 0),
+            remaining: Number(q.remaining) || 0,
+            agent_quotas: (q.agent_quotas as GovernanceQuotas['agent_quotas']) || [],
             system_defense: {
-                merkle_integrity: q.system_defense?.merkle_integrity || 0,
-                aletheia_status: q.system_defense?.aletheia_status || 'verified',
-                drift_status: q.system_defense?.drift_status || 'stable',
-                memory_pressure: q.system_defense?.memory_pressure,
-                cpu_load: q.system_defense?.cpu_load
+                merkle_integrity: Number(defense?.merkle_integrity) || 0,
+                aletheia_status: (defense?.aletheia_status as 'verified' | 'bypassed') || 'verified',
+                drift_status: (defense?.drift_status as 'stable' | 'drifting') || 'stable',
+                memory_pressure: defense?.memory_pressure !== undefined ? Number(defense.memory_pressure) : undefined,
+                cpu_load: defense?.cpu_load !== undefined ? Number(defense.cpu_load) : undefined,
+                sandbox_status: (defense?.sandbox_status as 'ACTIVE' | 'OFFLINE') || 'OFFLINE',
+                sandbox_type: (defense?.sandbox_type as string) || 'Unknown'
             },
-            last_sync: q.last_sync || new Date().toISOString()
+            last_sync: (q.last_sync as string) || new Date().toISOString()
         };
     }
 
@@ -70,7 +73,7 @@ class Governance_Service {
 
     public async sync(): Promise<GovernanceQuotas> {
         const q = await system_api_service.get_security_quotas();
-        const mapped = this.map_quotas(q);
+        const mapped = this.map_quotas(q as unknown as Record<string, unknown>);
         this.update_quotas(mapped);
         return mapped;
     }

@@ -16,7 +16,7 @@ import { tadpole_os_service } from '../../services/tadpoleos_service';
 import { event_bus } from '../../services/event_bus';
 import { use_role_store } from '../../stores/role_store';
 import { use_model_store } from '../../stores/model_store';
-import { resolve_agent_model_config } from '../../utils/model_utils';
+import { resolve_agent_model_config, resolve_technical_model_id } from '../../utils/model_utils';
 import { ValidationUtils } from '../../utils/validation_utils';
 import { i18n } from '../../i18n';
 import type { Agent, AgentPatch, Role_Definition, Agent_Model_Slot_Key, Department } from '../../contracts/agent';

@@ -19,6 +19,7 @@
 //! - **Trace Scope**: `server-rs::agent::mcp::registry`
 
 use crate::agent::mcp::{McpResult, McpToolHub};
+use crate::agent::types::ToolContext;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -30,7 +31,7 @@ pub trait ToolHandler: Send + Sync {
     async fn execute(
         &self,
         args: Value,
-        workspace_root: std::path::PathBuf,
+        ctx: &ToolContext,
     ) -> Result<McpResult, crate::error::AppError>;
 
     /// Returns the tool's registration metadata (name, schema, etc).
@@ -82,7 +83,7 @@ mod tests {
         async fn execute(
             &self,
             _args: Value,
-            _root: std::path::PathBuf,
+            _ctx: &ToolContext,
         ) -> Result<McpResult, crate::error::AppError> {
             Ok(McpResult::Raw("dummy".to_string()))
         }

@@ -73,6 +73,7 @@ pub(crate) struct RunContext {
     pub safe_mode: bool,
     pub analysis: bool,
     pub traceparent: Option<String>,
+    pub trace_id: String,
     pub last_accessed_files: std::sync::Arc<parking_lot::Mutex<Vec<String>>>,
     pub recent_findings: Option<String>,
     pub working_memory: serde_json::Value,
@@ -81,12 +82,15 @@ pub(crate) struct RunContext {
     pub backlog: Option<Arc<parking_lot::Mutex<MissionBacklog>>>,
     pub primary_goal: Option<String>,
     pub budget_usd: f64,
+    pub budget_limit_usd: f64,
     pub current_cost_usd: f64,
     pub reasoning_depth: u32,
     pub act_threshold: f32,
     pub max_turns: u32,
     pub authority_level: RoleAuthorityLevel,
     pub resource_weights: std::collections::HashMap<String, f32>,
+    pub security_policy: serde_json::Value,
+    pub active_node_id: std::sync::Arc<parking_lot::Mutex<Option<String>>>,
 }
 
 impl Default for RunContext {
@@ -112,6 +116,7 @@ impl Default for RunContext {
             safe_mode: false,
             analysis: false,
             traceparent: None,
+            trace_id: "default-trace".to_string(),
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: None,
             working_memory: serde_json::json!({}),
@@ -120,12 +125,15 @@ impl Default for RunContext {
             backlog: None,
             primary_goal: None,
             budget_usd: 0.0,
+            budget_limit_usd: 10.0,
             current_cost_usd: 0.0,
             reasoning_depth: 1,
             act_threshold: 0.9,
             max_turns: 20,
             authority_level: RoleAuthorityLevel::Specialist,
             resource_weights: std::collections::HashMap::new(),
+            security_policy: serde_json::json!({}),
+            active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
         }
     }
 }
@@ -170,6 +178,10 @@ impl RunContext {
             mission_id: ctx.mission_id.clone(),
             workspace_root: ctx.workspace_root.clone(),
             fs_adapter: ctx.fs_adapter.clone(),
+            budget_usd: ctx.budget_usd,
+            budget_limit_usd: ctx.budget_limit_usd,
+            security_policy: ctx.security_policy.clone(),
+            active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(ctx.active_node_id.clone())),
             ..Default::default()
         }
     }
@@ -234,6 +246,21 @@ impl AgentRunner {
     }
 
     /// Emits an agent-specific personality event to the dashboard.
+    /// Broadcasts partial agent text for real-time UI rendering (Streamdown).
+    pub(crate) fn broadcast_agent_stream(&self, ctx: &RunContext, text: &str, is_final: bool) {
+        let payload = serde_json::json!({
+            "type": "agent_stream",
+            "agent_id": ctx.agent_id,
+            "mission_id": ctx.mission_id,
+            "trace_id": ctx.trace_id,
+            "text": text,
+            "is_final": is_final,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        let _ = self.state.comms.event_tx.send(payload);
+    }
+
+    /// Emits an agent-specific personality event to the dashboard.
     pub(crate) fn broadcast_agent(&self, ctx: &RunContext, msg: &str, level: &str) {
         self.state.broadcast_agent(
             msg,
@@ -242,6 +269,33 @@ impl AgentRunner {
             &ctx.agent_id,
             &ctx.name,
         );
+    }
+
+    /// Appends a node to the multiversal mission journal via the MemoryActor.
+    pub(crate) async fn append_to_journal(
+        &self,
+        ctx: &RunContext,
+        role: &str,
+        content: &str,
+        parent_id: Option<String>,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<String, AppError> {
+        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+        let msg = crate::system::actors::SystemMessage::MemoryAppend {
+            mission_id: ctx.mission_id.clone(),
+            parent_id,
+            role: role.to_string(),
+            content: content.to_string(),
+            metadata,
+            resp: resp_tx,
+        };
+
+        if let Some(actors) = self.state.actors.get() {
+            let _ = actors.memory.send(msg).await;
+            resp_rx.await.map_err(|e| AppError::InternalServerError(format!("MemoryActor channel closed: {}", e)))?
+        } else {
+            Err(AppError::InternalServerError("MemoryActor not initialized".to_string()))
+        }
     }
 
     /// Updates the heartbeat timestamp in the registry and persistence layer.

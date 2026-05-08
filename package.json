@@ -36,7 +36,7 @@
     "build:linux:light": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-light.ps1",
     "build:linux:upload": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-light.ps1 -Upload",
     "deploy:linuxlite66": "powershell -ExecutionPolicy Bypass -File scripts/deploy-linuxlite.ps1",
-    "audit:observability": "node scripts/verify_observability_sync.cjs",
+    "audit:observability": "echo 'verify_observability_sync.cjs not found - script removed'",
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs",
     "docs:preview": "vitepress preview docs"

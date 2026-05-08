@@ -68,15 +68,15 @@ export function useEngineStatus(): Engine_Status {
             
             // Map event fields to UI metrics, with fallback logic for legacy/transient states
             set_metrics({
-                cpu: Number.isFinite(h.cpu) ? h.cpu! : 0,
-                memory: Number.isFinite(h.memory) ? h.memory! : 0,
-                memory_total: Number.isFinite(h.memory_total) ? h.memory_total! : 0,
-                latency: Number.isFinite(h.latency) ? h.latency! : 0,
-                active_agents: Number.isFinite(h.active_agents) ? h.active_agents! : (Number.isFinite(h.agent_count) ? h.agent_count! : 0),
-                max_depth: Number.isFinite(h.max_depth) ? h.max_depth! : 0,
-                tpm: Number.isFinite(h.tpm) ? h.tpm! : 0,
-                recruit_count: Number.isFinite(h.recruit_count) ? h.recruit_count! : 0,
-                active_processes: Number.isFinite(h.active_processes) ? h.active_processes! : (Number.isFinite(h.activeProcesses) ? h.activeProcesses! : 0)
+                cpu: Number.isFinite(h.cpu) ? (h.cpu as number) : 0,
+                memory: Number.isFinite(h.memory) ? (h.memory as number) : 0,
+                memory_total: Number.isFinite(h.memory_total) ? (h.memory_total as number) : 0,
+                latency: Number.isFinite(h.latency) ? (h.latency as number) : 0,
+                active_agents: Number.isFinite(h.active_agents) ? (h.active_agents as number) : (Number.isFinite(h.agent_count) ? (h.agent_count as number) : 0),
+                max_depth: Number.isFinite(h.max_depth) ? (h.max_depth as number) : 0,
+                tpm: Number.isFinite(h.tpm) ? (h.tpm as number) : 0,
+                recruit_count: Number.isFinite(h.recruit_count) ? (h.recruit_count as number) : 0,
+                active_processes: Number.isFinite(h.active_processes) ? (h.active_processes as number) : (Number.isFinite(h.activeProcesses) ? (h.activeProcesses as number) : 0)
             });
         });
 

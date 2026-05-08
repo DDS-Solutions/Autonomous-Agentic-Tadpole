@@ -99,7 +99,19 @@ pub async fn execute_mcp_tool(
     }
 
     let snapshot = state.registry.skills.snapshot();
-    match state.registry.mcp_host.call_tool(&name, arguments, workspace_root, &snapshot.skills).await {
+    let tool_ctx = crate::agent::types::ToolContext {
+        mission_id: "api-debug".to_string(),
+        agent_id: "api-user".to_string(),
+        workspace_root: workspace_root.clone(),
+        fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.clone()),
+        state: state.clone(),
+        trace_id: uuid::Uuid::new_v4().to_string(),
+        budget_usd: 0.0,
+        budget_limit_usd: 10.0,
+        security_policy: serde_json::json!({}),
+        active_node_id: None,
+    };
+    match state.registry.mcp_host.call_tool(&name, arguments, &tool_ctx, &snapshot.skills).await {
         Ok(McpResult::Raw(output)) => {
             Ok((StatusCode::OK, Json(json!({ "status": "success", "output": output }))).into_response())
         }

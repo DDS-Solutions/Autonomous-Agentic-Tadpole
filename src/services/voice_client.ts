@@ -132,12 +132,18 @@ export class Voice_Client {
         return this.status;
     };
 
-    public on_status_change = (callback: (status: Voice_Status) => void): void => {
-        this.on_status_callback = callback;
+    private status_listeners: ((status: Voice_Status) => void)[] = [];
+    
+    public on_status_change = (callback: (status: Voice_Status) => void): () => void => {
+        this.status_listeners.push(callback);
+        return () => {
+            this.status_listeners = this.status_listeners.filter(cb => cb !== callback);
+        };
     };
 
     private set_status(status: Voice_Status): void {
         this.status = status;
+        this.status_listeners.forEach(cb => cb(status));
         if (this.on_status_callback) {
             this.on_status_callback(status);
         }

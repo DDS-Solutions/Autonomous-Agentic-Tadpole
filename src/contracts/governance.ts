@@ -27,6 +27,8 @@ export interface GovernanceQuotas {
         merkle_integrity: number;
         aletheia_status?: 'verified' | 'bypassed';
         drift_status?: 'stable' | 'drifting';
+        sandbox_status?: 'ACTIVE' | 'OFFLINE';
+        sandbox_type?: string;
     };
     last_sync: string;
 }

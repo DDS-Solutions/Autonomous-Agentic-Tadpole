@@ -98,7 +98,7 @@ export default function Skills() {
         try {
             const ingested = await scan_workspace_skills();
             // Optional: Show a toast or notification
-            console.log(`Ingested ${ingested} skills`);
+            console.debug(`Ingested ${ingested} skills`);
         } catch (err) {
             set_save_error((err as Error).message || "Failed to scan workspace");
         } finally {

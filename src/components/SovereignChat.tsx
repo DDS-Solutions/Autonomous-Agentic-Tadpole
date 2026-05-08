@@ -38,7 +38,8 @@ import {
     ChevronDown,
     GripVertical,
     Activity,
-    GitBranch
+    GitBranch,
+    Box
 } from 'lucide-react';
 import clsx from 'clsx';
 import { use_settings_store } from '../stores/settings_store';
@@ -56,6 +57,7 @@ import { Portal_Window } from './ui/Portal_Window';
 import { Buffered_Transcript_View } from './transcript/Buffered_Transcript_View';
 import { Chat_Message_List } from './chat/Chat_Message_List';
 import { Chat_Input_Bar } from './chat/Chat_Input_Bar';
+import { ArtifactWorkspace } from './chat/ArtifactWorkspace';
 import { type Voice_Status } from '../services/voice_client';
 
 const TELEMETRY_SOURCE = '[SovereignChat]';
@@ -99,6 +101,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
     const session_leaves = use_sovereign_store(s => s.session_leaves);
     const fetch_session_history = use_sovereign_store(s => s.fetch_session_history);
     const fetch_mission_leaves = use_sovereign_store(s => s.fetch_mission_leaves);
+    const revert_to_node = use_sovereign_store(s => s.revert_to_node);
 
     const target_node = active_scope === 'cluster' ? target_cluster : target_agent;
 
@@ -116,6 +119,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
     const [open_dropdown, set_open_dropdown] = useState<'agent' | 'cluster' | null>(null);
     const [show_transcript, set_show_transcript] = useState(false);
     const [show_branches, set_show_branches] = useState(false);
+    const [is_workspace_open, set_is_workspace_open] = useState(false);
     const [input_text, set_input_text] = useState('');
     const last_spoken_id_ref = useRef<string | null>(null);
     const speak_start_timeout_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -314,6 +318,12 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
         }
     }, [input_text, active_scope, target_node, agents, add_message, selected_agent_id]);
 
+    const handle_revert = useCallback(async (node_id: string) => {
+        if (active_mission_id) {
+            await revert_to_node(active_mission_id, node_id);
+        }
+    }, [active_mission_id, revert_to_node]);
+
     const toggle_voice = useCallback(() => {
         if (voice_status !== 'idle') {
             voice_client.stop_listening();
@@ -409,51 +419,51 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                     height={720}
                     url="/detached/chat"
                 >
-                    <div className="w-full h-full bg-zinc-950 text-white overflow-hidden flex flex-col">
-                        <SovereignChatContent 
-                            isDetached={true} 
-                            activeScope={active_scope}
-                            targetNode={target_node}
-                            targetAgent={target_agent}
-                            targetCluster={target_cluster}
-                            selectedAgentId={selected_agent_id}
-                            isSpeaking={is_speaking}
-                            voiceStatus={voice_status}
-                            showTranscript={show_transcript}
-                            setShowTranscript={set_show_transcript}
-                            messages={filtered_messages}
-                            maxRenderedMessages={MAX_RENDERED_MESSAGES}
-                            onSend={handle_send}
-                            inputText={input_text}
-                            setInputText={set_input_text}
-                            onToggleVoice={toggle_voice}
-                            onToggleSpeech={toggle_speech}
-                            onToggleSafety={toggle_safety}
-                            isSafeMode={is_safe_mode}
-                            isSpeechEnabled={is_speech_enabled}
-                            onToggleDetach={toggle_detach}
-                            onClearHistory={clear_history}
-                            onSetScope={set_scope}
-                            openDropdown={open_dropdown}
-                            setOpenDropdown={set_open_dropdown}
-                            sortedAgents={sorted_agents}
-                            setTargetAgent={set_target_agent}
-                            setSelectedAgentId={set_selected_agent_id}
-                            setTargetCluster={set_target_cluster}
-                            clusters={clusters}
-                            onMinimize={perform_minimize_transform}
-                            // Multiversal Props
-                            activeNodeId={active_node_id}
-                            activeMissionId={active_mission_id}
-                            sessionLeaves={session_leaves}
-                            onFetchHistory={fetch_session_history}
-                            onFetchLeaves={fetch_mission_leaves}
-                            showBranches={show_branches}
-                            setShowBranches={set_show_branches}
-                            // Portal-specific props
-                            containerProps={{}}
-                        />
-                    </div>
+                    <SovereignChatContent 
+                        isDetached={true} 
+                        activeScope={active_scope}
+                        targetNode={target_node}
+                        targetAgent={target_agent}
+                        targetCluster={target_cluster}
+                        selectedAgentId={selected_agent_id}
+                        isSpeaking={is_speaking}
+                        voiceStatus={voice_status}
+                        showTranscript={show_transcript}
+                        setShowTranscript={set_show_transcript}
+                        messages={filtered_messages}
+                        maxRenderedMessages={MAX_RENDERED_MESSAGES}
+                        onSend={handle_send}
+                        inputText={input_text}
+                        setInputText={set_input_text}
+                        onToggleVoice={toggle_voice}
+                        onToggleSpeech={toggle_speech}
+                        onToggleSafety={toggle_safety}
+                        onRevert={handle_revert}
+                        isSafeMode={is_safe_mode}
+                        isSpeechEnabled={is_speech_enabled}
+                        onToggleDetach={toggle_detach}
+                        onClearHistory={clear_history}
+                        onSetScope={set_scope}
+                        openDropdown={open_dropdown}
+                        setOpenDropdown={set_open_dropdown}
+                        sortedAgents={sorted_agents}
+                        setTargetAgent={set_target_agent}
+                        setSelectedAgentId={set_selected_agent_id}
+                        setTargetCluster={set_target_cluster}
+                        clusters={clusters}
+                        onMinimize={perform_minimize_transform}
+                        // Portal-specific props
+                        activeNodeId={active_node_id}
+                        activeMissionId={active_mission_id}
+                        sessionLeaves={session_leaves}
+                        onFetchHistory={fetch_session_history}
+                        onFetchLeaves={fetch_mission_leaves}
+                        showBranches={show_branches}
+                        setShowBranches={set_show_branches}
+                        isWorkspaceOpen={is_workspace_open}
+                        setWorkspaceOpen={set_is_workspace_open}
+                        containerProps={{}}
+                    />
                 </Portal_Window>
             </>
         );
@@ -502,6 +512,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                             onToggleVoice={toggle_voice}
                             onToggleSpeech={toggle_speech}
                             onToggleSafety={toggle_safety}
+                            onRevert={handle_revert}
                             isSafeMode={is_safe_mode}
                             isSpeechEnabled={is_speech_enabled}
                             onToggleDetach={toggle_detach}
@@ -525,6 +536,8 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                             onFetchLeaves={fetch_mission_leaves}
                             showBranches={show_branches}
                             setShowBranches={set_show_branches}
+                            isWorkspaceOpen={is_workspace_open}
+                            setWorkspaceOpen={set_is_workspace_open}
                         />
                     </motion.div>
                 )}
@@ -602,6 +615,9 @@ interface SovereignChatContentProps {
     onFetchLeaves: (mission_id: string) => Promise<void>;
     showBranches: boolean;
     setShowBranches: (show: boolean) => void;
+    isWorkspaceOpen: boolean;
+    setWorkspaceOpen: (open: boolean) => void;
+    onRevert?: (node_id: string) => void;
 }
 
 const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
@@ -645,7 +661,10 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
     onFetchHistory,
     onFetchLeaves,
     showBranches,
-    setShowBranches
+    setShowBranches,
+    isWorkspaceOpen,
+    setWorkspaceOpen,
+    onRevert
 }) => {
     const scroll_ref = useRef<HTMLDivElement>(null);
 
@@ -661,6 +680,13 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
     return (
         <div className="w-full h-full flex flex-col relative" {...containerProps}>
             {!isDetached && <div className="neural-grid opacity-[0.05] absolute inset-0 pointer-events-none" />}
+
+            <ArtifactWorkspace 
+                agentId={selectedAgentId || 'ceo'}
+                missionId={activeMissionId || 'global'}
+                isOpen={isWorkspaceOpen}
+                onClose={() => setWorkspaceOpen(false)}
+            />
 
             {/* Header */}
             <div
@@ -726,6 +752,21 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                             aria-label={i18n.t('chat.toggle_transcript_aria')}
                         >
                             <Activity size={16} />
+                        </button>
+                    </Tooltip>
+                    <Tooltip content={isWorkspaceOpen ? "Close Workspace" : "Open Live Workspace"} position="top">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setWorkspaceOpen(!isWorkspaceOpen);
+                            }}
+                            className={clsx(
+                                "p-2 rounded-lg transition-all active:scale-95",
+                                isWorkspaceOpen ? "text-blue-400 bg-blue-500/10 border border-blue-500/30" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
+                            )}
+                            aria-label="Toggle Live Workspace"
+                        >
+                            <Box size={16} />
                         </button>
                     </Tooltip>
                     <Tooltip content="Multiversal Branches" position="top">
@@ -988,6 +1029,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                         max_rendered={maxRenderedMessages}
                         active_scope={activeScope}
                         target_node={targetNode}
+                        onRevert={onRevert}
                     />
                 )}
             </div>

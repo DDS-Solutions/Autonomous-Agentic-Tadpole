@@ -23,7 +23,7 @@ class MockBroadcastChannel {
     this.name = name;
   }
 
-  postMessage(message: any) {
+  postMessage(_message: unknown) {
     // In a real mock, we might want to trigger onmessage on other instances
     // but for unit tests, we usually just spy on postMessage
   }

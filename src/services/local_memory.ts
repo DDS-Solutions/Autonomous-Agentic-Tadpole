@@ -26,7 +26,7 @@ import { browser_inference_service } from './browser_inference';
 export interface MemoryEntry {
     id?: number;
     text: string;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
     embedding: number[];
     timestamp: number;
 }
@@ -49,8 +49,8 @@ class LocalMemoryService {
      * Stores a new piece of information in local memory.
      * Automatically generates a vector embedding for semantic retrieval.
      */
-    async save(text: string, metadata: Record<string, any> = {}) {
-        console.log('🧠 [LocalMemory] Archiving to local vector store...');
+    async save(text: string, metadata: Record<string, unknown> = {}) {
+        console.debug('🧠 [LocalMemory] Archiving to local vector store...');
         const embedding = await browser_inference_service.get_embedding(text);
         
         await db.memories.add({
@@ -60,15 +60,16 @@ class LocalMemoryService {
             timestamp: Date.now()
         });
         
-        console.log('🧠 [LocalMemory] Archive complete.');
+        console.debug('🧠 [LocalMemory] Archive complete.');
     }
 
     /**
      * Performs a semantic search across local memories.
      */
     async search(query: string, limit: number = 5): Promise<string[]> {
-        console.log(`🧠 [LocalMemory] Searching for: ${query}`);
+        console.debug(`🧠 [LocalMemory] Searching for: ${query}`);
         const query_vector = await browser_inference_service.get_embedding(query);
+
         
         // 1. Fetch all memories (In a production app with thousands of entries, 
         // we'd use a more optimized vector index, but for local use this is fine).

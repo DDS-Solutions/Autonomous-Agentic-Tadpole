@@ -55,7 +55,12 @@ export default function Missions() {
         if (agents.length === 0) {
             fetch_agents({ signal: controller.signal });
         }
+        return () => {
+            controller.abort();
+        };
+    }, [fetch_agents, agents.length]);
 
+    useEffect(() => {
         const unsubscribeHandoff = tadpole_os_socket.subscribe_handoff((event: Handoff_Event) => {
             const tgt = event.to_cluster || 'unknown';
             const desc = (event.payload?.description as string) || `Cross-cluster task handoff triggered for agent ${event.agent_id}.`;
@@ -70,10 +75,9 @@ export default function Missions() {
         });
 
         return () => {
-            controller.abort();
             unsubscribeHandoff();
         };
-    }, [fetch_agents, agents.length]);
+    }, []);
 
     const active_cluster = useMemo(() => 
         (clusters || []).find(c => c.id === selected_cluster_id),

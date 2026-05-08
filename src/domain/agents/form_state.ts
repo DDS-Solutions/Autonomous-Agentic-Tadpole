@@ -17,6 +17,13 @@ import { resolve_technical_model_id } from '../../utils/model_utils';
 import type { Agent, AgentFormState, AgentPatch, Department } from '../../contracts/agent';
 import { resolve_provider } from '../../utils/model_utils';
 
+/** Shape of legacy/mixed model_config objects that may have either camelCase or snake_case keys. */
+type LegacyModelConfig = {
+    systemPrompt?: string; system_prompt?: string;
+    reasoningDepth?: number; reasoning_depth?: number;
+    actThreshold?: number; act_threshold?: number;
+};
+
 /**
  * buildAgentFormState
  * Converts a Domain Agent into a ready-to-use Form State for the configuration UI.
@@ -46,9 +53,9 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 provider: primary_provider,
                 model: agent.model,
                 temperature: agent.model_config?.temperature ?? 0.7,
-                system_prompt: (agent.model_config as any)?.systemPrompt ?? (agent.model_config as any)?.system_prompt ?? '',
-                reasoning_depth: (agent.model_config as any)?.reasoningDepth ?? (agent.model_config as any)?.reasoning_depth ?? 1,
-                act_threshold: (agent.model_config as any)?.actThreshold ?? (agent.model_config as any)?.act_threshold ?? 0.9,
+                system_prompt: (agent.model_config as LegacyModelConfig)?.systemPrompt ?? (agent.model_config as LegacyModelConfig)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config as LegacyModelConfig)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config as LegacyModelConfig)?.actThreshold ?? (agent.model_config as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config?.skills ?? agent.skills ?? [],
                 workflows: agent.model_config?.workflows ?? agent.workflows ?? []
             },
@@ -56,9 +63,9 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 provider: secondary_provider,
                 model: agent.model_2 || '',
                 temperature: agent.model_config2?.temperature ?? 0.5,
-                system_prompt: (agent.model_config2 as any)?.systemPrompt ?? (agent.model_config2 as any)?.system_prompt ?? '',
-                reasoning_depth: (agent.model_config2 as any)?.reasoningDepth ?? (agent.model_config2 as any)?.reasoning_depth ?? 1,
-                act_threshold: (agent.model_config2 as any)?.actThreshold ?? (agent.model_config2 as any)?.act_threshold ?? 0.9,
+                system_prompt: (agent.model_config2 as LegacyModelConfig)?.systemPrompt ?? (agent.model_config2 as LegacyModelConfig)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config2 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config2 as LegacyModelConfig)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config2 as LegacyModelConfig)?.actThreshold ?? (agent.model_config2 as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config2?.skills ?? [],
                 workflows: agent.model_config2?.workflows ?? []
             },
@@ -66,9 +73,9 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 provider: tertiary_provider,
                 model: agent.model_3 || '',
                 temperature: agent.model_config3?.temperature ?? 0.9,
-                system_prompt: (agent.model_config3 as any)?.systemPrompt ?? (agent.model_config3 as any)?.system_prompt ?? '',
-                reasoning_depth: (agent.model_config3 as any)?.reasoningDepth ?? (agent.model_config3 as any)?.reasoning_depth ?? 1,
-                act_threshold: (agent.model_config3 as any)?.actThreshold ?? (agent.model_config3 as any)?.act_threshold ?? 0.9,
+                system_prompt: (agent.model_config3 as LegacyModelConfig)?.systemPrompt ?? (agent.model_config3 as LegacyModelConfig)?.system_prompt ?? '',
+                reasoning_depth: (agent.model_config3 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config3 as LegacyModelConfig)?.reasoning_depth ?? 1,
+                act_threshold: (agent.model_config3 as LegacyModelConfig)?.actThreshold ?? (agent.model_config3 as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config3?.skills ?? [],
                 workflows: agent.model_config3?.workflows ?? []
             }
@@ -141,7 +148,7 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             skills: slots.tertiary.skills,
             workflows: slots.tertiary.workflows
         },
-        active_model_slot: state.active_model_slot,
+        active_model_slot: state.active_tab === 'secondary' ? 2 : state.active_tab === 'tertiary' ? 3 : 1,
         skills: Array.from(new Set([
             ...slots.primary.skills,
             ...slots.secondary.skills,

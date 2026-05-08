@@ -312,7 +312,7 @@ export const use_agent_store = create<Agent_State>()(
             }),
             onRehydrateStorage: () => (state) => {
                 if (state) {
-                    console.info('🧬 [AgentStore] Registry hydrated from local storage.');
+                    console.debug('🧬 [AgentStore] Registry hydrated from local storage.');
                 }
             }
         }

@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search for `[Oversight_Dashboard]` or `GOVERNANCE_SYNC` in service logs.
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
     Shield,
     CheckCircle,

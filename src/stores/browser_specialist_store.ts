@@ -43,7 +43,7 @@ export const use_browser_specialist_store = create<BrowserSpecialistState>((set,
         try {
             await browser_inference_service.init_specialist();
             set({ status: 'idle' });
-        } catch (err) {
+        } catch {
             set({ status: 'error' });
         }
     },
@@ -58,7 +58,7 @@ export const use_browser_specialist_store = create<BrowserSpecialistState>((set,
             const result = await browser_inference_service.analyze_ui(prompt, dom_summary);
             set({ status: 'idle', last_analysis: result });
             return result;
-        } catch (err) {
+        } catch {
             set({ status: 'error' });
             return "Failed to analyze DOM.";
         }

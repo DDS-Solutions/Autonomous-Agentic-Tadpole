@@ -102,9 +102,9 @@ pub fn agent_tool(_attr: TokenStream, item: TokenStream) -> TokenStream {
             async fn execute(
                 &self, 
                 args: serde_json::Value, 
-                workspace_root: std::path::PathBuf
+                ctx: &crate::agent::types::ToolContext
             ) -> Result<crate::agent::mcp::McpResult, crate::error::AppError> {
-                #fn_name(args, workspace_root).await
+                #fn_name(args, ctx.workspace_root.clone()).await
             }
         }
     };

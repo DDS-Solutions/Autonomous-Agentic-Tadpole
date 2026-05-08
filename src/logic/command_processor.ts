@@ -22,7 +22,7 @@ import { use_skill_store } from '../stores/skill_store';
 import type { Agent } from '../types';
 import { browser_inference_service } from '../services/browser_inference';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';
-import { use_trace_store, type Trace_Span } from '../stores/trace_store';
+import { use_trace_store } from '../stores/trace_store';
 import { v4 as uuidv4 } from 'uuid';
 
 /** Return value from process_command indicating if the log should be cleared. */
@@ -69,7 +69,7 @@ export async function process_command(
     if (settings.sentinel_mode && !cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#')) {
         const is_tactical = check_if_tactical(command_text);
         if (is_tactical) {
-            console.log(`${telemetry_source} [TieredRouting] Tactical intent detected. Routing to Browser Specialist.`);
+            console.debug(`${telemetry_source} [TieredRouting] Tactical intent detected. Routing to Browser Specialist.`);
             event_bus.emit_log({ source: 'System', text: '🧠 Browser Specialist analyzing tactical intent...', severity: 'info' });
             
             const specialist_store = use_browser_specialist_store.getState();

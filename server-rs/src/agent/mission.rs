@@ -47,6 +47,7 @@ pub async fn create_mission(
         cost_usd: 0.0,
         is_degraded: None,
         is_pinned: false,
+        active_node_id: None,
     };
 
     // ### 🛡️ Sector Defense: Identity Validation

@@ -25,7 +25,6 @@ export function useDashboardData() {
     const { nodes, fetch_nodes, discover_nodes, is_loading: nodes_loading } = use_node_store();
     const [logs, set_logs] = useState<log_entry[]>(() => event_bus.get_history());
     const logs_end_ref = useRef<HTMLDivElement>(null);
-    const is_fetching_ref = useRef(false);
     const agents_count = (agents_list || []).length;
 
     useEffect(() => {
@@ -57,7 +56,7 @@ export function useDashboardData() {
             unsubscribe_logs();
             unsubscribe_telemetry();
         };
-    }, []); // Mount-only initialization
+    }, [fetch_agents, fetch_nodes, init_telemetry]); // Initialize on mount or if store methods change
 
     // Auto-scroll to bottom of logs
     useEffect(() => {

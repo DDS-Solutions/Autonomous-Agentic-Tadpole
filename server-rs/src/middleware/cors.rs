@@ -17,21 +17,10 @@
 
 use tower_http::cors::CorsLayer;
 
-use axum::http::HeaderValue;
 
 /// Configures the CORS policy for the engine.
 /// Handles dynamic origins from the ALLOWED_ORIGINS environment variable.
 pub fn create_cors_layer() -> CorsLayer {
-    let mut origins = vec![
-        HeaderValue::from_static("http://localhost:5173"),
-        HeaderValue::from_static("http://127.0.0.1:5173"),
-        HeaderValue::from_static("http://localhost:5174"),
-        HeaderValue::from_static("http://127.0.0.1:5174"),
-        HeaderValue::from_static("http://localhost:8000"),
-        HeaderValue::from_static("http://127.0.0.1:8000"),
-        HeaderValue::from_static("tauri://localhost"),
-        HeaderValue::from_static("http://tauri.localhost"),
-    ];
 
     let mut cors = CorsLayer::new();
 

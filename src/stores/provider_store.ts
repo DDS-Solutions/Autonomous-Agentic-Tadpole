@@ -41,6 +41,9 @@ import { log_error } from '../services/system_utils';
 const SYNC_CHANNEL = 'tadpole-os-sync';
 const sync_channel = typeof window !== 'undefined' ? new BroadcastChannel(SYNC_CHANNEL) : null;
 
+/** Module-level sync guard - avoids adding transient state to the persisted Zustand slice. */
+let sync_in_progress = false;
+
 export type { Model_Entry };
 
 export interface Provider_Config {
@@ -230,11 +233,11 @@ export const use_provider_store = create<Provider_State>()(
             },
 
             sync_with_backend: async () => {
-                const state = get() as any;
-                if (state.is_syncing) return;
+                // is_syncing is not part of persisted state, so we use a module-level flag
+                if (sync_in_progress) return;
                 
                 try {
-                    set({ is_syncing: true } as any);
+                    sync_in_progress = true;
                     console.debug('[ProviderStore] Initiating coordination sync...');
                     
                     const raw_providers = (await tadpole_os_service.get_providers()) || [];
@@ -307,7 +310,7 @@ export const use_provider_store = create<Provider_State>()(
                     const final_json = JSON.stringify(final_providers);
 
                     if (current_json !== final_json) {
-                        console.log(`[ProviderStore] Registry updated: ${final_providers.length} providers active.`);
+                        console.debug(`[ProviderStore] Registry updated: ${final_providers.length} providers active.`);
                         set({ providers: final_providers });
                     }
 
@@ -319,7 +322,7 @@ export const use_provider_store = create<Provider_State>()(
                 } catch (error) {
                     log_error('ProviderStore', 'Coordination Sync Failed', error);
                 } finally {
-                    set({ is_syncing: false } as any);
+                    sync_in_progress = false;
                 }
             }
         }),

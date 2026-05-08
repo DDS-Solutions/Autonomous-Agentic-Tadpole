@@ -16,8 +16,7 @@
 //! tools only have access to the specific resources authorized for their scope.
 
 use super::error::ToolExecutionError;
-use crate::agent::types::TokenUsage;
-use std::sync::Arc;
+use crate::agent::types::{TokenUsage, ToolContext};
 
 use serde_json::Value;
 
@@ -27,16 +26,6 @@ pub struct ToolDefinitionData {
     pub name: String,
     pub description: String,
     pub parameters: Value,
-}
-
-/// A lightweight, isolated view of the application state for tool execution.
-/// Prevents tools from accessing unrelated runner internals.
-pub struct ToolContext {
-    pub mission_id: String,
-    pub agent_id: String,
-    pub workspace_root: std::path::PathBuf,
-    pub fs_adapter: crate::adapter::filesystem::FilesystemAdapter,
-    pub state: Arc<crate::state::AppState>,
 }
 
 #[async_trait::async_trait]

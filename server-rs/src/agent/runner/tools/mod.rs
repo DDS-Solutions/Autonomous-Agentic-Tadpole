@@ -26,7 +26,8 @@ pub mod capability;
 use crate::error::AppError;
 use security::{SecurityManager, DefaultSecurityManager};
 
-pub use trait_tool::{Tool, ToolContext};
+pub use trait_tool::Tool;
+pub use crate::agent::types::ToolContext;
 pub use capability::{CapabilityToken, ZeroTrustGuard};
 
 use super::{AgentRunner, RunContext};
@@ -121,13 +122,26 @@ impl AgentRunner {
             }
         }
 
-        // 5. Execute with Isolated Context
+        // 5. Budget Check
+        if ctx.current_cost_usd >= ctx.budget_limit_usd {
+            return Err(ToolExecutionError::SecurityBlocked(format!(
+                "Budget exhausted: Current ${:.4} >= Limit ${:.2}",
+                ctx.current_cost_usd, ctx.budget_limit_usd
+            )));
+        }
+
+        // 6. Execute with Isolated Context
         let tool_ctx = ToolContext {
             mission_id: ctx.mission_id.clone(),
             agent_id: ctx.agent_id.clone(),
             workspace_root: ctx.workspace_root.clone(),
             fs_adapter: ctx.fs_adapter.clone(),
             state: self.state.clone(),
+            trace_id: ctx.trace_id.clone(),
+            budget_usd: ctx.budget_usd,
+            budget_limit_usd: ctx.budget_limit_usd,
+            security_policy: ctx.security_policy.clone(),
+            active_node_id: ctx.active_node_id.lock().clone(),
         };
 
         // Execution Loop with Self-Annealing
@@ -135,6 +149,14 @@ impl AgentRunner {
         let max_retries = 2;
 
         loop {
+            let span = tracing::info_span!("ToolExecution", 
+                tool = %fc.name,
+                trace_id = %ctx.trace_id,
+                agent_id = %ctx.agent_id,
+                mission_id = %ctx.mission_id
+            );
+            let _enter = span.enter();
+
             let result = if let Some(handler) = self.state.registry.tool_registry.get(&fc.name) {
                 handler.execute(&tool_ctx, fc.args.clone(), usage).await
             } else {
@@ -192,6 +214,19 @@ impl AgentRunner {
         _usage: &mut Option<crate::agent::types::TokenUsage>,
     ) -> Result<(), AppError> {
         let snapshot = self.state.registry.skills.snapshot();
+        let tool_ctx = ToolContext {
+            mission_id: ctx.mission_id.clone(),
+            agent_id: ctx.agent_id.clone(),
+            workspace_root: ctx.workspace_root.clone(),
+            fs_adapter: ctx.fs_adapter.clone(),
+            state: self.state.clone(),
+            trace_id: ctx.trace_id.clone(),
+            budget_usd: ctx.budget_usd,
+            budget_limit_usd: ctx.budget_limit_usd,
+            security_policy: ctx.security_policy.clone(),
+            active_node_id: ctx.active_node_id.lock().clone(),
+        };
+
         let result = self
             .state
             .registry
@@ -199,7 +234,7 @@ impl AgentRunner {
             .call_tool(
                 &skill.name,
                 fc.args.clone(),
-                ctx.workspace_root.clone(),
+                &tool_ctx,
                 &snapshot.skills,
             )
             .await;

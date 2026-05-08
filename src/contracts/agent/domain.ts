@@ -68,6 +68,7 @@ export interface Agent {
     };
     valence?: number;
     reports_to?: string;
+    total_tokens?: number;
 }
 
 export interface Role_Definition {

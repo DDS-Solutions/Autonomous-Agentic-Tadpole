@@ -1060,6 +1060,36 @@ impl AppState {
 
         Ok(node_id)
     }
+
+    /// ### 🧠 State: Revert to Node (revert_to_node_sovereign)
+    /// Sets the active head of the mission to a previous node (Time Travel).
+    pub async fn revert_to_node_sovereign(
+        &self,
+        mission_id: &str,
+        node_id: &str,
+    ) -> Result<(), AppError> {
+        // Verify node exists and belongs to mission
+        let exists = sqlx::query("SELECT 1 FROM mission_nodes WHERE id = ?1 AND mission_id = ?2")
+            .bind(node_id)
+            .bind(mission_id)
+            .fetch_optional(&self.resources.pool)
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("Validation failed: {}", e)))?;
+
+        if exists.is_none() {
+            return Err(AppError::BadRequest("Target node does not exist in this mission context".to_string()));
+        }
+
+        sqlx::query("UPDATE mission_history SET active_node_id = ?1 WHERE id = ?2")
+            .bind(node_id)
+            .bind(mission_id)
+            .execute(&self.resources.pool)
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("Reversion failed: {}", e)))?;
+
+        tracing::info!("⏳ [TimeTravel] Mission {} reverted to node {}", mission_id, node_id);
+        Ok(())
+    }
 }
 
 impl Default for AppState {
@@ -1173,3 +1203,69 @@ impl Default for AppState {
 // Metadata: [mod]
 
 // Metadata: [mod]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_revert_to_node_sovereign() {
+        let state = AppState::new_minimal_mock().await;
+        let pool = &state.resources.pool;
+        // 0. Setup an agent
+        sqlx::query("INSERT INTO agents (id, name, role, department) VALUES (?, ?, ?, ?)")
+            .bind("test-agent")
+            .bind("Test Agent")
+            .bind("Specialist")
+            .bind("IT")
+            .execute(pool)
+            .await
+            .unwrap();
+
+        // 1. Setup a mission
+        let mission_id = "test-mission";
+        sqlx::query("INSERT INTO mission_history (id, title, status, agent_id) VALUES (?, ?, 'active', ?)")
+            .bind(mission_id)
+            .bind("Test Mission")
+            .bind("test-agent")
+            .execute(pool)
+            .await
+            .unwrap();
+
+        // 2. Add two nodes
+        let node1 = "node-1";
+        let node2 = "node-2";
+        sqlx::query("INSERT INTO mission_nodes (id, mission_id, role, content) VALUES (?, ?, 'user', 'Hello')")
+            .bind(node1)
+            .bind(mission_id)
+            .execute(pool)
+            .await
+            .unwrap();
+
+        sqlx::query("INSERT INTO mission_nodes (id, mission_id, role, content) VALUES (?, ?, 'assistant', 'Hi')")
+            .bind(node2)
+            .bind(mission_id)
+            .execute(pool)
+            .await
+            .unwrap();
+
+        // 3. Set active node to node2 initially
+        sqlx::query("UPDATE mission_history SET active_node_id = ? WHERE id = ?")
+            .bind(node2)
+            .bind(mission_id)
+            .execute(pool)
+            .await
+            .unwrap();
+
+        // 4. Revert to node1
+        state.revert_to_node_sovereign(mission_id, node1).await.unwrap();
+
+        // 5. Verify
+        let active_node: String = sqlx::query_scalar("SELECT active_node_id FROM mission_history WHERE id = ?")
+            .bind(mission_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        
+        assert_eq!(active_node, node1);
+    }
+}

@@ -92,11 +92,25 @@ mod tests {
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");
 
+        let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
+        let tool_ctx = crate::agent::types::ToolContext {
+            mission_id: "test".to_string(),
+            agent_id: "test".to_string(),
+            workspace_root: workspace.clone(),
+            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
+            state: state.clone(),
+            trace_id: "test".to_string(),
+            budget_usd: 0.0,
+            budget_limit_usd: 10.0,
+            security_policy: serde_json::json!({}),
+            active_node_id: None,
+        };
+
         let result = host
             .call_tool(
                 "recruit_specialist",
                 json!({"agent_id": "tester", "task_description": "test"}),
-                workspace,
+                &tool_ctx,
                 &all_skills,
             )
             .await
@@ -118,12 +132,26 @@ mod tests {
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");
 
+        let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
+        let tool_ctx = crate::agent::types::ToolContext {
+            mission_id: "test".to_string(),
+            agent_id: "test".to_string(),
+            workspace_root: workspace.clone(),
+            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
+            state: state.clone(),
+            trace_id: "test".to_string(),
+            budget_usd: 0.0,
+            budget_limit_usd: 10.0,
+            security_policy: serde_json::json!({}),
+            active_node_id: None,
+        };
+
         // Testing list_file_symbols
         let result = host
             .call_tool(
                 "list_file_symbols",
                 json!({"path": "src/main.rs"}),
-                workspace.clone(),
+                &tool_ctx,
                 &all_skills,
             )
             .await
@@ -145,8 +173,22 @@ mod tests {
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");
 
+        let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
+        let tool_ctx = crate::agent::types::ToolContext {
+            mission_id: "test".to_string(),
+            agent_id: "test".to_string(),
+            workspace_root: workspace.clone(),
+            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
+            state: state.clone(),
+            trace_id: "test".to_string(),
+            budget_usd: 0.0,
+            budget_limit_usd: 10.0,
+            security_policy: serde_json::json!({}),
+            active_node_id: None,
+        };
+
         let result = host
-            .call_tool("non_existent", json!({}), workspace, &all_skills)
+            .call_tool("non_existent", json!({}), &tool_ctx, &all_skills)
             .await;
 
         assert!(result.is_err());

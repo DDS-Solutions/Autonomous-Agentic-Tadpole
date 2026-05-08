@@ -601,6 +601,23 @@ pub struct AgentState {
     pub current_reasoning_turn: u32,
 }
 
+/// ### 📡 Protocol: ToolContext
+/// A lightweight, isolated view of the application state for tool execution.
+/// Prevents tools from accessing unrelated runner internals while providing
+/// necessary governance metadata.
+pub struct ToolContext {
+    pub mission_id: String,
+    pub agent_id: String,
+    pub workspace_root: std::path::PathBuf,
+    pub fs_adapter: crate::adapter::filesystem::FilesystemAdapter,
+    pub state: std::sync::Arc<crate::state::AppState>,
+    pub trace_id: String,
+    pub budget_usd: f64,
+    pub budget_limit_usd: f64,
+    pub security_policy: serde_json::Value,
+    pub active_node_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, specta::Type)]
 pub struct EngineAgent {
     pub identity: AgentIdentity,
@@ -914,6 +931,7 @@ impl EngineAgent {
             safe_mode: false,
             analysis: false,
             traceparent: None,
+            trace_id: uuid::Uuid::new_v4().to_string(),
             user_id: None,
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: None,
@@ -921,14 +939,17 @@ impl EngineAgent {
             summarized_history: None,
             structured_output: false,
             backlog: None,
-            primary_goal: None,
+            primary_goal: self.state.current_task.clone(),
             budget_usd: self.economics.budget_usd,
+            budget_limit_usd: 10.0,
             current_cost_usd: self.economics.cost_usd,
             reasoning_depth: self.models.model.reasoning_depth.unwrap_or(1),
             act_threshold: self.models.model.act_threshold.unwrap_or(0.95),
             max_turns: self.models.model.max_turns.unwrap_or(20),
             authority_level: crate::agent::types::RoleAuthorityLevel::from_role(&self.identity.role),
             resource_weights: std::collections::HashMap::new(),
+            security_policy: serde_json::json!({}),
+            active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
         }
     }
 }
@@ -1002,6 +1023,8 @@ pub struct SkillProposal {
     pub category: String,
 }
 
+
+
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct OversightEntry {
     pub id: String,
@@ -1025,6 +1048,7 @@ pub struct Mission {
     pub cost_usd: f64,
     pub is_degraded: Option<bool>,
     pub is_pinned: bool,
+    pub active_node_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, specta::Type)]

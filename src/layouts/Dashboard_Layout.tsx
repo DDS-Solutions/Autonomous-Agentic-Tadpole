@@ -32,10 +32,7 @@ import { use_agent_store } from '../stores/agent_store';
 import { APP_ROUTES } from '../constants/routes';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
-const Lineage_Stream = lazy(() => import('../components/Lineage_Stream').then(module => ({ default: module.Lineage_Stream })));
-const Neural_Waterfall = lazy(() => import('../components/Neural_Waterfall').then(module => ({ default: module.Neural_Waterfall })));
 const Command_Palette = lazy(() => import('../components/Command_Palette').then(module => ({ default: module.Command_Palette })));
-const System_Log = lazy(() => import('../components/dashboard/System_Log').then(module => ({ default: module.System_Log })));
 const Observability_Sidebar = lazy(() => import('../components/layout/Observability_Sidebar').then(module => ({ default: module.Observability_Sidebar })));
 const Toast_Center = lazy(() => import('../components/ui/Toast_Center').then(module => ({ default: module.Toast_Center })));
 

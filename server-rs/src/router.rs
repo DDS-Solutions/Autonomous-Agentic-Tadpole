@@ -155,6 +155,10 @@ fn build_sovereign_routes() -> Router<Arc<AppState>> {
             get(routes::sovereign_state::get_session_history),
         )
         .route(
+            "/missions/{mission_id}/nodes/{node_id}/revert",
+            post(routes::sovereign_state::revert_to_node),
+        )
+        .route(
             "/missions/{mission_id}/leaves",
             get(routes::sovereign_state::get_mission_leaves),
         )
@@ -273,6 +277,7 @@ fn build_skills_routes() -> Router<Arc<AppState>> {
         .route("/manifests/{name}", get(routes::skills::get_manifest))
         .route("/mcp-tools", get(routes::mcp::list_mcp_tools))
         .route("/import", post(routes::skills::import_capability))
+        .route("/promote", post(routes::skills::promote_artifact))
         .route("/register", post(routes::skills::register_capability))
         .route("/scan", post(routes::skills::scan_workspace_skills))
         .route("/proposals", get(routes::skills::list_capability_proposals))

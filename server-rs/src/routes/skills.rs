@@ -474,6 +474,84 @@ pub async fn resolve_capability_proposal(
     ))
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct PromotePayload {
+    pub name: String,
+    pub description: String,
+    pub cap_type: String, // 'skill', 'workflow', 'hook'
+    pub content: String,
+    pub agent_id: String,
+    pub mission_id: Option<String>,
+}
+
+/// POST /v1/skills/promote
+///
+/// Promotes an artifact (agent-generated code) to a formal capability proposal.
+#[tracing::instrument(skip(state, payload), fields(name = %payload.name), name = "capability_registry::promote")]
+pub async fn promote_artifact(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<PromotePayload>,
+) -> Result<impl IntoResponse, AppError> {
+    let proposal_id = uuid::Uuid::new_v4().to_string();
+    
+    // For 'skill' type, we try to wrap it in a proper SkillDefinition JSON
+    let final_payload = if payload.cap_type == "skill" {
+        let skill = SkillDefinition {
+            name: payload.name.clone(),
+            description: payload.description.clone(),
+            execution_command: format!("python agent_generated/{}.py", payload.name),
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "args": { "type": "object" }
+                }
+            }),
+            category: "ai".to_string(),
+            oversight_required: true,
+            doc_url: None,
+            tags: None,
+            full_instructions: None,
+            negative_constraints: None,
+            verification_script: None,
+            id: None,
+        };
+        serde_json::to_string(&skill).unwrap_or_default()
+    } else {
+        payload.content.clone()
+    };
+
+    sqlx::query(
+        "INSERT INTO capability_proposals (id, name, description, cap_type, content, agent_id, mission_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')"
+    )
+    .bind(&proposal_id)
+    .bind(&payload.name)
+    .bind(&payload.description)
+    .bind(&payload.cap_type)
+    .bind(&final_payload)
+    .bind(&payload.agent_id)
+    .bind(payload.mission_id.as_deref())
+    .execute(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    state.broadcast_sys(
+        &format!("🚀 New Capability Proposal: {} by Agent {}", payload.name, payload.agent_id),
+        "info",
+        payload.mission_id.clone(),
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ 
+            "status": "proposed", 
+            "id": proposal_id,
+            "message": "Artifact promoted to proposal. Awaiting human oversight."
+        })),
+    ))
+}
+
+
 // Metadata: [skills]
 
 // Metadata: [skills]

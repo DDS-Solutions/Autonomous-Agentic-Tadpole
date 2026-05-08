@@ -146,8 +146,8 @@ export const mission_api_service = {
      * Fetches all active directives (sub-tasks) for a mission.
      * Used for Synchronicity Guard to prevent premature mission completion.
      */
-    get_mission_directives: async (mission_id: string): Promise<any[]> => {
-        return api_request<any[]>(`/v1/missions/${mission_id}/directives`, { method: 'GET' });
+    get_mission_directives: async (mission_id: string): Promise<Record<string, unknown>[]> => {
+        return api_request<Record<string, unknown>[]>(`/v1/missions/${mission_id}/directives`, { method: 'GET' });
     },
 
     /**

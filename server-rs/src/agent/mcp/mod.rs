@@ -170,7 +170,7 @@ impl McpHost {
         &self,
         tool_name: &str,
         arguments: serde_json::Value,
-        workspace_root: std::path::PathBuf,
+        ctx: &crate::agent::types::ToolContext,
         all_skills: &DashMap<String, SkillDefinition>,
     ) -> Result<McpResult, AppError> {
         let start_time = std::time::Instant::now();
@@ -196,7 +196,7 @@ impl McpHost {
         }
 
         let result = self
-            .execute_tool_internal(tool_name, arguments, workspace_root, all_skills)
+            .execute_tool_internal(tool_name, arguments, ctx, all_skills)
             .await;
 
         let latency = start_time.elapsed().as_millis() as u64;
@@ -210,7 +210,7 @@ impl McpHost {
         &self,
         tool_name: &str,
         arguments: serde_json::Value,
-        workspace_root: std::path::PathBuf,
+        ctx: &crate::agent::types::ToolContext,
         all_skills: &DashMap<String, SkillDefinition>,
     ) -> Result<McpResult, AppError> {
         let handler = {
@@ -219,12 +219,12 @@ impl McpHost {
         };
 
         if let Some(h) = handler {
-            return h.execute(arguments, workspace_root).await;
+            return h.execute(arguments, ctx).await;
         }
 
         if let Some(skill) = all_skills.get(tool_name) {
             let output = self
-                .execute_legacy_skill(skill.value(), arguments, workspace_root)
+                .execute_legacy_skill(skill.value(), arguments, ctx.workspace_root.clone())
                 .await?;
             return Ok(McpResult::Raw(output));
         }
@@ -489,7 +489,7 @@ impl ToolHandler for InspectEngineHealthHandler {
     async fn execute(
         &self,
         _args: serde_json::Value,
-        _workspace_root: std::path::PathBuf,
+        _ctx: &crate::agent::types::ToolContext,
     ) -> Result<McpResult, AppError> {
         let stats_vec: Vec<serde_json::Value> = self.stats
             .iter()

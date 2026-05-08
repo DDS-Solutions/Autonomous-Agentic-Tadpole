@@ -106,4 +106,20 @@ pub async fn append_session_node(
     })))
 }
 
+/// POST /v1/sovereign/missions/:mission_id/nodes/:node_id/revert
+///
+/// Reverts the mission tip to a specific node (Time Travel).
+pub async fn revert_to_node(
+    Path((mission_id, node_id)): Path<(String, String)>,
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    state.revert_to_node_sovereign(&mission_id, &node_id).await?;
+    
+    Ok(Json(json!({
+        "status": "success",
+        "mission_id": mission_id,
+        "active_node_id": node_id
+    })))
+}
+
 // Metadata: [sovereign_state]
