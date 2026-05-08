@@ -371,7 +371,10 @@ fn build_docs_routes() -> Router<Arc<AppState>> {
 }
 
 fn build_engine_public_routes() -> Router<Arc<AppState>> {
-    Router::new().route("/engine/health", get(routes::health::health_check))
+    Router::new()
+        .route("/engine/health", get(routes::health::health_check))
+        .route("/engine/ws", get(routes::ws::ws_handler))
+        .route("/engine/live-voice", get(routes::ws::live_voice_handler))
 }
 
 fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
@@ -382,8 +385,6 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
             "/engine/shutdown",
             post(routes::engine_control::shutdown_engine),
         )
-        .route("/engine/ws", get(routes::ws::ws_handler))
-        .route("/engine/live-voice", get(routes::ws::live_voice_handler))
         .route("/engine/transcribe", post(routes::audio::transcribe_audio))
         .route("/engine/speak", post(routes::audio::text_to_speech))
         .route(
@@ -391,6 +392,10 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
             post(routes::templates::install_template),
         )
         .route("/api/pull", post(routes::model_manager::ollama_proxy_pull))
+        // --- MCP Bridge Endpoints ---
+        .route("/mcp/sse", get(crate::agent::mcp::transport::mcp_sse_handler))
+        .route("/mcp/message", post(crate::agent::mcp::transport::mcp_message_handler))
+        // ----------------------------
         .route_layer(axum::middleware::from_fn_with_state(
             app_state,
             middleware::auth::validate_token,

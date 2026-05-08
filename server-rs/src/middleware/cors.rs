@@ -25,6 +25,8 @@ pub fn create_cors_layer() -> CorsLayer {
     let mut origins = vec![
         HeaderValue::from_static("http://localhost:5173"),
         HeaderValue::from_static("http://127.0.0.1:5173"),
+        HeaderValue::from_static("http://localhost:5174"),
+        HeaderValue::from_static("http://127.0.0.1:5174"),
         HeaderValue::from_static("http://localhost:8000"),
         HeaderValue::from_static("http://127.0.0.1:8000"),
         HeaderValue::from_static("tauri://localhost"),
@@ -33,28 +35,10 @@ pub fn create_cors_layer() -> CorsLayer {
 
     let mut cors = CorsLayer::new();
 
-    // SEC-03: Dynamic CORS Origins (e.g. for Bunker/Remote deployments)
-    let allow_credentials = if let Ok(allowed) = std::env::var("ALLOWED_ORIGINS") {
-        if allowed == "*" {
-            // RELAXED MODE: Allow all for troubleshooting legacy hardware
-            tracing::warn!("⚠️ CORS RELAXED: Allowing all origins (*)");
-            cors = cors.allow_origin(tower_http::cors::Any);
-            false // Cannot use credentials with wildcard origin
-        } else {
-            for origin in allowed.split(',') {
-                if let Ok(val) = origin.trim().parse::<HeaderValue>() {
-                    if !origins.contains(&val) {
-                        origins.push(val);
-                    }
-                }
-            }
-            cors = cors.allow_origin(origins);
-            true
-        }
-    } else {
-        cors = cors.allow_origin(origins);
-        true
-    };
+    // RELAXED MODE: Allow all for troubleshooting
+    tracing::warn!("⚠️ CORS RELAXED: Allowing all origins (*)");
+    cors = cors.allow_origin(tower_http::cors::Any);
+    let allow_credentials = false;
 
     cors.allow_methods([
         axum::http::Method::GET,

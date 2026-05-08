@@ -135,6 +135,7 @@ export interface Task_Payload {
   recent_findings?: string;
   traceparent?: string;
   parent_node_id?: string;
+  enabled_skills?: string[];
 }
 
 export type AgentPatch = Partial<Agent>;

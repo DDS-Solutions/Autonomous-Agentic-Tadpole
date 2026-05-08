@@ -11,8 +11,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { system_api_service } from '../services/system_api_service';
 import { use_settings_store } from '../stores/settings_store';
+import { browser_inference_service } from '../services/browser_inference';
+import { governance_service } from '../services/governance_service';
 import { 
     Shield, 
     Activity, 
@@ -22,32 +23,47 @@ import {
     RefreshCcw,
     Lock,
     Zap,
-    Scale
+    Scale,
+    Brain
 } from 'lucide-react';
+
+import type { GovernanceQuotas } from '../contracts/governance';
+import { LD_Json } from '../components/ui/LD_Json';
 
 export default function Governance_View() {
     const [manifest, setManifest] = useState<string>('');
-    const [quotas, setQuotas] = useState<any>(null);
+    const [quotas, setQuotas] = useState<GovernanceQuotas | null>(governance_service.get_current_quotas());
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
-    const { settings } = use_settings_store();
+    const { settings, update_setting } = use_settings_store();
     const isSyncingRef = useRef(false);
+
+    const toggle_sentinel = () => {
+        const next = !settings.sentinel_mode;
+        update_setting('sentinel_mode', next);
+        if (next) {
+            browser_inference_service.pre_warm();
+        }
+    };
 
     const fetchGovernance = async () => {
         if (isSyncingRef.current) return;
         isSyncingRef.current = true;
         
         setLoading(true);
+        setError(null);
         try {
             const [m, q] = await Promise.all([
-                system_api_service.get_sovereign_manifest(),
-                system_api_service.get_security_quotas()
+                governance_service.get_manifest(),
+                governance_service.sync()
             ]);
             setManifest(m);
             setQuotas(q);
             setLastRefresh(new Date());
-        } catch (error) {
-            console.error('[Governance] Sync Failed:', error);
+        } catch (e) {
+            console.error('[Governance] Sync Failed:', e);
+            setError('Neural link synchronization failed. System state may be stale.');
         } finally {
             setLoading(false);
             isSyncingRef.current = false;
@@ -56,14 +72,28 @@ export default function Governance_View() {
 
     useEffect(() => {
         fetchGovernance();
-        const interval = setInterval(fetchGovernance, 300000); // Sync every 5 minutes
-        return () => clearInterval(interval);
+        
+        // Event-driven sync: Listen for pulses from the service
+        const unsubscribe = governance_service.on_pulse((new_quotas) => {
+            setQuotas(new_quotas);
+            setLastRefresh(new Date());
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const spentPercentage = quotas ? (quotas.total_spent / quotas.total_budget) * 100 : 0;
 
     return (
         <div className="flex flex-col h-full bg-[#050505] text-zinc-100 p-6 overflow-y-auto custom-scrollbar">
+            <LD_Json data={{
+                "@context": "https://schema.org",
+                "@type": "Service",
+                "name": "Tadpole OS Sovereign Governance",
+                "description": "Kernel-level resource orchestration and defense protocol management.",
+                "provider": { "@type": "Organization", "name": "Sovereign Engineering" }
+            }} />
+
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
@@ -76,13 +106,20 @@ export default function Governance_View() {
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
+                    {error && (
+                        <div className="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-red-400" />
+                            <span className="text-[10px] font-mono text-red-400 uppercase">{error}</span>
+                        </div>
+                    )}
                     <div className="text-right">
                         <p className="text-[10px] text-zinc-600 uppercase font-mono tracking-widest">Last Intelligence Sync</p>
                         <p className="text-xs text-zinc-400 font-mono">{lastRefresh.toLocaleTimeString()}</p>
                     </div>
                     <button 
                         onClick={fetchGovernance}
-                        className="p-2 hover:bg-white/5 rounded-lg transition-colors border border-zinc-800"
+                        disabled={loading}
+                        className="p-2 hover:bg-white/5 rounded-lg transition-colors border border-zinc-800 disabled:opacity-50"
                     >
                         <RefreshCcw className={`w-4 h-4 text-zinc-400 ${loading ? 'animate-spin' : ''}`} />
                     </button>
@@ -107,10 +144,10 @@ export default function Governance_View() {
                             <div>
                                 <div className="flex justify-between items-end mb-2">
                                     <span className="text-3xl font-mono font-bold">
-                                        ${quotas?.total_spent.toFixed(2) || '0.00'}
+                                        ${quotas?.total_spent?.toFixed(2) || '0.00'}
                                     </span>
                                     <span className="text-zinc-500 text-xs mb-1">
-                                        of ${quotas?.total_budget.toFixed(2) || '0.00'} limit
+                                        of ${quotas?.total_budget?.toFixed(2) || '0.00'} limit
                                     </span>
                                 </div>
                                 <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
@@ -124,11 +161,11 @@ export default function Governance_View() {
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
                                 <div>
                                     <p className="text-[10px] text-zinc-600 uppercase font-mono mb-1">Efficiency Score</p>
-                                    <p className="text-lg font-mono text-emerald-400">{(quotas?.efficiency * 100).toFixed(1) || '0.0'}%</p>
+                                    <p className="text-lg font-mono text-emerald-400">{((quotas?.efficiency ?? 0) * 100).toFixed(1)}%</p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] text-zinc-600 uppercase font-mono mb-1">Remaining</p>
-                                    <p className="text-lg font-mono">${quotas?.remaining.toFixed(2) || '0.00'}</p>
+                                    <p className="text-lg font-mono">${quotas?.remaining?.toFixed(2) || '0.00'}</p>
                                 </div>
                             </div>
                         </div>
@@ -157,7 +194,7 @@ export default function Governance_View() {
                             <div className="space-y-2">
                                 <div className="flex justify-between text-[10px] uppercase font-mono text-zinc-600">
                                     <span>Merkle Chain Integrity</span>
-                                    <span>{(quotas?.system_defense.merkle_integrity * 100).toFixed(2) || '100.00'}%</span>
+                                    <span>{((quotas?.system_defense?.merkle_integrity ?? 1) * 100).toFixed(2)}%</span>
                                 </div>
                                 <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
                                     <div 
@@ -166,6 +203,48 @@ export default function Governance_View() {
                                     />
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Sentinel Mode Toggle */}
+                    <div className="bg-[#0a0a0a] border border-zinc-800/50 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 mb-5">
+                            <Brain className="w-4 h-4 text-violet-400" />
+                            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Browser Sentinel</h2>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                                <p className="text-sm font-semibold text-zinc-200 mb-1">Active Sentinel Mode</p>
+                                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                                    Enables real-time UI health monitoring, predictive skill filtering, 
+                                    and autonomous error detection via the local browser AI specialist 
+                                    (Gemma-2B · WebGPU/WASM).
+                                </p>
+                                <div className={`mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                    settings.sentinel_mode
+                                        ? 'bg-violet-500/15 border border-violet-500/30 text-violet-300'
+                                        : 'bg-zinc-800/50 border border-zinc-700/50 text-zinc-500'
+                                }`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                                        settings.sentinel_mode ? 'bg-violet-400 animate-pulse' : 'bg-zinc-600'
+                                    }`} />
+                                    {settings.sentinel_mode ? 'Sentinel Active' : 'Sentinel Offline'}
+                                </div>
+                            </div>
+
+                            <button
+                                id="sentinel-mode-toggle"
+                                onClick={toggle_sentinel}
+                                aria-label="Toggle Sentinel Mode"
+                                className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/50 ${
+                                    settings.sentinel_mode ? 'bg-violet-500' : 'bg-zinc-700'
+                                }`}
+                            >
+                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${
+                                    settings.sentinel_mode ? 'left-7' : 'left-1'
+                                }`} />
+                            </button>
                         </div>
                     </div>
                 </div>

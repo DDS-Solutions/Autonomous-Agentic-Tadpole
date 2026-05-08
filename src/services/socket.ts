@@ -63,10 +63,18 @@ export interface Handoff_Event {
 
 /** Payload for MCP tool pulse events. */
 export interface Mcp_Pulse_Event {
-    type: 'engine:mcp_pulse';
-    tool: string;
     status: 'success' | 'error';
     latency: number;
+}
+
+/** 
+ * SEC-Telemetry: Structured headers for binary pulse decoding.
+ */
+export enum Telemetry_Packet_Header {
+    AUDIO_STREAM = 0x01,
+    SWARM_PULSE = 0x02,
+    NEURAL_TRACE = 0x03, 
+    METRICS_SNAPSHOT = 0x04
 }
 
 /** Maximum number of reconnect attempts before giving up. */
@@ -291,41 +299,20 @@ class Tadpole_OS_Socket_Client {
             this.socket.onmessage = (event) => {
                 if (event.data instanceof ArrayBuffer) {
                     const view = new Uint8Array(event.data);
-                    const header = view[0];
+                    const header = view[0] as Telemetry_Packet_Header;
                     const payload = event.data.slice(1);
 
-                    if (header === 0x01) {
-                        // Audio Stream
-                        this.audio_stream_listeners.forEach(l => l(payload));
-                    } else if (header === 0x02) {
-                        // Swarm Pulse (MessagePack)
-                        try {
-                            const raw = decode(payload) as any;
-                            
-                            // Fully recursive normalization function to ensure fields match TS interfaces 
-                            // regardless of MessagePack serialization strategy (Array vs Map)
-                            const normalize_pulse = (data: any): Swarm_Pulse => {
-                                if (Array.isArray(data)) {
-                                    return {
-                                        timestamp: data[0],
-                                        nodes: (data[1] || []).map((n: any) => Array.isArray(n) ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } : n),
-                                        edges: (data[2] || []).map((e: any) => Array.isArray(e) ? { source: e[0], target: e[1] } : e)
-                                    };
-                                } else {
-                                    // Even if top-level is a Map, children might be Arrays depending on rmp-serde recursion config
-                                    return {
-                                        timestamp: data.timestamp || 0,
-                                        nodes: (data.nodes || []).map((n: any) => Array.isArray(n) ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } : n),
-                                        edges: (data.edges || []).map((e: any) => Array.isArray(e) ? { source: e[0], target: e[1] } : e)
-                                    };
-                                }
-                            };
+                    switch (header) {
+                        case Telemetry_Packet_Header.AUDIO_STREAM:
+                            this.audio_stream_listeners.forEach(l => l(payload));
+                            break;
 
-                            const pulse = normalize_pulse(raw);
-                            this.pulse_listeners.forEach(l => l(pulse));
-                        } catch (e) {
-                            console.error('[Tadpole_OS] Failed to decode swarm pulse:', e);
-                        }
+                        case Telemetry_Packet_Header.SWARM_PULSE:
+                            this.handle_swarm_pulse(payload);
+                            break;
+
+                        default:
+                            console.warn(`[Tadpole_OS] Received unknown telemetry header: 0x${header.toString(16)}`);
                     }
                     return;
                 }
@@ -359,6 +346,33 @@ class Tadpole_OS_Socket_Client {
             console.error('[Tadpole_OS] Connection failed:', error);
             this.set_state('disconnected');
             this.schedule_reconnect();
+        }
+    }
+
+    private handle_swarm_pulse(payload: ArrayBuffer): void {
+        try {
+            const raw = decode(payload) as any;
+            
+            // Fully recursive normalization function to ensure fields match TS interfaces 
+            const normalize_pulse = (data: any): Swarm_Pulse => {
+                const nodes_raw = Array.isArray(data) ? data[1] : data.nodes;
+                const edges_raw = Array.isArray(data) ? data[2] : data.edges;
+
+                return {
+                    timestamp: (Array.isArray(data) ? data[0] : data.timestamp) || 0,
+                    nodes: (nodes_raw || []).map((n: any) => Array.isArray(n) 
+                        ? { id: n[0], x: n[1], y: n[2], status: n[3], battery: n[4], signal: n[5], progress: n[6] } 
+                        : n),
+                    edges: (edges_raw || []).map((e: any) => Array.isArray(e) 
+                        ? { source: e[0], target: e[1] } 
+                        : e)
+                };
+            };
+
+            const pulse = normalize_pulse(raw);
+            this.pulse_listeners.forEach(l => l(pulse));
+        } catch (e) {
+            console.error('[Tadpole_OS] Failed to decode swarm pulse:', e);
         }
     }
 

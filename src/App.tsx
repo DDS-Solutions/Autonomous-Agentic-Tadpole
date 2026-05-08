@@ -114,6 +114,23 @@ export default function App(): React.ReactElement {
         // --- Phase 2: Visual Monitoring ---
         const { visual_monitor_bridge } = await import('./services/visual_monitor_bridge');
         visual_monitor_bridge.init();
+
+        // --- Phase 3: Resource Governance ---
+        // Start VRAM/memory pressure polling so the browser inference
+        // Resource Guard has live data before any inference is attempted.
+        const { vram_monitor_service } = await import('./services/vram_monitor');
+        vram_monitor_service.start();
+        console.debug('[AppKernel] VRAM monitor started.');
+
+        // --- Phase 4: Browser Inference Pre-Warm ---
+        // Only pre-warm if sentinel_mode is already enabled in persisted settings.
+        // This avoids a surprise 2GB download for users who never enabled the feature.
+        const settings = get_settings();
+        if (settings.sentinel_mode) {
+          const { browser_inference_service } = await import('./services/browser_inference');
+          browser_inference_service.pre_warm();
+          console.debug('[AppKernel] Browser specialist pre-warm initiated.');
+        }
       } catch (err) {
         console.error('[AppKernel] Critical Initialization Failure:', err);
       }

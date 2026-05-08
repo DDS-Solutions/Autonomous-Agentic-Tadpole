@@ -25,35 +25,25 @@ import {
     Plus,
     Minus
 } from 'lucide-react';
-import { tadpole_os_service, type Quotas, type Audit_Entry, type Agent_Health } from '../services/tadpoleos_service';
+import { governance_service } from '../services/governance_service';
+import { tadpole_os_service, type Audit_Entry, type Agent_Health } from '../services/tadpoleos_service';
 import { Tooltip } from '../components/ui';
+import { LD_Json } from '../components/ui/LD_Json';
 import { i18n } from '../i18n';
+import type { GovernanceQuotas } from '../contracts/governance';
 
-/**
- * Security Dashboard: The central nexus for system-wide governance monitoring.
- * 
- * ### 📊 Core Responsibilities
- * 1. **Budget Enforcement**: Real-time tracking of mission spend vs. quotas.
- * 2. **Audit Verification**: Visualization of the Merkle Hash Chain integrity.
- * 3. **Swarm Health**: Monitoring agent heartbeats and failure rates.
- * 4. **Defense Matrix**: Real-time stats on sandbox isolation and secret redaction.
- */
 export default function Security_Dashboard() {
-    const [quotas_state, set_quotas_state] = useState<Quotas | null>(null);
+    const [quotas_state, set_quotas_state] = useState<GovernanceQuotas | null>(governance_service.get_current_quotas());
     const [audit_trail_state, set_audit_trail_state] = useState<Audit_Entry[]>([]);
     const [agent_health_state, set_agent_health_state] = useState<Agent_Health[]>([]);
     const [is_loading, set_is_loading] = useState(true);
     const [sort_config, set_sort_config] = useState<{ key: 'name' | 'status' | 'quota', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
     const [is_updating_quota, set_is_updating_quota] = useState<string | null>(null);
 
-    /**
-     * Orchestrates the multi-source data load from the Tadpole OS service.
-     * Fetches quotas, audit trails (paginated), and global agent health.
-     */
     const fetch_data = async () => {
         try {
             const [q, a, h] = await Promise.all([
-                tadpole_os_service.get_security_quotas(),
+                governance_service.sync(),
                 tadpole_os_service.get_audit_trail(1, 10),
                 tadpole_os_service.get_agent_health()
             ]);
@@ -67,15 +57,11 @@ export default function Security_Dashboard() {
         }
     };
 
-    /**
-     * Updates an entity's resource quota. 
-     * Triggers a 'is_updating' state to prevent UI double-submission.
-     */
     const handle_update_quota = async (entity_id: string, current_budget: number, increment: number) => {
         set_is_updating_quota(entity_id);
         try {
-            await tadpole_os_service.update_security_quota(entity_id, current_budget + increment);
-            await fetch_data();
+            await governance_service.update_quota(entity_id, current_budget + increment);
+            // Service handles the internal sync and pulse
         } catch (error) {
             console.error("Failed to update quota", error);
         } finally {
@@ -111,12 +97,23 @@ export default function Security_Dashboard() {
     };
 
     useEffect(() => {
-        void (async () => {
-            await Promise.resolve();
-            fetch_data();
-        })();
-        const interval = setInterval(fetch_data, 5000);
-        return () => clearInterval(interval);
+        fetch_data();
+        
+        // Event-driven sync
+        const unsubscribe = governance_service.on_pulse((new_quotas) => {
+            set_quotas_state(new_quotas);
+        });
+
+        // Still poll for audit trail and agent health since they are not in governance_service yet
+        const interval = setInterval(() => {
+            tadpole_os_service.get_audit_trail(1, 10).then(a => set_audit_trail_state(a.data || []));
+            tadpole_os_service.get_agent_health().then(h => set_agent_health_state(h.agents || []));
+        }, 10000);
+
+        return () => {
+            unsubscribe();
+            clearInterval(interval);
+        };
     }, []);
 
     if (is_loading && !quotas_state) {
@@ -130,17 +127,14 @@ export default function Security_Dashboard() {
 
     return (
         <div className="p-6 space-y-6 max-w-7xl mx-auto" aria-label="Security Dashboard">
-            {/* GEO Optimization: Structured Data & Semantic Header */}
-            <script type="application/ld+json">
-            {JSON.stringify({
+            <LD_Json data={{
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               "name": "Tadpole OS Security Hub",
               "description": "System-wide governance monitoring, budget enforcement, and cryptographic audit verification center.",
               "provider": { "@type": "Organization", "name": "Sovereign Engineering" },
               "applicationCategory": "Security System"
-            })}
-            </script>
+            }} />
             <header className="flex justify-between items-start bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">

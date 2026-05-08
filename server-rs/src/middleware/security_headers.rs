@@ -38,7 +38,7 @@ pub async fn inject_security_headers(
     // Conservative policy allowing only essential dashboard resources.
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws: wss:; frame-ancestors 'none';"),
+        HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://*.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co; worker-src 'self' blob: https://cdn.jsdelivr.net https://*.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://raw.githubusercontent.com https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net https://*.jsdelivr.net https://api.openai.com https://api.anthropic.com ws: wss:; frame-ancestors 'none';"),
     );
 
     // 2. Strict-Transport-Security (HSTS)

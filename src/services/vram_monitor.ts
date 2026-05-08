@@ -22,7 +22,8 @@ export interface Memory_Status {
     is_throttled: boolean;
 }
 
-const PRESSURE_THRESHOLD = 0.90; // 90%
+const ENTRANCE_THRESHOLD = 0.90; // Enter guard mode at 90%
+const EXIT_THRESHOLD = 0.82;     // Stabilization buffer: exit at 82%
 const POLL_INTERVAL_MS = 5000;
 
 class VramMonitor {
@@ -77,9 +78,13 @@ class VramMonitor {
 
             // 3. WebGPU VRAM (Future: request adapter info if supported)
             // Currently browsers don't expose granular VRAM used/total via WebGPU easily
-            // but we can detect if the adapter is struggling.
 
-            const is_throttled = pressure >= PRESSURE_THRESHOLD;
+            let is_throttled = this.current_status.is_throttled;
+            if (!is_throttled && pressure >= ENTRANCE_THRESHOLD) {
+                is_throttled = true;
+            } else if (is_throttled && pressure <= EXIT_THRESHOLD) {
+                is_throttled = false;
+            }
 
             if (is_throttled && !this.current_status.is_throttled) {
                 event_bus.emit_log({ 

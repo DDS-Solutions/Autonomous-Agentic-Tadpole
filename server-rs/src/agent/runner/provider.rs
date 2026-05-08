@@ -265,10 +265,22 @@ impl AgentRunner {
                     .api_key
                     .clone()
                     .unwrap_or_else(|| "ollama".to_string());
+                let mut config = ctx.model_config.clone();
+                if config.base_url.as_deref().unwrap_or("").trim().is_empty() {
+                    let mut host = std::env::var("OLLAMA_HOST")
+                        .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
+                        .trim()
+                        .to_string();
+                    if !host.ends_with("/v1") && !host.ends_with("/v1/") {
+                        if host.ends_with('/') { host.pop(); }
+                        host.push_str("/v1");
+                    }
+                    config.base_url = Some(host);
+                }
                 ProviderVariant::OpenAI(crate::agent::openai::OpenAIProvider::new(
                     client,
                     api_key,
-                    ctx.model_config.clone(),
+                    config,
                 ))
             }
             ModelProvider::Anthropic => {
@@ -381,11 +393,13 @@ impl AgentRunner {
     pub(crate) async fn check_budget(
         &self,
         ctx: &RunContext,
-        _step_cost: f64,
+        running_cost: &mut f64,
+        step_cost: f64,
         output_text: &str,
     ) -> Result<Option<String>, AppError> {
         let budget = ctx.budget_usd;
-        let current_cost = ctx.current_cost_usd + _step_cost;
+        *running_cost += step_cost;
+        let current_cost = *running_cost;
 
         if budget > 0.0 && current_cost >= (budget * 1.05) {
             tracing::warn!(
@@ -429,6 +443,14 @@ mod tests {
         assert_eq!(tot.total_tokens, 45);
     }
 
+    static ENV_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn test_check_budget_exceeded() {
         let state = Arc::new(AppState::new_minimal_mock().await);
@@ -437,7 +459,8 @@ mod tests {
         ctx.budget_usd = 1.0;
         ctx.current_cost_usd = 1.06; // Over 105%
 
-        let res = runner.check_budget(&ctx, 0.0, "Result text").await.unwrap();
+        let mut cost = ctx.current_cost_usd;
+        let res = runner.check_budget(&ctx, &mut cost, 0.0, "Result text").await.unwrap();
         assert!(res.is_some());
         assert!(res.unwrap().contains("Budget Exceeded"));
     }
@@ -450,15 +473,42 @@ mod tests {
         ctx.budget_usd = 1.0;
         ctx.current_cost_usd = 0.5;
 
-        let res = runner.check_budget(&ctx, 0.1, "Result text").await.unwrap();
+        let mut cost = ctx.current_cost_usd;
+        let res = runner.check_budget(&ctx, &mut cost, 0.1, "Result text").await.unwrap();
         assert!(res.is_none());
+        assert_eq!(cost, 0.6);
+    }
+
+    #[tokio::test]
+    async fn test_check_budget_accumulates_across_calls() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+        let mut ctx = RunContext::default();
+        ctx.budget_usd = 1.0;
+        ctx.current_cost_usd = 0.0;
+
+        let mut running = 0.0f64;
+        // 5 turns of $0.22 each = $1.10 > $1.05 threshold (5% buffer)
+        for i in 1..=5 {
+            let res = runner
+                .check_budget(&ctx, &mut running, 0.22, "output")
+                .await
+                .unwrap();
+            if i < 5 {
+                assert!(res.is_none(), "Turn {i} should still be under budget");
+            } else {
+                assert!(res.is_some(), "Turn {i} should trigger budget exceeded");
+            }
+        }
+        assert!((running - 1.10).abs() < 0.001);
     }
 
     #[test]
     fn test_resolve_api_key() {
+        let _guard = env_lock();
         let mut config = crate::agent::types::ModelConfig::default();
         config.api_key = Some("config-key".to_string());
-        
+
         // Priority should be config
         let key = resolve_api_key(&config, "UNUSED_ENV_VAR");
         assert_eq!(key, Some("config-key".to_string()));
@@ -468,5 +518,6 @@ mod tests {
         std::env::set_var("TEST_PROVIDER_KEY", "env-key");
         let key = resolve_api_key(&config, "TEST_PROVIDER_KEY");
         assert_eq!(key, Some("env-key".to_string()));
+        std::env::remove_var("TEST_PROVIDER_KEY");
     }
 }

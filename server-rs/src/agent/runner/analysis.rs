@@ -176,6 +176,7 @@ pub(crate) fn spawn_post_mission_analysis(
                 recent_findings,
                 structured_output: Some(false),
                 primary_goal: ctx.primary_goal.clone(),
+                enabled_skills: None,
             };
 
             // Hardcoded "99" for QA Auditor

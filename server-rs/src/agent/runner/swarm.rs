@@ -363,8 +363,9 @@ impl AgentRunner {
                 model_id: Some(target_config.model_id.clone()),
                 model: crate::agent::types::ModelConfig {
                     provider: target_config.provider,
-                    model_id: opts.parent_config.model_id.clone(),
-                    base_url: opts.parent_config.base_url.clone(),
+                    model_id: target_config.model_id.clone(),
+                    base_url: target_config.base_url.clone(),
+                    api_key: target_config.api_key.clone(),
                     rpd: opts.parent_config.rpd,
                     tpm: opts.parent_config.tpm,
                     tpd: opts.parent_config.tpd,
@@ -446,7 +447,38 @@ impl AgentRunner {
 
         let payload = ctx.derive_subtask_payload(final_directive);
 
-        let sub_result = Box::pin(self.run("2".to_string(), payload)).await?;
+        // ### 🛡️ [Self-Healing] Alpha Directive Pre-flight
+        // Resolve Agent 2 ("Tadpole Alpha") using the same tiered lookup as
+        // handle_spawn_subagent: Tier 1 by name match, Tier 2 from swarm pool,
+        // Tier 3 fabrication. This prevents silent NotFound failures on fresh boots.
+        let alpha_id = {
+            // Prefer an agent with "alpha", "coo", or "tadpole" in its role/name
+            let registry_match = self.state.registry.agents.iter().find(|kv| {
+                let a = kv.value();
+                let name = a.identity.name.to_lowercase();
+                let role = a.identity.role.to_lowercase();
+                name.contains("alpha") || role.contains("coo") || name.contains("tadpole")
+            }).map(|kv| kv.key().clone());
+
+            registry_match.unwrap_or_else(|| "2".to_string())
+        };
+
+        // Ensure the resolved agent exists in DB before running
+        if let Ok(mut tx) = self.state.resources.pool.begin().await {
+            let _ = self.ensure_sub_agent_exists(
+                &mut tx,
+                SubAgentOptions {
+                    agent_id: &alpha_id,
+                    parent_config: &ctx.model_config,
+                    extra_skills: None,
+                    extra_workflows: None,
+                    role_override: Some("COO (Operations Director)"),
+                },
+            ).await;
+            let _ = tx.commit().await;
+        }
+
+        let sub_result = Box::pin(self.run(alpha_id, payload)).await?;
 
         Ok(format!(
             "Directive issued to Tadpole Alpha. Mission ID: {}\n\nResult: {}",
@@ -691,6 +723,47 @@ mod tests {
         // ASSERT: The agents should have been recruited/registered in state
         assert!(runner.state.registry.agents.contains_key("researcher_1"), "researcher_1 should be in registry");
         assert!(runner.state.registry.agents.contains_key("researcher_2"), "researcher_2 should be in registry");
+    }
+
+    #[tokio::test]
+    async fn test_tier3_fabrication_preserves_model_id() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state.clone());
+
+        let parent_config = ModelConfig {
+            model_id: "gemma4:e4b".to_string(),
+            provider: crate::agent::types::ModelProvider::Ollama,
+            base_url: Some("http://127.0.0.1:11434/v1".to_string()),
+            api_key: Some("ollama".to_string()),
+            ..Default::default()
+        };
+
+        let mut tx = state.resources.pool.begin().await.unwrap();
+        runner
+            .ensure_sub_agent_exists(
+                &mut tx,
+                SubAgentOptions {
+                    agent_id: "2",
+                    parent_config: &parent_config,
+                    extra_skills: None,
+                    extra_workflows: None,
+                    role_override: None,
+                },
+            )
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let agent = state.registry.agents.get("2").unwrap();
+        assert!(
+            !agent.models.model.model_id.is_empty(),
+            "Fabricated agent model.model_id must not be empty — causes 400 from provider"
+        );
+        assert_eq!(agent.models.model.model_id, "gemma4:e4b");
+        assert_eq!(
+            agent.models.model.base_url,
+            Some("http://127.0.0.1:11434/v1".to_string())
+        );
     }
 }
 

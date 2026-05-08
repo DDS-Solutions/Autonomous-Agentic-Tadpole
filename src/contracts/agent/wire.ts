@@ -50,6 +50,10 @@ export interface AgentDto {
         outputTokens?: number;
         totalTokens?: number;
     };
+    // Flat token fields for AgentConfigUpdate parity
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
     skills?: string | string[];
     workflows?: string | string[];
     mcpTools?: string | string[];

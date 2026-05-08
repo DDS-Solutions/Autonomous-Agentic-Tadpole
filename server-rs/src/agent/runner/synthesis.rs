@@ -35,10 +35,10 @@ use crate::agent::constants::*;
 use crate::agent::types::{FunctionDeclaration, ToolDefinition};
 
 impl AgentRunner {
-    /// 📟 [AAAK Encoder]
-    /// Compresses mission context using the MemPalace-inspired AAAK dialect
-    /// to increase context fidelity while reducing token load.
-    fn aaak_encode(&self, text: &str) -> String {
+    /// 📟 [Token Compression]
+    /// Shortens system tokens by replacing common verbose status strings
+    /// with concise aliases to increase context fidelity.
+    fn shorten_system_tokens(&self, text: &str) -> String {
         let mut replacements = HashMap::new();
         replacements.insert("STATUS: ok", "*ok*");
         replacements.insert("STATUS: success", "*ok*");
@@ -139,7 +139,8 @@ impl AgentRunner {
             &pruned_swarm_context_str,
             criticality_score,
             failure_context,
-            sovereign_manifest
+            sovereign_manifest,
+            _global_intel_str
         );
 
         let system_prompt = self.state.resources.renderer.render(self.state.resources.renderer.default_system_template(), &vars);
@@ -214,9 +215,10 @@ impl AgentRunner {
         criticality_score: i32,
         failure_context: Vec<String>,
         sovereign_manifest: String,
+        global_intel: String,
     ) -> HashMap<&'static str, String> {
         let hierarchy_label = self.get_hierarchy_label(ctx.authority_level);
-        let compressed_swarm_context = self.aaak_encode(pruned_swarm_context_str);
+        let compressed_swarm_context = self.shorten_system_tokens(pruned_swarm_context_str);
         
         let priority_str = if ctx.agent_id == AGENT_CEO {
             "STRATEGIC OVERLORD: You are the final authority. Your priority is mission synthesis and high-level routing."
@@ -226,7 +228,7 @@ impl AgentRunner {
             "TACTICAL SPECIALIST: Your priority is focused task completion."
         };
 
-        let compressed_findings = self.aaak_encode(ctx.recent_findings.as_deref().unwrap_or("No recent findings inherited."));
+        let compressed_findings = self.shorten_system_tokens(ctx.recent_findings.as_deref().unwrap_or("No recent findings inherited."));
         let swarm_str = self.generate_swarm_protocols(ctx);
 
         let skill_fragments_str = self.generate_skill_fragments(ctx);
@@ -250,7 +252,7 @@ impl AgentRunner {
         vars.insert("hierarchy_label", hierarchy_label.to_string());
         vars.insert("directives", directives_str.to_string());
         vars.insert("reviews", reviews_str.to_string());
-        vars.insert("global_intelligence", "N/A (RAG-Enabled Swarm)".to_string());
+        vars.insert("global_intelligence", global_intel);
         vars.insert("priority", priority_str.to_string());
         vars.insert("personality", ctx.model_config.system_prompt.as_deref().unwrap_or("No specific personality instructions.").to_string());
         vars.insert("skill_fragments", skill_fragments_str.to_string());
@@ -270,7 +272,7 @@ impl AgentRunner {
         vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
         vars.insert("working_memory", serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string()));
-        vars.insert("history", self.aaak_encode(ctx.summarized_history.as_deref().unwrap_or("No history summarized yet.")).to_string());
+        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No history summarized yet.")).to_string());
         vars.insert("safe_mode_prefix", safe_mode_prefix.clone());
         vars.insert("tool_mode_prefix", tool_mode_prefix.to_string());
 
@@ -335,7 +337,6 @@ impl AgentRunner {
         let mut pruned_swarm_context = swarm_context_str.to_string();
 
         let get_total_tokens = |repo: &str, swarm: &str| {
-            // ASSUMPTION: For rough calculation, we assume the combined string length is roughly proportional to token count.
             let combined = format!("{}{}{}{}", identity, memory, repo, swarm);
             bpe.encode_with_special_tokens(&combined).len()
         };
@@ -623,10 +624,12 @@ impl AgentRunner {
         let mut sorted_skills = ctx.skills.clone();
         sorted_skills.sort();
         let cache_key = format!(
-            "{}:{}:{}",
+            "{}:{}:{}:{:?}:{}",
             sorted_skills.join(","),
             ctx.safe_mode,
-            ctx.agent_id
+            ctx.agent_id,
+            ctx.authority_level,
+            ctx.role
         );
 
         {
@@ -642,6 +645,13 @@ impl AgentRunner {
         let tool_list = self.state.registry.tool_registry.list_tools();
         for tool in tool_list {
             if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
+                // --- 🛡️ Strict Membership Filter ---
+                // Only include the tool if it's in the agent's context skills or is a system core tool.
+                let is_core_tool = tool.name == "complete_mission" || tool.name == "issue_alpha_directive" || tool.name == "set_confidence";
+                if !is_core_tool && !ctx.skills.contains(&tool.name) {
+                    continue;
+                }
+
                 // Specialized Skill Checks
                 if tool.name == "execute_shell" && !(ctx.skills.contains(&"shell".to_string()) || ctx.skills.contains(&"terminal".to_string())) {
                     continue;
@@ -689,11 +699,17 @@ impl AgentRunner {
                 .await;
             for tool in mcp_tools {
                 if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
-                    function_declarations.push(FunctionDeclaration {
-                        name: tool.name,
-                        description: tool.description,
-                        parameters: tool.input_schema,
-                    });
+                    // --- 🛡️ Strict Membership Filter (MCP) ---
+                    // Only include if explicitly in ctx.skills or if it's a structural MCP server tool
+                    let is_allowed = ctx.skills.contains(&tool.name) || tool.name.contains(":server");
+                    
+                    if is_allowed {
+                        function_declarations.push(FunctionDeclaration {
+                            name: tool.name,
+                            description: tool.description,
+                            parameters: tool.input_schema,
+                        });
+                    }
                 }
             }
         }
@@ -719,9 +735,6 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [synthesis]
-
-// Metadata: [synthesis]
 
 #[cfg(test)]
 mod tests {
@@ -733,12 +746,12 @@ mod tests {
     use dashmap::DashMap;
 
     #[tokio::test]
-    async fn test_aaak_encode() {
+    async fn test_shorten_system_tokens() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
         
         let raw = "STATUS: success. RESULT: Finding for mission was successful.";
-        let encoded = runner.aaak_encode(raw);
+        let encoded = runner.shorten_system_tokens(raw);
         
         assert!(encoded.contains("*ok*"));
         assert!(encoded.contains("RES:"));
@@ -891,6 +904,7 @@ mod tests {
                 recruit_count: std::sync::atomic::AtomicU32::new(0),
                 tpm_accumulator: std::sync::atomic::AtomicUsize::new(0),
                 privacy_mode: std::sync::atomic::AtomicBool::new(false),
+                observed_max_depth: std::sync::atomic::AtomicU32::new(0),
             }),
             registry: Arc::new(crate::state::hubs::reg::RegistryHub {
                 agents: dashmap::DashMap::new(),

@@ -120,46 +120,11 @@ const DEFAULT_CLUSTERS: Mission_Cluster[] = [
         name: 'Strategic Command',
         department: 'Executive',
         path: '/workspaces/strategic-command',
-        collaborators: ['1', '2'],
-        alpha_id: '1',
+        collaborators: [],
         objective: 'Global swarm oversight and strategic mission planning.',
         theme: 'blue',
         pending_tasks: [],
         is_active: true
-    },
-    {
-        id: 'cl-chain-a',
-        name: 'Strategic Ops (Chain A)',
-        department: 'Operations',
-        path: '/workspaces/strategic-ops',
-        collaborators: ['3', '4', '5', '6'],
-        alpha_id: '3',
-        objective: 'Optimize swarm coordination and strategic resource allocation.',
-        theme: 'cyan',
-        pending_tasks: [],
-        is_active: false
-    },
-    {
-        id: 'cl-chain-b',
-        name: 'Core Intelligence (Chain B)',
-        department: 'Engineering',
-        path: '/workspaces/core-intelligence',
-        collaborators: ['7', '8', '9', '10'],
-        alpha_id: '7',
-        objective: 'Enhance neural processing efficiency and knowledge synthesis.',
-        theme: 'zinc',
-        pending_tasks: []
-    },
-    {
-        id: 'cl-chain-c',
-        name: 'Applied Growth (Chain C)',
-        department: 'Product',
-        path: '/workspaces/applied-growth',
-        collaborators: ['11', '12', '13', '14'],
-        alpha_id: '11',
-        objective: 'Iterate on user-facing features and scale operational impact.',
-        theme: 'amber',
-        pending_tasks: []
     }
 ];
 
@@ -206,12 +171,15 @@ export const use_workspace_store = create<Workspace_State>()(
                 const new_cluster_id = (typeof crypto !== 'undefined' && crypto.randomUUID) 
                     ? `cl-${crypto.randomUUID().split('-')[0]}` 
                     : `cl-${Math.random().toString(36).substring(2, 9)}`;
+                // Path Sanitization: Ensure paths don't contain traversal sequences
+                const sanitized_path = (mission.path || `/workspaces/${Date.now()}`).replace(/\.\.\//g, '');
+                
                 const new_cluster: Mission_Cluster = {
                     ...mission,
                     id: new_cluster_id,
                     name: mission.name || 'New Cluster',
                     department: mission.department || 'Engineering',
-                    path: mission.path || `/workspaces/${Date.now()}`,
+                    path: sanitized_path,
                     collaborators: mission.collaborators || [],
                     theme: mission.theme || 'blue',
                     pending_tasks: []

@@ -121,14 +121,16 @@ describe('Org_Chart', () => {
         render(<Org_Chart />);
 
         await waitFor(() => {
-            // Check Alpha (Root)
+            // Check Alpha (Root Command)
             const alpha_node = screen.getByTestId('node-1');
             expect(alpha_node).toBeInTheDocument();
             expect(alpha_node).toHaveTextContent('ROOT');
 
-            // Check Nexus (Agent 2)
-            const nexus_node = screen.getByTestId('node-2');
-            expect(nexus_node).toBeInTheDocument();
+            // Check Chain Agents (Agents should exist in their respective mission chains)
+            const node_2 = screen.getByTestId('node-2');
+            const node_3 = screen.getByTestId('node-3');
+            expect(node_2).toBeInTheDocument();
+            expect(node_3).toBeInTheDocument();
         });
     });
 

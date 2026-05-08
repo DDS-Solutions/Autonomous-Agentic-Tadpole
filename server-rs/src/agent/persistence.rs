@@ -28,7 +28,6 @@ const PROVIDERS_FILE: &str = "data/infra_providers.json";
 const MODELS_FILE: &str = "data/infra_models.json";
 
 const DEFAULT_PROVIDER: &str = "ollama";
-const DEFAULT_MODEL_ID: &str = "gemma4:e4b";
 const DEFAULT_CATEGORY: &str = "user";
 
 async fn read_json_file<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
@@ -153,7 +152,7 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                     model_id: row
                         .get::<Option<String>, _>("model_id")
                         .filter(|s| !s.trim().is_empty())
-                        .unwrap_or_else(|| DEFAULT_MODEL_ID.to_string()),
+                        .unwrap_or_else(|| "".to_string()),
                     api_key: row.try_get("api_key").ok(),
                     base_url: row.try_get("base_url").ok(),
                     system_prompt: row.try_get("system_prompt").ok(),

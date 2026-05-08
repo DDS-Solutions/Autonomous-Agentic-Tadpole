@@ -31,7 +31,7 @@ impl AgentRunner {
         // Check if it's a synthesized skill
         let snapshot = self.state.registry.skills.snapshot();
         let is_synthesized = snapshot.skills.get(&fc.name)
-            .map(|s| s.category == "agent_generated")
+            .map(|s| s.category == "ai" || s.category == "agent_generated")
             .unwrap_or(false);
 
         if is_synthesized {

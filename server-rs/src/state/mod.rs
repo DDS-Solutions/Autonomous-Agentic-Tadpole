@@ -82,11 +82,11 @@ impl AppState {
     /// Creates an AppState using a provided pool. Useful for testing.
     #[allow(dead_code)]
     pub async fn with_pool(pool: SqlitePool) -> Self {
-        let (tx, _) = tokio::sync::broadcast::channel(1000);
-        let (event_tx, _) = tokio::sync::broadcast::channel(1000);
+        let (tx, _) = tokio::sync::broadcast::channel(5000);
+        let (event_tx, _) = tokio::sync::broadcast::channel(5000);
         let (audio_stream_tx, _) = tokio::sync::broadcast::channel(5000);
-        let (telemetry_tx, _) = tokio::sync::broadcast::channel(1000);
-        let (pulse_tx, _) = tokio::sync::broadcast::channel(1000);
+        let (telemetry_tx, _) = tokio::sync::broadcast::channel(5000);
+        let (pulse_tx, _) = tokio::sync::broadcast::channel(5000);
 
         let base_dir = std::env::temp_dir().join(format!("tadpole-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base_dir).ok();
@@ -114,6 +114,7 @@ impl AppState {
             recruit_count: std::sync::atomic::AtomicU32::new(0),
             tpm_accumulator: std::sync::atomic::AtomicUsize::new(0),
             privacy_mode: std::sync::atomic::AtomicBool::new(false),
+            observed_max_depth: std::sync::atomic::AtomicU32::new(0),
         });
 
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(
@@ -181,11 +182,11 @@ impl AppState {
     }
 
     async fn new_mock_ext(minimal: bool) -> Self {
-        let (tx, _) = tokio::sync::broadcast::channel(1000);
-        let (event_tx, _) = tokio::sync::broadcast::channel(1000);
+        let (tx, _) = tokio::sync::broadcast::channel(5000);
+        let (event_tx, _) = tokio::sync::broadcast::channel(5000);
         let (audio_stream_tx, _) = tokio::sync::broadcast::channel(5000);
-        let (telemetry_tx, _) = tokio::sync::broadcast::channel(1000);
-        let (pulse_tx, _) = tokio::sync::broadcast::channel(1000);
+        let (telemetry_tx, _) = tokio::sync::broadcast::channel(5000);
+        let (pulse_tx, _) = tokio::sync::broadcast::channel(5000);
 
         // SEC: Use unique temporary directories for test base_dir to avoid shared-state 
         // race conditions in parallel unit tests (INFRA-01).
@@ -231,6 +232,7 @@ impl AppState {
             recruit_count: std::sync::atomic::AtomicU32::new(0),
             tpm_accumulator: std::sync::atomic::AtomicUsize::new(0),
             privacy_mode: std::sync::atomic::AtomicBool::new(false),
+            observed_max_depth: std::sync::atomic::AtomicU32::new(0),
         });
 
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(
@@ -326,10 +328,10 @@ impl AppState {
         dotenvy::dotenv().ok();
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
 
-        let (tx, _) = broadcast::channel(1000);
-        let (event_tx, _) = broadcast::channel(1000);
+        let (tx, _) = broadcast::channel(5000);
+        let (event_tx, _) = broadcast::channel(5000);
         let (audio_stream_tx, _) = broadcast::channel(5000);
-        let (pulse_tx, _) = broadcast::channel(1000);
+        let (pulse_tx, _) = broadcast::channel(5000);
         let telemetry_tx = crate::telemetry::TELEMETRY_TX.clone();
 
         let base_dir = std::env::var("WORKSPACE_ROOT")
@@ -489,6 +491,7 @@ impl AppState {
             recruit_count: AtomicU32::new(0),
             tpm_accumulator: AtomicUsize::new(0),
             privacy_mode: AtomicBool::new(false),
+            observed_max_depth: AtomicU32::new(0),
         });
 
         let mcp_config_path = base_dir.join(".agent").join("mcp_config.json");
@@ -1095,6 +1098,7 @@ impl Default for AppState {
             recruit_count: AtomicU32::new(0),
             tpm_accumulator: AtomicUsize::new(0),
             privacy_mode: AtomicBool::new(false),
+            observed_max_depth: AtomicU32::new(0),
         });
 
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(

@@ -28,7 +28,7 @@ import Error_Boundary from '../components/Error_Boundary';
 
 import { Stat_Metrics } from '../components/dashboard/Stat_Metrics';
 import { Agent_Status_Grid } from '../components/dashboard/Agent_Status_Grid';
-import { Portal_Window } from '../components/ui';
+import { Portal_Window, LD_Json } from '../components/ui';
 import { ExternalLink } from 'lucide-react';
 import type { Agent } from '../types';
 
@@ -152,9 +152,7 @@ export default function Ops_Dashboard() {
     return (
         <Error_Boundary>
             <div className="flex flex-col h-full gap-6">
-                {/* GEO Optimization: Structured Data & Semantic Header */}
-                <script type="application/ld+json">
-                {JSON.stringify({
+                <LD_Json data={{
                   "@context": "https://schema.org",
                   "@type": "SoftwareApplication",
                   "name": "Tadpole OS Operations Dashboard",
@@ -162,8 +160,7 @@ export default function Ops_Dashboard() {
                   "author": { "@type": "Organization", "name": "Sovereign Engineering" },
                   "applicationCategory": "Control Center",
                   "operatingSystem": "Tadpole OS"
-                })}
-                </script>
+                }} />
                 <h1 className="sr-only">Tadpole OS Operations Command Center</h1>
                 <h2 className="sr-only">Swarm Telemetry Visualization</h2>
                 <h2 className="sr-only">Multi-Agent Task Dispatching</h2>

@@ -121,11 +121,11 @@ export const agent_api_service = {
      * SECURITY NOTE: If a local key is available in the vault, it is injected into the payload.
      * The Rust backend is responsible for redacting this key from systemic logs.
      */
-    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string): Promise<boolean> => {
+    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string, enabled_skills?: string[]): Promise<boolean> => {
         return track_operation('AgentAPI', `Dispatching command to agent: ${agent_id.toUpperCase()}`, async () => {
             const vault_store = use_vault_store.getState();
             const model_store = use_model_store.getState();
-            const body: Task_Payload = { message, cluster_id, department, provider, model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id };
+            const body: Task_Payload = { message, cluster_id, department, provider, model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id, enabled_skills };
 
             const provider_api_key = await vault_store.get_api_key(provider);
             const is_actually_locked = vault_store.is_locked && !sessionStorage.getItem('tadpole-vault-master-key');

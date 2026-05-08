@@ -29,10 +29,6 @@ export function useDashboardData() {
     const agents_count = (agents_list || []).length;
 
     useEffect(() => {
-        // Guard: Prevent double-initialization in React 19 Strict Mode or rapid re-renders
-        if (is_fetching_ref.current) return;
-        is_fetching_ref.current = true;
-
         const controller = new AbortController();
         const { signal } = controller;
 
@@ -43,6 +39,7 @@ export function useDashboardData() {
                     fetch_nodes({ signal })
                 ]);
             } catch (err) {
+                // Silently handle aborts; errors are already tracked in the store/API service
                 if (err instanceof Error && err.name === 'AbortError') return;
                 console.error('[useDashboardData] Initial fetch failed:', err);
             }
@@ -51,7 +48,7 @@ export function useDashboardData() {
         init_data();
         const unsubscribe_telemetry = init_telemetry();
 
-        const unsubscribe_logs = event_bus.subscribe_logs((entry) => {
+        const unsubscribe_logs = event_bus.subscribe_logs((entry: log_entry) => {
             set_logs(prev => [...prev, entry].slice(-100));
         });
 
@@ -59,8 +56,6 @@ export function useDashboardData() {
             controller.abort();
             unsubscribe_logs();
             unsubscribe_telemetry();
-            // We don't reset is_fetching_ref.current here to ensure it stays mount-only 
-            // for the duration of the component lifecycle.
         };
     }, []); // Mount-only initialization
 

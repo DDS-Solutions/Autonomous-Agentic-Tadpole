@@ -17,16 +17,22 @@
   {
     "id": "2",
     "name": "Tadpole",
-    "role": "COO",
+    "role": "COO (Operations Director)",
     "department": "Operations",
-    "description": "Operations orchestrator and swarm synchronization lead.",
+    "description": "Chief Operations Officer. Orchestrates multi-agent swarm missions, recruits specialists, and synthesizes operational results into final reports.",
     "model": "Gemma 4 (Local)",
     "model_config": {
       "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["schedule_meeting"],
+    "skills": [
+      "complete_mission", "recruit", "spawn_subagent",
+      "fetch_url", "read_file", "write_file", "list_files",
+      "get_file_contents", "grep_search", "get_agent_metrics",
+      "query_financial_logs", "search_mission_knowledge", "update_working_memory"
+    ],
     "workflows": ["resource_allocation"]
   },
   {

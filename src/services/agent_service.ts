@@ -53,11 +53,13 @@ export const load_agents = async (options: RequestInit = {}): Promise<Agent[]> =
             }
         }
     } catch {
-        // Offline mode fallback
+        // Offline mode fallback handled below
     }
 
     if (!is_backend_online || raw_agents.length === 0) {
-        console.warn('⚠️ [AgentService] No live agents detected. Registry may be empty or unreachable.');
+        console.warn('⚠️ [AgentService] No live agents detected. Falling back to mock registry.');
+        // Cast mock agents to DTO format for normalization
+        raw_agents = mock_agents as unknown as AgentDto[];
     }
 
     const workspace_path_fn = use_workspace_store.getState().get_agent_path;

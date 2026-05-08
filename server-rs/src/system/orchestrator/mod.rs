@@ -78,11 +78,13 @@ impl Orchestrator {
             // Future: Push to FAULT_REGISTRY table here
         }
 
-        // 7. Also fail missions that have been active but have no associated "busy" agents
         // (i.e., the agent process died without the mission finishing)
+        // [Grace Period]: Ignore missions created in the last 30 seconds to allow for 
+        // high-concurrency setup/handshake logic (GHOST-02).
         let ghost_missions: Vec<String> = sqlx::query_scalar(
             "SELECT id FROM mission_history 
              WHERE status = 'active' 
+             AND created_at < datetime('now', '-30 seconds')
              AND id NOT IN (
                  SELECT json_extract(active_mission, '$.id') 
                  FROM agents 

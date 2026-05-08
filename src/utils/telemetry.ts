@@ -91,14 +91,21 @@ export async function track_operation<T>(
         const error_message = error instanceof Error ? error.message : String(error);
         const type_id = (error as { type?: string })?.type || context.type_id || 'system::error';
 
+        // [Harden Phase 4: Abort Noise Suppression]
+        // Treat signal aborts as informational 'Canceled' events rather than errors.
+        const is_abort = error instanceof Error && error.name === 'AbortError';
+        const severity = is_abort ? 'info' : 'error';
+        const icon = is_abort ? '🛑' : '❌';
+        const phase = is_abort ? 'canceled' : 'failure';
+
         event_bus.emit_log({
             source: 'System',
-            text: `❌ [${source}] Failed: ${description}. Error: ${error_message}`,
-            severity: 'error',
+            text: `${icon} [${source}] ${is_abort ? 'Canceled' : 'Failed'}: ${description}. Error: ${error_message}`,
+            severity,
             agent_id: context.agent_id,
             mission_id: context.mission_id,
             type_id,
-            metadata: { ...safe_metadata, duration_ms: duration, phase: 'failure', error: error_message }
+            metadata: { ...safe_metadata, duration_ms: duration, phase, error: error_message }
         });
 
         throw error;

@@ -65,7 +65,23 @@ impl AgentRunner {
         // 5. Capability Merging & Security Gates
         let mut skills = resolved_config.skills.clone().unwrap_or_else(|| a.capabilities.skills.clone());
         let mut workflows = resolved_config.workflows.clone().unwrap_or_else(|| a.capabilities.workflows.clone());
-        let mcp_tools = resolved_config.mcp_tools.clone().unwrap_or_else(|| a.capabilities.mcp_tools.clone());
+
+        // --- 🧠 Predictive Intelligence Filter (Double-Gated) ---
+        if let Some(enabled) = &payload.enabled_skills {
+            if !enabled.is_empty() {
+                tracing::info!("🧠 [Context] Enforcing predictive tool filter: {:?}", enabled);
+                skills.retain(|s| enabled.contains(s));
+                workflows.retain(|w| enabled.contains(w));
+                
+                // Ensure critical tools are NEVER filtered out (Failsafe)
+                let failsafe = ["complete_mission", "issue_alpha_directive"];
+                for tool in failsafe {
+                    if a.capabilities.skills.contains(&tool.to_string()) && !skills.contains(&tool.to_string()) {
+                        skills.push(tool.to_string());
+                    }
+                }
+            }
+        }
 
         let safe_mode = payload.safe_mode.unwrap_or(false);
         self.apply_security_gates(safe_mode, &mut skills, &mut workflows);
@@ -89,7 +105,6 @@ impl AgentRunner {
             model_config: resolved_config.clone(),
             skills,
             workflows,
-            mcp_tools,
             mission_id: mission_id.to_string(),
             user_id: payload.user_id.clone(),
             depth,
@@ -103,7 +118,6 @@ impl AgentRunner {
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: payload.recent_findings.clone(),
             working_memory: a.state.working_memory.clone(),
-            base_dir: self.state.base_dir.clone(),
             summarized_history: None,
             structured_output: false,
             backlog: None,
@@ -163,7 +177,6 @@ impl AgentRunner {
             cfg.model_id = target_model_id.to_string();
             cfg.skills = Some(a.capabilities.skills.clone());
             cfg.workflows = Some(a.capabilities.workflows.clone());
-            cfg.mcp_tools = Some(a.capabilities.mcp_tools.clone());
             Ok(cfg)
         }
     }
@@ -205,7 +218,6 @@ impl AgentRunner {
             tpd: m.tpd,
             skills: Some(a.capabilities.skills.clone()),
             workflows: Some(a.capabilities.workflows.clone()),
-            mcp_tools: Some(a.capabilities.mcp_tools.clone()),
             steering_vectors: if provider_config.supports_steering_vectors {
                 Some(vec![format!("persona:{}", a.identity.role)])
             } else {
@@ -248,8 +260,12 @@ impl AgentRunner {
             }
         }
 
-        if let Some(key) = &payload.api_key { config.api_key = Some(key.clone()); }
-        if let Some(url) = &payload.base_url { config.base_url = Some(url.clone()); }
+        if let Some(key) = &payload.api_key {
+            if !key.trim().is_empty() { config.api_key = Some(key.clone()); }
+        }
+        if let Some(url) = &payload.base_url {
+            if !url.trim().is_empty() { config.base_url = Some(url.clone()); }
+        }
         if let Some(eid) = &payload.external_id { config.external_id = Some(eid.clone()); }
         if let Some(m) = &payload.model_id { config.model_id = m.clone(); }
     }

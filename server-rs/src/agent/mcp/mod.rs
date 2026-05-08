@@ -22,6 +22,7 @@
 
 pub mod registry;
 pub mod client;
+pub mod transport;
 
 #[allow(unused_imports)]
 use self::registry::{McpRegistry, ToolHandler};

@@ -39,6 +39,7 @@ pub enum ToolExecutionError {
     #[error("Security Violation: {0}")]
     SecurityBlocked(String),
     
+    #[allow(dead_code)]
     #[error("Hierarchy Violation: {0}")]
     HierarchyBlocked(String),
     

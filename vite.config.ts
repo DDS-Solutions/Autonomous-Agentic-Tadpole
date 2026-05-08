@@ -60,14 +60,15 @@ export default defineConfig({
     headers: {
       'Content-Security-Policy': [
         "default-src 'self'",
-        // Vite HMR requires unsafe-eval; ws: for the WebSocket HMR channel
-        "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+        // Vite HMR requires unsafe-eval; ws: for the WebSocket HMR channel; jsDelivr/HF for ONNX runtime
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://*.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co",
+        "worker-src 'self' blob: https://cdn.jsdelivr.net https://*.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co",
         // Vite injects <style> tags at runtime in dev mode
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         // Google Fonts + data URIs for icons
         "font-src 'self' https://fonts.gstatic.com data:",
         // API, WebSocket to same host; wss: for production TLS upgrade
-        "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://raw.githubusercontent.com ws: wss:",
+        "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://raw.githubusercontent.com https://*.huggingface.co https://huggingface.co https://*.hf.co https://cdn.jsdelivr.net https://*.jsdelivr.net https://api.openai.com https://api.anthropic.com ws: wss:",
         // Media capture (getUserMedia for voice)
         "media-src 'self' blob:",
         // Inline SVGs and canvas used by the visualizer

@@ -69,8 +69,9 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
     if (patch.category !== undefined) dto.category = patch.category;
     if (patch.created_at !== undefined) dto.createdAt = patch.created_at;
     
-    if (patch.input_tokens !== undefined) dto.tokenUsage = { ...dto.tokenUsage, inputTokens: Math.floor(patch.input_tokens) };
-    if (patch.output_tokens !== undefined) dto.tokenUsage = { ...dto.tokenUsage, outputTokens: Math.floor(patch.output_tokens) };
+    if (patch.input_tokens !== undefined) dto.inputTokens = Math.floor(patch.input_tokens);
+    if (patch.output_tokens !== undefined) dto.outputTokens = Math.floor(patch.output_tokens);
+    if (patch.total_tokens !== undefined) dto.totalTokens = Math.floor(patch.total_tokens);
     if (patch.tokens_used !== undefined) dto.tokensUsed = Math.floor(patch.tokens_used);
     
     if (patch.current_task !== undefined) dto.currentTask = patch.current_task;

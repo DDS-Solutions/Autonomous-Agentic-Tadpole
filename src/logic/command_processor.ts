@@ -18,6 +18,7 @@ import { resolve_agent_model_config } from '../utils/model_utils';
 import { use_workspace_store } from '../stores/workspace_store';
 import { use_sovereign_store } from '../stores/sovereign_store';
 import { get_settings } from '../stores/settings_store';
+import { use_skill_store } from '../stores/skill_store';
 import type { Agent } from '../types';
 import { browser_inference_service } from '../services/browser_inference';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';
@@ -349,8 +350,31 @@ export async function process_command(
             console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: ${agent.name} (ID: ${agent.id}), Safe_Mode: ${!!is_safe_mode}`);
             
             const active_node_id = use_sovereign_store.getState().active_node_id;
+            const skill_store = use_skill_store.getState();
+            const all_skill_names = [
+                ...skill_store.manifests.map(m => m.name),
+                ...skill_store.scripts.map(s => s.name),
+                ...skill_store.mcp_tools.map(t => t.name)
+            ];
 
-            agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined)
+            // 🧠 Predictive Skill Selection (Local Gemma)
+            let enabled_skills: string[] | undefined = undefined;
+            if (settings.sentinel_mode && all_skill_names.length > 5) {
+                try {
+                    enabled_skills = await browser_inference_service.predict_relevant_skills(message, all_skill_names);
+                    if (enabled_skills && enabled_skills.length > 0) {
+                        event_bus.emit_log({ 
+                            source: 'System', 
+                            text: `🧠 Gemma predictive filter: [${enabled_skills.join(', ')}]`, 
+                            severity: 'info' 
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[CommandProcessor] Predictive filtering failed:', e);
+                }
+            }
+
+            agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
                 .catch(err => {
                     event_bus.emit_log({
                         source: 'System',
@@ -473,8 +497,30 @@ export async function process_command(
                     console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: @${agent.name}, Safe_Mode: ${!!is_safe_mode}`);
                     
                     const active_node_id = use_sovereign_store.getState().active_node_id;
+                    const skill_store = use_skill_store.getState();
+                    const all_skill_names = [
+                        ...skill_store.manifests.map(m => m.name),
+                        ...skill_store.scripts.map(s => s.name),
+                        ...skill_store.mcp_tools.map(t => t.name)
+                    ];
 
-                    agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined)
+                    let enabled_skills: string[] | undefined = undefined;
+                    if (settings.sentinel_mode && all_skill_names.length > 5) {
+                        try {
+                            enabled_skills = await browser_inference_service.predict_relevant_skills(message, all_skill_names);
+                            if (enabled_skills && enabled_skills.length > 0) {
+                                event_bus.emit_log({ 
+                                    source: 'System', 
+                                    text: `🧠 Gemma predictive filter: [${enabled_skills.join(', ')}]`, 
+                                    severity: 'info' 
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('[CommandProcessor] Predictive filtering failed:', e);
+                        }
+                    }
+
+                    agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
                         .catch(err => {
                             event_bus.emit_log({
                                 source: 'System',

@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search for `[Oversight_Dashboard]` or `GOVERNANCE_SYNC` in service logs.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     Shield,
     CheckCircle,
@@ -35,6 +35,7 @@ import { agents as all_agents } from '../data/mock_agents';
 import { MOCK_PENDING, MOCK_LEDGER, type OversightEntry, type LedgerEntry } from '../data/mock_oversight';
 import { Command_Table } from '../components/Command_Table';
 import { i18n } from '../i18n';
+import { LD_Json } from '../components/ui/LD_Json';
 
 // Types mirrored from server/types.ts
 // Types are now imported from ../data/mockOversight
@@ -195,16 +196,14 @@ export default function Oversight_Dashboard() {
     return (
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
             {/* GEO Optimization: Structured Data & Semantic Header */}
-            <script type="application/ld+json">
-            {JSON.stringify({
+            <LD_Json data={{
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               "name": "Tadpole OS Oversight Dashboard",
               "description": "High-level governance and oversight dashboard for swarm-wide compliance and safety protocols.",
               "provider": { "@type": "Organization", "name": "Sovereign Engineering" },
               "applicationCategory": "Governance System"
-            })}
-            </script>
+            }} />
             <h1 className="sr-only">Tadpole OS Oversight & Governance Command</h1>
             {/* Fallback / Simulation Banner */}
             {is_simulated && (

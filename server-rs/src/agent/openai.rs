@@ -169,7 +169,10 @@ impl OpenAIProvider {
             .config
             .base_url
             .clone()
-            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string())
+            .trim()
+            .to_string();
 
         // ### 🛡️ Sector Defense: Localhost Conflict Resolution
         // Resolve IPv4/IPv6 localhost conflict on Windows by forcing 127.0.0.1.
@@ -263,7 +266,7 @@ impl OpenAIProvider {
         let mut request = self
             .client
             .post(&url)
-            .header(header::AUTHORIZATION, format!("Bearer {}", self.api_key))
+            .header(header::AUTHORIZATION, format!("Bearer {}", self.api_key.trim()))
             .json(&request_body);
 
         // ### 🛡️ Sector Defense: Extended Timeout for Local Models
@@ -273,17 +276,22 @@ impl OpenAIProvider {
             request = request.timeout(std::time::Duration::from_secs(300));
         }
 
-        let res = request
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    tracing::error!("🕒 [OpenAI] Request timed out for URL: {}. Model might be too slow for current hardware.", url);
-                } else if e.is_connect() {
-                    tracing::error!("🔌 [OpenAI] Failed to connect to URL: {}. Is the provider service (Ollama/Mercury) running?", url);
-                }
-                AppError::from(e)
-            })?;
+        let res_result = request.send().await;
+        if let Err(ref e) = res_result {
+            tracing::error!("🚨 [CRITICAL DEBUG] Reqwest send failed! Error: {:?}", e);
+            if e.is_builder() {
+                tracing::error!("🚨 [CRITICAL DEBUG] It is a BUILDER error! URL: {}, Body: {}", url, serde_json::to_string(&request_body).unwrap_or_else(|_| "Failed to serialize body for debug".to_string()));
+            }
+        }
+
+        let res = res_result.map_err(|e| {
+            if e.is_timeout() {
+                tracing::error!("🕒 [OpenAI] Request timed out for URL: {}. Model might be too slow for current hardware.", url);
+            } else if e.is_connect() {
+                tracing::error!("🔌 [OpenAI] Failed to connect to URL: {}. Is the provider service (Ollama/Mercury) running?", url);
+            }
+            AppError::from(e)
+        })?;
 
         if !res.status().is_success() {
             let status = res.status();
@@ -430,7 +438,9 @@ impl crate::agent::provider_trait::LlmProvider for OpenAIProvider {
             .config
             .base_url
             .clone()
-            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string())
+            .trim()
+            .to_string();
         if !url.ends_with("/embeddings") {
             if !url.ends_with('/') {
                 url.push('/');
@@ -452,7 +462,7 @@ impl crate::agent::provider_trait::LlmProvider for OpenAIProvider {
         let res = self
             .client
             .post(&url)
-            .header(header::AUTHORIZATION, format!("Bearer {}", self.api_key))
+            .header(header::AUTHORIZATION, format!("Bearer {}", self.api_key.trim()))
             .json(&request_body)
             .send()
             .await?;

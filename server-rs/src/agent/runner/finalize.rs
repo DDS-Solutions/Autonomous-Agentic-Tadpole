@@ -115,7 +115,18 @@ impl AgentRunner {
         self.update_status(&ctx.agent_id, &ctx.mission_id, "idle", None);
 
         // 💾 PERSISTENCE & MEMORY
-        self.finalize_mission_persistence(ctx, output_text, usage)
+        let turn_cost = usage
+            .as_ref()
+            .map(|u| {
+                crate::agent::rates::calculate_cost(
+                    &ctx.model_config.model_id,
+                    u.input_tokens,
+                    u.output_tokens,
+                )
+            })
+            .unwrap_or(0.0);
+
+        self.finalize_mission_persistence(ctx, output_text, turn_cost)
             .await?;
         #[cfg(feature = "vector-memory")]
         self.archive_lance_db_memory(ctx, output_text);
@@ -133,19 +144,14 @@ impl AgentRunner {
         &self,
         ctx: &RunContext,
         output_text: &str,
-        usage: &Option<crate::agent::types::TokenUsage>,
+        cumulative_cost: f64,
     ) -> Result<(), AppError> {
-        let final_cumulative_cost = crate::agent::rates::calculate_cost(
-            &ctx.model_config.model_id,
-            usage.as_ref().map(|u| u.input_tokens).unwrap_or(0),
-            usage.as_ref().map(|u| u.output_tokens).unwrap_or(0),
-        );
 
         crate::agent::mission::update_mission(
             &self.state.resources.pool,
             &ctx.mission_id,
             crate::agent::types::MissionStatus::Completed,
-            final_cumulative_cost,
+            cumulative_cost,
         )
         .await?;
 
@@ -290,6 +296,60 @@ impl AgentRunner {
             "System",
             &format!("❌ Error: {}", safe_error),
             "error",
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    /// Handles mission cancellation (e.g. from the Gateway). 
+    /// Ensures status is reverted and mission is marked as 'aborted'.
+    pub(crate) async fn fail_mission_aborted(
+        &self,
+        ctx: &RunContext,
+    ) -> Result<(), AppError> {
+        tracing::warn!(
+            "🛑 [Runner] Mission aborted for agent {}. Cleaning up...",
+            ctx.agent_id
+        );
+
+        // Update global agent state
+        if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
+            let agent = entry.value_mut();
+            agent.state.active_mission = None;
+            agent.health.status = "idle".to_string();
+
+            let agent_data = agent.clone();
+            drop(entry);
+
+            // Sync to DB
+            let _ = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await;
+
+            self.state.emit_event(serde_json::json!({
+                "type": "agent:update",
+                "agent_id": ctx.agent_id,
+                "data": agent_data
+            }));
+        }
+
+        self.update_status(&ctx.agent_id, &ctx.mission_id, "idle", None);
+
+        crate::agent::mission::update_mission(
+            &self.state.resources.pool,
+            &ctx.mission_id,
+            crate::agent::types::MissionStatus::Failed, // Using Failed as 'Aborted' placeholder for now
+            0.0,
+        )
+        .await?;
+
+        crate::agent::mission::log_step(
+            &self.state.resources.pool,
+            &ctx.mission_id,
+            &ctx.agent_id,
+            "System",
+            "🛑 Mission aborted by kernel/user.",
+            "warning",
             None,
         )
         .await?;

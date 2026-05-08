@@ -72,17 +72,8 @@ export interface Mcp_Tool_Hub_Definition {
 }
 
 /**
- * Common shape for anything that is an "Ability" in the swarm.
+ * State and Actions for the Skill Store
  */
-export interface Unified_Ability {
-    name: string;
-    display_name: string;
-    description: string;
-    type: 'native' | 'script' | 'workflow' | 'mcp';
-    category: 'user' | 'ai';
-    icon_hint?: string;
-    raw: Skill_Manifest | Skill_Definition | Workflow_Definition | Mcp_Tool_Hub_Definition;
-}
 
 export interface Skill_State {
     manifests: Skill_Manifest[];
@@ -135,13 +126,19 @@ export const use_skill_store = create<Skill_State & Skill_Actions>()((set, get) 
         try {
             const data = await tadpole_os_service.get_unified_skills();
 
-            const p_data = data as { manifests?: Skill_Manifest[]; scripts?: Skill_Definition[]; workflows?: Workflow_Definition[]; hooks?: Hook_Definition[] };
+            const p_data = (data || {}) as { manifests?: Skill_Manifest[]; scripts?: Skill_Definition[]; workflows?: Workflow_Definition[]; hooks?: Hook_Definition[] };
+            
+            // Robust sorting and assignment with fallback to empty arrays
+            const manifests = Array.isArray(p_data.manifests) ? [...p_data.manifests].sort((a, b) => a.name.localeCompare(b.name)) : [];
+            const scripts = Array.isArray(p_data.scripts) ? [...p_data.scripts].sort((a, b) => a.name.localeCompare(b.name)) : [];
+            const workflows = Array.isArray(p_data.workflows) ? [...p_data.workflows].sort((a, b) => a.name.localeCompare(b.name)) : [];
+            const hooks = Array.isArray(p_data.hooks) ? [...p_data.hooks].sort((a, b) => a.name.localeCompare(b.name)) : [];
 
             set({
-                manifests: (p_data.manifests || []).sort((a, b) => a.name.localeCompare(b.name)),
-                scripts: (p_data.scripts || []).sort((a, b) => a.name.localeCompare(b.name)),
-                workflows: (p_data.workflows || []).sort((a, b) => a.name.localeCompare(b.name)),
-                hooks: (p_data.hooks || []).sort((a, b) => a.name.localeCompare(b.name)),
+                manifests,
+                scripts,
+                workflows,
+                hooks,
                 is_loading: false,
                 initialized_skills: true
             });

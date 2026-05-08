@@ -95,6 +95,8 @@ impl AgentRunner {
         conversation_history.push(format!("USER: {}", payload.message));
         let max_turns = ctx.max_turns;
 
+        let mut running_cost: f64 = ctx.current_cost_usd;
+
         while turn_count < max_turns {
             turn_count += 1;
             tracing::debug!(
@@ -126,7 +128,7 @@ impl AgentRunner {
                 }
 
                 // 🛡️ [Financial Guardrail] Intra-turn budget check
-                match self.check_budget(ctx, 0.0, "").await {
+                match self.check_budget(ctx, &mut running_cost, 0.0, "").await {
                      Ok(Some(_pause_msg)) => {
                          tracing::warn!("💰 [Mythos] Budget breach mid-recurrence for agent {}", ctx.agent_id);
                          return Ok(IntelligenceOutput { text: format!("{} (Halting: Budget Exceeded)", scrub_mythos_tags(&output_text)), usage });
@@ -191,6 +193,7 @@ impl AgentRunner {
 
                     // 🛡️ [Sentinel Gate]
                     let mut turn_text_clone = turn_text.clone();
+                    let mut sentinel_attempts = 0;
                     self.enforce_sentinel_gate(
                         ctx,
                         &system_prompt,
@@ -198,6 +201,7 @@ impl AgentRunner {
                         &mut turn_text_clone,
                         &mut function_calls,
                         &mut usage,
+                        &mut sentinel_attempts,
                     )
                     .await
                     .map_err(|e| (e, usage.clone()))?;
@@ -234,7 +238,17 @@ impl AgentRunner {
 
                     use futures::stream::{FuturesUnordered, StreamExt};
                     let mut futures = FuturesUnordered::new();
-                    for fc in function_calls {
+                    
+                    // 🛡️ [Harden] Concurrency Guard: Limit parallel tools to 10 per turn
+                    const MAX_CONCURRENT_TOOLS: usize = 10;
+                    let tool_count = function_calls.len();
+                    if tool_count > MAX_CONCURRENT_TOOLS {
+                        tracing::warn!("⚠️ [Intelligence] Agent {} requested {} tools. Capping at {} to prevent resource exhaustion.", ctx.agent_id, tool_count, MAX_CONCURRENT_TOOLS);
+                        conversation_history.push(format!("OBSERVATION: System capped parallel tool execution to {}. Remaining tasks were deferred to the next turn.", MAX_CONCURRENT_TOOLS));
+                        self.broadcast_agent(ctx, "System: Capping concurrent tools", "warn");
+                    }
+
+                    for fc in function_calls.into_iter().take(MAX_CONCURRENT_TOOLS) {
                         let runner = self.clone();
                         let ctx_clone = ctx.clone();
                         let user_msg_clone = payload.message.clone();
@@ -347,7 +361,13 @@ impl AgentRunner {
         output_text: &mut String,
         function_calls: &mut Vec<crate::agent::types::ToolCall>,
         usage: &mut Option<crate::agent::types::TokenUsage>,
+        attempt_count: &mut u32,
     ) -> Result<(), AppError> {
+        if *attempt_count >= 2 {
+            tracing::error!("🚨 [Sentinel] Patience limit reached for {}. Agent is stuck in narrative mode.", ctx.agent_id);
+            return Err(AppError::InternalServerError("Sentinel Gate: Model failed to transition to tool-use after 2 attempts.".to_string()));
+        }
+
         let is_orchestrator = ctx.agent_id == AGENT_CEO 
             || ctx.agent_id == AGENT_COO 
             || ctx.agent_id == AGENT_ALPHA
@@ -380,6 +400,7 @@ impl AgentRunner {
                 )
                 .await;
 
+            *attempt_count += 1;
             let (sent_text, sent_calls, sent_usage) = sentinel_result?;
             *output_text = sent_text;
             *function_calls = sent_calls;
@@ -389,9 +410,6 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [intelligence]
-
-// Metadata: [intelligence]
 
 #[cfg(test)]
 mod tests {
@@ -438,13 +456,15 @@ mod tests {
         let mut usage = None;
         
         // Should NOT enforce (do nothing) because it's an orchestrator
+        let mut attempts = 0;
         let result = runner.enforce_sentinel_gate(
             &ctx,
             "system",
             "user",
             &mut output_text,
             &mut function_calls,
-            &mut usage
+            &mut usage,
+            &mut attempts,
         ).await;
         
         assert!(result.is_ok());
@@ -470,14 +490,18 @@ mod tests {
         // But we can verify that it *attempts* to enforce by checking the error or using a more robust mock.
         // Actually, call_provider will likely return an error because the mock state has no providers.
         
+        std::env::set_var("TADPOLE_NULL_PROVIDERS", "true");
+        let mut attempts = 0;
         let result = runner.enforce_sentinel_gate(
             &ctx,
             "system",
             "user",
             &mut output_text,
             &mut function_calls,
-            &mut usage
+            &mut usage,
+            &mut attempts,
         ).await;
+        std::env::remove_var("TADPOLE_NULL_PROVIDERS");
         
         // In a minimal mock, call_provider returns Ok with a DEGRADED message from NullProvider.
         // This proves the sentinel gate was triggered and successfully re-called the provider.

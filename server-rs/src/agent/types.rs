@@ -30,11 +30,11 @@ use std::collections::HashMap;
 #[sqlx(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum ModelProvider {
-    #[default]
     Openai,
     Anthropic,
     Google,
     Gemini, // Alias for Google
+    #[default]
     Ollama,
     Groq,
     Mistral,
@@ -905,7 +905,6 @@ impl EngineAgent {
             model_config: self.models.model.clone(),
             skills: self.capabilities.skills.clone(),
             workflows: self.capabilities.workflows.clone(),
-            mcp_tools: self.capabilities.mcp_tools.clone(),
             mission_id: "system-internal".to_string(),
             depth: 0,
             lineage: vec![],
@@ -919,7 +918,6 @@ impl EngineAgent {
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: None,
             working_memory: self.state.working_memory.clone(),
-            base_dir,
             summarized_history: None,
             structured_output: false,
             backlog: None,
@@ -964,6 +962,8 @@ pub struct TaskPayload {
     pub structured_output: Option<bool>,
     #[serde(default, alias = "primaryGoal")]
     pub primary_goal: Option<String>,
+    #[serde(default, alias = "enabledSkills")]
+    pub enabled_skills: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]

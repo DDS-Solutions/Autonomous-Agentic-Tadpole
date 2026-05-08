@@ -104,7 +104,7 @@ async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
         .fetch_one(pool)
         .await?;
 
-    if agent_count > 1 {
+    if agent_count > 0 {
         // We already have a populated swarm, skip seeding
         return Ok(());
     }

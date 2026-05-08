@@ -183,10 +183,10 @@ impl AgentRunner {
         }
 
         let depth = payload.swarm_depth.unwrap_or(0);
-        let _ = self
-            .state
+        // Record telemetry only — never mutate the enforcement limit
+        self.state
             .governance
-            .max_swarm_depth
+            .observed_max_depth
             .fetch_max(depth, std::sync::atomic::Ordering::Relaxed);
 
         let mission_title = payload.message.chars().take(50).collect::<String>() + "...";

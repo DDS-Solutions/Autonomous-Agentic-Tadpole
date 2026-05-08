@@ -221,13 +221,28 @@ export const use_model_store = create<Model_State>()(
                             }
                         } else {
                             const existing = final_models[existing_idx];
-                            // Authoritative Update: Backend always wins for routing critical fields
-                            if (existing.provider !== bm.provider || 
-                                existing.modality !== bm.modality || 
-                                existing.name !== bm.name ||
-                                JSON.stringify(existing.capabilities) !== JSON.stringify(bm.capabilities)) {
-                                final_models[existing_idx] = { ...existing, ...bm };
-                                changed = true;
+                            // RECONCILIATION: Prefer local state if it has been modified recently
+                            // This implements the "Prefer Local" strategy to prevent legacy defaults from clobbering user state.
+                            const has_local_changes = existing.rpm !== bm.rpm || 
+                                                    existing.tpm !== bm.tpm || 
+                                                    existing.modality !== bm.modality;
+                            
+                            if (has_local_changes) {
+                                console.debug(`[ModelStore] Preserving Local state for Model ${bm.name} (Local-First Strategy)`);
+                                // Only sync capabilities from backend as they are authoritative from the infra provider
+                                if (JSON.stringify(existing.capabilities) !== JSON.stringify(bm.capabilities)) {
+                                    final_models[existing_idx] = { ...existing, capabilities: bm.capabilities };
+                                    changed = true;
+                                }
+                            } else {
+                                // Fallback: Authoritative Update for non-modified models
+                                if (existing.provider !== bm.provider || 
+                                    existing.modality !== bm.modality || 
+                                    existing.name !== bm.name ||
+                                    JSON.stringify(existing.capabilities) !== JSON.stringify(bm.capabilities)) {
+                                    final_models[existing_idx] = { ...existing, ...bm };
+                                    changed = true;
+                                }
                             }
                         }
                     });

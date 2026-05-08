@@ -63,8 +63,6 @@ pub(crate) struct RunContext {
     pub model_config: ModelConfig,
     pub skills: Vec<String>,
     pub workflows: Vec<String>,
-    #[allow(dead_code)]
-    pub mcp_tools: Vec<String>,
     pub mission_id: String,
     pub user_id: Option<String>,
     pub depth: u32,
@@ -78,7 +76,6 @@ pub(crate) struct RunContext {
     pub last_accessed_files: std::sync::Arc<parking_lot::Mutex<Vec<String>>>,
     pub recent_findings: Option<String>,
     pub working_memory: serde_json::Value,
-    pub base_dir: std::path::PathBuf,
     pub summarized_history: Option<String>,
     pub structured_output: bool,
     pub backlog: Option<Arc<parking_lot::Mutex<MissionBacklog>>>,
@@ -103,7 +100,6 @@ impl Default for RunContext {
             model_config: ModelConfig::default(),
             skills: vec![],
             workflows: vec![],
-            mcp_tools: vec![],
             mission_id: "default-mission".to_string(),
             user_id: None,
             depth: 0,
@@ -119,7 +115,6 @@ impl Default for RunContext {
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             recent_findings: None,
             working_memory: serde_json::json!({}),
-            base_dir: std::path::PathBuf::from("."),
             summarized_history: None,
             structured_output: false,
             backlog: None,
@@ -136,34 +131,6 @@ impl Default for RunContext {
 }
 
 impl RunContext {
-    #[allow(dead_code)]
-    pub fn resolve_paths(&self) -> (String, String, String) {
-        let cluster_name = self
-            .workspace_root
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let agent_memory_dir = self
-            .base_dir
-            .join("data/workspaces")
-            .join(&cluster_name)
-            .join("agents")
-            .join(&self.agent_id)
-            .join("memory.lance")
-            .to_string_lossy()
-            .to_string();
-        let mission_scope_dir = self
-            .base_dir
-            .join("data/workspaces")
-            .join(&cluster_name)
-            .join("missions")
-            .join(&self.mission_id)
-            .join("scope.lance")
-            .to_string_lossy()
-            .to_string();
-        (cluster_name, agent_memory_dir, mission_scope_dir)
-    }
 
     pub fn derive_subtask_payload(&self, message: String) -> TaskPayload {
         TaskPayload {
@@ -224,14 +191,35 @@ struct ActiveAgentGuard<'a> {
 
 impl<'a> ActiveAgentGuard<'a> {
     fn acquire(counter: &'a AtomicU32) -> Self {
-        counter.fetch_add(1, Ordering::Relaxed);
+        counter.fetch_add(1, Ordering::SeqCst);
         Self { counter }
     }
 }
 
 impl Drop for ActiveAgentGuard<'_> {
     fn drop(&mut self) {
-        self.counter.fetch_sub(1, Ordering::Relaxed);
+        self.counter.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Guard to ensure mission cleanup on abrupt task cancellation (Drop).
+struct MissionCleanupGuard {
+    runner: AgentRunner,
+    ctx: Option<RunContext>,
+    completed: bool,
+}
+
+impl Drop for MissionCleanupGuard {
+    fn drop(&mut self) {
+        if !self.completed {
+            if let Some(ref ctx) = self.ctx {
+                let runner = self.runner.clone();
+                let ctx = ctx.clone();
+                tokio::spawn(async move {
+                    let _ = runner.fail_mission_aborted(&ctx).await;
+                });
+            }
+        }
     }
 }
 
@@ -300,6 +288,12 @@ impl AgentRunner {
             payload.primary_goal = Some(payload.message.clone());
         }
 
+        let mut cleanup_guard = MissionCleanupGuard {
+            runner: self.clone(),
+            ctx: None,
+            completed: false,
+        };
+
         let _mission_id = payload
             .cluster_id
             .clone()
@@ -353,6 +347,7 @@ impl AgentRunner {
         let ctx = self
             .prepare_run_context(&agent_id, &payload, &mission_id, depth, &lineage)
             .await?;
+        cleanup_guard.ctx = Some(ctx.clone());
 
         self.state
             .yield_phase_transition(&agent_id, "IntelligenceLoop")
@@ -366,9 +361,11 @@ impl AgentRunner {
                     .yield_phase_transition(&agent_id, "Finalization")
                     .await;
                 self.record_heartbeat(&ctx.agent_id).await;
+                cleanup_guard.completed = true;
                 self.finalize_run(&ctx, &output.text, &output.usage).await
             }
             Err((e, usage)) => {
+                cleanup_guard.completed = true;
                 let _ = self.fail_mission(&ctx, &e, &usage).await;
                 Err(e)
             }
@@ -388,9 +385,7 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [mod]
 
-// Metadata: [mod]
 
 #[cfg(test)]
 mod tests {

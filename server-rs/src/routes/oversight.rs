@@ -234,6 +234,7 @@ pub async fn update_settings(
             "max_agents": state.governance.max_agents.load(std::sync::atomic::Ordering::Relaxed),
             "max_clusters": state.governance.max_clusters.load(std::sync::atomic::Ordering::Relaxed),
             "max_swarm_depth": state.governance.max_swarm_depth.load(std::sync::atomic::Ordering::Relaxed),
+            "observed_max_depth": state.governance.observed_max_depth.load(std::sync::atomic::Ordering::Relaxed),
             "max_task_length": state.governance.max_task_length.load(std::sync::atomic::Ordering::Relaxed),
             "default_budget_usd": *state.governance.default_budget_usd.read(),
             "privacy_mode": state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed)

@@ -279,18 +279,6 @@ export const use_sovereign_store = create<Sovereign_State>()(
                 active_node_id: state.active_node_id,
                 active_mission_id: state.active_mission_id
             }),
-            migrate: (persisted_state: unknown) => {
-                const state = (persisted_state || {}) as { logs?: Record<string, unknown>[] };
-                const logs = state.logs || [];
-
-                return {
-                    ...state,
-                    logs: (logs || []).map(l => ({
-                        ...l,
-                        agent_id: l.agent_id ?? l.agentId
-                    }))
-                } as unknown as Record<string, unknown>;
-            }
         }
     )
 );

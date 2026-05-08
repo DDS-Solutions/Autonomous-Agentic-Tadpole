@@ -38,6 +38,8 @@ pub struct GovernanceHub {
     pub tpm_accumulator: AtomicUsize,
     /// Privacy Shield: When true, all external cloud provider traffic is blocked.
     pub privacy_mode: AtomicBool,
+    /// Telemetry: highest swarm depth seen this server session. Never decreases.
+    pub observed_max_depth: AtomicU32,
 }
 
 // Metadata: [gov]

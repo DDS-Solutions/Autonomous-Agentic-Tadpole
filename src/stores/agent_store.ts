@@ -33,6 +33,7 @@ import { load_agents, persist_agent_update, normalize_agent, type Raw_Agent } fr
 import { agent_api_service } from '../services/agent_api_service';
 import { tadpole_os_socket } from '../services/socket';
 import { log_error } from '../services/system_utils';
+import { persist } from 'zustand/middleware';
 import { use_workspace_store } from './workspace_store';
 import { agents as mock_agents } from '../data/mock_agents';
 
@@ -106,7 +107,9 @@ export interface Agent_State {
  * use_agent_store
  * Standardized reactive store for the entire agent swarm.
  */
-export const use_agent_store = create<Agent_State>((set, get) => ({
+export const use_agent_store = create<Agent_State>()(
+    persist(
+        (set, get) => ({
     agents: [],
     is_loading: false,
     error: null,
@@ -134,17 +137,32 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
 
             if ((!has_alpha || !has_qa) && mock_agents.length > 0) {
                 // Phase 4: Hydrate the full mock swarm if backend is missing critical agents.
-                // We map through all mock agents to ensure the complete roster is available.
+                // WE PREFER LOCAL: If the user has a local version of a mock agent, keep it.
                 const hydrated_mock_swarm = (mock_agents as unknown as Raw_Agent[]).map(raw => {
                     const existing_in_live = (live_agents || []).find(a => a.id === raw.id);
-                    if (existing_in_live) return existing_in_live;
+                    if (existing_in_live) {
+                        // RECONCILIATION: Prefer local model/config if backend is sending defaults
+                        const local = get().agents.find(a => a.id === raw.id);
+                        if (local && (local._local_timestamp || 0) > (existing_in_live._local_timestamp || 0)) {
+                            return { ...existing_in_live, ...local };
+                        }
+                        return existing_in_live;
+                    }
                     
                     const existing_in_state = get().agents.find(a => a.id === raw.id);
                     return existing_in_state || normalize_agent(raw);
                 });
                 final_agents = hydrated_mock_swarm;
             } else {
-                final_agents = live_agents;
+                // RECONCILIATION: Merge backend data with local modifications
+                final_agents = live_agents.map(la => {
+                    const local = get().agents.find(a => a.id === la.id);
+                    if (local && (local._local_timestamp || 0) > (la._local_timestamp || 0)) {
+                        console.debug(`[AgentStore] Preferring Local state for Agent ${la.id} (Local: ${local._local_timestamp}, Live: ${la._local_timestamp})`);
+                        return { ...la, ...local };
+                    }
+                    return la;
+                });
             }
 
             set({ agents: final_agents, is_loading: false });
@@ -154,7 +172,7 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
             }
         } catch (err: unknown) {
             if (err instanceof Error && err.name === 'AbortError') {
-                set({ is_loading: false });
+                set({ is_loading: false, last_fetch_time: 0 }); 
                 return;
             }
             log_error('AgentStore', 'Agent Registry Failure (Hydrating from Mocks)', err);
@@ -231,8 +249,8 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
     /// Ensures that agent capability changes, status shifts, and mission 
     /// progress are reflected with zero manual refresh.
     init_telemetry: (): (() => void) => {
-        const path_cache = new Map<string, string>();
-
+        // Use a localized cache that is cleaned up when the component/portal unmounts.
+        // Or better, resolve it dynamically to avoid any stale mapping.
         const unsubscribe = tadpole_os_socket.subscribe_agent_updates((event) => {
             // Guard: Ignore self-updates or malformed events (SYNC-02)
             if (!event || !event.agent_id || !event.data || (event as { source_id?: string }).source_id === TAB_ID) {
@@ -242,20 +260,13 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
             if (event.type === 'agent:update' || event.type === 'agent:create') {
                 const id_str = event.agent_id;
                 
-                // Resolve Workspace Context for normalization
-                let workspace_path = path_cache.get(id_str);
-                if (!workspace_path) {
-                    const workspace_store = use_workspace_store.getState();
-                    const cluster = (workspace_store.clusters || []).find(c => {
-                        const members = c.collaborators || [];
-                        // event.agent_id is already checked to be truthy at line 200
-                        return members.includes(id_str) || members.includes(event.agent_id!);
-                    });
-                    workspace_path = cluster ? cluster.path : `/workspaces/agent-silo-${id_str}`;
-                    path_cache.set(id_str, workspace_path);
-                }
-                
-                const final_work_path = workspace_path;
+                // Resolve Workspace Context for normalization dynamically
+                const workspace_store = use_workspace_store.getState();
+                const cluster = (workspace_store.clusters || []).find(c => {
+                    const members = c.collaborators || [];
+                    return members.includes(id_str);
+                });
+                const final_work_path = cluster ? cluster.path : `/workspaces/agent-silo-${id_str}`;
                 
                 set((state: Agent_State) => {
                     const agents = state.agents || [];
@@ -293,7 +304,21 @@ export const use_agent_store = create<Agent_State>((set, get) => ({
 
         return unsubscribe;
     }
-}));
+        }),
+        {
+            name: 'tadpole-agent-registry',
+            partialize: (state) => ({
+                agents: state.agents,
+            }),
+            onRehydrateStorage: () => (state) => {
+                if (state) {
+                    console.info('🧬 [AgentStore] Registry hydrated from local storage.');
+                }
+            }
+        }
+    )
+);
+
 
 // --- Global Sync Handler ---
 

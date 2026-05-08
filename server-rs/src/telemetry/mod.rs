@@ -40,7 +40,7 @@ use tracing_subscriber::Layer;
 /// Optimized for high-throughput JSON emissions from system spans and
 /// agent lifecycle events.
 pub static TELEMETRY_TX: Lazy<broadcast::Sender<::serde_json::Value>> = Lazy::new(|| {
-    let (tx, _) = broadcast::channel(2000);
+    let (tx, _) = broadcast::channel(5000);
     tx
 });
 

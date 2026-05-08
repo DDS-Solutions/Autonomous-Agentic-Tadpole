@@ -1,88 +1,28 @@
 [
   {
-    "id": "gemma4:26b",
-    "name": "gemma4:26b",
-    "provider_id": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supports_tools": true,
-      "supports_vision": false,
-      "supports_structured_output": false,
-      "supports_reasoning": false,
-      "supports_halting_tool": true,
-      "context_window": 128000,
-      "max_output_tokens": 4096
-    }
-  },
-  {
-    "id": "gemma4:e4b",
-    "name": "Gemma 4 (Local)",
-    "provider_id": "ollama",
+    "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
+    "name": "gemma4:e2b",
+    "providerId": "ollama",
     "provider": "ollama",
     "rpm": 100,
-    "tpm": 1000000,
-    "rpd": 10000,
+    "tpm": 100000,
+    "rpd": 1000,
     "tpd": 10000000,
     "modality": "llm",
     "capabilities": {
-      "supports_tools": true,
-      "supports_vision": false,
-      "supports_structured_output": true,
-      "supports_reasoning": false,
-      "supports_halting_tool": true,
-      "context_window": 128000,
-      "max_output_tokens": 8192
-    }
-  },
-  {
-    "id": "phi3.5:latest",
-    "name": "phi3.5:latest",
-    "provider_id": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supports_tools": false,
-      "supports_vision": false,
-      "supports_structured_output": false,
-      "supports_reasoning": false,
-      "supports_halting_tool": true,
-      "context_window": 32768,
-      "max_output_tokens": 4096
-    }
-  },
-  {
-    "id": "qwen3.5:9b",
-    "name": "qwen3.5:9b",
-    "provider_id": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supports_tools": true,
-      "supports_vision": false,
-      "supports_structured_output": false,
-      "supports_reasoning": false,
-      "supports_halting_tool": true,
-      "context_window": 32768,
-      "max_output_tokens": 4096
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096
     }
   },
   {
     "id": "gemma4:e4b",
     "name": "gemma4:e4b",
-    "provider_id": "ollama",
+    "providerId": "ollama",
     "provider": "ollama",
     "rpm": null,
     "tpm": null,
@@ -90,13 +30,73 @@
     "tpd": null,
     "modality": "llm",
     "capabilities": {
-      "supports_tools": true,
-      "supports_vision": false,
-      "supports_structured_output": false,
-      "supports_reasoning": false,
-      "supports_halting_tool": true,
-      "context_window": 128000,
-      "max_output_tokens": 4096
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096
+    }
+  },
+  {
+    "id": "phi3.5:latest",
+    "name": "phi3.5:latest",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": false,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096
+    }
+  },
+  {
+    "id": "qwen3.5:9b",
+    "name": "qwen3.5:9b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096
+    }
+  },
+  {
+    "id": "gemma4:26b",
+    "name": "gemma4:26b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096
     }
   }
 ]

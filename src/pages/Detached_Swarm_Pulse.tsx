@@ -1,52 +1,79 @@
 /**
- * @docs ARCHITECTURE:Pages
+ * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
- * **Detached Swarm Pulse**: Standalone telemetry visualizer optimized for 
- * multi-window operations. Decouples the pulse graph from the main dashboard 
- * to allow dedicated monitor tracking of swarm health. Inherits 
- * `Swarm_Visualizer` logic with the `is_detached` flag to enable 
- * fullscreen vertex rendering and dedicated WebSocket synchronization.
+ * **Detached Swarm Pulse**: A standalone, high-fidelity monitoring portal for the Tadpole Swarm.
+ * Optimized for multi-monitor setups, providing real-time telemetry and visual "God View" of 
+ * active missions and agent interactions.
  * 
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: WebSocket disconnection causing empty graph frames, 
- *   Canvas context loss on window resize, or state lag in multi-agent bursts.
- * - **Telemetry Link**: Look for `[Pulse:Detached]` in tracing logs.
- * - **Trace Scope**: `src/pages/Detached_Swarm_Pulse`
+ * - **Failure Path**: Websocket desync, D3 force-layout jitter, or memory leaks during high-velocity mission bursts.
+ * - **Telemetry Link**: Look for `[SwarmPulse]` in UI traces or check the global telemetry ring buffer.
  */
 
+import { Suspense } from 'react';
 import { Swarm_Visualizer } from '../components/Swarm_Visualizer';
-import { i18n } from '../i18n';
+import Error_Boundary from '../components/Error_Boundary';
+import { LD_Json } from '../components/ui/LD_Json';
 
-
-/**
- * Detached_Swarm_Pulse
- * A standalone view for the Swarm Pulse telemetry graph, 
- * optimized for multi-window setups.
- */
 export default function Detached_Swarm_Pulse() {
     return (
-        <div className="w-screen h-screen bg-zinc-950 p-4">
-            {/* GEO Optimization: Structured Data & Semantic Header */}
-            <script type="application/ld+json">
-            {JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "SoftwareApplication",
-              "name": "Tadpole OS Swarm Pulse",
-              "description": i18n.t('swarm_visualizer.detached_description'),
-              "author": { "@type": "Organization", "name": "Sovereign Engineering" },
-              "applicationCategory": "Telemetry Tool",
-              "operatingSystem": "Tadpole OS"
-            })}
-            </script>
-            <h1 className="sr-only">{i18n.t('swarm_visualizer.detached_telemetry_h1')}</h1>
-            <div className="w-full h-full">
-                <Swarm_Visualizer is_detached={true} />
-            </div>
+        <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden selection:bg-teal-500/30">
+            <LD_Json 
+                data={{
+                    "@context": "https://schema.org",
+                    "@type": "SoftwareApplication",
+                    "name": "Tadpole OS Swarm Pulse Viewer",
+                    "description": "Standalone real-time telemetry visualization portal for the sovereign agentic swarm.",
+                    "applicationCategory": "Observability Terminal",
+                    "operatingSystem": "Tadpole OS"
+                }}
+            />
+            
+            <header className="px-6 py-4 border-b border-zinc-800/50 flex items-center justify-between bg-zinc-900/20 backdrop-blur-md z-10">
+                <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse shadow-[0_0_8px_rgba(20,184,166,0.5)]" />
+                    <h1 className="text-zinc-400 font-mono text-xs uppercase tracking-[0.2em]">
+                        Sovereign Neural Pulse <span className="text-zinc-600 ml-2">// STANDALONE_NODE</span>
+                    </h1>
+                </div>
+                <div className="flex items-center gap-4 text-[10px] font-mono text-zinc-600 uppercase">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full border border-zinc-700" />
+                        <span>Sync Status: Nominal</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full border border-zinc-700" />
+                        <span>Buffer: O(1) Circular</span>
+                    </div>
+                </div>
+            </header>
+
+            <main className="flex-1 relative">
+                <Error_Boundary name="Swarm Pulse Visualizer">
+                    <Suspense fallback={
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
+                            <div className="w-12 h-12 border-2 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+                            <span className="text-zinc-600 font-mono text-[10px] uppercase tracking-widest animate-pulse">
+                                Synchronizing Swarm Heartbeat...
+                            </span>
+                        </div>
+                    }>
+                        <Swarm_Visualizer is_detached={true} />
+                    </Suspense>
+                </Error_Boundary>
+            </main>
+
+            <footer className="px-6 py-2 border-t border-zinc-800/30 flex items-center justify-between bg-zinc-900/10 text-[9px] font-mono text-zinc-700 uppercase tracking-tight">
+                <div>Kernel Build: Stable-Sovereign-v1.4.0</div>
+                <div className="flex items-center gap-4">
+                    <span>Latency: 12ms</span>
+                    <span>Load: Nominal</span>
+                    <span className="text-teal-900/50">Property of Sovereign Engineering</span>
+                </div>
+            </footer>
         </div>
     );
 }
 
-// Metadata: [Detached_Swarm_Pulse]
-
-// Metadata: [Detached_Swarm_Pulse]
+// Metadata: [detached_swarm_pulse]

@@ -27,6 +27,7 @@ import { use_workspace_store } from '../stores/workspace_store';
 import { use_dropdown_store } from '../stores/dropdown_store';
 import { use_agent_store } from '../stores/agent_store';
 import { i18n } from '../i18n';
+import { LD_Json } from '../components/ui/LD_Json';
 
 export default function Org_Chart() {
     const { clusters } = use_workspace_store();
@@ -77,38 +78,31 @@ export default function Org_Chart() {
         handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: new_model, provider } });
     };
 
-    // ── Data Partitioning ──────────────────────────────────
+    // ── Data Partitioning (Dynamic Hierarchy Builder) ────────────────────────
     const hierarchy_data = useMemo(() => {
         if (agents_list.length === 0) return null;
-
-        const combined_agents = [...agents_list];
-
-        // Level 1: Alpha (Force Agent of Nine)
-        const alpha = combined_agents.find(a => a.name === 'Agent of Nine' || a.id === '1') || combined_agents[0];
-
-        const nexus = combined_agents.find(a => (a.name === 'Tadpole' || a.id === '2') && a.id !== alpha.id)
-            || combined_agents.find(a => a.id !== alpha.id);
-
-        const used_higher_ids = new Set([alpha.id, nexus?.id].filter(Boolean));
-
-        // Map remaining clusters to chains (excluding cl-command which forms the root/nexus)
-        const chain_clusters = clusters.filter(c => c.id !== 'cl-command');
-        const chains = chain_clusters.slice(0, 3).map(cluster => ({
+        const combined = [...agents_list];
+        const cmd_cluster = clusters.find(c => c.id === 'cl-command');
+        const roots = combined.filter(a => !a.reports_to || (cmd_cluster && cmd_cluster.collaborators.includes(a.id)));
+        const alpha = roots.find(a => a.role.toLowerCase().includes('coordinator') || a.role.toLowerCase().includes('alpha')) || roots[0] || combined[0];
+        const mission_clusters = clusters.filter(c => c.id !== 'cl-command');
+        const chains = mission_clusters.map(cluster => ({
             id: cluster.id,
             name: cluster.name,
             theme: cluster.theme,
             alpha_id: cluster.alpha_id,
             objective: cluster.objective,
             is_active: cluster.is_active,
-            agents: cluster.collaborators
-                .filter(cid => !used_higher_ids.has(cid))
-                .map(cid => combined_agents.find(a => a.id === cid))
-                .filter(Boolean) as Agent[]
+            agents: cluster.collaborators.filter(cid => cid !== alpha.id).map(cid => combined.find(a => a.id === cid)).filter((a): a is Agent => !!a)
         }));
 
-        return {
-            alpha, nexus, chains
-        };
+        const chains_count = chains.length;
+        const path_d = chains_count > 0 ? `M 500 0 L 500 40 ${chains.map((_, i) => {
+            const x = 500 + (i - (chains_count - 1) * 0.5) * 400;
+            return `M 500 40 L ${x} 40 L ${x} 62`;
+        }).join(' ')}` : '';
+
+        return { alpha, chains, path_d };
     }, [agents_list, clusters]);
 
     if (!hierarchy_data) {
@@ -121,18 +115,15 @@ export default function Org_Chart() {
 
     return (
         <div className="h-full flex flex-col bg-zinc-950">
-            {/* GEO Optimization: Structured Data & Semantic Header */}
-            <script type="application/ld+json">
-            {JSON.stringify({
+            <LD_Json data={{
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               "name": "Tadpole OS Organization Chart",
-              "description": "Visual hierarchy and reporting structure for the autonomous agent swarm. Displays command-and-control relationships and cluster allocations.",
+              "description": "Dynamic visual hierarchy and reporting structure for the autonomous agent swarm. Real-time command-and-control visualization.",
               "author": { "@type": "Organization", "name": "Sovereign Engineering" },
               "applicationCategory": "Organization Management",
               "operatingSystem": "Tadpole OS"
-            })}
-            </script>
+            }} />
             <h1 className="sr-only">Tadpole OS Neural Command Hierarchy & Swarm Organization</h1>
 
             <div 
@@ -146,7 +137,7 @@ export default function Org_Chart() {
 
                 <div className="min-w-max pt-1 pb-12 px-12 flex flex-col items-center gap-12 relative">
 
-                    {/* Level 1: Root (Alpha) */}
+                    {/* Level 1: Root Command (Alpha) */}
                     <div className={`relative group w-[350px] ${dropdown_open_id === hierarchy_data.alpha?.id ? 'z-[100]' : 'z-30'}`}>
                         <div className="mb-4 text-center">
                             <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1 text-green-400">
@@ -177,55 +168,25 @@ export default function Org_Chart() {
                             );
                         })()}
 
-                        {/* Connection to Nexus */}
-                        <div 
-                            aria-hidden="true"
-                            className={`absolute top-full left-1/2 -translate-x-1/2 h-[30px] w-px bg-gradient-to-b from-green-500/50 to-green-500/20 ${(hierarchy_data.nexus?.status !== 'offline' && hierarchy_data.nexus?.status !== 'idle') || hierarchy_data.chains.some(c => c.is_active) ? 'vertical-pulse text-green-500' : ''}`} 
-                        />
-                    </div>
-
-                    {/* Level 2: Nexus (Coordinator) */}
-                    <div className={`relative pt-0 mt-[-18px] w-[350px] ${dropdown_open_id === hierarchy_data.nexus?.id ? 'z-[100]' : 'z-20'}`}>
-                        <div className="absolute -inset-4 bg-zinc-500/5 blur-xl rounded-full opacity-50" />
-                        {(() => {
-                            const cluster = clusters.find(c => hierarchy_data.nexus?.id && c.collaborators.includes(hierarchy_data.nexus.id));
-                            return (
-                                <Hierarchy_Node
-                                    agent={hierarchy_data.nexus}
-                                    available_roles={available_roles}
-                                    on_role_change={handle_role_change}
-                                    theme_color="zinc"
-                                    is_active={cluster?.is_active}
-                                    mission_objective={cluster?.objective}
-                                    on_skill_trigger={handle_skill_trigger}
-                                    on_configure_click={(id) => set_config_agent_id(id)}
-                                    on_model_change={handle_model_change}
-                                    on_model_2_change={handle_model_2_change}
-                                    on_model_3_change={handle_model_3_change}
-                                    on_update={handle_agent_update}
+                        {/* Connection SVG to Mission Chains */}
+                        {hierarchy_data.path_d && (
+                            <svg 
+                                aria-hidden="true"
+                                className="absolute top-[100%] left-1/2 -translate-x-1/2 w-[1000px] h-[62px] overflow-visible pointer-events-none"
+                            >
+                                <path
+                                    d={hierarchy_data.path_d}
+                                    fill="none"
+                                    stroke="rgba(16, 185, 129, 0.3)"
+                                    strokeWidth="1.5"
+                                    className={hierarchy_data.chains.some(c => c.is_active) ? 'neural-pulse text-green-500' : ''}
                                 />
-                            );
-                        })()}
-
-                        {/* Branching SVG */}
-                        <svg 
-                            aria-hidden="true"
-                            className="absolute top-[100%] left-1/2 -translate-x-1/2 w-[1000px] h-[42px] overflow-visible pointer-events-none"
-                        >
-                            <path
-                                d="M 500 0 L 500 30 M 500 30 L 100 30 M 500 30 L 900 30 M 100 30 L 100 42 M 500 30 L 500 42 M 900 30 L 900 42"
-                                fill="none"
-                                stroke="rgba(113, 113, 122, 0.3)"
-                                strokeWidth="1"
-                                className={hierarchy_data.chains.some(c => c.is_active || c.agents.some(a => a.status !== 'offline' && a.status !== 'idle')) ? 'neural-pulse text-zinc-500' : ''}
-                            />
-                            <circle cx="100" cy="30" r="2" fill="rgba(113, 113, 122, 0.5)" />
-                            <circle cx="900" cy="30" r="2" fill="rgba(113, 113, 122, 0.5)" />
-                        </svg>
+                            </svg>
+                        )}
                     </div>
 
-                    {/* Level 3: Chains */}
-                    <div className={`flex gap-16 relative ${hierarchy_data.chains.some(c => c.agents.some(a => a.id === dropdown_open_id)) ? 'z-[100]' : 'z-10'}`}>
+                    {/* Level 2: Active Mission Chains (Dynamic Grid) */}
+                    <div className={`flex gap-16 relative mt-4 ${hierarchy_data.chains.some(c => c.agents.some(a => a.id === dropdown_open_id)) ? 'z-[100]' : 'z-10'}`}>
                         {hierarchy_data.chains.map(chain => (
                             <Agent_Chain
                                 key={chain.id}
@@ -339,15 +300,18 @@ const Agent_Chain = memo(({
                             on_update={handle_agent_update}
                         />
 
-                        {idx < chain.agents.length - 1 && (
-                            <div 
-                                aria-hidden="true"
-                                className={`absolute top-full left-1/2 -translate-x-1/2 h-12 w-px 
-                                ${chain.theme === 'cyan' ? 'bg-cyan-500/20' :
-                                        chain.theme === 'zinc' ? 'bg-zinc-500/20' : 'bg-amber-500/20'}
-                                ${chain.is_active || (chain.agents[idx].status !== 'offline' && chain.agents[idx].status !== 'idle') || (chain.agents[idx + 1].status !== 'offline' && chain.agents[idx + 1].status !== 'idle') ? `vertical-pulse text-${chain.theme}-500` : ''}`}
-                            />
-                        )}
+                        {idx < chain.agents.length - 1 && (() => {
+                            const is_pulse = chain.is_active || (chain.agents[idx].status !== 'offline' && chain.agents[idx].status !== 'idle') || (chain.agents[idx + 1].status !== 'offline' && chain.agents[idx + 1].status !== 'idle');
+                            const pulse_class = is_pulse ? `vertical-pulse text-${chain.theme}-500` : '';
+                            const theme_bg = chain.theme === 'cyan' ? 'bg-cyan-500/20' : chain.theme === 'zinc' ? 'bg-zinc-500/20' : 'bg-amber-500/20';
+
+                            return (
+                                <div 
+                                    aria-hidden="true"
+                                    className={`absolute top-full left-1/2 -translate-x-1/2 h-12 w-px ${theme_bg} ${pulse_class}`}
+                                />
+                            );
+                        })()}
                     </div>
                 ))}
             </div>

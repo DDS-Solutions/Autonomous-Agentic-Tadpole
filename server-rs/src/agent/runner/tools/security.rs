@@ -11,7 +11,7 @@
 use crate::agent::runner::RunContext;
 use crate::agent::types::ToolCall;
 use crate::agent::runner::AgentRunner;
-use crate::agent::constants::{AGENT_CEO, AGENT_COO, AGENT_ALPHA};
+// use crate::agent::constants::{AGENT_CEO, AGENT_COO, AGENT_ALPHA};
 use super::error::ToolExecutionError;
 
 pub struct ValidationResult {
@@ -48,24 +48,21 @@ impl SecurityManager for DefaultSecurityManager {
             }
 
             // 2. [Hierarchy Guard] Enforce strategic delegation for CEO/COO
-            // NOTE: Deactivated to allow for flexible swarm scaling during operational drills.
-            /*
             if matches!(fc.name.as_str(), "spawn_subagent" | "recruit_specialist") {
-                if ctx.agent_id == AGENT_CEO {
-                    tracing::warn!("🛡️ [Hierarchy Guard] CEO (ID: {}) blocked from spawning specialists directly.", AGENT_CEO);
+                if ctx.agent_id == crate::agent::constants::AGENT_CEO {
+                    tracing::warn!("🛡️ [Hierarchy Guard] CEO (ID: {}) blocked from spawning specialists directly.", crate::agent::constants::AGENT_CEO);
                     runner.broadcast_sys("🛡️ Hierarchy Guard: CEO blocked from direct worker recruitment. Use 'issue_alpha_directive' instead.", "warning", Some(ctx.mission_id.clone()));
                     return Err(ToolExecutionError::HierarchyBlocked("As CEO, you are prohibited from direct worker recruitment. You MUST use 'issue_alpha_directive' to delegate complex missions to the COO.".to_string()));
                 }
-                if ctx.agent_id == AGENT_COO {
+                if ctx.agent_id == crate::agent::constants::AGENT_COO {
                     let target = fc.args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("");
-                    if target != AGENT_ALPHA {
-                        tracing::warn!("🛡️ [Hierarchy Guard] COO (ID: {}) blocked from spawning specialist '{}' directly.", AGENT_COO, target);
+                    if target != crate::agent::constants::AGENT_ALPHA {
+                        tracing::warn!("🛡️ [Hierarchy Guard] COO (ID: {}) blocked from spawning specialist '{}' directly.", crate::agent::constants::AGENT_COO, target);
                         runner.broadcast_sys("🛡️ Hierarchy Guard: COO blocked from direct worker recruitment. Use Alpha Node commander instead.", "warning", Some(ctx.mission_id.clone()));
                         return Err(ToolExecutionError::HierarchyBlocked("As COO, you are prohibited from direct worker recruitment. You MUST recruit an Alpha Node (ID: alpha) to serve as Swarm Mission Commander.".to_string()));
                     }
                 }
             }
-            */
         }
 
         // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy first
