@@ -272,8 +272,14 @@ impl OpenAIProvider {
         // ### 🛡️ Sector Defense: Extended Timeout for Local Models
         // Local models (Ollama/Mercury) can be slow on consumer hardware during heavy inference. 
         // We extend the timeout to 300s to prevent premature mission failure.
+        // If memory pressure is high (>92%), we extend further to 600s to allow for swapping.
         if url.contains("127.0.0.1") || url.contains("localhost") {
-            request = request.timeout(std::time::Duration::from_secs(300));
+            let timeout_secs = if let Some(stats) = self.config.extra_parameters.as_ref().and_then(|p| p.get("memory_pressure")).and_then(|v| v.as_f64()) {
+                if stats >= 0.92 { 600 } else { 300 }
+            } else {
+                300
+            };
+            request = request.timeout(std::time::Duration::from_secs(timeout_secs));
         }
 
         let res_result = request.send().await;

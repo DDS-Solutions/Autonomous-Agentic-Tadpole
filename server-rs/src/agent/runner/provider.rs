@@ -15,7 +15,7 @@
 use super::{AgentRunner, RunContext};
 use crate::agent::null_provider::{NullProvider, NullReason};
 use crate::agent::provider_trait::LlmProvider;
-use crate::agent::types::{TokenUsage, ToolCall, ToolDefinition};
+use crate::agent::types::{ModelProvider, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use std::sync::Arc;
 
@@ -342,6 +342,40 @@ impl AgentRunner {
         if limiter.is_active() {
             let estimated_tokens = ((system_prompt.len() + user_message.len()) as f64 / 3.5) as u32;
             limiter.acquire(estimated_tokens).await;
+        }
+
+        // ### 🛡️ [Resource Guard] Backend Pre-flight
+        // Check system memory pressure before initiating local inference.
+        // If pressure is critical, we fail early to prevent OOM or long hangs.
+        let is_local = ctx.model_config.provider == ModelProvider::Ollama 
+            || ctx.model_config.base_url.as_ref().is_some_and(|u| u.contains("127.0.0.1") || u.contains("localhost"));
+        
+        if is_local {
+            let stats = self.state.security.system_monitor.get_system_defense_stats();
+            
+            // Inject pressure into config for dynamic timeout handling in provider
+            let mut config = ctx.model_config.clone();
+            let mut extras = config.extra_parameters.take().unwrap_or_default();
+            extras.insert("memory_pressure".to_string(), serde_json::json!(stats.memory_pressure));
+            config.extra_parameters = Some(extras);
+            
+            let mut new_ctx = ctx.clone();
+            new_ctx.model_config = config;
+
+            if stats.memory_pressure >= 0.98 {
+                tracing::error!("🚨 [ResourceGuard] CRITICAL memory pressure ({:.1}%). Blocking local inference for agent {}.", stats.memory_pressure * 100.0, ctx.agent_id);
+                return Err(AppError::InfrastructureError { 
+                    provider_id: "local_guard".to_string(), 
+                    detail: format!("RESOURCE_GUARD: System memory pressure is CRITICAL ({:.1}%). Local inference blocked to prevent crash.", stats.memory_pressure * 100.0), 
+                    help_link: None 
+                });
+            } else if stats.memory_pressure >= 0.92 {
+                tracing::warn!("⚠️ [ResourceGuard] High memory pressure ({:.1}%). Local inference may be slow.", stats.memory_pressure * 100.0);
+            }
+
+            let provider = self.resolve_provider(&new_ctx, client);
+            let result = provider.generate(system_prompt, user_message, tools).await;
+            return result.map_err(|e| e.into());
         }
 
         let provider = self.resolve_provider(ctx, client);

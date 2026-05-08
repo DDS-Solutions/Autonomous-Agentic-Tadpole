@@ -153,7 +153,16 @@ impl AgentRunner {
 
                 let (turn_text, mut function_calls, turn_usage) = match provider_res {
                     Ok(data) => data,
-                    Err(e) => return Err((e, usage)),
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        if err_str.contains("RESOURCE_GUARD") {
+                            tracing::warn!("🛡️ [Intelligence] Resource Guard active. Pausing intelligence loop for agent {}.", ctx.agent_id);
+                            self.broadcast_sys("🛡️ System Resources Critical: Local inference paused. Waiting for memory stabilization...", "warning", Some(ctx.mission_id.clone()));
+                            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                            continue; // Retry reasoning turn after wait
+                        }
+                        return Err((e, usage));
+                    }
                 };
                 self.accumulate_usage(&mut usage, turn_usage);
 

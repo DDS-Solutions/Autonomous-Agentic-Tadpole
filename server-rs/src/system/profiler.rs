@@ -41,7 +41,7 @@ impl HardwareProfiler {
         // To get accurate CPU usage, we just refresh CPU
         sys.refresh_cpu_usage();
         sys.refresh_memory();
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, false);
 
         let cpus = sys.cpus();
         let cpu_usage = if !cpus.is_empty() {

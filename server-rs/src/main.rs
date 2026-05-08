@@ -204,21 +204,14 @@ async fn async_main() -> anyhow::Result<()> {
     let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1".to_string());
     let addr: SocketAddr = format!("{}:{}", bind_addr, port).parse()?;
 
-    tracing::info!(
-        "🚀 Tadpole OS Engine v{} listening on {}",
-        env!("CARGO_PKG_VERSION"),
-        addr
-    );
-
-    // ### 📡 Networking: Endpoint Initialization (TCP Bind)
-    // Dispatches the engine to the specified loopback port. 
-    // Includes specific fault-handling for port-binding failures (e.g., 
-    // zombie sidecar instances using Port 8000).
     let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => l,
+        Ok(l) => {
+            tracing::info!("🚀 Tadpole OS Engine v{} listening on {}", env!("CARGO_PKG_VERSION"), addr);
+            l
+        },
         Err(e) => {
             let msg = if e.kind() == std::io::ErrorKind::AddrInUse {
-                format!("❌ FATAL ERROR: Port {} is already in use (os error 10048). Please ensure no other instances of 'server-rs' are running.", port)
+                format!("❌ FATAL ERROR: Port {} is already in use. Please run 'taskkill /F /IM server-rs.exe' and try again.", port)
             } else {
                 format!("❌ FATAL ERROR: Failed to bind to {}: {:?}", addr, e)
             };

@@ -12,31 +12,51 @@ describe('VramMonitor', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset service state manually for tests
-        (vram_monitor_service as any).current_status = { pressure: 0, is_throttled: false };
+        (vram_monitor_service as any).current_status = { pressure: 0, is_throttled: false, severity: 'normal' };
     });
 
-    it('should enter throttled state at 90% pressure', async () => {
+    it('should enter throttled state at 95% pressure', async () => {
         const emitSpy = vi.spyOn(event_bus, 'emit_log');
         
-        // Mock 91% pressure
+        // Mock 96% pressure
         const { system_api_service } = await import('./system_api_service');
         (system_api_service.get_security_quotas as any).mockResolvedValue({
-            system_defense: { memory_pressure: 0.91 }
+            system_defense: { memory_pressure: 0.96 }
         });
 
         await (vram_monitor_service as any).poll();
 
         const status = vram_monitor_service.get_status();
         expect(status.is_throttled).toBe(true);
+        expect(status.severity).toBe('critical');
+        expect(emitSpy).toHaveBeenCalledWith(expect.objectContaining({
+            severity: 'error',
+            text: expect.stringContaining('CRITICAL: High memory pressure')
+        }));
+    });
+
+    it('should emit warning at 86% pressure', async () => {
+        const emitSpy = vi.spyOn(event_bus, 'emit_log');
+        
+        const { system_api_service } = await import('./system_api_service');
+        (system_api_service.get_security_quotas as any).mockResolvedValue({
+            system_defense: { memory_pressure: 0.86 }
+        });
+
+        await (vram_monitor_service as any).poll();
+
+        const status = vram_monitor_service.get_status();
+        expect(status.is_throttled).toBe(false);
+        expect(status.severity).toBe('warning');
         expect(emitSpy).toHaveBeenCalledWith(expect.objectContaining({
             severity: 'warning',
-            text: expect.stringContaining('Entering Resource Guard mode')
+            text: expect.stringContaining('Warning: System memory pressure is rising')
         }));
     });
 
     it('should stay throttled at 85% pressure (hysteresis)', async () => {
         // 1. Enter throttle
-        (vram_monitor_service as any).current_status = { pressure: 0.91, is_throttled: true };
+        (vram_monitor_service as any).current_status = { pressure: 0.96, is_throttled: true, severity: 'critical' };
         
         const { system_api_service } = await import('./system_api_service');
         (system_api_service.get_security_quotas as any).mockResolvedValue({
@@ -53,7 +73,7 @@ describe('VramMonitor', () => {
         const emitSpy = vi.spyOn(event_bus, 'emit_log');
         
         // Start throttled
-        (vram_monitor_service as any).current_status = { pressure: 0.85, is_throttled: true };
+        (vram_monitor_service as any).current_status = { pressure: 0.86, is_throttled: true, severity: 'warning' };
         
         const { system_api_service } = await import('./system_api_service');
         (system_api_service.get_security_quotas as any).mockResolvedValue({

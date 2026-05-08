@@ -172,9 +172,11 @@ ASSISTANT:`;
         try {
             // Check for Resource Guard (VRAM Pressure)
             const memory_status = vram_monitor_service.get_status();
-            if (memory_status.is_throttled) {
-                console.warn('🧠 [BrowserSpecialist] INFERENCE BLOCKED: Resource Guard active due to high VRAM pressure.');
+            if (memory_status.severity === 'critical') {
+                console.warn('🧠 [BrowserSpecialist] INFERENCE BLOCKED: Resource Guard active due to CRITICAL VRAM pressure.');
                 return "RESOURCE_GUARD: System memory pressure is too high for local inference. Please close other applications or wait for stabilization.";
+            } else if (memory_status.severity === 'warning') {
+                console.warn('🧠 [BrowserSpecialist] INFERENCE WARNING: High VRAM pressure detected. Performance may be degraded.');
             }
 
             // Non-null assertion: init_specialist() above guarantees pipe is set, or it throws.

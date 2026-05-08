@@ -371,11 +371,13 @@ pub async fn get_security_quotas(
     let mut total_budget = 0.0;
     let mut total_spent = 0.0;
 
+    tracing::debug!("📊 [Oversight] Calculating global budget from {} agents", state.registry.agents.len());
     for entry in state.registry.agents.iter() {
         total_budget += entry.value().economics.budget_usd;
         total_spent += entry.value().economics.cost_usd;
     }
 
+    tracing::debug!("📊 [Oversight] Fetching quotas from budget_guard...");
     let agent_quotas: Vec<crate::security::metering::Quota> = state
         .security
         .budget_guard
@@ -383,12 +385,17 @@ pub async fn get_security_quotas(
         .await
         .unwrap_or_default();
 
+    tracing::debug!("📊 [Oversight] Gathering system defense stats...");
     let system_defense = state.security.system_monitor.get_system_defense_stats();
+    
+    tracing::debug!("📊 [Oversight] Verifying audit trail integrity...");
     let merkle_integrity = match state.security.audit_trail.verify_last_n(10, None).await {
          Ok((v, t)) if v == t && t > 0 => 1.0,
          Ok((v, t)) if t > 0 => v as f64 / t as f64,
          _ => 1.0, 
     };
+
+    tracing::debug!("📊 [Oversight] Budget: ${} / ${} (Remaining: ${})", total_spent, total_budget, total_budget - total_spent);
 
     Ok(Json(serde_json::json!({
         "total_budget": total_budget,
