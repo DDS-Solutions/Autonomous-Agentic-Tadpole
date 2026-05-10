@@ -41,11 +41,18 @@ vi.mock('../components/Telemetry_Graph', () => ({
     Telemetry_Graph: () => <div data-testid="telemetry-graph" />
 }));
 
+vi.mock('../components/dashboard/Hardware_Load', () => ({
+    Hardware_Load: () => <div data-testid="hardware-load" />
+}));
+
 describe('Engine_Dashboard Page', () => {
+    const gib = 1024 * 1024 * 1024;
+
     const mock_online_status = {
         is_online: true,
         cpu: 45.5,
-        memory: 8.2,
+        memory: 8.2 * gib,
+        memory_total: 16 * gib,
         latency: 42,
         connection_state: 'Connected',
         active_agents: 12,
@@ -58,6 +65,7 @@ describe('Engine_Dashboard Page', () => {
         is_online: false,
         cpu: 0,
         memory: 0,
+        memory_total: 16 * gib,
         latency: 0,
         connection_state: 'Disconnected',
         active_agents: 0,

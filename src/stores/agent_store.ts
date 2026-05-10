@@ -123,32 +123,19 @@ export const use_agent_store = create<Agent_State>()(
     fetch_agents: async (options: RequestInit = {}): Promise<void> => {
         const now = Date.now();
         // Rate limit: Max one fetch every 3 seconds to prevent loops
-        if (get().is_loading || (now - get().last_fetch_time < 3000)) return;
+        if (get().is_loading || ((get().agents || []).length > 0 && now - get().last_fetch_time < 3000)) return;
         
         set({ is_loading: true, error: null, last_fetch_time: now });
         try {
             const live_agents = (await load_agents(options)) || [];
             
-            // Handle Mock Fallback: Ensures 'Alpha' agent is always present 
-            // for development parity if the server is in a clean-state.
-            const has_alpha = (live_agents || []).some(a => a.id === '1');
-            const has_qa = (live_agents || []).some(a => a.id === '99');
             let final_agents: Agent[];
 
-            if ((!has_alpha || !has_qa) && mock_agents.length > 0) {
-                // Phase 4: Hydrate the full mock swarm if backend is missing critical agents.
-                // WE PREFER LOCAL: If the user has a local version of a mock agent, keep it.
+            if (live_agents.length === 0 && mock_agents.length > 0) {
+                // Hydrate mocks only for an empty/offline registry. A partial live
+                // backend response should remain authoritative instead of being
+                // silently padded with demo agents.
                 const hydrated_mock_swarm = (mock_agents as unknown as Raw_Agent[]).map(raw => {
-                    const existing_in_live = (live_agents || []).find(a => a.id === raw.id);
-                    if (existing_in_live) {
-                        // RECONCILIATION: Prefer local model/config if backend is sending defaults
-                        const local = get().agents.find(a => a.id === raw.id);
-                        if (local && (local._local_timestamp || 0) > (existing_in_live._local_timestamp || 0)) {
-                            return { ...existing_in_live, ...local };
-                        }
-                        return existing_in_live;
-                    }
-                    
                     const existing_in_state = get().agents.find(a => a.id === raw.id);
                     return existing_in_state || normalize_agent(raw);
                 });
@@ -175,19 +162,18 @@ export const use_agent_store = create<Agent_State>()(
                 set({ is_loading: false, last_fetch_time: 0 }); 
                 return;
             }
-            log_error('AgentStore', 'Agent Registry Failure (Hydrating from Mocks)', err);
+            log_error('AgentStore', 'Agent Registry Failure', err);
             
             // EMERGENCY HYDRATION: Ensure the swarm is visible even if the backend is dead
             const hydrated_mock_swarm = (mock_agents as unknown as Raw_Agent[]).map(raw => {
                 const existing = get().agents.find(a => a.id === raw.id);
                 return existing || normalize_agent(raw);
             });
-            set({ agents: hydrated_mock_swarm, is_loading: false });
-
-            // Only set the user-facing error if we are past the boot cooldown (5s)
-            if (Date.now() - get().boot_time > 5000) {
-                set({ error: 'Backend registry offline. Operating in local-only mode.' });
-            }
+            set({
+                agents: hydrated_mock_swarm,
+                is_loading: false,
+                error: 'Failed to load agent registry. Check system logs for details.',
+            });
         }
     },
 

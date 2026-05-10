@@ -57,6 +57,35 @@ export default function Dashboard_Layout() {
     const toggle_lineage_stream_detachment = use_tab_store(s => s.toggle_lineage_stream_detachment);
 
     const [is_command_palette_open, set_is_command_palette_open] = useState(false);
+    const tab_snapshot = (
+        tabs &&
+        typeof tabs === 'object' &&
+        !Array.isArray(tabs) &&
+        'tabs' in tabs
+    )
+        ? tabs as unknown as {
+            tabs?: unknown;
+            active_tab_id?: unknown;
+            is_system_log_detached?: unknown;
+            is_trace_stream_detached?: unknown;
+            is_lineage_stream_detached?: unknown;
+        }
+        : null;
+    const safe_tabs = Array.isArray(tabs)
+        ? tabs
+        : (Array.isArray(tab_snapshot?.tabs) ? tab_snapshot.tabs : []);
+    const safe_active_tab_id = typeof active_tab_id === 'string'
+        ? active_tab_id
+        : (typeof tab_snapshot?.active_tab_id === 'string' ? tab_snapshot.active_tab_id : null);
+    const safe_is_system_log_detached = typeof is_system_log_detached === 'boolean'
+        ? is_system_log_detached
+        : tab_snapshot?.is_system_log_detached === true;
+    const safe_is_trace_stream_detached = typeof is_trace_stream_detached === 'boolean'
+        ? is_trace_stream_detached
+        : tab_snapshot?.is_trace_stream_detached === true;
+    const safe_is_lineage_stream_detached = typeof is_lineage_stream_detached === 'boolean'
+        ? is_lineage_stream_detached
+        : tab_snapshot?.is_lineage_stream_detached === true;
 
     // Synchronize tab store with URL on first load and browser navigation
     useEffect(() => {
@@ -65,7 +94,7 @@ export default function Dashboard_Layout() {
             return;
         }
 
-        const active_tab = (tabs || []).find(t => t.id === active_tab_id);
+        const active_tab = safe_tabs.find(t => t.id === safe_active_tab_id);
         if (active_tab && active_tab.path !== location.pathname) {
             // Only navigate if the change came from the UI (click) or a remote SYNC (other tab).
             // If the source is 'url', it means the URL already matches (or is the driver), so we skip to avoid loops.
@@ -79,7 +108,7 @@ export default function Dashboard_Layout() {
                 }
             }
         }
-    }, [active_tab_id, location.pathname, navigate, tabs, active_tab_sync_source]);
+    }, [safe_active_tab_id, location.pathname, navigate, safe_tabs, active_tab_sync_source]);
 
     // Synchronize Tab Store with URL (URL -> Tab)
     useEffect(() => {
@@ -92,8 +121,11 @@ export default function Dashboard_Layout() {
         const route = APP_ROUTES.find(r => r.path === normalized_path);
         
         if (route) {
+            if (typeof use_tab_store.getState !== 'function') {
+                return;
+            }
             const { tabs: current_tabs, active_tab_id: current_active_id, open_tab } = use_tab_store.getState();
-            const active_tab = (current_tabs || []).find(t => t.id === current_active_id);
+            const active_tab = (Array.isArray(current_tabs) ? current_tabs : []).find(t => t.id === current_active_id);
             
             // Only open/switch tab if the URL doesn't match the current active tab
             if (!active_tab || active_tab.path !== normalized_path) {
@@ -205,7 +237,6 @@ export default function Dashboard_Layout() {
             {i18n.t('common.loading')}
         </div>
     );
-
     return (
         <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-700/30">
             <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-green-600 text-white px-4 py-2 rounded shadow-lg">
@@ -220,11 +251,11 @@ export default function Dashboard_Layout() {
 
                 <div className="flex-1 flex overflow-hidden">
                     <div className="flex-1 relative">
-                        {(tabs || []).map((tab) => {
+                        {safe_tabs.map((tab) => {
                             const route = get_route_by_path(tab.path);
                             const Component = route.component;
                             const is_detached = tab.is_detached;
-                            const is_active = tab.id === active_tab_id;
+                            const is_active = tab.id === safe_active_tab_id;
                             if (!is_active && !is_detached) {
                                 return null;
                             }
@@ -306,7 +337,7 @@ export default function Dashboard_Layout() {
                         />
                     </Suspense>
 
-                    {is_system_log_detached && (
+                    {safe_is_system_log_detached && (
                         <Portal_Window
                             id="system-log-detached"
                             title={i18n.t('dashboard.log_title')}
@@ -317,7 +348,7 @@ export default function Dashboard_Layout() {
                         </Portal_Window>
                     )}
 
-                    {is_trace_stream_detached && (
+                    {safe_is_trace_stream_detached && (
                         <Portal_Window
                             id="trace-stream-detached"
                             title={i18n.t('trace_stream.title')}
@@ -328,7 +359,7 @@ export default function Dashboard_Layout() {
                         </Portal_Window>
                     )}
 
-                    {is_lineage_stream_detached && (
+                    {safe_is_lineage_stream_detached && (
                         <Portal_Window
                             id="lineage-stream-detached"
                             title={i18n.t('trace.stream_title')}

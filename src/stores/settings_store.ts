@@ -69,6 +69,14 @@ const sanitize_api_key = (value: string): string => {
     return LEGACY_DEV_TOKENS.has(trimmed) ? '' : trimmed;
 };
 
+const sanitize_settings = (settings: Tadpole_Settings): Tadpole_Settings => ({
+    ...settings,
+    tadpole_os_url: settings.tadpole_os_url?.toLowerCase().includes('tauri')
+        ? get_base_url()
+        : settings.tadpole_os_url,
+    tadpole_os_api_key: sanitize_api_key(settings.tadpole_os_api_key || ''),
+});
+
 
 
 /** is_valid_url - Validates a URL string for HTTP/HTTPS protocols. */
@@ -96,7 +104,7 @@ export const use_settings_store = create<Settings_State>()(
         (set, get) => ({
             settings: {
                 tadpole_os_url: get_base_url(),
-                tadpole_os_api_key: 'Tadpole-OS-2026', // Set default for local dev stabilization
+                tadpole_os_api_key: '',
                 theme: 'zinc',
                 density: 'compact',
                 default_model: 'GPT-4o',
@@ -123,9 +131,6 @@ export const use_settings_store = create<Settings_State>()(
 
                 if (!is_valid_url(new_settings.tadpole_os_url)) {
                     return 'Invalid URL. Must start with http:// or https://';
-                }
-                if (!is_valid_api_key(new_settings.tadpole_os_api_key)) {
-                    return 'API token is required. Generate a NEURAL_TOKEN and paste it here.';
                 }
                 set({
                     settings: {
@@ -162,6 +167,7 @@ export const use_settings_store = create<Settings_State>()(
                         return;
                     }
                     if (hydrated_state) {
+                        hydrated_state.settings = sanitize_settings(hydrated_state.settings);
                         const url = hydrated_state.settings.tadpole_os_url;
                         if (url && url.toLowerCase().includes('tauri')) {
                             console.warn('[SettingsStore] Legacy internal URL detected in persistent storage. Resetting to standard loopback.');
@@ -178,8 +184,8 @@ export const use_settings_store = create<Settings_State>()(
             migrate: (persisted_state: unknown, version: number) => {
                 if (version === 0) {
                     const state = persisted_state as Settings_State;
-                    if (state && state.settings && state.settings.tadpole_os_url && state.settings.tadpole_os_url.toLowerCase().includes('tauri')) {
-                        state.settings.tadpole_os_url = 'http://127.0.0.1:8000';
+                    if (state && state.settings) {
+                        state.settings = sanitize_settings(state.settings);
                     }
                 }
                 return persisted_state as Settings_State;

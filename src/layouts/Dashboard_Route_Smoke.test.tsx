@@ -76,6 +76,7 @@ vi.mock('../pages/Docs', () => ({ default: () => <div data-testid="route-docs" /
 vi.mock('../pages/Settings', () => ({ default: () => <div data-testid="route-settings" /> }));
 vi.mock('../pages/Template_Store', () => ({ default: () => <div data-testid="route-store" /> }));
 vi.mock('../pages/Security_Dashboard', () => ({ default: () => <div data-testid="route-security" /> }));
+vi.mock('../pages/Governance_View', () => ({ default: () => <div data-testid="route-governance" /> }));
 
 describe('Dashboard route smoke', () => {
     beforeEach(() => {

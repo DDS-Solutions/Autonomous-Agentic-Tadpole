@@ -27,6 +27,7 @@
 
 import { env, pipeline, TextGenerationPipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
 import { sanitize_ui_context, extract_neural_output } from '../utils/ai_utils';
+import { get_settings } from '../stores/settings_store';
 
 // Configure transformers.js BEFORE anything else
 env.allowLocalModels = false;
@@ -57,18 +58,39 @@ class BrowserInferenceService {
     private embed_model_id: string = 'onnx-community/all-MiniLM-L6-v2-ONNX';
     private skill_embedding_cache: Map<string, number[]> = new Map();
 
+    private sync_model_settings(): void {
+        const configured_model = get_settings().browser_specialist_model_id?.trim();
+        const next_model_id = configured_model || 'onnx-community/gpt2-ONNX';
+
+        if (next_model_id === this.model_id) return;
+
+        this.model_id = next_model_id;
+        this.pipe = null;
+        this.init_promise = null;
+    }
+
     /**
      * Initializes the local AI model.
      * Attempts WebGPU first, automatically falls back to WASM/CPU if unavailable.
      * Safe to call multiple times — subsequent calls await the in-flight promise.
      */
     async init_specialist(): Promise<void> {
+        this.sync_model_settings();
         if (this.pipe && this.embedding_pipe) return;
         if (this.init_promise) return this.init_promise;
         this.status = 'loading';
         console.debug('🧠 [BrowserSpecialist] Initializing local AI specialist...');
 
         this.init_promise = (async () => {
+            // RESOURCE GUARD: Check memory pressure before attempting heavy model initialization.
+            const memory_status = vram_monitor_service.get_status();
+            if (memory_status.severity === 'critical') {
+                console.warn('🧠 [BrowserSpecialist] ABORTING INITIALIZATION: Resource Guard active due to CRITICAL memory pressure.');
+                this.status = 'error';
+                this.init_promise = null;
+                throw new Error("Resource Guard: Memory pressure too high for local model initialization.");
+            }
+
             // Device priority chain: webgpu → wasm → cpu
             const device_chain: Array<'webgpu' | 'wasm'> = ['webgpu', 'wasm'];
             let last_err: unknown;

@@ -49,7 +49,7 @@ describe('use_sovereign_store', () => {
     });
 
     afterEach(() => {
-        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
     });
 
     it('has the correct default state', () => {

@@ -13,6 +13,30 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+const createStorageMock = (): Storage => {
+  let store: Record<string, string> = {};
+
+  return {
+    get length() {
+      return Object.keys(store).length;
+    },
+    clear: vi.fn(() => {
+      store = {};
+    }),
+    getItem: vi.fn((key: string) => store[key] ?? null),
+    key: vi.fn((index: number) => Object.keys(store)[index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = String(value);
+    }),
+  };
+};
+
+vi.stubGlobal('localStorage', createStorageMock());
+vi.stubGlobal('sessionStorage', createStorageMock());
+
 // Mock BroadcastChannel for inter-tab comms testing
 class MockBroadcastChannel {
   name: string;
@@ -36,9 +60,18 @@ class MockBroadcastChannel {
 
 vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
 
+let uuidCounter = 0;
+
 // Mock crypto for UUID generation
 vi.stubGlobal('crypto', {
-  randomUUID: () => 'mock-uuid-' + Math.random().toString(36).substring(2, 9),
+  randomUUID: () => {
+    uuidCounter += 1;
+    return `00000000-0000-4000-8000-${uuidCounter.toString().padStart(12, '0')}`;
+  },
+  getRandomValues: (array: Uint8Array) => {
+    array.fill(1);
+    return array;
+  },
   subtle: {
     digest: () => Promise.resolve(new Uint8Array(32)),
   }

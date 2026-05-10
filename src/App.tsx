@@ -129,6 +129,12 @@ export default function App(): React.ReactElement {
           browser_inference_service.pre_warm();
           console.debug('[AppKernel] Browser specialist pre-warm initiated.');
         }
+
+        // --- Phase 5: Agent Registry Hydration ---
+        // Finalize the boot sequence by fetching the latest agent configurations.
+        const { use_agent_store } = await import('./stores/agent_store');
+        void use_agent_store.getState().fetch_agents();
+        console.debug('[AppKernel] Agent registry hydration initiated.');
       } catch (err) {
         console.error('[AppKernel] Critical Initialization Failure:', err);
       }

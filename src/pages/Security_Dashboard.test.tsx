@@ -31,14 +31,22 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Security_Dashboard from './Security_Dashboard';
 import { tadpole_os_service } from '../services/tadpoleos_service';
+import { governance_service } from '../services/governance_service';
 
 // Mock tadpole_os_service
 vi.mock('../services/tadpoleos_service', () => ({
     tadpole_os_service: {
-        get_security_quotas: vi.fn(),
         get_audit_trail: vi.fn(),
         get_agent_health: vi.fn(),
-        update_security_quota: vi.fn(),
+    }
+}));
+
+vi.mock('../services/governance_service', () => ({
+    governance_service: {
+        get_current_quotas: vi.fn(() => null),
+        sync: vi.fn(),
+        update_quota: vi.fn(),
+        on_pulse: vi.fn(() => vi.fn()),
     }
 }));
 
@@ -81,13 +89,15 @@ describe('Security_Dashboard Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.stubGlobal('setInterval', vi.fn());
-        (tadpole_os_service.get_security_quotas as any).mockResolvedValue(mock_quotas);
+        (governance_service.get_current_quotas as any).mockReturnValue(null);
+        (governance_service.sync as any).mockResolvedValue(mock_quotas);
+        (governance_service.on_pulse as any).mockReturnValue(vi.fn());
         (tadpole_os_service.get_audit_trail as any).mockResolvedValue(mock_audit_trail);
         (tadpole_os_service.get_agent_health as any).mockResolvedValue(mock_agent_health);
     });
 
     it('renders loading state initially', () => {
-        (tadpole_os_service.get_security_quotas as any).mockReturnValue(new Promise(() => {}));
+        (governance_service.sync as any).mockReturnValue(new Promise(() => {}));
         render(<Security_Dashboard />);
         expect(screen.getByText('security.loading')).toBeInTheDocument();
     });
@@ -123,7 +133,7 @@ describe('Security_Dashboard Page', () => {
 
     it('handles fetch errors gracefully', async () => {
         const console_error_spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        (tadpole_os_service.get_security_quotas as any).mockRejectedValue(new Error('API Down'));
+        (governance_service.sync as any).mockRejectedValue(new Error('API Down'));
         
         render(<Security_Dashboard />);
 

@@ -38,26 +38,39 @@ export type { AgentDto as Raw_Agent } from '../contracts/agent';
 /**
  * load_agents
  * Loads agents from the Rust engine if available, falling back to mock data only if offline.
+ * Implements a retry loop to handle transient signal abortions during heavy startup lag.
  */
 export const load_agents = async (options: RequestInit = {}): Promise<Agent[]> => {
     let raw_agents: AgentDto[] = [];
     let is_backend_online = false;
-    try {
-        const is_connected = await system_api_service.check_health();
+    const MAX_RETRIES = 3;
+    let attempt = 0;
 
-        if (is_connected) {
-            is_backend_online = true;
-            const live_agents = await agent_api_service.get_agents(options);
-            if (live_agents.length > 0) {
-                raw_agents = [...live_agents];
+    while (attempt < MAX_RETRIES) {
+        try {
+            const is_connected = await system_api_service.check_health();
+
+            if (is_connected) {
+                is_backend_online = true;
+                const live_agents = await agent_api_service.get_agents(options);
+                if (live_agents.length > 0) {
+                    raw_agents = [...live_agents];
+                    break; // Success!
+                }
             }
+        } catch (err) {
+            console.warn(`⚠️ [AgentService] Load attempt ${attempt + 1} failed:`, err);
         }
-    } catch {
-        // Offline mode fallback handled below
+
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+            // Exponential-ish backoff to wait for engine/browser stabilization
+            await new Promise(r => setTimeout(r, 1000 * attempt));
+        }
     }
 
     if (!is_backend_online || raw_agents.length === 0) {
-        console.warn('⚠️ [AgentService] No live agents detected. Falling back to mock registry.');
+        console.warn('⚠️ [AgentService] No live agents detected after retries. Falling back to mock registry.');
         // Cast mock agents to DTO format for normalization
         raw_agents = mock_agents as unknown as AgentDto[];
     }

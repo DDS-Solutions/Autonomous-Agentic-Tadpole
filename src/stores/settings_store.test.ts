@@ -102,19 +102,20 @@ describe('settings_store', () => {
 
 
     it('validates settings before saving', async () => {
-        const { save_settings, use_settings_store } = await import('./settings_store');
+        const { get_settings, save_settings, use_settings_store } = await import('./settings_store');
         await use_settings_store.persist.rehydrate();
 
         // Test invalid URL
         const err_url = save_settings({ tadpole_os_url: 'invalid-url' } as any);
         expect(err_url).toBe('Invalid URL. Must start with http:// or https://');
 
-        // Test missing API key
+        // Empty API tokens are allowed so local-only preferences can be saved.
         const err_key = save_settings({
             tadpole_os_url: 'http://valid',
             tadpole_os_api_key: '   ',
         } as any);
-        expect(err_key).toBe('API token is required. Generate a NEURAL_TOKEN and paste it here.');
+        expect(err_key).toBeNull();
+        expect(get_settings().tadpole_os_api_key).toBe('');
 
         // Test successful save
         const valid_settings = {

@@ -74,27 +74,38 @@ export default function Settings(): React.ReactElement {
             return;
         }
 
-        // Synchronize governance settings with the backend
-        try {
-            await system_api_service.update_governance_settings({
-                auto_approve_safe_skills: settings_state.auto_approve_safe_skills,
-                privacy_mode: settings_state.privacy_mode,
-                max_agents: settings_state.max_agents,
-                max_clusters: settings_state.max_clusters,
-                max_swarm_depth: settings_state.max_swarm_depth,
-                max_task_length: settings_state.max_task_length,
-                default_budget_usd: settings_state.default_budget_usd,
-                default_model: settings_state.default_model
-            });
-        } catch (e) {
-            console.error("Failed to sync governance settings with engine", e);
-            set_validation_error(i18n.t('settings.error_sync_failed', { defaultValue: 'System synchronization failed. Local changes saved.' }));
-            return;
+        const has_api_token = settings_state.tadpole_os_api_key.trim().length > 0;
+
+        if (has_api_token) {
+            // Synchronize governance settings with the backend when credentials exist.
+            try {
+                await system_api_service.update_governance_settings({
+                    auto_approve_safe_skills: settings_state.auto_approve_safe_skills,
+                    privacy_mode: settings_state.privacy_mode,
+                    max_agents: settings_state.max_agents,
+                    max_clusters: settings_state.max_clusters,
+                    max_swarm_depth: settings_state.max_swarm_depth,
+                    max_task_length: settings_state.max_task_length,
+                    default_budget_usd: settings_state.default_budget_usd,
+                    default_model: settings_state.default_model
+                });
+            } catch (e) {
+                console.error("Failed to sync governance settings with engine", e);
+                set_validation_error(i18n.t('settings.error_sync_failed', { defaultValue: 'System synchronization failed. Local changes saved.' }));
+                return;
+            }
+        } else {
+            console.info('[Settings_View] Saved local settings without engine sync because NEURAL_TOKEN is not configured.');
         }
 
         // Apply appearance engine preferences immediately
         document.documentElement.setAttribute('data-theme', settings_state.theme);
         document.documentElement.setAttribute('data-density', settings_state.density);
+
+        if (settings_state.sentinel_mode) {
+            const { browser_inference_service } = await import('../services/browser_inference');
+            browser_inference_service.pre_warm();
+        }
 
         set_is_saved(true);
         set_validation_error(null);

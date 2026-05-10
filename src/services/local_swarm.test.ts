@@ -46,7 +46,7 @@ describe('system_api_service - Local Swarm', () => {
 
         const result = await system_api_service.get_model_catalog();
         
-        expect(api_request).toHaveBeenCalledWith('/v1/infra/model-store/catalog', { method: 'GET' });
+        expect(api_request).toHaveBeenCalledWith('/v1/model-manager/model-store/catalog', { method: 'GET' });
         expect(result).toEqual(mock_catalog);
     });
 
@@ -56,7 +56,7 @@ describe('system_api_service - Local Swarm', () => {
 
         const result = await system_api_service.pull_model('llama3', 'node-1');
         
-        expect(api_request).toHaveBeenCalledWith('/v1/infra/model-store/pull', {
+        expect(api_request).toHaveBeenCalledWith('/v1/model-manager/model-store/pull', {
             method: 'POST',
             body: JSON.stringify({ tag: 'llama3', node_id: 'node-1' })
         });

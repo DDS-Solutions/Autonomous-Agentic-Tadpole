@@ -219,7 +219,7 @@ describe('Ops_Dashboard', () => {
         const node_1 = screen.getByTestId('node-1');
         fireEvent.click(within(node_1).getByText('Slot 1'));
         expect(tadpole_os_service.send_command).toHaveBeenCalledWith(
-            '1', 'test_skill', 'GPT-5.2', 'openai', 'cluster-1', 'Executive', 1000
+            '1', 'test_skill', 'Gemma 4 (Local)', 'ollama', 'cluster-1', 'Executive', 1000
         );
 
         // Slot 2

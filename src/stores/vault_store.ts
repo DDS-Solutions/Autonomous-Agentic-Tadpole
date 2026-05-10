@@ -110,11 +110,9 @@ export const use_vault_store = create<Vault_State>()(
                 }, 100);
             }
 
-            const saved_key = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_KEY) : null;
-
             return {
-                is_locked: !saved_key,
-                master_key: saved_key,
+                is_locked: true,
+                master_key: null,
                 encrypted_configs: {},
                 inactivity_timeout: DEFAULT_TIMEOUT,
 
@@ -142,7 +140,6 @@ export const use_vault_store = create<Vault_State>()(
                         }
                     }
 
-                    sessionStorage.setItem(SESSION_KEY, password);
                     set({ is_locked: false, master_key: password });
                     
                     if (!is_sync) {
