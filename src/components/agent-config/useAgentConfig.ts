@@ -53,15 +53,8 @@ export function useAgentConfig(
     useEffect(() => {
         if (models.length > 0) {
             const slots: Agent_Model_Slot_Key[] = ['primary', 'secondary', 'tertiary'];
-            slots.forEach(slotKey => {
-                const slot = state.slots[slotKey];
-                if (!slot.model) {
-                    const provider_models = models.filter(m => m.provider === slot.provider);
-                    if (provider_models.length > 0) {
-                        dispatch({ type: 'UPDATE_SLOT', slot: slotKey, field: 'model', value: provider_models[0].name });
-                    }
-                }
-            });
+            // [DEBT] Removed aggressive auto-fill logic that was overriding user selections.
+            // Slots should remain empty if not explicitly configured to avoid unintended model reverts.
         }
     }, [models, state.slots]);
 

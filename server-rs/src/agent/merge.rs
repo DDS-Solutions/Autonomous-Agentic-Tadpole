@@ -115,6 +115,9 @@ impl AgentConfigUpdate {
             agent.models.model = mc.clone();
             if !mc.model_id.is_empty() {
                 agent.models.model_id = Some(mc.model_id.clone());
+            } else if let Some(m_id) = &agent.models.model_id {
+                // Restore ID if missing from nested config but present in parent
+                agent.models.model.model_id = m_id.clone();
             }
             changed = true;
         } else {
@@ -176,22 +179,38 @@ impl AgentConfigUpdate {
         }
         if let Some(m2) = &self.model_2 {
             agent.models.model_2 = Some(m2.clone());
+            if let Some(mc2) = agent.models.model_config2.as_mut() {
+                mc2.model_id = m2.clone();
+            }
             changed = true;
         }
-        if let Some(m3) = &self.model_3 {
-            agent.models.model_3 = Some(m3.clone());
-            changed = true;
-        }
-        if let Some(active_slot) = self.active_model_slot {
-            agent.models.active_model_slot = Some(active_slot);
-            changed = true;
-        }
+
         if let Some(mc2) = &self.model_config2 {
             agent.models.model_config2 = Some(mc2.clone());
+            if !mc2.model_id.is_empty() {
+                agent.models.model_2 = Some(mc2.model_id.clone());
+            }
             changed = true;
         }
+
+        if let Some(m3) = &self.model_3 {
+            agent.models.model_3 = Some(m3.clone());
+            if let Some(mc3) = agent.models.model_config3.as_mut() {
+                mc3.model_id = m3.clone();
+            }
+            changed = true;
+        }
+
         if let Some(mc3) = &self.model_config3 {
             agent.models.model_config3 = Some(mc3.clone());
+            if !mc3.model_id.is_empty() {
+                agent.models.model_3 = Some(mc3.model_id.clone());
+            }
+            changed = true;
+        }
+
+        if let Some(active_slot) = self.active_model_slot {
+            agent.models.active_model_slot = Some(active_slot);
             changed = true;
         }
         if let Some(connector_configs) = &self.connector_configs {

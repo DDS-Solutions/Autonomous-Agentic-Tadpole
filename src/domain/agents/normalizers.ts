@@ -141,7 +141,7 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
     const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
     const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
     const raw_model_final = model_name_wire || model_id_wire || default_model;
-    const model = resolve_friendly_model_name(raw_model_final);
+    const model = resolve_friendly_model_name(raw_model_final) || default_model;
 
     return {
         id: dto.id || existing_agent?.id || 'unknown',
@@ -162,8 +162,8 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         budget_usd: get_val('budgetUsd', 'budget_usd', 0),
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
-        model_2: resolve_friendly_model_name(get_val('model2', 'model_2', undefined)),
-        model_3: resolve_friendly_model_name(get_val('model3', 'model_3', undefined)),
+        model_2: resolve_friendly_model_name(get_val('model2', 'model_2', undefined) || (get_val('modelConfig2', 'model_config2', undefined) as any)?.modelId),
+        model_3: resolve_friendly_model_name(get_val('model3', 'model_3', undefined) || (get_val('modelConfig3', 'model_config3', undefined) as any)?.modelId),
         model_config2: get_val('modelConfig2', 'model_config2', undefined),
         model_config3: get_val('modelConfig3', 'model_config3', undefined),
         active_model_slot: (get_val('activeModelSlot', 'active_model_slot', 1) as 1 | 2 | 3),

@@ -667,6 +667,7 @@ struct AgentModelsResponse<'a> {
     model_config: &'a ModelConfig,
     model_2: &'a Option<String>,
     model_config2: &'a Option<ModelConfig>,
+    model_3: &'a Option<String>,
     model_config3: &'a Option<ModelConfig>,
     active_model_slot: &'a Option<i32>,
 }
@@ -700,6 +701,7 @@ impl Serialize for EngineAgent {
                 model_config: &self.models.model,
                 model_2: &self.models.model_2,
                 model_config2: &self.models.model_config2,
+                model_3: &self.models.model_3,
                 model_config3: &self.models.model_config3,
                 active_model_slot: &self.models.active_model_slot,
             },

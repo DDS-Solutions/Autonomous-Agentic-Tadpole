@@ -157,8 +157,15 @@ impl AgentRunner {
             );
             let _enter = span.enter();
 
+            // Wrap tool execution in a hard timeout to prevent "Silent Hangs" (INFRA-05)
             let result = if let Some(handler) = self.state.registry.tool_registry.get(&fc.name) {
-                handler.execute(&tool_ctx, fc.args.clone(), usage).await
+                match tokio::time::timeout(std::time::Duration::from_secs(60), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
+                    Ok(res) => res,
+                    Err(_) => {
+                        tracing::error!("🚨 [Runner] Tool '{}' execution TIMED OUT after 60s", fc.name);
+                        Err(ToolExecutionError::ExecutionFailed(format!("Tool '{}' execution timed out after 60 seconds", fc.name)))
+                    }
+                }
             } else {
                 Err(ToolExecutionError::ExecutionFailed(format!("Unknown tool '{}'", fc.name)))
             };

@@ -10,29 +10,33 @@
  * - **Telemetry Link**: Search `[Serializer]` in UI traces.
  */
 
-console.debug("[Serializer] Domain logic loaded");
-
 import type { AgentPatch, AgentUpdateDto } from '../../contracts/agent';
+import { resolve_technical_model_id } from '../../utils/model_utils';
 
 /**
  * serialize_agent_update
  * Maps frontend Domain updates back to the backend AgentUpdateDto shape.
  * Implements the "One Merge Policy" for metadata vs first-class fields.
  */
-export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
+export const serialize_agent_update = (patch: any): AgentUpdateDto => {
     const dto: AgentUpdateDto = {};
+
+    // Telemetry for debugging model drift
+    if (patch.model || patch.model_config) {
+        console.debug(`[Serializer] Serializing model update: model=${patch.model}, config_id=${patch.model_config?.modelId}`);
+    }
 
     if (patch.role !== undefined) dto.role = patch.role;
     if (patch.name !== undefined) dto.name = patch.name;
     if (patch.department !== undefined) dto.department = patch.department;
     
-    // Model resolution logic (Migrated from legacy mappers)
+    // Model resolution logic: ALWAYS ensure we send the technical ID
     if (patch.model !== undefined) {
-        dto.modelId = patch.model;
+        dto.modelId = resolve_technical_model_id(patch.model);
         if (patch.model_config?.provider) {
             dto.provider = patch.model_config.provider;
         } else {
-            const m = patch.model.toLowerCase();
+            const m = dto.modelId.toLowerCase();
             if (m.includes('gpt')) dto.provider = 'openai';
             else if (m.includes('claude')) dto.provider = 'anthropic';
             else if (m.includes('gemini')) dto.provider = 'google';
@@ -41,23 +45,31 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
     }
 
     if (patch.model_config !== undefined) {
-        dto.modelId = patch.model_config.modelId;
+        dto.modelId = patch.model_config.modelId || dto.modelId;
         dto.provider = patch.model_config.provider;
         dto.modelConfig = patch.model_config;
     }
 
     if (patch.theme_color !== undefined) dto.themeColor = patch.theme_color;
     if (patch.active_model_slot !== undefined) dto.activeModelSlot = patch.active_model_slot;
-    if (patch.model_2 !== undefined) dto.model2 = patch.model_2;
-    if (patch.model_3 !== undefined) dto.model3 = patch.model_3;
+    
+    // Slot 2 & 3 parity
+    if (patch.model_2 !== undefined) {
+        dto.model2 = resolve_technical_model_id(patch.model_2);
+    }
+    if (patch.model_3 !== undefined) {
+        dto.model3 = resolve_technical_model_id(patch.model_3);
+    }
+    
     if (patch.model_config2 !== undefined) {
         dto.modelConfig2 = patch.model_config2;
-        dto.model2 = patch.model_config2.modelId;
+        dto.model2 = patch.model_config2.modelId || dto.model2;
     }
     if (patch.model_config3 !== undefined) {
         dto.modelConfig3 = patch.model_config3;
-        dto.model3 = patch.model_config3.modelId;
+        dto.model3 = patch.model_config3.modelId || dto.model3;
     }
+
     if (patch.budget_usd !== undefined) dto.budgetUsd = patch.budget_usd;
     
     if (patch.skills !== undefined) dto.skills = patch.skills;
@@ -93,8 +105,3 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
 
     return dto;
 };
-
-
-// Metadata: [serializers]
-
-// Metadata: [serializers]

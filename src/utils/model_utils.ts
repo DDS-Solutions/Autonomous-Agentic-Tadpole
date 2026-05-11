@@ -43,6 +43,7 @@ export const MODEL_MAP: Record<string, string> = {
     "DeepSeek R1": "deepseek-r1",
     // Local
     "Gemma 4 (Local)": "gemma4:e4b",
+    "Gemma 4 26B": "gemma4:26b",
 };
 
 // Pre-compute reverse map for performance
@@ -55,8 +56,22 @@ const REVERSE_MODEL_MAP: Record<string, string> = Object.fromEntries(
  * Returns the original name if no mapping is found.
  */
 export function resolve_technical_model_id(model_name: string | undefined): string {
-    if (!model_name) return 'unknown';
-    return MODEL_MAP[model_name] || model_name;
+    if (!model_name) return '';
+    
+    // Check for exact match in MODEL_MAP first
+    if (MODEL_MAP[model_name]) return MODEL_MAP[model_name];
+    
+    // Check case-insensitive match for keys
+    const lowerName = model_name.toLowerCase();
+    const keyMatch = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === lowerName);
+    if (keyMatch) return MODEL_MAP[keyMatch];
+
+    // If it's already a technical ID (contains colon or common provider prefix), return it as-is
+    if (model_name.includes(':') || model_name.startsWith('gpt-') || model_name.startsWith('claude-')) {
+        return model_name;
+    }
+
+    return model_name;
 }
 
 /**
@@ -64,8 +79,17 @@ export function resolve_technical_model_id(model_name: string | undefined): stri
  * Returns the original ID if no mapping is found.
  */
 export function resolve_friendly_model_name(model_id: string | undefined): string {
-    if (!model_id) return 'Unknown';
-    return REVERSE_MODEL_MAP[model_id] || model_id;
+    if (!model_id) return '';
+    
+    // Check exact match in REVERSE_MODEL_MAP
+    if (REVERSE_MODEL_MAP[model_id]) return REVERSE_MODEL_MAP[model_id];
+    
+    // Check case-insensitive match for technical IDs
+    const lowerId = model_id.toLowerCase();
+    const technicalMatch = Object.keys(REVERSE_MODEL_MAP).find(k => k.toLowerCase() === lowerId);
+    if (technicalMatch) return REVERSE_MODEL_MAP[technicalMatch];
+
+    return model_id;
 }
 
 /**
