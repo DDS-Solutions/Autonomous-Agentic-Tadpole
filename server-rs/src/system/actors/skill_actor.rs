@@ -1,9 +1,9 @@
 //! @docs ARCHITECTURE:Infrastructure
-//! 
+//!
 //! ### AI Assist Note
 //! **! @docs ARCHITECTURE:SovereignKernel**
 //! This module implements high-fidelity logic for the Sovereign Reality layer.
-//! 
+//!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[skill_actor]` in tracing logs.
@@ -54,7 +54,7 @@ impl SkillScannerActor {
 
     async fn handle_scan(&self, root_path: &str) -> Result<usize, AppError> {
         tracing::info!("[SkillScanner] Starting autonomous scan of: {}", root_path);
-        
+
         let root_path_string = root_path.to_string();
         let app_state = self.app_state.clone();
 
@@ -71,7 +71,7 @@ impl SkillScannerActor {
                 .filter_map(|e| e.ok())
             {
                 let path = entry.path();
-                
+
                 // Skip ignored directories
                 if path.is_dir() {
                     if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
@@ -81,16 +81,18 @@ impl SkillScannerActor {
                     }
                 }
 
-                // Look for SKILL.md or README.md with frontmatter
+                // Look for SKILL.md, README.md with frontmatter, or .json legacy manifests
                 if path.is_file() {
                     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
                     if file_name == "SKILL.md" || file_name == "README.md" {
                         // Using standard fs::read_to_string since we are in spawn_blocking
                         if let Ok(content) = std::fs::read_to_string(path) {
                             if let Some(skill) = parse_skill_md(&content) {
                                 tracing::info!("[SkillScanner] Discovered capability: {} at {:?}", skill.name, path);
-                                
-                                // Register the skill (This involves async DB calls, so we need a runtime handle)
+
+                                // Register the skill
                                 let data = serde_json::to_value(&skill).unwrap_or(serde_json::Value::Null);
                                 if !data.is_null() {
                                     let rt = tokio::runtime::Handle::current();
@@ -98,6 +100,23 @@ impl SkillScannerActor {
                                     match rt.block_on(state.registry.skills.register_capability("skill", data, "workspace_discovered")) {
                                         Ok(_) => count += 1,
                                         Err(e) => tracing::error!("[SkillScanner] Failed to register {}: {}", skill.name, e),
+                                    }
+                                }
+                            }
+                        }
+                    } else if extension == "json" {
+                        // Check if it's a valid legacy skill manifest
+                        if let Ok(content) = std::fs::read_to_string(path) {
+                            if let Ok(skill) = serde_json::from_str::<crate::agent::script_skills::SkillDefinition>(&content) {
+                                tracing::info!("[SkillScanner] Discovered legacy capability: {} at {:?}", skill.name, path);
+
+                                let data = serde_json::to_value(&skill).unwrap_or(serde_json::Value::Null);
+                                if !data.is_null() {
+                                    let rt = tokio::runtime::Handle::current();
+                                    let state = app_state.clone();
+                                    match rt.block_on(state.registry.skills.register_capability("skill", data, "workspace_discovered")) {
+                                        Ok(_) => count += 1,
+                                        Err(e) => tracing::error!("[SkillScanner] Failed to register legacy {}: {}", skill.name, e),
                                     }
                                 }
                             }

@@ -2,12 +2,15 @@
 target/
 debug/
 release/
+server-rs/target/
 
 # Node.js dependencies
 node_modules/
 
 # Environment and Secrets
 .env
+.env.*
+!.env.example
 *.key
 *.pem
 
@@ -19,5 +22,35 @@ Thumbs.db
 
 # Tadpole Temporary Files
 tmp/
+.tmp/
+scratch/
 *.log
 .agent/
+
+# Runtime databases and generated cache files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+data/*.db
+data/*.db-shm
+data/*.db-wal
+server-rs/data/*.db
+server-rs/*.db
+
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build outputs and generated reports
+dist/
+coverage/
+reports/
+audit_full_report.*
+audit_production_report.md
+sidecar_panic.log
+server-rs/errors.txt
+server-rs/logs.txt

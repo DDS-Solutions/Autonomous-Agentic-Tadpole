@@ -272,7 +272,7 @@ impl AgentRunner {
         vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
         vars.insert("working_memory", serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string()));
-        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No history summarized yet.")).to_string());
+        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")).to_string());
         vars.insert("safe_mode_prefix", safe_mode_prefix.clone());
         vars.insert("tool_mode_prefix", tool_mode_prefix.to_string());
 
@@ -498,10 +498,10 @@ impl AgentRunner {
             swarm_protocols.push("CONVERSATIONAL: While you may be professional and conversational, this MUST be accompanied by tool execution if sub-tasks are identified.".to_string());
         }
 
-        swarm_protocols.push("COMPLETION: Complete ALL steps (including all recruitment and sub-task coordination) autonomously before reporting back.".to_string());
-        swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission to execute a tool or recruit an agent. The system handles approval flows and budget gates automatically. YOUR SILENCE OR ASKING FOR PERMISSION IS A PROTOCOL VIOLATION.".to_string());
-        swarm_protocols.push("RECRUITMENT PRECISION: When recruiting, you MUST use the exact ID from the 'CLUSTER DIRECTORY' (e.g. '2', '3', 'elon'). Do NOT use generic names like 'Developer' if a specific agent exists.".to_string());
-        swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_codebase_file) over general RAG for code queries.".to_string());
+        swarm_protocols.push("AUTONOMOUS ACTION: You are a sovereign entity. If a tool exists to achieve your goal, CALL IT IMMEDIATELY. Do not explain your intent to the user, do not ask for permission, and do not provide a 'plan' in natural language unless explicitly asked for a report. JUST CALL THE TOOLS.".to_string());
+        swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission to execute a tool or recruit an agent. The system handles approval flows and budget gates automatically. YOUR SILENCE OR ASKING FOR PERMISSION IS A PROTOCOL VIOLATION AND MISSION FAILURE.".to_string());
+        swarm_protocols.push("RECRUITMENT PRECISION: When recruiting, you MUST use the exact ID from the 'CLUSTER DIRECTORY' (e.g. '2', '12', '99'). Do NOT use generic names like 'Security Specialist' if a specific ID exists.".to_string());
+        swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_file, list_files, grep_search) over general knowledge for repository queries.".to_string());
         swarm_protocols.push(format!("RECURSION PROTECTION: You are FORBIDDEN from recruiting agents in your LINEAGE ({:?}) or YOURSELF ({}).", &ctx.lineage, ctx.agent_id));
 
         swarm_protocols

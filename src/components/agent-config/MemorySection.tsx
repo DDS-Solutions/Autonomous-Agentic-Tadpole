@@ -29,6 +29,8 @@ interface MemorySectionProps {
     memories: Memory_Entry[];
     connectorConfigs: Connector_Config[];
     isLoading: boolean;
+    isFeatureDisabled?: boolean;
+    errorMessage?: string | null;
     memoryInput: string;
     themeColor: string;
     onMemoryInputChange: (val: string) => void;
@@ -48,6 +50,8 @@ export function MemorySection({
     memories,
     connectorConfigs,
     isLoading,
+    isFeatureDisabled = false,
+    errorMessage = null,
     memoryInput,
     themeColor,
     onMemoryInputChange,
@@ -127,12 +131,14 @@ export function MemorySection({
                             value={memoryInput}
                             onChange={(e) => onMemoryInputChange(e.target.value)}
                             placeholder={i18n.t('agent_config.placeholder_memory_injection')}
+                            disabled={isFeatureDisabled}
                             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono transition-all"
                             style={{ borderLeft: `2px solid ${themeColor}40` }}
                         />
                         <button
                             onClick={onSaveMemory}
-                            className="p-2 text-black rounded-xl transition-all shadow-lg"
+                            disabled={isFeatureDisabled}
+                            className="p-2 text-black rounded-xl transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ backgroundColor: themeColor }}
                         >
                             <Brain size={16} />
@@ -143,13 +149,27 @@ export function MemorySection({
                 <div className="space-y-2">
                     <div className="flex items-center justify-between px-2">
                         <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('agent_config.label_persisted_memories')}</label>
-                        <button onClick={onRefresh} disabled={isLoading} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors">
+                        <button onClick={onRefresh} disabled={isLoading || isFeatureDisabled} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                             <RefreshCw size={10} className={`text-zinc-500 ${isLoading ? 'animate-spin' : ''}`} />
                         </button>
                     </div>
 
                     <div className="space-y-2">
-                        {memories.length === 0 ? (
+                        {isFeatureDisabled ? (
+                            <div className="p-8 text-center bg-amber-950/20 border border-amber-500/20 border-dashed rounded-2xl">
+                                <Brain size={24} className="mx-auto text-amber-500 mb-2 opacity-50" />
+                                <p className="text-[10px] text-amber-300 uppercase font-bold tracking-[0.2em]">Vector Memory Disabled</p>
+                                <p className="mt-2 text-[11px] text-amber-100/60 leading-relaxed">
+                                    {errorMessage || 'Restart the Rust engine with the vector-memory feature to enable persisted semantic memory.'}
+                                </p>
+                            </div>
+                        ) : errorMessage ? (
+                            <div className="p-8 text-center bg-red-950/20 border border-red-500/20 border-dashed rounded-2xl">
+                                <Brain size={24} className="mx-auto text-red-500 mb-2 opacity-50" />
+                                <p className="text-[10px] text-red-300 uppercase font-bold tracking-[0.2em]">Memory Unavailable</p>
+                                <p className="mt-2 text-[11px] text-red-100/60 leading-relaxed">{errorMessage}</p>
+                            </div>
+                        ) : memories.length === 0 ? (
                             <div className="p-8 text-center bg-zinc-900/40 border border-zinc-800/50 border-dashed rounded-2xl">
                                 <Brain size={24} className="mx-auto text-zinc-800 mb-2 opacity-20" />
                                 <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-[0.2em]">{i18n.t('agent_config.no_memories')}</p>

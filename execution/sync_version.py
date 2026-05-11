@@ -39,17 +39,14 @@ from typing import List, Dict, Any
 # The first capturing group MUST be the version string.
 PATHS = {
     "package.json": r'"version":\s*"([^"]+)"',
-    "src-tauri/tauri.conf.json": r'"version":\s*"([^"]+)"',
     "server-rs/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
-    "src-tauri/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     "server-rs/src/state/mod.rs": r'TadpoleOS/([0-9.]+)',
     "server-rs/src/adapter/discord.rs": r'TadpoleOS/([0-9.]+)',
     "server-rs/src/agent/skill_manifest.rs": r'\bversion:\s*"([^"]+)"',
     "directives/IDENTITY.md": r'TadpoleOS/([0-9.]+)',
-    "docs/TROUBLESHOOTING.md": r'\*\*Version\*\*:\s*([0-9.]+)',
+    "SYSTEM_MAP.md": r'\*\*Version\*\*:\s*([0-9.]+)',
+    "docs/API_REFERENCE.md": r'\*\*Version\*\*:\s*([0-9.]+)',
     "docs/openapi.yaml": r'version:\s*([0-9.]+)',
-    "CHANGELOG.md": r'## \[([0-9.]+)\]',
-    "README.md": r'\*\*Version\*\*:\s*([0-9.]+)',
 }
 
 def bump_version(current_version, part):

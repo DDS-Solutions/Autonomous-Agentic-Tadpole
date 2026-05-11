@@ -213,6 +213,8 @@ export async function api_request<T = unknown>(
                 detail = is_local 
                     ? 'Unauthorized. Your Neural Token does not match the engine configuration. Please verify the NEURAL_TOKEN in Settings.'
                     : 'Unauthorized. Invalid API token.';
+            } else if (response.status === 501) {
+                detail = 'This capability is disabled in the current engine build. Enable the required Rust feature and restart the engine.';
             } else if (response.status === 429) {
                 detail = 'Too many requests. Local security protocols have triggered a temporary cooling-down period. Please wait a moment and try again.';
             }

@@ -114,10 +114,10 @@ impl AgentRunner {
             let mut reasoning_turn = 0;
             let mut reasoning_halted = false;
             let mut internal_monologue = Vec::new();
-            
+
             while reasoning_turn < ctx.reasoning_depth && !reasoning_halted {
                 reasoning_turn += 1;
-                
+
                 if ctx.reasoning_depth > 1 {
                     tracing::info!("🧠 [Mythos] Reasoning Loop {}/{} for agent {}", reasoning_turn, ctx.reasoning_depth, ctx.agent_id);
                     // Synchronize with registry for UI "Pulse" rail
@@ -138,7 +138,7 @@ impl AgentRunner {
                 }
 
                 let tools = vec![self.build_tools(ctx).await];
-                // Hybrid Halting: the set_confidence tool is automatically registered via the 
+                // Hybrid Halting: the set_confidence tool is automatically registered via the
                 // SelfHalting trait if the model supports it.
 
                 let current_prompt = if internal_monologue.is_empty() {
@@ -187,7 +187,7 @@ impl AgentRunner {
                 if reasoning_turn < ctx.reasoning_depth && !reasoning_halted {
                     // Continue reasoning: feed output back as internal monologue
                     internal_monologue.push(turn_text);
-                    
+
                     // 📏 [Context Hygiene] Summarize monologue if it grows too large
                     let _ = self.compress_monologue(ctx, &mut internal_monologue).await;
                 } else {
@@ -198,7 +198,7 @@ impl AgentRunner {
                         }
                         output_text.push_str(&turn_text);
                         conversation_history.push(format!("ASSISTANT: {}", turn_text));
-                        
+
                         // --- 📔 Journaling: Record Assistant node ---
                         let parent_id = ctx.active_node_id.lock().clone();
                         if let Ok(new_id) = self.append_to_journal(ctx, "assistant", &turn_text, parent_id, None).await {
@@ -231,26 +231,26 @@ impl AgentRunner {
                     if function_calls.is_empty() {
                         tracing::debug!("🏁 [Intelligence] No tool calls for agent {}, breaking loop.", ctx.agent_id);
                         let mut final_text = scrub_mythos_tags(&output_text);
-                        
+
                         // ### 🛡️ [Resilience] Mission Closure Fallback
-                        // If the model produced tool calls and observations but no narrative 
-                        // summary, we perform a "Final Pulse" to ensure the user receives a 
+                        // If the model produced tool calls and observations but no narrative
+                        // summary, we perform a "Final Pulse" to ensure the user receives a
                         // human-readable report.
                         if final_text.trim().is_empty() && conversation_history.len() > 2 {
                             tracing::info!("🔄 [Intelligence] Silent completion detected for {}. Synthesizing final report...", ctx.agent_id);
                             let closure_prompt = "MISSION_CLOSURE: You have completed the technical steps. \
                                                   PROVIDE A CONCISE SUMMARY OF YOUR FINDINGS AND ACTIONS TO THE USER NOW. \
                                                   DO NOT EXECUTE ANY MORE TOOLS.";
-                            
+
                             if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, closure_prompt, None).await {
                                 final_text = summary;
                                 self.accumulate_usage(&mut usage, s_usage);
                             }
                         }
 
-                        return Ok(IntelligenceOutput { 
-                            text: final_text, 
-                            usage 
+                        return Ok(IntelligenceOutput {
+                            text: final_text,
+                            usage
                         });
                     }
 
@@ -260,7 +260,7 @@ impl AgentRunner {
 
                     use futures::stream::{FuturesUnordered, StreamExt};
                     let mut futures = FuturesUnordered::new();
-                    
+
                     // 🛡️ [Harden] Concurrency Guard: Limit parallel tools to 10 per turn
                     const MAX_CONCURRENT_TOOLS: usize = 10;
                     let tool_count = function_calls.len();
@@ -279,7 +279,7 @@ impl AgentRunner {
                             let mut local_text = String::new();
                             let mut local_usage = None;
                             let result = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
-                            
+
                             // 🧬 [Evolution] Autonomous Refinement Hook
                             runner.handle_tool_failure_refinement(&ctx_clone, &fc, &mut local_text);
 
@@ -322,14 +322,29 @@ impl AgentRunner {
                                 }
                                 output_text.push_str(&report);
                             }
-                            return Ok(IntelligenceOutput { 
-                                text: scrub_mythos_tags(&output_text), 
-                                usage 
+                            return Ok(IntelligenceOutput {
+                                text: scrub_mythos_tags(&output_text),
+                                usage
                             });
                         }
-                    
+
                     reasoning_halted = true; // Break the reasoning loop to move to the next turn_count
                 }
+            }
+        }
+
+        // ### 🛡️ [Resilience] Silent Completion Synthesis (Hardened)
+        // If the agent performed technical steps (tools) but failed to provide
+        // a narrative summary (common with smaller models or turn caps), we
+        // force a final synthesis to ensure the user and auditors receive a report.
+        if scrub_mythos_tags(&output_text).trim().is_empty() && conversation_history.len() > 2 {
+            tracing::info!("🔄 [Intelligence] Post-turn silent completion detected for {}. Enforcing report synthesis...", ctx.agent_id);
+            let final_tools = self.build_tools(ctx).await;
+            let synthesis_prompt = "You have completed your technical tasks. Provide a CONCISE and TECHNICAL summary of your findings and the current state of the workspace. If you performed a discovery tool (like list_files), summarize the results now.";
+
+            if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, synthesis_prompt, Some(vec![final_tools])).await {
+                output_text = summary;
+                self.accumulate_usage(&mut usage, s_usage);
             }
         }
 
@@ -397,8 +412,8 @@ impl AgentRunner {
             return Err(AppError::InternalServerError("Sentinel Gate: Model failed to transition to tool-use after 2 attempts.".to_string()));
         }
 
-        let is_orchestrator = ctx.agent_id == AGENT_CEO 
-            || ctx.agent_id == AGENT_COO 
+        let is_orchestrator = ctx.agent_id == AGENT_CEO
+            || ctx.agent_id == AGENT_COO
             || ctx.agent_id == AGENT_ALPHA
             || ctx.role.to_lowercase().contains("ceo")
             || ctx.role.to_lowercase().contains("coo")
@@ -415,7 +430,7 @@ impl AgentRunner {
 
             let sentinel_directive = format!(
                 "SYSTEM_SENTINEL: Your turn resulted in a narrative-only response. As an AGENT (Task Specialist), you are FORBIDDEN from text-only progress reports or roadblock apologies. \
-                 You MUST execute tools or call 'complete_mission' with results. Directive: {}", 
+                 You MUST execute tools or call 'complete_mission' with results. Directive: {}",
                 user_directive
             );
 
@@ -465,7 +480,7 @@ mod tests {
         // Test CEO label
         let mut ctx = RunContext::default();
         ctx.agent_id = AGENT_CEO.to_string();
-        
+
         // We can't easily call execute_intelligence_loop because it's too complex to mock everything,
         // but we can extract the labeling logic if we refactor, or test it via the side effects.
         // For now, let's test the logic by verifying the context setup which we can do elsewhere,
@@ -476,14 +491,14 @@ mod tests {
     async fn test_enforce_sentinel_gate_orchestrator() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        
+
         let mut ctx = RunContext::default();
         ctx.agent_id = AGENT_CEO.to_string(); // Orchestrator
-        
+
         let mut output_text = "I am the CEO".to_string();
         let mut function_calls = vec![];
         let mut usage = None;
-        
+
         // Should NOT enforce (do nothing) because it's an orchestrator
         let mut attempts = 0;
         let result = runner.enforce_sentinel_gate(
@@ -495,7 +510,7 @@ mod tests {
             &mut usage,
             &mut attempts,
         ).await;
-        
+
         assert!(result.is_ok());
         assert_eq!(output_text, "I am the CEO");
         assert!(function_calls.is_empty());
@@ -505,20 +520,20 @@ mod tests {
     async fn test_enforce_sentinel_gate_specialist_narrative_leak() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        
+
         let mut ctx = RunContext::default();
         ctx.agent_id = "specialist-1".to_string();
         ctx.role = "Specialist".to_string();
         ctx.safe_mode = false;
-        
+
         let mut output_text = "I am just talking".to_string();
         let mut function_calls = vec![];
         let mut usage = None;
-        
+
         // This will try to call_provider, which will fail because there are no providers configured in mock.
         // But we can verify that it *attempts* to enforce by checking the error or using a more robust mock.
         // Actually, call_provider will likely return an error because the mock state has no providers.
-        
+
         std::env::set_var("TADPOLE_NULL_PROVIDERS", "true");
         let mut attempts = 0;
         let result = runner.enforce_sentinel_gate(
@@ -531,7 +546,7 @@ mod tests {
             &mut attempts,
         ).await;
         std::env::remove_var("TADPOLE_NULL_PROVIDERS");
-        
+
         // In a minimal mock, call_provider returns Ok with a DEGRADED message from NullProvider.
         // This proves the sentinel gate was triggered and successfully re-called the provider.
         assert!(result.is_ok());

@@ -1212,11 +1212,14 @@ mod tests {
         let state = AppState::new_minimal_mock().await;
         let pool = &state.resources.pool;
         // 0. Setup an agent
-        sqlx::query("INSERT INTO agents (id, name, role, department) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT INTO agents (id, name, role, department, description, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind("test-agent")
             .bind("Test Agent")
             .bind("Specialist")
             .bind("IT")
+            .bind("Test agent for sovereign revert flow")
+            .bind("idle")
+            .bind("{}")
             .execute(pool)
             .await
             .unwrap();

@@ -6,16 +6,16 @@
 > - **Telemetry Link**: Search `[GEMINI]` in audit logs.
 >
 > ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
+> Operating directive for Tadpole OS agent orchestration.
 >
-> ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
+> ### Debugging & Observability
+> Traceability via `execution/parity_guard.py`.
 
 ---
 trigger: always_on
 ---
 
-# 🤖 Tadpole Engine: Antigravity Kit (GEMINI.md)
+# Tadpole Engine: Antigravity Kit (GEMINI.md)
 **Intelligence Level**: High (ECC Optimized)
 **Source of Truth**: `directives/GEMINI.md`, `directives/IDENTITY.md`
 **Last Hardened**: 2026-04-16
@@ -109,13 +109,14 @@ graph TD
 
 - **Language**: Translate strictly internally, respond in user's language. Code comments in English.
 - **Clean Code**: Follow `@[skills/clean-code]`. Concise, tested (Pyramid/AAA), performant (2025 standards), safe (5-Phase Deployment).
-- **Dependencies**: Check `CODEBASE.md`, identify dependent files, update all together.
-- **System Map**: Read `ARCHITECTURE.md` at start. Understand Agents (`.agent/`) & Skills (`.agent/skills/`).
+- **Dependencies**: Check `package.json` and `server-rs/Cargo.toml`. Identify dependent files, update all together.
+- **System Map**: Read `SYSTEM_MAP.md` at start. Understand Modular Skills (`execution/core/`) & Registry (`execution/skills/`).
+
 
 **Read → Understand → Apply**: Answer "What is the GOAL? What PRINCIPLES? How does this DIFFER?" before coding.
 
 **ECC Hybrid Optimization**:
-- **Active Quality Gates**: Trust the automated hooks (`data/hooks/post-tool/clippy_gate.ps1`) to flag build regressions early.
+- **Active Quality Gates**: Use explicit verification commands such as `npm run build`, `npm run test`, and `cargo test --manifest-path server-rs/Cargo.toml` to flag regressions.
 - **Surgical Repairs**: Leverage the "Surgical Fix Tables" in `rust-pro` skill to solve borrow checker issues in 1-2 turns.
 - **Resource Efficiency**: Use `Haiku/Flash` for lints/docs to preserve tokens for complex reasoning in `Sonnet/Opus`.
 
@@ -125,10 +126,11 @@ graph TD
 
 **The Tadpole OS codebase is "AI-Indexable". Use these resources to resolve issues with minimal token usage.**
 
-1. **Error Resolution**: Check [`docs/ERROR_REGISTRY.json`](file:///d:/TadpoleOS-Dev/docs/ERROR_REGISTRY.json) first. It maps explicit error codes to source files and failure paths.
-2. **Telemetry Tracing**: Check [`docs/TELEMETRY_MAP.json`](file:///d:/TadpoleOS-Dev/docs/TELEMETRY_MAP.json) for log emitter locations. Search for specific tags like `[VaultStore]` or `[AgentService]`.
-3. **Logic Flow**: All core Zustand stores contain **Mermaid `stateDiagram-v2`** blocks in their headers. Read these to understand complex state transitions before parsing code.
-4. **Service Context**: All core services include an **`@aiContext` block** documenting dependencies, side effects, and mocking strategies. Use this to prepare test suites.
+1. **Error Resolution**: Check terminal output, `server-rs/errors.txt`, `server-rs/logs.txt`, `scratch/server.err`, and `sidecar_panic.log` when present.
+2. **Telemetry Tracing**: Trace emitters through `server-rs/src/telemetry/`, `server-rs/src/startup.rs`, `server-rs/src/router.rs`, and WebSocket consumers in `src/services/`.
+3. **Modular Skills**: Use the **`BaseSkill`** framework in `execution/core/` for new tools when the existing skill registry pattern fits.
+4. **Service Context**: Prefer source-level comments and the docs in `README.md`, `SYSTEM_MAP.md`, and `docs/ARCHITECTURE.md` for current dependencies and side effects.
+
 
 > [!TIP]
 > From now on, when troubleshooting, you can simply ask an AI agent to "Check the Error Registry for 'X'" or "Trace the Telemetry Link for 'Y'" to resolve issues in seconds.
@@ -164,14 +166,17 @@ Trigger: "final checks", "son kontrolleri yap", "çalıştır tüm testleri".
 ---
 
 ## TIER 2: DESIGN RULES
-**Visual Source of Truth**: Before any UI work, READ **[/design.md](file:///d:/TadpoleOS-Dev/design.md)**.
-**Read Agent Definitions**: `frontend-specialist.md` (Web) or `mobile-developer.md` (Mobile).
+**Visual Source of Truth**: Before any UI work, inspect `src/index.css`, `src/constants/theme.ts`, `src/components/ui/theme_tokens.ts`, and the nearest existing page/component patterns.
+
+**Read Agent Definitions**: use available specialist directives and skills for the target domain when present.
 *Rules: No Purple, No Templates, Anti-cliché, Deep Design Thinking.*
 
 ---
 
 ## 📁 QUICK REF
-- **Masters**: `orchestrator`, `project-planner`, `backend-specialist`, `frontend-specialist`, `mobile-developer`, `security-auditor`.
-- **Scripts**: `checklist.py`, `security_scan.py`, `lint_runner.py`, `test_runner.py`, `playwright_runner.py`.
+- **Core Framework**: `BaseSkill` (`execution/core/base_skill.py`), `SkillRegistry` (`execution/core/registry.py`).
+- **Masters**: `orchestrator`, `project-planner`, `backend-specialist`, `frontend-specialist`.
+- **Scripts**: `tadpole_mcp_server.py`, `parity_guard.py`, `checklist.py`, `security_scan.py`.
+
 
 [//]: # (Metadata: [GEMINI])

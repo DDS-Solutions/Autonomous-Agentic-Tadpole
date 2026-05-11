@@ -350,8 +350,14 @@ impl AgentRunner {
                 Err(e) => {
                     // SEC-FAILSAFE: Summarization failure should not block the mission.
                     // We log a warning and continue, accepting potential token cutoff.
-                    tracing::warn!("⚠️ [Runner] Context summarization failed (continuing without summary): {}", e);
+                    tracing::warn!("⚠️ [Runner] Context summarization failed (continuing with raw history): {}", e);
+                    ctx.summarized_history = Some(history_text);
                 }
+            }
+        } else {
+            // INFRA-FIX: Always provide history even if not summarized to avoid "No history summarized yet" error in prompts.
+            if !history_text.is_empty() {
+                ctx.summarized_history = Some(history_text);
             }
         }
     }

@@ -37,6 +37,7 @@ import type { Role_State } from '../stores/role_store';
 import { use_skill_store } from '../stores/skill_store';
 import { useShallow } from 'zustand/react/shallow';
 import { tadpole_os_service } from '../services/tadpoleos_service';
+import { ApiError } from '../services/base_api_service';
 import type { 
     Agent, 
     Agent_Model_Slot_Key, 
@@ -127,6 +128,8 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
     // Local state for memories (separate from config form)
     const [memories, setMemories] = useState<Memory_Entry[]>([]);
     const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+    const [memoryError, setMemoryError] = useState<string | null>(null);
+    const [isMemoryFeatureDisabled, setIsMemoryFeatureDisabled] = useState(false);
     const [memoryInput, setMemoryInput] = useState('');
     const [isDetached, setIsDetached] = useState(false);
 
@@ -158,6 +161,13 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
         try {
             const response = await tadpole_os_service.get_agent_memory(agent.id) as { entries: Memory_Entry[] };
             setMemories(response.entries || []);
+            setMemoryError(null);
+            setIsMemoryFeatureDisabled(false);
+        } catch (err) {
+            const isFeatureDisabled = err instanceof ApiError && err.status === 501;
+            setIsMemoryFeatureDisabled(isFeatureDisabled);
+            setMemoryError(err instanceof Error ? err.message : i18n.t('agent_config.memory_unavailable'));
+            setMemories([]);
         } finally {
             setIsLoadingMemories(false);
         }
@@ -171,16 +181,30 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
     }, [agent?.id, mainTab, loadMemories]);
 
     const handleSaveMemory = async () => {
-        if (!memoryInput.trim() || !agent?.id) return;
-        await tadpole_os_service.save_agent_memory(agent.id, memoryInput);
-        setMemoryInput('');
-        loadMemories();
+        if (!memoryInput.trim() || !agent?.id || isMemoryFeatureDisabled) return;
+        try {
+            await tadpole_os_service.save_agent_memory(agent.id, memoryInput);
+            setMemoryInput('');
+            setMemoryError(null);
+            loadMemories();
+        } catch (err) {
+            const isFeatureDisabled = err instanceof ApiError && err.status === 501;
+            setIsMemoryFeatureDisabled(isFeatureDisabled);
+            setMemoryError(err instanceof Error ? err.message : i18n.t('agent_config.memory_unavailable'));
+        }
     };
 
     const handleDeleteMemory = async (id: string) => {
-        if (!agent?.id) return;
-        await tadpole_os_service.delete_agent_memory(agent.id, id);
-        loadMemories();
+        if (!agent?.id || isMemoryFeatureDisabled) return;
+        try {
+            await tadpole_os_service.delete_agent_memory(agent.id, id);
+            setMemoryError(null);
+            loadMemories();
+        } catch (err) {
+            const isFeatureDisabled = err instanceof ApiError && err.status === 501;
+            setIsMemoryFeatureDisabled(isFeatureDisabled);
+            setMemoryError(err instanceof Error ? err.message : i18n.t('agent_config.memory_unavailable'));
+        }
     };
 
     const allSkills = useMemo(() => {
@@ -268,6 +292,8 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                             memories={memories}
                             connectorConfigs={state.connector_configs}
                             isLoading={isLoadingMemories}
+                            isFeatureDisabled={isMemoryFeatureDisabled}
+                            errorMessage={memoryError}
                             memoryInput={memoryInput}
                             themeColor={ui.theme_color}
                             onMemoryInputChange={setMemoryInput}

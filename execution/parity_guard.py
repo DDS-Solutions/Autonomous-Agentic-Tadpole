@@ -39,10 +39,13 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Any
 
-# Ensure stdout handles UTF-8 on Windows
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# Fix Windows console encoding for Unicode output
+if __name__ == "__main__" and sys.platform == "win32":
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    except (AttributeError, io.UnsupportedOperation):
+        pass
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -60,69 +63,17 @@ def normalize_path(path):
 
 def scan_router(router_path):
     """Extracts routes from the Axum router.rs file, handling multi-level nesting."""
-    routes = []
-    if not os.path.exists(router_path):
-        return routes
-    
-    with open(router_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-        
-    # 1. Map all builder functions to their relative routes
-    # Regex for fn build_xxx_routes(...) -> Router[...] { ... }
-    function_routes = {}
-    func_matches = re.finditer(r'fn\s+(build_[a-z0-9_]+)\s*\([^)]*\)\s*->\s*Router[^\{]*\{([^}]+)\}', content, re.DOTALL)
-    
-    for fm in func_matches:
-        func_name = fm.group(1)
-        body = fm.group(2)
-        
-        # Find routes in this function body
-        route_matches = re.finditer(r'\.route\s*\(\s*"([^"]+)"\s*,\s*(?:[a-z:]+::)?([a-z]+)\(([^)]+)\)\s*\)', body, re.DOTALL)
-        func_routes = []
-        for m in route_matches:
-            path = m.group(1)
-            method = m.group(2).upper()
-            handler = m.group(3).strip()
-            func_routes.append({"path": path, "method": method, "handler": handler})
-        
-        function_routes[func_name] = func_routes
+    try:
+        sys.path.insert(0, str(ROOT / "execution"))
+        from generate_api_reference import discover_routes
 
-    # 2. Heuristic: Resolve the unified /v1 hierarchy
-    # Every route in Tadpole OS is now nested under /v1 in create_router()
-    # We resolve nests in build_protected_v1_routes first
-    v1_nest_matches = re.finditer(r'\.nest\s*\(\s*"([^"]+)"\s*,\s*(build_[a-z0-9_]+)\s*\(\s*\)\s*\)', content)
-    
-    for nm in v1_nest_matches:
-        prefix = nm.group(1)
-        func_name = nm.group(2)
-        if func_name in function_routes:
-            for r in function_routes[func_name]:
-                # Clean merge of prefix + path (e.g. /agents + / -> /agents)
-                full_path = f"/v1{prefix}{r['path']}".replace("//", "/")
-                if full_path.endswith("/") and len(full_path) > 1:
-                    full_path = full_path[:-1]
-                routes.append({"path": full_path, "method": r["method"], "handler": r["handler"]})
-
-    # 3. Add root v1 routes (those not in nests but in build_protected_v1_routes)
-    # This captures things like /search/memory and /env-schema
-    m_root_v1 = re.search(r'fn build_protected_v1_routes.*?\{([^}]+)\}', content, re.DOTALL)
-    if m_root_v1:
-        body = m_root_v1.group(1)
-        route_matches = re.finditer(r'\.route\s*\(\s*"([^"]+)"\s*,\s*(?:[a-z:]+::)?([a-z]+)\(([^)]+)\)\s*\)', body, re.DOTALL)
-        for m in route_matches:
-            path = m.group(1)
-            method = m.group(2).upper()
-            handler = m.group(3).strip()
-            routes.append({"path": f"/v1{path}", "method": method, "handler": handler})
-
-    # 4. Add Engine Routes (Public/Protected)
-    # These are merged into /v1 in create_router()
-    for func in ["build_engine_public_routes", "build_engine_protected_routes"]:
-        if func in function_routes:
-            for r in function_routes[func]:
-                routes.append({"path": f"/v1{r['path']}", "method": r["method"], "handler": r["handler"]})
-
-    return routes
+        return [
+            {"path": route.path, "method": route.method, "handler": route.handler}
+            for route in discover_routes()
+        ]
+    except Exception as exc:
+        print_result("ROUTER-SCAN", False, f"Failed to import route generator: {exc}")
+        return []
 
 def scan_openapi(openapi_path):
     """Parses paths from openapi.yaml."""
@@ -146,7 +97,7 @@ def check_env_vars(root):
                 for m in matches:
                     env_vars_in_code.add(m)
                     
-    env_example_path = root / "server-rs" / ".env.example"
+    env_example_path = root / ".env.example"
     env_example_vars = set()
     if env_example_path.exists():
         with open(env_example_path, 'r', encoding='utf-8') as f:
@@ -169,9 +120,87 @@ def check_env_vars(root):
             
     return errors
 
+def check_version_sync(root):
+    print(f"\nChecking Version Parity...")
+    version_file = root / "version.json"
+    if not version_file.exists():
+        print_result("VERSION", False, "version.json missing")
+        return 1
+    version = json.loads(version_file.read_text(encoding="utf-8")).get("version")
+    targets = {
+        "package.json": r'"version":\s*"([^"]+)"',
+        "server-rs/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+        "docs/openapi.yaml": r'version:\s*([0-9.]+)',
+        "docs/API_REFERENCE.md": r'\*\*Version\*\*:\s*([0-9.]+)',
+        "SYSTEM_MAP.md": r'\*\*Version\*\*:\s*([0-9.]+)',
+        "directives/IDENTITY.md": r'TadpoleOS/([0-9.]+)',
+    }
+    errors = 0
+    for rel, pattern in targets.items():
+        path = root / rel
+        if not path.exists():
+            print_result("VERSION", False, f"{rel} missing")
+            errors += 1
+            continue
+        match = re.search(pattern, path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+        if not match:
+            print_result("VERSION", False, f"{rel} has no version marker")
+            errors += 1
+        elif match.group(1) != version:
+            print_result("VERSION", False, f"{rel} has {match.group(1)}, expected {version}")
+            errors += 1
+        else:
+            print_result("VERSION", True, f"{rel} -> {version}")
+    return errors
+
+def check_doc_file_refs(root):
+    print(f"\nChecking Documentation File References...")
+    docs = [
+        root / "README.md",
+        root / "SYSTEM_MAP.md",
+        root / "docs" / "ARCHITECTURE.md",
+        root / "docs" / "OPERATIONS_MANUAL.md",
+        root / "docs" / "SECURITY.md",
+        root / "docs" / "API_REFERENCE.md",
+        root / "directives" / "IDENTITY.md",
+        root / "directives" / "GEMINI.md",
+        root / "directives" / "AUTONOMY_MANIFEST.md",
+    ]
+    errors = 0
+    for doc in docs:
+        if not doc.exists():
+            continue
+        text = doc.read_text(encoding="utf-8")
+        refs = re.findall(r'`([^`\n]+\.(?:md|yaml|yml|json|toml|rs|tsx|ts|py|bat|css))`', text)
+        refs += [m.replace("/", "\\") for m in re.findall(r'file:///D:/Autonomous-Agentic-Tadpole/([^\)\s]+)', text)]
+        for ref in refs:
+            if (
+                ref.startswith("http")
+                or "<" in ref
+                or ">" in ref
+                or "{" in ref
+                or "}" in ref
+                or " " in ref
+                or ref == "SKILL.md"
+            ):
+                continue
+            normalized = ref.replace("/", os.sep)
+            candidates = [
+                root / normalized,
+                root / "execution" / normalized,
+                root / "directives" / normalized,
+                root / "docs" / normalized,
+            ]
+            if not any(candidate.exists() for candidate in candidates):
+                print_result("DOC-REF", False, f"{doc.relative_to(root)} references missing {ref}")
+                errors += 1
+    if errors == 0:
+        print_result("DOC-REF", True, "All checked file references exist")
+    return errors
+
 def check_skills(root):
     print(f"\nScanning Skills & Workflows...")
-    skills_dir = root / "server-rs" / "data" / "skills"
+    skills_dir = root / "data" / "skills"
     errors = 0
     
     if not skills_dir.exists():
@@ -326,6 +355,8 @@ def check_parity(root_dir, fix=False):
             print_result("ADG-TAG", True, f"{tag} synchronized")
 
     errors += check_env_vars(root)
+    errors += check_version_sync(root)
+    errors += check_doc_file_refs(root)
     errors += check_skills(root)
     errors += check_api_docs_parity(root, fix=fix)
 

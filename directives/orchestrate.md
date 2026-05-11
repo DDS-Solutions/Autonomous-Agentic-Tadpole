@@ -16,7 +16,8 @@
 1. Initialize mission parameters.
 2. Delegate 'alpha' as lead node.
 3. Assign worker nodes to specialists.
-4. Establish neural handoff channels.
-5. Monitor for worker node disconnection.
+4. **Functional Validation**: The Alpha node MUST verify the operational readiness of all sub-agents via a non-destructive tool call (PoW Mandate) before proceeding to tactical execution.
+5. Establish neural handoff channels.
+6. Monitor for worker node disconnection.
 
 [//]: # (Metadata: [orchestrate])

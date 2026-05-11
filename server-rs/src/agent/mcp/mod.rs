@@ -97,6 +97,7 @@ impl McpHost {
         registry.register(Arc::new(ListFileSymbolsHandler));
         registry.register(Arc::new(GetSymbolBodyHandler));
         registry.register(Arc::new(RunIntegrityCheckHandler));
+        registry.register(Arc::new(GetCurrentTimeHandler));
         registry.register(Arc::new(InspectEngineHealthHandler {
             stats: stats.clone(),
         }));
@@ -149,14 +150,32 @@ impl McpHost {
                 if let Ok(content) = std::fs::read_to_string(safe_path) {
                     if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
                         for (server_name, _) in config.mcp_servers {
-                            tools.push(McpToolHub {
-                                name: format!("{}:server", server_name),
-                                description: format!("External MCP Server: {}", server_name),
-                                input_schema: serde_json::json!({}),
-                                source: "mcp".to_string(),
-                                stats: McpToolStats::default(),
-                                category: "agent".to_string(),
-                            });
+                            // Discover tools from the server
+                            if let Ok(client) = self.get_or_spawn_client(&server_name).await {
+                                let mut client_lock = client.lock().await;
+                                if let Ok(mcp_tools) = client_lock.list_tools().await {
+                                    for t_val in mcp_tools {
+                                        if let (Some(name), Some(desc)) = (
+                                            t_val.get("name").and_then(|v| v.as_str()),
+                                            t_val.get("description").and_then(|v| v.as_str())
+                                        ) {
+                                            let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
+
+                                            // Only add if explicitly allowed or in agent skills
+                                            if agent_skills.contains(&name.to_string()) || agent_skills.iter().any(|s| s == &format!("{}:{}", server_name, name)) {
+                                                tools.push(McpToolHub {
+                                                    name: name.to_string(),
+                                                    description: desc.to_string(),
+                                                    input_schema: schema,
+                                                    source: format!("mcp:{}", server_name),
+                                                    stats: McpToolStats::default(),
+                                                    category: "external".to_string(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -229,22 +248,62 @@ impl McpHost {
             return Ok(McpResult::Raw(output));
         }
 
+        // Try External MCP Servers
+        if let Some(ref path) = self.mcp_config_path {
+            let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            if let Ok(safe_path) = crate::utils::security::validate_path(&authorized_base, &path.to_string_lossy()) {
+                if let Ok(content) = std::fs::read_to_string(safe_path) {
+                    if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
+                        for (server_name, _) in config.mcp_servers {
+                            if let Ok(client) = self.get_or_spawn_client(&server_name).await {
+                                let mut client_lock = client.lock().await;
+                                // Check if this server has the tool
+                                if let Ok(mcp_tools) = client_lock.list_tools().await {
+                                    if mcp_tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
+                                        let result = client_lock.call_tool(tool_name, arguments).await
+                                            .map_err(|e| AppError::InfrastructureError {
+                                                provider_id: format!("mcp:{}", server_name),
+                                                detail: e.to_string(),
+                                                help_link: None,
+                                            })?;
+
+                                        if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                                            let mut output = String::new();
+                                            for item in content {
+                                                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                                    output.push_str(text);
+                                                }
+                                            }
+                                            return Ok(McpResult::Raw(output));
+                                        }
+
+                                        return Ok(McpResult::Raw(serde_json::to_string_pretty(&result)
+                                            .map_err(|e| AppError::InternalServerError(e.to_string()))?));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if tool_name.starts_with("mcp_") {
             let parts: Vec<&str> = tool_name.splitn(3, '_').collect();
             if parts.len() >= 3 {
                 let server_name = parts[1];
                 let actual_tool_name = parts[2];
-                
+
                 let client = self.get_or_spawn_client(server_name).await?;
                 let mut client_lock = client.lock().await;
-                
+
                 let result = client_lock.call_tool(actual_tool_name, arguments).await
                     .map_err(|e| AppError::InfrastructureError {
                         provider_id: format!("mcp:{}", server_name),
                         detail: e.to_string(),
                         help_link: None,
                     })?;
-                
+
                 if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
                     let mut output = String::new();
                     for item in content {
@@ -254,7 +313,7 @@ impl McpHost {
                     }
                     return Ok(McpResult::Raw(output));
                 }
-                
+
                 return Ok(McpResult::Raw(serde_json::to_string_pretty(&result)
                     .map_err(|e| AppError::InternalServerError(e.to_string()))?));
             }
@@ -265,30 +324,30 @@ impl McpHost {
 
     async fn get_or_spawn_client(&self, server_name: &str) -> Result<Arc<Mutex<client::McpClient>>, AppError> {
         let mut clients = self.clients.lock().await;
-        
+
         if let Some(client) = clients.get(server_name) {
             return Ok(client.clone());
         }
-        
+
         let config_path = self.mcp_config_path.as_ref()
             .ok_or_else(|| AppError::InternalServerError("MCP config path not set".to_string()))?;
-        
+
         let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let safe_path = crate::utils::security::validate_path(&authorized_base, &config_path.to_string_lossy())
             .map_err(|e| AppError::Forbidden(e.to_string()))?;
-        
+
         let content = std::fs::read_to_string(safe_path).map_err(AppError::Io)?;
         let config: McpConfig = serde_json::from_str(&content).map_err(|e| AppError::BadRequest(e.to_string()))?;
-        
+
         let server_config = config.mcp_servers.get(server_name)
             .ok_or_else(|| AppError::NotFound(format!("MCP server '{}' not found in config", server_name)))?;
-        
+
         let full_command = if server_config.args.is_empty() {
             server_config.command.clone()
         } else {
             format!("{} {}", server_config.command, server_config.args.join(" "))
         };
-        
+
         let mut client = client::McpClient::spawn(&full_command).await
             .map_err(|e| AppError::InfrastructureError {
                 provider_id: format!("mcp:{}", server_name),
@@ -300,10 +359,10 @@ impl McpHost {
             detail: format!("Failed to initialize MCP client: {}", e),
             help_link: None,
         })?;
-        
+
         let client_arc = Arc::new(Mutex::new(client));
         clients.insert(server_name.to_string(), client_arc.clone());
-        
+
         Ok(client_arc)
     }
 
@@ -402,6 +461,15 @@ pub async fn recruit_specialist(
         "recruit_specialist".to_string(),
         args,
     ))
+}
+
+#[agent_tool]
+pub async fn get_current_time(
+    _args: serde_json::Value,
+    _workspace_root: std::path::PathBuf,
+) -> Result<McpResult, AppError> {
+    let now = chrono::Local::now();
+    Ok(McpResult::Raw(format!("Current System Time: {}", now.format("%Y-%m-%d %H:%M:%S"))))
 }
 
 #[agent_tool]

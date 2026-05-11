@@ -181,6 +181,7 @@ impl RunContext {
             budget_usd: ctx.budget_usd,
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
+            trace_id: ctx.trace_id.clone(),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(ctx.active_node_id.clone())),
             ..Default::default()
         }

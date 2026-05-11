@@ -17,13 +17,13 @@
 //!   bursty write operations, migration checksum mismatches due to
 //!   manual tampering, or path permission errors on the
 //!   `DATABASE_URL` target.
-//! - **Recovery Protocol (DB-01)**: 
+//! - **Recovery Protocol (DB-01)**:
 //!   1. If `SQLITE_BUSY` persists, verify no rogue `sqlite3` processes
-//!      hold a lock. 
+//!      hold a lock.
 //!   2. If checksum fail, check `Hotfix Reconciler` logic in `db.rs`
-//!      and ensure the `_sqlx_migrations` entry matches the 
+//!      and ensure the `_sqlx_migrations` entry matches the
 //!      `sqlx::migrate!` binary hash.
-//!   3. For I/O errors, ensure the `.tmp/` or data directory has 
+//!   3. For I/O errors, ensure the `.tmp/` or data directory has
 //!      `0755` permissions for the engine process.
 //! - **Telemetry Link**: Search for `[Database]` or `[SQLx]` in
 //!   `tracing` logs for query performance and migration status.
@@ -99,25 +99,15 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
 
 /// Ensures default agents defined in `data/agents.json` exist in the system.
 async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
-    // 1. Check if we already have agents (other than maybe Alpha)
-    let agent_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agents")
-        .fetch_one(pool)
-        .await?;
-
-    if agent_count > 0 {
-        // We already have a populated swarm, skip seeding
-        return Ok(());
-    }
-
-    tracing::info!("🌱 [Database] Seeding baseline agents from bundle...");
+    tracing::info!("🌱 [Database] Synchronizing baseline agents from bundle...");
 
     // 2. Resolve data file path
     let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
     let agents_json_path = find_bundled_file(&resource_root, "data/agents.json");
 
     if let Some(path) = agents_json_path {
-        tracing::info!("📂 [Database] Found baseline agents at {:?}", path);
-        
+        tracing::info!("📂 [Database] Syncing baseline agents at {:?}", path);
+
         let content = tokio::fs::read_to_string(&path).await?;
         let agents: Vec<serde_json::Value> = serde_json::from_str(&content)?;
 
@@ -131,13 +121,29 @@ async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
             let role = agent_val["role"].as_str().unwrap_or("Specialist");
             let dept = agent_val["department"].as_str().unwrap_or("Swarm Core");
             let desc = agent_val["description"].as_str().unwrap_or("");
-            let model_id = agent_val["model"].as_str().or_else(|| agent_val["model_id"].as_str());
-            let provider = agent_val["model_config"]["provider"].as_str().unwrap_or("google");
+            let model_id = agent_val["model_config"]["modelId"].as_str()
+                .or_else(|| agent_val["model_id"].as_str())
+                .or_else(|| agent_val["model"].as_str());
+            let provider = agent_val["model_config"]["provider"].as_str()
+                .or_else(|| agent_val["provider"].as_str())
+                .unwrap_or("google");
             let theme = agent_val["theme_color"].as_str().unwrap_or("#4fd1c5");
+            let skills = serde_json::to_string(&agent_val["skills"]).unwrap_or_else(|_| "[]".to_string());
+            let workflows = serde_json::to_string(&agent_val["workflows"]).unwrap_or_else(|_| "[]".to_string());
 
             sqlx::query(
-                "INSERT OR IGNORE INTO agents (id, name, role, department, description, status, provider, model_id, theme_color, metadata, skills, workflows, mcp_tools, active_model_slot, category)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO agents (id, name, role, department, description, status, provider, model_id, theme_color, metadata, skills, workflows, mcp_tools, active_model_slot, category)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    role = excluded.role,
+                    department = excluded.department,
+                    description = excluded.description,
+                    provider = excluded.provider,
+                    model_id = excluded.model_id,
+                    theme_color = excluded.theme_color,
+                    skills = excluded.skills,
+                    workflows = excluded.workflows"
             )
             .bind(id)
             .bind(name)
@@ -149,8 +155,8 @@ async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
             .bind(model_id)
             .bind(theme)
             .bind("{}")
-            .bind(serde_json::to_string(&agent_val["skills"]).unwrap_or_else(|_| "[]".to_string()))
-            .bind(serde_json::to_string(&agent_val["workflows"]).unwrap_or_else(|_| "[]".to_string()))
+            .bind(skills)
+            .bind(workflows)
             .bind("[]") // mcp_tools
             .bind(1)
             .bind("user")
@@ -160,7 +166,10 @@ async fn seed_baseline_agents(pool: &SqlitePool) -> Result<()> {
 
         tx.commit().await?;
     } else {
-        tracing::warn!("⚠️ [Database] Seed file 'agents.json' not found in bundle; falling back...");
+        tracing::warn!("⚠️ [Database] Sync file 'agents.json' not found in bundle; falling back...");
+        let agent_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agents")
+            .fetch_one(pool)
+            .await?;
         if agent_count == 0 {
             seed_minimal_alpha(pool).await?;
         }
@@ -200,7 +209,7 @@ async fn seed_baseline_providers() -> Result<()> {
     let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
     let base_dir = std::env::current_dir().map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
     let data_dir = base_dir.join("data");
-    
+
     // Ensure data dir exists
     if !data_dir.exists() {
         tokio::fs::create_dir_all(&data_dir).await?;
@@ -269,7 +278,7 @@ async fn seed_baseline_mcp_config() -> Result<()> {
 
     let mcp_filename = "mcp_config.json";
     let dest_path = agent_dir.join(mcp_filename);
-    
+
     if !dest_path.exists() {
         if let Some(src_path) = find_bundled_file(&resource_root, &format!(".agent/{}", mcp_filename)) {
             tracing::info!("🌱 [System] Seeding MCP configuration from {:?}...", src_path);
@@ -283,25 +292,25 @@ async fn seed_baseline_mcp_config() -> Result<()> {
 /// Helper to find a bundled file, handling Tauri v2's '_up_' prefix if needed.
 fn find_bundled_file(resource_root: &str, relative_path: &str) -> Option<std::path::PathBuf> {
     let root = std::path::Path::new(resource_root);
-    
+
     // 1. Try direct path (e.g., resources/data/agents.json)
     let direct = root.join(relative_path);
     if direct.exists() {
         return Some(direct);
     }
-    
+
     // 2. Try _up_ path (e.g., resources/_up_/data/agents.json)
     let up_path = root.join("_up_").join(relative_path);
     if up_path.exists() {
         return Some(up_path);
     }
-    
+
     // 3. Last ditch: check if current dir has it (usually only for dev)
     let dev_path = std::path::Path::new(".").join(relative_path);
     if dev_path.exists() {
         return Some(dev_path);
     }
-    
+
     None
 }
 

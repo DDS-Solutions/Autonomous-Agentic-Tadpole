@@ -31,7 +31,8 @@
       "complete_mission", "recruit", "spawn_subagent",
       "fetch_url", "read_file", "write_file", "list_files",
       "get_file_contents", "grep_search", "get_agent_metrics",
-      "query_financial_logs", "search_mission_knowledge", "update_working_memory"
+      "query_financial_logs", "search_mission_knowledge", "update_working_memory",
+      "parity_guard", "verify_ai_context", "security_scan", "get_current_time"
     ],
     "workflows": ["resource_allocation"]
   },
@@ -404,7 +405,8 @@
     "model": "Gemma 4 (Local)",
     "model_config": {
       "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": ["code_audit", "system_audit"],

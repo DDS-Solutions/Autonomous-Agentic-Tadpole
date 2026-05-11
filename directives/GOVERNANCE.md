@@ -37,4 +37,10 @@ All autonomous actions must pass through the triple-gate verification loop:
 ## 5. Escalation Policy
 If the **Kernel** detects a systemic fault that it cannot self-heal after 3 attempts, it MUST pause all operations and alert Entity 0 with a high-fidelity diagnostic dossier.
 
+## 6. The Proof-of-Work (PoW) Mandate
+To eliminate "hallucinated readiness" and narrative-only confirmations, the following rules apply:
+*   **Demonstration Over Narrative**: Any mission or task asking to "confirm", "verify", or "check readiness" of a tool/skill MUST be answered with a functional execution of that tool (e.g., a dummy call, a version check, or a list operation).
+*   **Evidence Chain**: A textual affirmation of "Yes, I have tool X" is considered a **FAILED** task unless accompanied by the tool's output in the telemetry log.
+*   **Zero Trust**: All agents MUST assume their tools are unavailable until they have successfully triggered them in the current context.
+
 [//]: # (Metadata: [GOVERNANCE])

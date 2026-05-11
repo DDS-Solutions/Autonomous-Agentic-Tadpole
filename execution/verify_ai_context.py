@@ -115,10 +115,13 @@ def verify_file(file_path):
 
 def main():
     # Fix Windows console encoding for Unicode output
-    if sys.platform == "win32":
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    if __name__ == "__main__" and sys.platform == "win32":
+        try:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        except (AttributeError, io.UnsupportedOperation):
+            pass
 
     parser = argparse.ArgumentParser(description="Tadpole OS AI Context Auditor")
     parser.add_argument("path", nargs="?", default=".", help="Root directory to scan")
