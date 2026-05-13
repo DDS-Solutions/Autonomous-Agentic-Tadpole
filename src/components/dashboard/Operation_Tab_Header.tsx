@@ -112,7 +112,7 @@ export const Operation_Tab_Header: React.FC<Operation_Tab_Header_Props> = ({
     };
 
     return (
-        <div className="sticky top-0 bg-zinc-950/80 backdrop-blur-md z-30 border-b border-zinc-800/50 flex items-center justify-between px-2">
+        <div className="sticky top-0 bg-zinc-950/80 backdrop-blur-md z-30 border-b border-zinc-800/50 flex items-center justify-between px-6">
             <div className="flex-1 flex items-center overflow-x-auto no-scrollbar min-w-0">
                 {/* Global View Tab */}
                 {render_tab('global', i18n.t('dashboard.global_view') || 'Global View', <Globe size={12} className="group-hover:rotate-12 transition-transform" />)}
@@ -130,7 +130,7 @@ export const Operation_Tab_Header: React.FC<Operation_Tab_Header_Props> = ({
             </div>
 
             {/* Actions Sidebar in Header */}
-            <div className="flex items-center gap-4 pr-4">
+            <div className="flex items-center gap-4">
                 {on_detach_grid && (
                     <Tooltip content={i18n.t('layout.detach_grid') || 'Detach Agent Grid'}>
                         <button

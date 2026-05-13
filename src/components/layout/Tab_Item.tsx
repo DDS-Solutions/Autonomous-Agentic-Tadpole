@@ -63,15 +63,15 @@ export const Tab_Item = React.memo(({ tab, is_active }: Tab_Item_Props) => {
                 }
             }}
             className={clsx(
-                "group relative flex items-center gap-2 px-4 py-2 min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-zinc-900",
+                "group relative flex items-center gap-3 px-4 py-2 min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-zinc-900",
                 is_active 
-                    ? "bg-zinc-900 text-zinc-100" 
+                    ? "bg-zinc-800 text-white border-t border-zinc-700/50" 
                     : "text-zinc-500 hover:bg-zinc-900/40 hover:text-zinc-300"
             )}
         >
-            {/* Active Indicator Bar */}
+            {/* Active Indicator Bar - Refined for Neural Pulse feel */}
             {is_active && (
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-zinc-400" />
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
             )}
 
             <div className={clsx(

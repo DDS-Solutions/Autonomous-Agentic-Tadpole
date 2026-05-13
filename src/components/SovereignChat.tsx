@@ -394,7 +394,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="bg-red-500/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-md"
+                                className="bg-red-500/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg border border-red-500/20 backdrop-blur-md"
                             >
                                 ⚠️ {i18n.t('chat.popup_blocked_warning')}
                             </motion.div>
@@ -403,7 +403,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                     <Tooltip content={i18n.t('chat.restore_tooltip')} position="top">
                         <button
                             onClick={() => set_detached(false)}
-                            className="bg-zinc-900/80 backdrop-blur-md border border-zinc-700/50 p-4 rounded-full text-zinc-400 hover:text-zinc-100 shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all hover:scale-110 active:scale-95 group"
+                            className="bg-zinc-900/80 backdrop-blur-md border border-zinc-700/50 p-4 rounded-full text-zinc-400 hover:text-zinc-100 transition-all hover:scale-110 active:scale-95 group"
                         >
                             <Maximize2 size={24} className="group-hover:rotate-12 transition-transform" />
                         </button>
@@ -490,7 +490,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                         dragConstraints={is_detached ? undefined : constraints_ref}
                         className={clsx(
                             "fixed z-50 flex flex-col overflow-hidden transition-[filter,opacity] duration-300 pointer-events-auto",
-                            "bottom-6 right-6 w-[440px] h-[600px] rounded-2xl border border-zinc-800/50 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] bg-zinc-900/40 backdrop-blur-xl pointer-events-auto"
+                            "bottom-6 right-6 w-[440px] h-[600px] rounded-2xl border border-zinc-800/50 bg-zinc-900/40 backdrop-blur-xl pointer-events-auto"
                         )}
                     >
                         <SovereignChatContent 
@@ -558,7 +558,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                         onClick={() => {
                             perform_maximize_transform();
                         }}
-                        className="fixed bottom-6 right-6 z-50 bg-zinc-100 text-black px-5 py-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(255,255,255,0.3)] flex items-center gap-3 group border border-white cursor-grab active:cursor-grabbing"
+                        className="fixed bottom-6 right-6 z-50 bg-zinc-800 text-zinc-100 px-5 py-3 rounded-2xl flex items-center gap-3 group border border-zinc-700 cursor-grab active:cursor-grabbing hover:bg-zinc-700 transition-all"
                     >
                         <Zap size={20} className="group-hover:animate-pulse pointer-events-none" />
                         <span className="text-xs font-bold uppercase tracking-widest pointer-events-none">{i18n.t('chat.title')}</span>
@@ -696,7 +696,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                     }
                 }}
                 className={clsx(
-                    "relative z-10 p-4 border-b border-zinc-800/50 bg-zinc-950/40 backdrop-blur-md flex items-center justify-between shrink-0 overflow-hidden cursor-pointer select-none",
+                    "relative z-10 px-6 py-4 border-b border-zinc-800/50 bg-zinc-950/40 backdrop-blur-md flex items-center justify-between shrink-0 overflow-hidden cursor-pointer select-none",
                     !isDetached && "cursor-grab active:cursor-grabbing"
                 )}
                 onDoubleClick={onHeaderClick}
@@ -708,7 +708,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
             >
                 <div className="flex items-center gap-3">
                     {!isDetached && <GripVertical size={14} className="text-zinc-700" />}
-                    <div className="relative bg-zinc-100 p-1.5 rounded-md text-black shadow-lg">
+                    <div className="relative bg-zinc-800 p-1.5 rounded-md text-zinc-100 border border-zinc-700">
                         <Zap size={14} className="fill-current" />
                     </div>
                     <div>
@@ -747,7 +747,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                             }}
                             className={clsx(
                                 "p-2 rounded-lg transition-all active:scale-95",
-                                showTranscript ? "text-green-400 bg-green-500/10 border border-green-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)]" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                showTranscript ? "text-green-400 bg-green-500/10 border border-green-500/30" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
                             )}
                             aria-label={i18n.t('chat.toggle_transcript_aria')}
                         >
@@ -868,7 +868,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
 
             {/* Neural Lineage Breadcrumbs */}
             {activeScope === 'agent' && (
-                <div className="bg-zinc-950/40 border-b border-zinc-800/30 px-4 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar relative z-10 select-none">
+                <div className="bg-zinc-950/40 border-b border-zinc-800/30 px-6 py-3 flex items-center gap-2 overflow-x-auto no-scrollbar relative z-10 select-none">
                     <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider whitespace-nowrap">{i18n.t('chat.lineage_label')}</span>
                     <div className="flex items-center gap-1.5 scroll-smooth">
                         <span className="text-[10px] text-zinc-100 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700/50 hover:bg-zinc-700 transition-colors cursor-default shadow-sm">{i18n.t('chat.overlord_name')}</span>
@@ -884,7 +884,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
 
             {/* Scope & Target Selector */}
             <div className="relative z-20 flex flex-col border-b border-zinc-800/30">
-                <div className="flex p-1.5 bg-zinc-950/20 backdrop-blur-sm gap-1">
+                <div className="flex px-6 py-2 bg-zinc-950/20 backdrop-blur-sm gap-1">
                     {(['agent', 'cluster', 'swarm'] as Sovereign_Scope[]).map(scope => (
                         <button
                             key={scope}
@@ -904,7 +904,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
                 </div>
 
                 {activeScope !== 'swarm' && (
-                    <div className="px-3 pb-2 flex items-center gap-2">
+                    <div className="px-6 pb-3 flex items-center gap-2">
                         {/* Agent Selector */}
                         <div className="relative flex-1 min-w-0">
                             <button
@@ -1019,7 +1019,7 @@ const SovereignChatContent: React.FC<SovereignChatContentProps> = ({
             {/* Messages Window */}
             <div
                 ref={scroll_ref}
-                className="relative z-10 flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar"
+                className="relative z-10 flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
             >
                 {showTranscript ? (
                     <Buffered_Transcript_View agent_id={selectedAgentId || undefined} />

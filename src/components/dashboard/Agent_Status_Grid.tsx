@@ -165,7 +165,7 @@ export const Agent_Status_Grid: React.FC<Agent_Status_Grid_Props> = ({
                                 </div>
                                 <button 
                                     onClick={() => handle_reattach_tab(active_tab_id)}
-                                    className="px-4 py-2 bg-zinc-100 text-black text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-white transition-all shadow-lg active:scale-95"
+                                    className="px-4 py-2 bg-zinc-800 text-zinc-100 text-xs font-bold uppercase tracking-widest rounded-lg border border-zinc-700 hover:bg-zinc-700 transition-all active:scale-95"
                                 >
                                     {i18n.t('layout.recall_sector')}
                                 </button>

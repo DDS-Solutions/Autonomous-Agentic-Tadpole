@@ -161,7 +161,7 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                         initial={{ opacity: 0, scale: 0.95, y: -20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: -20 }}
-                        className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden"
+                        className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
                     >
                         <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
                             <Search className={clsx("transition-colors", is_searching ? "text-green-500 animate-pulse" : "text-zinc-500")} size={20} />
@@ -190,7 +190,7 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                                         onClick={item.action}
                                         className={clsx(
                                             "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group",
-                                            index === selected_index ? "bg-zinc-800/80 text-zinc-100 shadow-inner" : "text-zinc-400 hover:text-zinc-200"
+                                            index === selected_index ? "bg-zinc-800/80 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
                                         )}
                                         role="option"
                                         aria-selected={index === selected_index}

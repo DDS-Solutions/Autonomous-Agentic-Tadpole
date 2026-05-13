@@ -32,7 +32,7 @@ export const Dashboard_Header: React.FC<DashboardHeaderProps> = ({
     deployingTarget
 }): React.ReactElement => {
     return (
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-2 px-1 shrink-0">
+        <div className="flex items-center justify-between border-b border-zinc-900 pb-2 px-6 shrink-0">
             <div>
                 <Tooltip content={i18n.t('dashboard.ops_center_tooltip')} position="right">
                     <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-100 cursor-help">
@@ -68,7 +68,7 @@ export const Dashboard_Header: React.FC<DashboardHeaderProps> = ({
                             <button
                                 onClick={() => onDeploy(node.id, node.name)}
                                 disabled={deployingTarget !== null}
-                                className={`flex items-center gap-2 px-4 py-2 text-white font-bold rounded-lg text-xs transition-all shadow-lg disabled:opacity-50 ${themeClass}`}
+                                className={`flex items-center gap-2 px-4 py-2 text-white font-bold rounded-lg text-xs transition-all disabled:opacity-50 ${themeClass}`}
                             >
                                 {deployingTarget === node.id ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
                                 {deployingTarget === node.id ? i18n.t('dashboard.deploying') : deployLabel}

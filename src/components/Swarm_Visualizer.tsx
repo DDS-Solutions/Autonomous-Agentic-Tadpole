@@ -238,7 +238,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     const current_link_count = graph_metadata.links;
 
     return (
-        <div className="w-full h-full relative bg-zinc-950 rounded-[2.5rem] border border-zinc-900/50 shadow-2xl overflow-hidden group">
+        <div className="w-full h-full relative bg-zinc-950 rounded-xl border border-zinc-900/50 overflow-hidden group">
             <ForceGraph2D
                 ref={fg_ref}
                 /* eslint-disable-next-line react-hooks/refs */
@@ -311,7 +311,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                                 window.open(window.location.origin + '/detached/swarm-pulse', 'SwarmPulse', 'width=1000,height=800');
                             }
                         }}
-                        className="p-2.5 bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all shadow-lg group/detach"
+                        className="p-2.5 bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group/detach"
                         title={i18n.t('swarm_visualizer.detach_tooltip')}
                     >
                         <ExternalLink size={16} className="group-hover/detach:scale-110 transition-transform" />
@@ -323,7 +323,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
             <div className="absolute bottom-8 right-8 flex gap-2">
                  <button 
                     onClick={() => fg_ref.current?.zoomToFit(400, 50)}
-                    className="px-4 py-2 bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-xl text-[9px] font-bold text-zinc-400 uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-all shadow-lg overflow-hidden group/btn"
+                    className="px-4 py-2 bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-xl text-[9px] font-bold text-zinc-400 uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-all overflow-hidden group/btn"
                  >
                     <span className="relative z-10">{i18n.t('swarm_visualizer.recenter_swarm')}</span>
                  </button>

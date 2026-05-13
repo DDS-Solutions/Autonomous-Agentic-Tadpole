@@ -96,15 +96,14 @@ const Hierarchy_Node_Base: React.FC<Hierarchy_Node_Props> = ({
         <div ref={node_ref} className="relative group transition-all duration-300 w-full z-0">
             <div
                 className={`
-                    relative z-10 p-3 rounded-xl border backdrop-blur-xl transition-all duration-300
-                    bg-[#1b1b1e]/60
+                    relative z-10 p-4 rounded-xl border backdrop-blur-md transition-all duration-300
                     ${agent.status !== 'offline' && agent.status !== 'idle' ? 'border-zinc-800' : 'border-zinc-800/30'}
                     hover:border-zinc-600 hover:scale-[1.02] active:scale-[0.98]
-                    overflow-visible flex flex-col gap-3 shadow-2xl
+                    overflow-visible flex flex-col gap-3
                 `}
                 style={{
-                    borderColor: `${agent_color}30`,
-                    boxShadow: `0 0 15px ${agent_color}10`,
+                    backgroundColor: 'color-mix(in srgb, var(--color-theme-900) 60%, transparent)',
+                    borderColor: `color-mix(in srgb, ${agent_color} 40%, transparent)`,
                     color: agent_color
                 }}
             >

@@ -62,7 +62,7 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
     };
 
     return (
-        <div className="relative z-10 p-4 bg-zinc-950/50 backdrop-blur-xl border-t border-zinc-800/50">
+        <div className="relative z-10 px-6 py-4 bg-zinc-950/50 backdrop-blur-xl border-t border-zinc-800/50">
             <div className="flex items-center gap-2 bg-black/40 border border-zinc-800/60 rounded-xl p-1 focus-within:border-zinc-500/50 transition-all shadow-inner relative">
                 {is_listening && (
                     <div className="absolute inset-0 bg-green-500/10 animate-pulse pointer-events-none rounded-xl" />

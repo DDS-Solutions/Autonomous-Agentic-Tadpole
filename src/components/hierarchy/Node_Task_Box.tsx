@@ -26,8 +26,8 @@ export const Node_Task_Box = React.memo(({ agent }: Node_Task_Box_Props) => {
         <motion.div
             initial={false}
             animate={{
-                borderColor: is_active ? 'rgba(56, 189, 248, 0.4)' : 'rgba(39, 39, 42, 0.5)',
-                backgroundColor: is_active ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.2)'
+                borderColor: is_active ? 'color-mix(in srgb, var(--color-info) 40%, transparent)' : 'color-mix(in srgb, var(--color-theme-800) 50%, transparent)',
+                backgroundColor: is_active ? 'color-mix(in srgb, var(--color-theme-950) 40%, transparent)' : 'color-mix(in srgb, var(--color-theme-950) 20%, transparent)'
             }}
             className={`
                 text-[11px] min-h-[42px] max-h-[80px] overflow-y-auto leading-tight p-2.5 rounded-lg border z-10 transition-colors custom-scrollbar relative

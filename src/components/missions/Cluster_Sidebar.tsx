@@ -74,8 +74,8 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
     };
 
     return (
-        <div className="md:col-span-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-2 pl-1">
-            <div className="flex items-center justify-between px-2">
+        <div className="md:col-span-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar px-4 py-2">
+            <div className="flex items-center justify-between">
                 <h3 className="sovereign-header-text">{i18n.t('missions.header_active_clusters')}</h3>
                 <Tooltip content={i18n.t('missions.tooltip_create_cluster')} position="left">
                     <button
@@ -163,7 +163,7 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                             }
                         }}
                         className={`
-                            group relative p-3 rounded-xl border transition-all cursor-pointer overflow-hidden
+                            group relative p-4 rounded-xl border transition-all cursor-pointer overflow-hidden
                             ${is_selected ? `${theme.bg} ${theme.border} shadow-lg ${theme.glow} translate-y-[-2px]` : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:translate-y-[-1px]'}
                             ${is_active_cluster ? 'ring-1 ring-emerald-500/30' : ''}
                         `}

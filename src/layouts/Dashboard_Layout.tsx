@@ -228,7 +228,7 @@ export default function Dashboard_Layout() {
     const nav_item_class = ({ isActive: is_active }: { isActive: boolean }) => clsx(
         "flex items-center gap-3 p-2 rounded-md font-medium cursor-pointer transition-all duration-200 text-sm",
         is_active
-            ? "bg-zinc-800 text-zinc-100 shadow-inner border border-zinc-700/50"
+            ? "bg-zinc-800 text-zinc-100 border border-zinc-700/50"
             : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300"
     );
 
@@ -239,7 +239,7 @@ export default function Dashboard_Layout() {
     );
     return (
         <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-700/30">
-            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-green-600 text-white px-4 py-2 rounded shadow-lg">
+            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-emerald-600 text-white px-4 py-2 rounded">
                 {i18n.t('layout.skip_to_content') || 'Skip to content'}
             </a>
             <Sidebar nav_item_class={nav_item_class} />
@@ -301,7 +301,7 @@ export default function Dashboard_Layout() {
                                                 </div>
                                                 <button 
                                                     onClick={() => use_tab_store.getState().toggle_tab_detachment(tab.id)}
-                                                    className="px-4 py-2 bg-zinc-100 text-black text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-white transition-all shadow-lg active:scale-95"
+                                                    className="px-4 py-2 bg-zinc-800 text-zinc-100 text-xs font-bold uppercase tracking-widest rounded-lg border border-zinc-700 hover:bg-zinc-700 transition-all active:scale-95"
                                                 >
                                                     {i18n.t('layout.recall_sector')}
                                                 </button>
