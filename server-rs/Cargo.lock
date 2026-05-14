@@ -5710,6 +5710,7 @@ dependencies = [
  "lru 0.18.0",
  "md5",
  "mdns-sd",
+ "memmap2",
  "moka",
  "ndarray 0.15.6",
  "once_cell",

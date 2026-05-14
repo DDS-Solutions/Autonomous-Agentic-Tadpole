@@ -344,36 +344,51 @@ impl AgentRunner {
             limiter.acquire(estimated_tokens).await;
         }
 
-        // ### 🛡️ [Resource Guard] Backend Pre-flight
-        // Check system memory pressure before initiating local inference.
-        // If pressure is critical, we fail early to prevent OOM or long hangs.
+        // ### 🛡️ [SSCP] Resource Guard & Context Tiering
+        // Monitor system memory pressure and manage context tiers before initiating local inference.
         let is_local = ctx.model_config.provider == ModelProvider::Ollama 
             || ctx.model_config.base_url.as_ref().is_some_and(|u| u.contains("127.0.0.1") || u.contains("localhost"));
         
         if is_local {
-            let stats = self.state.security.system_monitor.get_system_defense_stats();
+            let arbiter = self.state.resources.continuity_arbiter.clone();
             
-            // Inject pressure into config for dynamic timeout handling in provider
-            let mut config = ctx.model_config.clone();
-            let mut extras = config.extra_parameters.take().unwrap_or_default();
-            extras.insert("memory_pressure".to_string(), serde_json::json!(stats.memory_pressure));
-            config.extra_parameters = Some(extras);
-            
-            let mut new_ctx = ctx.clone();
-            new_ctx.model_config = config;
-
-            if stats.memory_pressure >= 0.98 {
-                tracing::error!("🚨 [ResourceGuard] CRITICAL memory pressure ({:.1}%). Blocking local inference for agent {}.", stats.memory_pressure * 100.0, ctx.agent_id);
-                return Err(AppError::InfrastructureError { 
-                    provider_id: "local_guard".to_string(), 
-                    detail: format!("RESOURCE_GUARD: System memory pressure is CRITICAL ({:.1}%). Local inference blocked to prevent crash.", stats.memory_pressure * 100.0), 
-                    help_link: None 
-                });
-            } else if stats.memory_pressure >= 0.92 {
-                tracing::warn!("⚠️ [ResourceGuard] High memory pressure ({:.1}%). Local inference may be slow.", stats.memory_pressure * 100.0);
+            // 0. Rehydrate if evicted (Solves Dead Code APIs and maintains continuity)
+            if let Some(restored) = arbiter.rehydrate(&ctx.agent_id).await {
+                if let Some(mut agent) = self.state.registry.agents.get_mut(&ctx.agent_id) {
+                    agent.state.working_memory = restored;
+                    tracing::info!("♻️ [SSCP] Rehydrated working memory for agent {}", ctx.agent_id);
+                }
             }
 
-            let provider = self.resolve_provider(&new_ctx, client);
+            // 1. Update hot registry with current agent's estimated footprint
+            let estimated_tokens = ((system_prompt.len() + user_message.len()) as f64 / 3.5) as usize;
+            arbiter.update_agent_load(&ctx.agent_id, estimated_tokens);
+
+            // 2. Check for VRAM/RAM pressure
+            if arbiter.check_vram_pressure() {
+                if let Some(target_id) = arbiter.select_eviction_target() {
+                    if target_id != ctx.agent_id {
+                        // Retrieve the eviction target's working memory from the registry
+                        let working_memory = self.state.registry.agents.get(&target_id)
+                            .map(|a| a.state.working_memory.clone());
+                        tracing::warn!("❄️ [SSCP] High memory pressure. Evicting agent {} to SSD to prioritize {}", target_id, ctx.agent_id);
+                        let _ = arbiter.evict_to_ssd(&target_id, working_memory.as_ref()).await;
+                    }
+                }
+            }
+
+            // 3. Early failure for extreme pressure (SSCP Hard Limit)
+            let stats = self.state.security.system_monitor.get_system_defense_stats();
+            if stats.memory_pressure >= 0.98 {
+                tracing::error!("🚨 [SSCP] CRITICAL memory pressure ({:.1}%). Swarm execution suspended.", stats.memory_pressure * 100.0);
+                return Err(AppError::InfrastructureError { 
+                    provider_id: "sscp_guard".to_string(), 
+                    detail: "CRITICAL: System memory pressure is too high for safe inference.".to_string(), 
+                    help_link: None 
+                });
+            }
+
+            let provider = self.resolve_provider(ctx, client);
             let result = provider.generate(system_prompt, user_message, tools).await;
             return result.map_err(|e| e.into());
         }
