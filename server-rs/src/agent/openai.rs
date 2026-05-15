@@ -347,20 +347,24 @@ impl OpenAIProvider {
                             failed_gen
                         );
                         // 1. Attempt Polyglot extraction from the failed generation
-                        let recovered_calls = PolyglotParser::extract(failed_gen);
-                        if !recovered_calls.is_empty() {
-                            tracing::info!("🛠️ [OpenAI] Successfully recovered {} tool calls via PolyglotParser.", recovered_calls.len());
-                            let recovered_text = PolyglotParser::scrub_tool_calls(failed_gen);
-                            return Ok((
-                                recovered_text,
-                                recovered_calls,
-                                None,
-                            ));
+                        match PolyglotParser::extract(failed_gen) {
+                            Ok(recovered_calls) => {
+                                tracing::info!("🛠️ [OpenAI] Successfully recovered {} tool calls via PolyglotParser.", recovered_calls.len());
+                                let recovered_text = PolyglotParser::scrub_tool_calls(failed_gen);
+                                return Ok((
+                                    recovered_text,
+                                    recovered_calls,
+                                    None,
+                                ));
+                            }
+                            Err(crate::agent::runner::parser::ParserError::NoCallsFound) => {
+                                tracing::warn!("🛠️ [OpenAI] Recovery failed. No calls found in failed generation.");
+                            }
+                            Err(e) => {
+                                tracing::warn!("🛠️ [OpenAI] Extraction error during recovery: {}. Requiring annealing...", e);
+                                return Err(AppError::AnnealingRequired(e.to_string()));
+                            }
                         }
-
-                        tracing::warn!(
-                            "🛠️ [OpenAI] Recovery failed. Regex did not match failed generation."
-                        );
                     }
                 }
             }
@@ -388,12 +392,31 @@ impl OpenAIProvider {
         let mut function_calls = Vec::new();
         if let Some(tool_calls) = &choice.message.tool_calls {
             for tc in tool_calls {
-                let args: serde_json::Value =
-                    serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
-                function_calls.push(ToolCall {
-                    name: tc.function.name.clone(),
-                    args,
-                });
+                match serde_json::from_str::<serde_json::Value>(&tc.function.arguments) {
+                    Ok(args) => {
+                        function_calls.push(ToolCall {
+                            name: tc.function.name.clone(),
+                            args,
+                        });
+                    }
+                    Err(e) => {
+                        // Attempt heuristic repair first
+                        let repaired = PolyglotParser::repair_json(&tc.function.arguments);
+                        match serde_json::from_str::<serde_json::Value>(&repaired) {
+                            Ok(args) => {
+                                tracing::info!("🛠️ [OpenAI] Repaired native tool call JSON for '{}'.", tc.function.name);
+                                function_calls.push(ToolCall {
+                                    name: tc.function.name.clone(),
+                                    args,
+                                });
+                            }
+                            Err(_) => {
+                                tracing::warn!("🛠️ [OpenAI] Native tool arguments JSON parse failed: {}. Requiring annealing...", e);
+                                return Err(AppError::AnnealingRequired(format!("Tool '{}' arguments JSON parse failed: {}", tc.function.name, e)));
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -403,11 +426,17 @@ impl OpenAIProvider {
         }
 
         // ### 🛠️ Recovery & Cleanup: Polyglot Tool Extraction
-        let poly_calls = PolyglotParser::extract(&output_text);
-        if !poly_calls.is_empty() {
-            tracing::info!("🛠️ [Polyglot] Extracted {} additional tool calls.", poly_calls.len());
-            function_calls.extend(poly_calls);
-            output_text = PolyglotParser::scrub_tool_calls(&output_text);
+        match PolyglotParser::extract(&output_text) {
+            Ok(poly_calls) => {
+                tracing::info!("🛠️ [Polyglot] Extracted {} additional tool calls.", poly_calls.len());
+                function_calls.extend(poly_calls);
+                output_text = PolyglotParser::scrub_tool_calls(&output_text);
+            }
+            Err(crate::agent::runner::parser::ParserError::NoCallsFound) => {} // Ignore narrative-only
+            Err(e) => {
+                tracing::warn!("🛠️ [Polyglot] Extraction failed: {}. Requiring annealing...", e);
+                return Err(AppError::AnnealingRequired(e.to_string()));
+            }
         }
 
         let token_usage = parsed.usage.map(|u| TokenUsage {

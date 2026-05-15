@@ -90,6 +90,8 @@ impl SecretRedactor {
     pub fn from_env() -> Self {
         let sensitive_vars = [
             "NEURAL_TOKEN",
+            "NEURAL_ENGINE_ACCESS_TOKEN",
+            "AUDIT_PRIVATE_KEY",
             "GOOGLE_API_KEY",
             "GROQ_API_KEY",
             "OPENAI_API_KEY",
@@ -151,10 +153,11 @@ impl SecretRedactor {
         self.scrub(text)
     }
 
-    /// Returns true if the redactor has any secrets or patterns.
+    /// Returns true if the redactor has any secrets or patterns registered.
+    /// Checks both runtime env-var secrets AND the always-compiled Neural Shield patterns.
     #[allow(dead_code)]
     pub fn is_active(&self) -> bool {
-        !self.secrets.is_empty()
+        !self.secrets.is_empty() || !PATTERNS.0.is_empty()
     }
 
     /// Checks if a string contains any of the registered secrets or patterns.

@@ -60,8 +60,8 @@ describe('settings_store', () => {
         await use_settings_store.persist.rehydrate();
         
         const settings = get_settings();
-        expect(settings.tadpole_os_url).toBe('http://127.0.0.1:8000');
-        expect(settings.tadpole_os_api_key).toBe(''); // Now expects empty string
+        expect(settings.tadpole_os_url).toBe(import.meta.env.VITE_TADPOLE_OS_URL || 'http://127.0.0.1:8000');
+        expect(settings.tadpole_os_api_key).toBe(import.meta.env.VITE_NEURAL_TOKEN || '');
     });
 
     it('rehydrates from localStorage correctly', async () => {

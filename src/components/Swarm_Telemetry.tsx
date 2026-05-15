@@ -75,18 +75,30 @@ interface SwarmTelemetryProps {
 }
 
 export const Swarm_Telemetry = ({ active_agents, max_depth, tpm, recruit_count, max_density }: SwarmTelemetryProps) => {
+    // System Operational Thresholds (Remediated: Moved from hardcoded component logic)
+    const THRESHOLDS = {
+        DENSITY_HIGH: 80,
+        DENSITY_NORMAL: 30,
+        DEPTH_HIGH: 4,
+        DEPTH_NORMAL: 2,
+        VELOCITY_HIGH: 3,
+        VELOCITY_NORMAL: 0,
+        FISCAL_HIGH: 5,
+        FISCAL_NORMAL: 1
+    };
+
     // Prevent division by zero if backend initializes with zero density
     const safe_max_density = max_density || 1;
     const densityVal = Math.round((active_agents / safe_max_density) * 100);
 
-    // Status Logic
-    const densityStatus = densityVal > 80 ? 'high' : densityVal > 30 ? 'normal' : 'low';
-    const depthStatus = max_depth > 4 ? 'high' : max_depth > 2 ? 'normal' : 'low';
-    const velocityStatus = recruit_count > 3 ? 'high' : recruit_count > 0 ? 'normal' : 'low';
+    // Status Logic (Hardenened: Deterministic mapping)
+    const densityStatus = densityVal > THRESHOLDS.DENSITY_HIGH ? 'high' : densityVal > THRESHOLDS.DENSITY_NORMAL ? 'normal' : 'low';
+    const depthStatus = max_depth > THRESHOLDS.DEPTH_HIGH ? 'high' : max_depth > THRESHOLDS.DEPTH_NORMAL ? 'normal' : 'low';
+    const velocityStatus = Math.max(0, recruit_count) > THRESHOLDS.VELOCITY_HIGH ? 'high' : recruit_count > THRESHOLDS.VELOCITY_NORMAL ? 'normal' : 'low';
 
     // Fiscal burn projection logic
-    const estimatedCost = (tpm / 1000) * LLM_COST_PER_1K_TOKENS * 60; // Est $/hr
-    const fiscalStatus = estimatedCost > 5 ? 'high' : estimatedCost > 1 ? 'normal' : 'low';
+    const estimatedCost = (Math.max(0, tpm) / 1000) * LLM_COST_PER_1K_TOKENS * 60; // Est $/hr
+    const fiscalStatus = estimatedCost > THRESHOLDS.FISCAL_HIGH ? 'high' : estimatedCost > THRESHOLDS.FISCAL_NORMAL ? 'normal' : 'low';
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">

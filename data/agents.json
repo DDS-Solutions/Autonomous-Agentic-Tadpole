@@ -409,7 +409,7 @@
       "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["code_audit", "system_audit"],
+    "skills": ["code_audit", "system_audit", "verify_telemetry"],
     "workflows": ["Mission Analysis"]
   }
 ]

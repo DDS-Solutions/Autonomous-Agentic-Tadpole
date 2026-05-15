@@ -47,23 +47,23 @@ fn workspaces_root(base_dir: &std::path::Path) -> Result<std::path::PathBuf, App
 }
 
 /// Robustly resolves the path to an agent's memory store by scanning workspaces.
-fn resolve_agent_memory_path(base_dir: &std::path::Path, agent_id: &str) -> Option<std::path::PathBuf> {
+async fn resolve_agent_memory_path(base_dir: &std::path::Path, agent_id: &str) -> Option<std::path::PathBuf> {
     let _safe_agent_id = crate::utils::security::sanitize_id(agent_id);
     let workspaces_dir = workspaces_root(base_dir).ok()?;
 
-    if !workspaces_dir.exists() {
+    if !tokio::fs::try_exists(&workspaces_dir).await.unwrap_or(false) {
         return None;
     }
 
     // Single-pass resolution using recursive searching or shallow walking
-    if let Ok(entries) = std::fs::read_dir(&workspaces_dir) {
-        for entry in entries.flatten() {
+    if let Ok(mut entries) = tokio::fs::read_dir(&workspaces_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 let agents_base = entry_path.join("agents");
                 if let Ok(valid_agent_dir) = crate::utils::security::validate_path(&agents_base, &_safe_agent_id) {
                     let potential_path = valid_agent_dir.join("memory.lance");
-                    if potential_path.exists() {
+                    if tokio::fs::try_exists(&potential_path).await.unwrap_or(false) {
                         return Some(potential_path);
                     }
                 }
@@ -74,25 +74,25 @@ fn resolve_agent_memory_path(base_dir: &std::path::Path, agent_id: &str) -> Opti
 }
 
 /// Lists all valid agent memory paths across all clusters and workspaces.
-fn list_all_memory_paths(base_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+async fn list_all_memory_paths(base_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
     let workspaces_dir = match workspaces_root(base_dir) {
         Ok(d) => d,
         Err(_) => return paths,
     };
 
-    if !workspaces_dir.exists() {
+    if !tokio::fs::try_exists(&workspaces_dir).await.unwrap_or(false) {
         return paths;
     }
 
-    if let Ok(workspace_entries) = std::fs::read_dir(&workspaces_dir) {
-        for workspace in workspace_entries.flatten() {
+    if let Ok(mut workspace_entries) = tokio::fs::read_dir(&workspaces_dir).await {
+        while let Ok(Some(workspace)) = workspace_entries.next_entry().await {
             let agents_dir = workspace.path().join("agents");
-            if agents_dir.exists() {
-                if let Ok(agent_entries) = std::fs::read_dir(&agents_dir) {
-                    for agent in agent_entries.flatten() {
+            if tokio::fs::try_exists(&agents_dir).await.unwrap_or(false) {
+                if let Ok(mut agent_entries) = tokio::fs::read_dir(&agents_dir).await {
+                    while let Ok(Some(agent)) = agent_entries.next_entry().await {
                         let db_path = agent.path().join("memory.lance");
-                        if db_path.exists() {
+                        if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
                             paths.push(db_path);
                         }
                     }
@@ -197,7 +197,7 @@ pub async fn get_agent_memory(
 
     #[cfg(feature = "vector-memory")]
     {
-        let memory_path = resolve_agent_memory_path(&state.base_dir, &agent_id).ok_or_else(|| {
+        let memory_path = resolve_agent_memory_path(&state.base_dir, &agent_id).await.ok_or_else(|| {
             AppError::NotFound(format!("Memory for agent {} not found", agent_id))
         })?;
 
@@ -272,7 +272,7 @@ pub async fn delete_agent_memory(
 
     #[cfg(feature = "vector-memory")]
     {
-        let memory_path = resolve_agent_memory_path(&state.base_dir, &agent_id).ok_or_else(|| {
+        let memory_path = resolve_agent_memory_path(&state.base_dir, &agent_id).await.ok_or_else(|| {
             AppError::NotFound(format!("Memory for agent {} not found", agent_id))
         })?;
 
@@ -425,7 +425,7 @@ pub async fn global_search(
 
     // Iterate across workspaces
     {
-        let memory_paths = list_all_memory_paths(&state.base_dir);
+        let memory_paths = list_all_memory_paths(&state.base_dir).await;
         for db_path in memory_paths {
             if let Ok(mem) = VectorMemory::connect(&db_path.to_string_lossy(), "memories").await {
                 if let Ok(hits) = mem.search_knowledge_full(query_vec.clone(), 5).await {

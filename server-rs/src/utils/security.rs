@@ -125,7 +125,13 @@ pub fn redact_secrets(input: &str) -> String {
             r"(?i)AKIA[0-9A-Z]{16}",
         ];
         let set = RegexSet::new(&patterns).expect("Security patterns must be valid regex.");
-        let regexes = patterns.iter().map(|p| Regex::new(p).unwrap()).collect();
+        let regexes = patterns.iter().filter_map(|p| match Regex::new(p) {
+            Ok(re) => Some(re),
+            Err(e) => {
+                tracing::error!("❌ [Security] Failed to compile individual regex '{}': {}", p, e);
+                None
+            }
+        }).collect();
         (set, regexes)
     });
 

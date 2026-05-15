@@ -943,6 +943,9 @@ mod tests {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
+                    crate::agent::continuity::SSDManager::new(base_dir.clone()),
+                ))),
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
             }),
             base_dir,

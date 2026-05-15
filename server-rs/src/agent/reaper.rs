@@ -16,7 +16,6 @@
 use crate::state::AppState;
 use crate::error::AppError;
 use chrono::{Duration, Utc};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration as TokioDuration};
 
@@ -31,14 +30,15 @@ impl SwarmReaper {
             // Wait for the next sweep interval
             sleep(TokioDuration::from_secs(3600)).await;
 
-            if let Err(e) = Self::sweep(&state.resources.pool).await {
+            if let Err(e) = Self::sweep(&state).await {
                 tracing::error!("🚨 [Reaper] Batch sweep failed: {:?}", e);
             }
         }
     }
 
     /// Performs a single cleanup sweep of the entire system.
-    pub async fn sweep(pool: &SqlitePool) -> Result<(), AppError> {
+    pub async fn sweep(state: &Arc<AppState>) -> Result<(), AppError> {
+        let pool = &state.resources.pool;
         let threshold = Utc::now() - Duration::hours(48);
         tracing::info!("🧹 [Reaper] Starting sweep for missions older than {}", threshold);
 
@@ -80,7 +80,23 @@ impl SwarmReaper {
 
             tx.commit().await.map_err(AppError::Sqlx)?;
 
-            // 3. Purge Physical Workspace
+            // 4. Clear stale active_mission pointers from in-memory registry (II-04)
+            // Prevents agents that remain live from holding a dangling DB reference.
+            state.registry.agents.iter_mut().for_each(|mut entry| {
+                let is_stale = entry
+                    .state
+                    .active_mission
+                    .as_ref()
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    == Some(&mission_id);
+                if is_stale {
+                    entry.state.active_mission = None;
+                    tracing::debug!("🧹 [Reaper] Cleared stale active_mission for agent {}", entry.identity.id);
+                }
+            });
+
+            // 5. Purge Physical Workspace
             // Logic: data/workspaces/{cluster}/missions/{mission_id}
             Self::purge_workspace_files(&mission_id).await;
         }
@@ -111,7 +127,5 @@ impl SwarmReaper {
         }
     }
 }
-
-// Metadata: [reaper]
 
 // Metadata: [reaper]

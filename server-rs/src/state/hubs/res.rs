@@ -83,6 +83,8 @@ pub struct ResourceHub {
     pub base_dir: std::path::PathBuf,
     /// Global resource arbiter to prevent thread-pool exhaustion during heavy I/O.
     pub arbiter: Arc<tokio::sync::Semaphore>,
+    /// Sovereign Context Protocol (SSCP) arbiter for SSD tiering.
+    pub continuity_arbiter: Arc<crate::agent::continuity::ContextArbiter>,
     /// High-fidelity code parser for symbol extraction.
     pub parser: Arc<SymbolParser>,
 }

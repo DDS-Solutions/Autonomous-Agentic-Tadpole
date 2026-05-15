@@ -18,7 +18,7 @@
  * Refactored for strict snake_case compliance for backend parity.
  */
 import { useState, useEffect, useMemo, memo } from 'react';
-import { resolve_provider } from '../utils/model_utils';
+import { resolve_provider, resolve_technical_model_id } from '../utils/model_utils';
 import type { Agent } from '../types';
 import { Hierarchy_Node } from '../components/Hierarchy_Node';
 import AgentConfigPanel from '../components/AgentConfigPanel';
@@ -64,18 +64,21 @@ export default function Org_Chart() {
     };
 
     const handle_model_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: model_id, provider } });
     };
-
+ 
     const handle_model_2_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: model_id, provider } });
     };
-
+ 
     const handle_model_3_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: model_id, provider } });
     };
 
     // ── Data Partitioning (Dynamic Hierarchy Builder) ────────────────────────

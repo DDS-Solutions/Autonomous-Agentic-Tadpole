@@ -218,6 +218,8 @@
     "swarm_capacity_tooltip": "Allocated budget utilization across the entire cluster",
     "recruitment_velocity": "Recruitment Velocity",
     "recruitment_velocity_tooltip": "Agent node deployment frequency over the last 24 hours",
+    "swarm_tokens": "Swarm Tokens",
+    "swarm_tokens_tooltip": "Total neural tokens consumed across the entire agent swarm",
     "system_health": "System Health",
     "system_health_tooltip": "Real-time verification of the Neural Engine gateway status",
     "handoff_msg": "Direct Link: {{source}} to {{target}}"
@@ -1381,3 +1383,4 @@
     "msg_no_sync_sources": "No background sync sources configured."
   }
 }
+

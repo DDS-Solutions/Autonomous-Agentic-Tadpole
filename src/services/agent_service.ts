@@ -59,6 +59,12 @@ export const load_agents = async (options: RequestInit = {}): Promise<Agent[]> =
                 }
             }
         } catch (err) {
+            // [Harden Phase 4: Abort Guard]
+            // If the signal was explicitly aborted by the UI (e.g. unmount),
+            // retrying is futile and causes 'Signal Aborted' noise in telemetry.
+            if (err instanceof Error && err.name === 'AbortError') {
+                break;
+            }
             console.warn(`⚠️ [AgentService] Load attempt ${attempt + 1} failed:`, err);
         }
 
@@ -99,7 +105,5 @@ export { normalize_agent_dto as normalize_agent };
  */
 export const get_mock_agents = (): Agent[] => mock_agents as unknown as Agent[];
 
-
-// Metadata: [agent_service]
 
 // Metadata: [agent_service]

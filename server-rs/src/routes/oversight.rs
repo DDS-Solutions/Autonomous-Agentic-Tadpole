@@ -286,16 +286,21 @@ pub async fn decide_oversight(
             entry.mission_id.clone(),
         );
 
-        // 4. Update audit trail
+        // 4. Update audit trail & Persistent Log
         let audit = state.security.audit_trail.clone();
         let eid = entry.id.clone();
         let mission_id = entry.mission_id.clone();
+        let decision_str = payload.decision.clone();
+        let state_c = state.clone();
+        
         tokio::spawn(async move {
             let params = serde_json::to_string(&json!({
                 "entry_id": eid,
                 "approved": approved
             }))
             .unwrap_or_default();
+            
+            // Record in audit trail
             let _ = audit
                 .record(
                     "oversight",
@@ -305,6 +310,17 @@ pub async fn decide_oversight(
                     &params,
                 )
                 .await;
+
+            // Update persistent oversight_log
+            let now = chrono::Utc::now();
+            let _ = sqlx::query(
+                "UPDATE oversight_log SET status = 'resolved', decision = ?, decided_at = ?, decided_by = 'human' WHERE id = ?"
+            )
+            .bind(&decision_str)
+            .bind(now)
+            .bind(&eid)
+            .execute(&state_c.resources.pool)
+            .await;
         });
 
         // 5. Emit event for UI

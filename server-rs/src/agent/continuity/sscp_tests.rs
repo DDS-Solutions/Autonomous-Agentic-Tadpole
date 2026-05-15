@@ -112,9 +112,9 @@ mod tests {
         arbiter.update_agent_load("agent-medium", 3000);
         arbiter.update_agent_load("agent-large", 8000);
 
-        assert_eq!(arbiter.hot_registry.len(), 3);
-        assert_eq!(arbiter.hot_registry.get("agent-small").unwrap().token_count, 500);
-        assert_eq!(arbiter.hot_registry.get("agent-large").unwrap().token_count, 8000);
+        assert_eq!(arbiter.hot_registry.lock().len(), 3);
+        assert_eq!(*arbiter.hot_registry.lock().get("agent-small").unwrap(), 500);
+        assert_eq!(*arbiter.hot_registry.lock().get("agent-large").unwrap(), 8000);
         println!("✅ Hot registry: 3 agents tracked with token counts");
 
         let _ = tokio::fs::remove_dir_all(&root).await;
@@ -167,7 +167,7 @@ mod tests {
         arbiter.evict_to_ssd("agent-x", Some(&memory)).await.unwrap();
 
         // Verify agent removed from hot registry
-        assert!(arbiter.hot_registry.get("agent-x").is_none());
+        assert!(arbiter.hot_registry.lock().get("agent-x").is_none());
 
         // Verify working memory was ACTUALLY written to Drive G
         let loaded = ssd.load_block("agent-x", "eviction-snapshot", "working-memory").await
@@ -395,7 +395,7 @@ mod tests {
 
         for h in handles { h.await.unwrap(); }
 
-        assert_eq!(arbiter.hot_registry.len(), 10);
+        assert_eq!(arbiter.hot_registry.lock().len(), 10);
         println!("✅ 10-agent concurrent flood on Drive G passed");
 
         let _ = tokio::fs::remove_dir_all(&path).await;

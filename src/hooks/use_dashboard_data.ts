@@ -18,6 +18,7 @@ import { useEngineStatus } from '../hooks/use_engine_status';
 import { event_bus, type log_entry } from '../services/event_bus';
 import { use_workspace_store } from '../stores/workspace_store';
 import { use_role_store, type Role_State } from '../stores/role_store';
+import { AuthError } from '../services/base_api_service';
 
 export function useDashboardData() {
     const { is_online } = useEngineStatus();
@@ -40,6 +41,12 @@ export function useDashboardData() {
             } catch (err) {
                 // Silently handle aborts; errors are already tracked in the store/API service
                 if (err instanceof Error && err.name === 'AbortError') return;
+                
+                if (err instanceof AuthError) {
+                    console.warn('[useDashboardData] Authentication pending: ', err.message);
+                    return;
+                }
+                
                 console.error('[useDashboardData] Initial fetch failed:', err);
             }
         };
@@ -72,8 +79,10 @@ export function useDashboardData() {
     const available_roles = useMemo(() => Object.keys(roles).sort(), [roles]);
 
     const active_agents = useMemo(() =>
-        (agents_list || []).filter((a: Agent) => (a.status === 'active' || a.status === 'speaking') && assigned_agent_ids.has(a.id)).length,
-        [agents_list, assigned_agent_ids]);
+        (agents_list || []).filter((a: Agent) => 
+            ['active', 'speaking', 'thinking', 'coding'].includes(a.status || '')
+        ).length,
+        [agents_list]);
  
     const total_cost = useMemo(() => (agents_list || []).reduce((acc: number, curr: Agent) => acc + (curr.cost_usd || 0), 0), [agents_list]);
     const total_budget = useMemo(() => (agents_list || []).reduce((acc: number, curr: Agent) => acc + (curr.budget_usd || 0), 0), [agents_list]);
@@ -84,13 +93,19 @@ export function useDashboardData() {
     const total_output_tokens = useMemo(() => (agents_list || []).reduce((acc: number, curr: Agent) => acc + (curr.output_tokens || 0), 0), [agents_list]);
  
     // Calculate Recruitment Velocity (Agents created in the last 24 hours)
-    // We use a stable reference for "now" to satisfy React purity rules for useMemo.
-    const [now] = useState(() => Date.now());
+    // We update 'now' periodically to keep the 24h window accurate for long-running sessions.
+    const [now, set_now] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => set_now(Date.now()), 1000 * 60 * 60); // Update hourly
+        return () => clearInterval(timer);
+    }, []);
+
     const recruit_velocity = useMemo(() => {
         const twenty_four_hours_ago = now - (24 * 60 * 60 * 1000);
         return (agents_list || []).filter((a: Agent) => {
-            const created_time = a.created_at ? new Date(a.created_at).getTime() : 0;
-            return created_time > twenty_four_hours_ago;
+            if (!a.created_at) return false;
+            const created_time = new Date(a.created_at).getTime();
+            return !isNaN(created_time) && created_time > twenty_four_hours_ago;
         }).length;
     }, [agents_list, now]);
 

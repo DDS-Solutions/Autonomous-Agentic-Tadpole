@@ -23,7 +23,8 @@ import type {
     AgentDto, 
     Task_Payload,
     Agent_Memory_Entry,
-    Raw_Agent_Memory_Entry
+    Raw_Agent_Memory_Entry,
+    AgentUpdateDto
 } from '../contracts/agent';
 import { api_request } from './base_api_service';
 import type { Skill_Definition, Workflow_Definition, Hook_Definition } from '../stores/skill_store';
@@ -38,6 +39,50 @@ import { serialize_role } from '../domain/roles/normalizer';
 import type { Role } from '../contracts/role/domain';
 
 import { normalize_agent_memory_entry } from '../domain/agents/normalizers';
+import { system_api_service } from './system_api_service';
+
+/**
+ * ResourceGuard: Utility to check system pressure before execution.
+ * Hardened: Now implements a 'Soft-Wait' pulse instead of a 'Hard-Fail' throw.
+ * This prevents tasks from aborting during transient spikes (Nexus-Fix-01).
+ */
+async function check_resource_guard(agent_id?: string) {
+    let attempts = 0;
+    const MAX_WAIT_ATTEMPTS = 12; // 60 seconds total at 5s intervals
+    
+    while (attempts < MAX_WAIT_ATTEMPTS) {
+        const status = await system_api_service.get_engine_status();
+        if (!status || !status.features?.includes('resource-guard')) return;
+
+        const quotas = await system_api_service.get_security_quotas();
+        const pressure = quotas.system_defense.memory_pressure;
+
+        if (pressure <= 0.8) {
+            if (attempts > 0) {
+                event_bus.emit_log({ 
+                    source: 'System', 
+                    text: `✅ Memory pressure stabilized (${(pressure * 100).toFixed(1)}%). Resuming task for ${agent_id?.toUpperCase() || 'AGENT'}.`, 
+                    severity: 'success' 
+                });
+            }
+            return;
+        }
+
+        // Under high pressure: Emit pulse and wait
+        if (attempts === 0) {
+            event_bus.emit_log({ 
+                source: 'System', 
+                text: `⚠️ High memory pressure (${(pressure * 100).toFixed(1)}%). Throttling task for ${agent_id?.toUpperCase() || 'AGENT'}...`, 
+                severity: 'warning' 
+            });
+        }
+        
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    throw new Error('Locally Throttled: System memory pressure remained > 80% for 60s. Task aborted to protect engine stability.');
+}
 
 export const agent_api_service = {
     /**
@@ -49,13 +94,16 @@ export const agent_api_service = {
      */
     get_agents: async (options: RequestInit = {}): Promise<AgentDto[]> => {
         return track_operation('AgentAPI', 'Fetching agent registry...', async () => {
-            type Agent_List_Envelope = { data?: AgentDto[] } | AgentDto[];
-            const result = await api_request<Agent_List_Envelope>('/v1/agents?per_page=500', { 
+            // Maturity Level 3: Handle the 'data' field in the paginated envelope if present.
+            interface Agent_List_Envelope {
+                data?: AgentDto[];
+            }
+            
+            const result = await api_request<Agent_List_Envelope | AgentDto[]>('/v1/agents?per_page=500', { 
                 method: 'GET',
                 ...options 
             });
 
-            // Maturity Level 3: Handle the 'data' field in the paginated envelope if present.
             if (result && typeof result === 'object' && !Array.isArray(result) && 'data' in result) {
                 return result.data ?? [];
             }
@@ -69,7 +117,7 @@ export const agent_api_service = {
      */
     update_agent: async (agent_id: string, patch: AgentPatch): Promise<boolean> => {
         return track_operation('AgentAPI', `Updating configuration for agent: ${agent_id.toUpperCase()}`, async () => {
-            const body = serialize_agent_update(patch);
+            const body: AgentUpdateDto = serialize_agent_update(patch);
 
             await api_request(`/v1/agents/${agent_id}`, {
                 method: 'PUT',
@@ -121,49 +169,113 @@ export const agent_api_service = {
      * SECURITY NOTE: If a local key is available in the vault, it is injected into the payload.
      * The Rust backend is responsible for redacting this key from systemic logs.
      */
-    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string, enabled_skills?: string[]): Promise<boolean> => {
-        return track_operation('AgentAPI', `Dispatching command to agent: ${agent_id.toUpperCase()}`, async () => {
-            const vault_store = use_vault_store.getState();
-            const model_store = use_model_store.getState();
-            const body: Task_Payload = { message, cluster_id, department, provider, model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id, enabled_skills };
+    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string, enabled_skills?: string[]): Promise<string> => {
+        const attempt_dispatch = async (current_model_id: string, current_provider: string, attempt_count: number, base_url_override?: string): Promise<string> => {
+            return track_operation('AgentAPI', `Dispatching command to agent: ${agent_id.toUpperCase()} (Attempt ${attempt_count + 1})`, async () => {
+                // 🛡️ Resource Guard: Check pressure before dispatch
+                await check_resource_guard(agent_id);
 
-            const provider_api_key = await vault_store.get_api_key(provider);
-            const is_actually_locked = vault_store.is_locked && !sessionStorage.getItem('tadpole-vault-master-key');
-            const is_local = provider === PROVIDERS.OLLAMA || provider === PROVIDERS.LOCAL;
+                const vault_store = use_vault_store.getState();
+                const model_store = use_model_store.getState();
+                const body: Task_Payload = { message, cluster_id, department, provider: current_provider, model_id: current_model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id, enabled_skills };
 
-            if (provider_api_key) {
-                // NeuralVault Override: Use the local key if present for immediate inference.
-                body.api_key = provider_api_key;
-                const inventory_model = model_store.models.find((m: Model_Entry) => m.name === model_id);
-                if (inventory_model) {
-                    // Attach rate limits (RPM/TPM) to the payload for backend governance
-                    if (inventory_model.rpm) body.rpm = inventory_model.rpm;
-                    if (inventory_model.tpm) body.tpm = inventory_model.tpm;
-                    if (inventory_model.rpd) body.rpd = inventory_model.rpd;
-                    if (inventory_model.tpd) body.tpd = inventory_model.tpd;
+                const provider_api_key = await vault_store.get_api_key(current_provider);
+                const is_actually_locked = vault_store.is_locked && !sessionStorage.getItem('tadpole-vault-master-key');
+                const is_local = current_provider === PROVIDERS.OLLAMA || current_provider === PROVIDERS.LOCAL;
+
+                if (provider_api_key) {
+                    body.api_key = provider_api_key;
+                    const inventory_model = model_store.models.find((m: Model_Entry) => m.name === current_model_id || m.modelId === current_model_id);
+                    if (inventory_model) {
+                        if (inventory_model.rpm) body.rpm = inventory_model.rpm;
+                        if (inventory_model.tpm) body.tpm = inventory_model.tpm;
+                    }
+                } else if (!is_local) {
+                    const reason = is_actually_locked ? 'Vault is Locked' : `No Key for ${current_provider.toUpperCase()}`;
+                    event_bus.emit_log({
+                        source: 'System',
+                        text: `🔒 Neural Security: ${reason} for ${agent_id.toUpperCase()}.`,
+                        severity: 'warning'
+                    });
                 }
-            } else if (!is_local) {
-                // Alert user if inference is attempted without a valid credentials link.
-                const reason = is_actually_locked ? 'Vault is Locked' : `No Key for ${provider.toUpperCase()}`;
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `🔒 Neural Security: ${reason} for ${agent_id.toUpperCase()}.`,
-                    severity: 'warning'
-                });
+
+                // 🌐 Multi-Instance Support: Use slot-specific baseUrl if available
+                if (base_url_override) {
+                    body.base_url = base_url_override;
+                } else if (use_provider_store.getState().base_urls[current_provider]) {
+                    body.base_url = use_provider_store.getState().base_urls[current_provider];
+                }
+
+                const final_request_id = request_id || (crypto.randomUUID ? crypto.randomUUID() : `task-${Date.now()}`);
+
+                try {
+                    await api_request(`/v1/agents/${agent_id}/tasks`, {
+                        method: 'POST',
+                        body: JSON.stringify(body),
+                        headers: { 'X-Request-Id': final_request_id }
+                    });
+                    return final_request_id;
+                } catch (err: any) {
+                    // 🔄 Sovereign Failover: Detect Connection Failure
+                    const is_conn_fail = err.message?.includes('error sending request') || 
+                                       err.message?.includes('Failed to fetch') || 
+                                       err.status === 503 || 
+                                       err.status === 504;
+
+                    if (is_conn_fail && attempt_count < 2) {
+                        const agent_store = (await import('../stores/agent_store')).use_agent_store.getState();
+                        const agent = agent_store.get_agent(agent_id);
+                        
+                        if (agent) {
+                            const next_slot = attempt_count === 0 ? 2 : 3;
+                            const next_config = next_slot === 2 ? agent.model_config2 : agent.model_config3;
+
+                            if (next_config && next_config.modelId && next_config.provider) {
+                                event_bus.emit_log({
+                                    source: 'System',
+                                    text: `🔄 Sovereign Failover: ${current_provider.toUpperCase()} unreachable. Switching ${agent.name} to Slot ${next_slot} (${next_config.provider.toUpperCase()} @ ${next_config.baseUrl || 'Default URL'})...`,
+                                    severity: 'warning'
+                                });
+                                return attempt_dispatch(next_config.modelId, next_config.provider, attempt_count + 1, next_config.baseUrl);
+                            }
+                        }
+                    }
+                    throw err;
+                }
+            }, { agent_id, mission_id: cluster_id });
+        };
+
+        return attempt_dispatch(model_id, provider, 0);
+    },
+
+    /**
+     * poll_task_status
+     * Polls the backend audit trail to resolve the final status of a task.
+     * This addresses the 'Asynchronous Blindness' identified in the Nexus audit.
+     */
+    poll_task_status: async (agent_id: string, request_id: string, timeout_ms = 60000): Promise<'success' | 'error' | 'pending'> => {
+        const start_time = Date.now();
+        while (Date.now() - start_time < timeout_ms) {
+            try {
+                const trail = await system_api_service.get_audit_trail(1, 10);
+                const entry = trail.data.find(e => e.id === request_id || (e as any).request_id === request_id);
+                
+                if (entry) {
+                    if (entry.status === 'success' || entry.status === 'completed') return 'success';
+                    if (entry.status === 'failed' || entry.status === 'error') return 'error';
+                }
+                
+                // Fallback: Check mission history if not in audit trail
+                const history = await api_request<{ entries: any[] }>(`/v1/agents/${agent_id}/memories`, { method: 'GET' });
+                const mission_completion = history.entries.find(e => e.metadata?.request_id === request_id && e.text?.toLowerCase().includes('mission completed'));
+                if (mission_completion) return 'success';
+
+            } catch (e) {
+                console.warn('[AgentAPI] Status polling error:', e);
             }
-
-            if (use_provider_store.getState().base_urls[provider]) {
-                body.base_url = use_provider_store.getState().base_urls[provider];
-            }
-
-            await api_request(`/v1/agents/${agent_id}/tasks`, {
-                method: 'POST',
-                body: JSON.stringify(body),
-                headers: request_id ? { 'X-Request-Id': request_id } : undefined
-            });
-
-            return true;
-        }, { agent_id, mission_id: cluster_id });
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Poll every 3s
+        }
+        return 'pending';
     },
 
     /**

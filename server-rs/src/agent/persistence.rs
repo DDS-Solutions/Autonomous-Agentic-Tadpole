@@ -114,6 +114,7 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
             heartbeat_at,
             requires_oversight,
             working_memory,
+            stt_engine,
             version
          FROM agents",
     )
@@ -215,6 +216,7 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
             requires_oversight: row
                 .get::<Option<bool>, _>("requires_oversight")
                 .unwrap_or(false),
+            stt_engine: row.try_get("stt_engine").ok(),
             version: row.get::<i64, _>("version") as u32,
         };
         agents.push(agent);
@@ -238,8 +240,8 @@ where
                 .cloned()
         });
 
-    sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             role = excluded.role,
@@ -279,6 +281,7 @@ where
             category = excluded.category,
             requires_oversight = excluded.requires_oversight,
             working_memory = excluded.working_memory,
+            stt_engine = excluded.stt_engine,
             version = agents.version + 1
             WHERE agents.id = excluded.id AND agents.version = ?")
     .bind(&agent.identity.id)
@@ -320,6 +323,7 @@ where
     .bind(&agent.identity.category)
     .bind(agent.requires_oversight)
     .bind(sqlx::types::Json(&agent.state.working_memory))
+    .bind(&agent.stt_engine)
     .bind(agent.version as i64)
     .bind(agent.version as i64)
     .execute(executor)
@@ -679,6 +683,7 @@ mod tests {
             category TEXT,
             requires_oversight BOOLEAN DEFAULT 0,
             working_memory TEXT DEFAULT '{}',
+            stt_engine TEXT,
             version INTEGER DEFAULT 1,
             created_at DATETIME
         )",

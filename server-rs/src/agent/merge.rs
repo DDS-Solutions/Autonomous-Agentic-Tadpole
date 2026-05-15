@@ -80,6 +80,7 @@ pub struct AgentConfigUpdate {
     pub model_config3: Option<ModelConfig>,
     pub voice_id: Option<String>,
     pub voice_engine: Option<String>,
+    pub stt_engine: Option<String>,
     pub category: Option<String>,
     pub requires_oversight: Option<bool>,
     pub connector_configs: Option<Vec<ConnectorConfig>>,
@@ -91,6 +92,8 @@ pub struct AgentConfigUpdate {
     pub last_pulse: Option<DateTime<Utc>>,
     pub current_task: Option<String>,
     pub metadata: Option<HashMap<String, serde_json::Value>>,
+    #[serde(alias = "tokenUsage")]
+    pub token_usage: Option<crate::agent::types::TokenUsage>,
 }
 
 impl AgentConfigUpdate {
@@ -225,6 +228,10 @@ impl AgentConfigUpdate {
             agent.voice_engine = Some(voice_engine.clone());
             changed = true;
         }
+        if let Some(stt_engine) = &self.stt_engine {
+            agent.stt_engine = Some(stt_engine.clone());
+            changed = true;
+        }
         if let Some(base_url) = &self.base_url {
             agent.models.model.base_url = Some(base_url.clone());
             changed = true;
@@ -249,8 +256,15 @@ impl AgentConfigUpdate {
             agent.state.current_task = Some(current_task.clone());
             changed = true;
         }
-        if let Some(metadata) = &self.metadata {
-            agent.metadata.extend(metadata.clone());
+        if let Some(meta) = &self.metadata {
+            agent.metadata.extend(meta.clone());
+            changed = true;
+        }
+
+        if let Some(usage) = &self.token_usage {
+            agent.economics.token_usage.input_tokens += usage.input_tokens;
+            agent.economics.token_usage.output_tokens += usage.output_tokens;
+            agent.economics.token_usage.total_tokens += usage.total_tokens;
             changed = true;
         }
  

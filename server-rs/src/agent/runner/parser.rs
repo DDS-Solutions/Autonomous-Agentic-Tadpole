@@ -17,6 +17,19 @@
 use crate::agent::types::ToolCall;
 use regex::Regex;
 use once_cell::sync::Lazy;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ParserError {
+    #[error("No tool calls found in response")]
+    NoCallsFound,
+    #[error("Invalid JSON in tool call: {0}")]
+    InvalidJson(String),
+    #[error("Missing tool name in call")]
+    MissingName,
+}
+
+pub type ParserResult<T> = Result<T, ParserError>;
 
 /// Resilient parser for extracting tool calls from raw model output.
 pub struct PolyglotParser;
@@ -47,14 +60,16 @@ static COMMA_REGEX: Lazy<Regex> = Lazy::new(|| {
 
 impl PolyglotParser {
     /// Extracts all tool calls from the raw text, trying multiple formats.
-    pub fn extract(text: &str) -> Vec<ToolCall> {
+    pub fn extract(text: &str) -> ParserResult<Vec<ToolCall>> {
         let mut calls = Vec::new();
+        let mut last_error = None;
 
         // 1. Try XML-like JSON format: <tool_call>{...}</tool_call>
         for cap in XML_TOOL_REGEX.captures_iter(text) {
             if let Some(json_str) = cap.get(1) {
-                if let Some(call) = Self::parse_json_call(json_str.as_str()) {
-                    calls.push(call);
+                match Self::parse_json_call(json_str.as_str()) {
+                    Ok(call) => calls.push(call),
+                    Err(e) => last_error = Some(e),
                 }
             }
         }
@@ -63,8 +78,9 @@ impl PolyglotParser {
         for cap in GEMMA_TOOL_REGEX.captures_iter(text) {
             let name = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
             let args_raw = cap.get(2).map(|m| m.as_str()).unwrap_or("{}");
-            if let Some(args) = Self::repair_and_parse_json(args_raw) {
-                calls.push(ToolCall { name, args });
+            match Self::repair_and_parse_json(args_raw) {
+                Ok(args) => calls.push(ToolCall { name, args }),
+                Err(e) => last_error = Some(e),
             }
         }
 
@@ -73,8 +89,9 @@ impl PolyglotParser {
             for cap in BARE_CALL_REGEX.captures_iter(text) {
                 let name = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
                 let args_raw = cap.get(2).map(|m| m.as_str()).unwrap_or("{}");
-                if let Some(args) = Self::repair_and_parse_json(args_raw) {
-                    calls.push(ToolCall { name, args });
+                match Self::repair_and_parse_json(args_raw) {
+                    Ok(args) => calls.push(ToolCall { name, args }),
+                    Err(e) => last_error = Some(e),
                 }
             }
         }
@@ -127,7 +144,7 @@ impl PolyglotParser {
                 }
             }
 
-            if let Some(args) = Self::repair_and_parse_json(json_str) {
+            if let Some(args) = Self::repair_and_parse_json(json_str).ok() {
                 calls.push(ToolCall { name: name_raw.to_string(), args });
             }
         }
@@ -187,26 +204,36 @@ impl PolyglotParser {
              }
         }
 
-        calls
+        if calls.is_empty() {
+            if let Some(err) = last_error {
+                return Err(err);
+            }
+            return Err(ParserError::NoCallsFound);
+        }
+        Ok(calls)
     }
 
     /// Attempts to parse a JSON object representing a tool call (name + arguments).
-    fn parse_json_call(json_str: &str) -> Option<ToolCall> {
+    fn parse_json_call(json_str: &str) -> ParserResult<ToolCall> {
         let repaired = Self::repair_json(json_str);
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&repaired) {
-            let name = v.get("name").and_then(|n| n.as_str()).map(|s| s.to_string());
-            let args = v.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
-            if let Some(name) = name {
-                return Some(ToolCall { name, args });
+        match serde_json::from_str::<serde_json::Value>(&repaired) {
+            Ok(v) => {
+                let name = v.get("name").and_then(|n| n.as_str()).map(|s| s.to_string());
+                let args = v.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
+                if let Some(name) = name {
+                    Ok(ToolCall { name, args })
+                } else {
+                    Err(ParserError::MissingName)
+                }
             }
+            Err(e) => Err(ParserError::InvalidJson(e.to_string())),
         }
-        None
     }
 
     /// Repairs and parses a raw JSON arguments object.
-    fn repair_and_parse_json(json_str: &str) -> Option<serde_json::Value> {
+    fn repair_and_parse_json(json_str: &str) -> ParserResult<serde_json::Value> {
         let repaired = Self::repair_json(json_str);
-        serde_json::from_str(&repaired).ok()
+        serde_json::from_str(&repaired).map_err(|e| ParserError::InvalidJson(e.to_string()))
     }
 
     /// Performs heuristic repair on malformed JSON strings.
@@ -266,7 +293,7 @@ mod tests {
     #[test]
     fn test_extract_gemma_format() {
         let input = "I will search now. <|tool_call|>call:list_files{\"path\": \".\"}<tool_call|>";
-        let calls = PolyglotParser::extract(input);
+        let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "list_files");
     }
@@ -274,7 +301,7 @@ mod tests {
     #[test]
     fn test_extract_xml_format() {
         let input = "Calling tool: <tool_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"README.md\"}}</tool_call>";
-        let calls = PolyglotParser::extract(input);
+        let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");
         assert_eq!(calls[0].args["path"], "README.md");
@@ -283,7 +310,7 @@ mod tests {
     #[test]
     fn test_extract_execute_tool_format() {
         let input = r#"I will recruit Tadpole now. <execute_tool> <tool_name>execute_tool</tool_name> <tool_input> ```json { "tool_name": "recruit", "tool_input": { "agent_id": "2", "message": "Recruit Tadpole" } } ``` </tool_input> </execute_tool>"#;
-        let calls = PolyglotParser::extract(input);
+        let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "recruit");
         assert_eq!(calls[0].args["agent_id"], "2");
@@ -292,7 +319,7 @@ mod tests {
     #[test]
     fn test_extract_execute_command_format() {
         let input = r#"Action Plan: ```json { "tool_name": "execute_command", "tool_args": { "command": "recruit", "agent_id": "2" } } ```"#;
-        let calls = PolyglotParser::extract(input);
+        let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "recruit");
         assert_eq!(calls[0].args["agent_id"], "2");

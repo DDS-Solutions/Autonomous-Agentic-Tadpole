@@ -44,20 +44,26 @@ export default function Engine_Dashboard() {
 
     const stats = [
         { 
+            id: 'cpu',
             label: i18n.t('engine_dashboard.label_cpu'), 
             value: `${cpu.toFixed(1)}%`, 
+            percent: cpu,
             icon: CpuIcon, 
             color: cpu > 80 ? 'text-red-400' : 'text-emerald-400' 
         },
         { 
+            id: 'memory',
             label: i18n.t('engine_dashboard.label_memory'), 
             value: `${(memory / (1024 * 1024 * 1024)).toFixed(1)}GB`, 
+            percent: (memory / (memory_total || 16 * 1024 * 1024 * 1024)) * 100,
             icon: HardDrive, 
             color: 'text-emerald-400' 
         },
         { 
+            id: 'latency',
             label: i18n.t('engine_dashboard.label_latency'), 
             value: `${latency.toFixed(0)}ms`, 
+            percent: Math.min((latency / 500) * 100, 100), // Normalized against 500ms upper bound
             icon: Zap, 
             color: latency > 150 ? 'text-yellow-400' : 'text-emerald-400' 
         },
@@ -117,28 +123,28 @@ export default function Engine_Dashboard() {
                 {/* Engine Stats from old pulse stream */}
                 <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                     {stats.map((stat) => (
-                        <Tooltip key={stat.label} content={
-                            stat.label === i18n.t('engine_dashboard.label_cpu') ? i18n.t('engine_dashboard.tooltip_cpu') :
-                                stat.label === i18n.t('engine_dashboard.label_memory') ? i18n.t('engine_dashboard.tooltip_memory') :
-                                i18n.t('engine_dashboard.tooltip_latency')
-                    } position="top">
-                        <div className="p-5 border border-zinc-800 rounded-2xl bg-zinc-900/50 backdrop-blur-xl group hover:border-zinc-700 transition-all shadow-lg cursor-help">
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{stat.label}</div>
-                                <stat.icon size={14} className="text-zinc-700 group-hover:text-zinc-500 transition-colors" />
-                            </div>
-                            <div className={`text-3xl font-mono ${stat.color} tracking-tighter`}>{stat.value}</div>
-                            <div className="mt-3 flex items-center gap-1.5">
-                                <div className={`h-1 w-full rounded-full bg-zinc-800 overflow-hidden`}>
-                                    <div
-                                        className={`h-full bg-current transition-all duration-100 ${stat.color}`}
-                                        style={{ width: stat.label === i18n.t('engine_dashboard.label_cpu') ? `${cpu}%` : stat.label === i18n.t('engine_dashboard.label_memory') ? `${(memory / (memory_total || 16 * 1024 * 1024 * 1024)) * 100}%` : '50%' }}
-                                    />
+                        <Tooltip key={stat.id} content={
+                                stat.id === 'cpu' ? i18n.t('engine_dashboard.tooltip_cpu') :
+                                    stat.id === 'memory' ? i18n.t('engine_dashboard.tooltip_memory') :
+                                    i18n.t('engine_dashboard.tooltip_latency')
+                        } position="top">
+                            <div className="p-5 border border-zinc-800 rounded-2xl bg-zinc-900/50 backdrop-blur-xl group hover:border-zinc-700 transition-all shadow-lg cursor-help">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{stat.label}</div>
+                                    <stat.icon size={14} className="text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                                </div>
+                                <div className={`text-3xl font-mono ${stat.color} tracking-tighter`}>{stat.value}</div>
+                                <div className="mt-3 flex items-center gap-1.5">
+                                    <div className={`h-1 w-full rounded-full bg-zinc-800 overflow-hidden`}>
+                                        <div
+                                            className={`h-full bg-current transition-all duration-100 ${stat.color}`}
+                                            style={{ width: `${Math.min(100, Math.max(0, stat.percent))}%` }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </Tooltip>
-                ))}
+                        </Tooltip>
+                    ))}
                 </div>
             </div>
 

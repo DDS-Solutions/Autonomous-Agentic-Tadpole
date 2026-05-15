@@ -79,7 +79,7 @@ pub async fn execute_mcp_tool(
     }
 
     // 2. Governance: Check Permission Policy
-    let mode = state.security.permission_policy.get_mode(&name).await;
+    let mode = state.security.permission_policy.get_mode(&name, "api-user").await;
     match mode {
         PermissionMode::Deny => {
             return Err(AppError::Forbidden(format!(

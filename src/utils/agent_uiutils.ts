@@ -111,4 +111,11 @@ export const get_valence_color = (valence: number = 0) => {
     return '#3b82f6'; // Blue 500
 };
 
+/**
+ * Normalizes a role string into a canonical kebab-case slug.
+ */
+export const slugify_role = (role: string): string => {
+    return (role || '').toLowerCase().trim().replace(/\s+/g, '-');
+};
+
 // Metadata: [agent_uiutils]

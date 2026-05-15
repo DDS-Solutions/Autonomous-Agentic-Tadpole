@@ -26,6 +26,7 @@ export interface Agent_Model_Slot_State {
     act_threshold: number;
     skills: string[];
     workflows: string[];
+    base_url: string;
 }
 
 export interface AgentFormState {

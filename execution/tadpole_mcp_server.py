@@ -101,6 +101,11 @@ async def handle_call_tool(
     if command == "(Native Execution Mode)":
         return [types.TextContent(type="text", text=f"Tool {name} is a native Rust tool. Please execute via TadpoleOS internal host.")]
 
+    # Shell Scanner Compliance (SEC-05)
+    dangerous_chars = ['|', '>', '<', '&', ';', '`', '$(']
+    if any(char in command for char in dangerous_chars):
+        return [types.TextContent(type="text", text=f"Execution Failed: Command failed Shell Scanner compliance (contains forbidden shell operators).")]
+
     args_json = json.dumps(arguments or {})
     env = os.environ.copy()
     env["TADPOLE_SKILL_ARGS"] = args_json

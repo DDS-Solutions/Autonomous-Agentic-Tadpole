@@ -51,6 +51,17 @@ export class ApiError extends Error {
     }
 }
 
+/**
+ * Represents a failure to retrieve or validate the required API credentials.
+ */
+export class AuthError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'AuthError';
+        Object.setPrototypeOf(this, AuthError.prototype);
+    }
+}
+
 export function with_timeout(timeout_ms: number = DEFAULT_TIMEOUT): { signal: AbortSignal; clear: () => void } {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort('TIMEOUT'), timeout_ms);
@@ -61,7 +72,7 @@ function require_api_token(): string {
     const { tadpole_os_api_key } = get_settings();
     const token = tadpole_os_api_key.trim();
     if (!token) {
-        throw new Error('Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.');
+        throw new AuthError('Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.');
     }
     return token;
 }
@@ -170,13 +181,23 @@ export async function api_request<T = unknown>(
                     },
                     signal: options.signal || signal
                 });
+
+                // Hardened Retry Logic: Handle 429 and 503 with exponential backoff
+                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES) {
+                    const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+                    console.warn(`[BaseAPI] ${res.status} detected at ${path}. Retrying in ${backoff}ms (Attempt ${attempt + 1})...`);
+                    await new Promise(resolve => setTimeout(resolve, backoff));
+                    return execute_fetch(attempt + 1);
+                }
+
                 return res;
             } catch (err) {
                 // Only retry safe, idempotent methods. POST/PUT/DELETE/PATCH
-                // must NOT be retried to avoid duplicate side effects.
+                // must NOT be retried to avoid duplicate side effects (unless it's a network failure).
                 const method = (options.method || 'GET').toUpperCase();
-                const is_retryable = method === 'GET' || method === 'HEAD';
-                if (!is_retryable || attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError')) {
+                const is_safe_method = method === 'GET' || method === 'HEAD';
+                
+                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError')) {
                     if (err instanceof Error && err.message === 'TIMEOUT') {
                         throw new Error(`Request timed out after ${options.timeout || DEFAULT_TIMEOUT}ms for: ${url}`, { cause: err });
                     }
@@ -185,6 +206,7 @@ export async function api_request<T = unknown>(
                     }
                     throw err;
                 }
+
                 const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 return execute_fetch(attempt + 1);
@@ -206,7 +228,7 @@ export async function api_request<T = unknown>(
             const title = (error_json?.title as string) || response.statusText;
             const error_code = (error_json?.error_code as string) || null;
             const help_link = (error_json?.help_link as string) || null;
-            let detail = (error_json?.detail as string) || (error_json?.message as string) || 'Unknown Infrastructure Error';
+            let detail = (error_json?.detail as string) || (error_json?.message as string) || (error_text && error_text.length < 1000 ? error_text : 'Unknown Infrastructure Error');
             
             if (response.status === 401) {
                 const is_local = url.includes('127.0.0.1') || url.includes('localhost');
@@ -217,6 +239,8 @@ export async function api_request<T = unknown>(
                 detail = 'This capability is disabled in the current engine build. Enable the required Rust feature and restart the engine.';
             } else if (response.status === 429) {
                 detail = 'Too many requests. Local security protocols have triggered a temporary cooling-down period. Please wait a moment and try again.';
+            } else if (response.status === 422) {
+                detail = `Unprocessable Entity: The payload schema does not match the backend expectations. Raw detail: ${detail}`;
             }
             
             const message = `${title}: ${detail}`;

@@ -13,10 +13,10 @@
 //!   false-positives on sanitized command strings.
 //! - **Trace Scope**: `server-rs::state::hubs::sec`
 
+use crate::agent::runner::service_traits::SystemMonitorTrait;
 use crate::secret_redactor::SecretRedactor;
 use crate::security::audit::MerkleAuditTrail;
 use crate::security::metering::BudgetGuard;
-use crate::security::monitoring::SecurityMonitor;
 use crate::security::permissions::PermissionPolicy;
 use crate::security::scanner::ShellScanner;
 use std::sync::Arc;
@@ -24,28 +24,19 @@ use std::sync::Arc;
 /// Hub for tamper-evident auditing and preventative security checks.
 pub struct SecurityHub {
     /// Tamper-evident audit trail engine (Merkle Hash Chain).
-    #[allow(dead_code)]
     pub audit_trail: Arc<MerkleAuditTrail>,
     /// Persistent budget governance and metering engine.
-    #[allow(dead_code)]
     pub budget_guard: Arc<BudgetGuard>,
     /// Proactive shell safety scanner (API key leak protection).
-    #[allow(dead_code)]
     pub shell_scanner: Arc<ShellScanner>,
     /// Runtime secret redactor for logs and telemetry.
-    #[allow(dead_code)]
     pub secret_redactor: Arc<SecretRedactor>,
-    /// System resource and environment monitor.
-    #[allow(dead_code)]
-    pub system_monitor: Arc<SecurityMonitor>,
+    /// System resource and environment monitor (trait object for testability).
+    pub system_monitor: Arc<dyn SystemMonitorTrait>,
     /// Dynamic tool permission and governance policy engine.
-    #[allow(dead_code)]
     pub permission_policy: Arc<PermissionPolicy>,
     /// Authentication token for administrative/deploy requests.
-    #[allow(dead_code)]
     pub deploy_token: String,
 }
-
-// Metadata: [sec]
 
 // Metadata: [sec]

@@ -36,8 +36,9 @@ impl SecurityManager for DefaultSecurityManager {
         if let Some(agent) = runner.state.registry.agents.get(&ctx.agent_id) {
             let allowed_skills = &agent.value().capabilities.skills;
             let is_builtin = super::registry::BUILTIN_TOOLS.contains(&fc.name.as_str());
+            let is_orchestrator = ctx.agent_id == crate::agent::constants::AGENT_CEO || ctx.agent_id == crate::agent::constants::AGENT_COO;
 
-            if !is_builtin && !allowed_skills.is_empty() && !allowed_skills.contains(&fc.name) {
+            if !is_orchestrator && !is_builtin && !allowed_skills.is_empty() && !allowed_skills.contains(&fc.name) {
                 tracing::warn!("🛡️ [CBS] Agent {} attempted unauthorized skill: {}", ctx.agent_id, fc.name);
                 runner.broadcast_sys(
                     &format!("🛡️ CBS: {} attempted unauthorized skill: {}", ctx.name, fc.name),
@@ -66,7 +67,7 @@ impl SecurityManager for DefaultSecurityManager {
         }
 
         // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy first
-        let policy_mode = runner.state.security.permission_policy.get_mode(&fc.name).await;
+        let policy_mode = runner.state.security.permission_policy.get_mode(&fc.name, &ctx.agent_id).await;
         match policy_mode {
             crate::security::permissions::PermissionMode::Deny => {
                 return Err(ToolExecutionError::SecurityBlocked(format!("Policy for '{}' is set to DENY", fc.name)));

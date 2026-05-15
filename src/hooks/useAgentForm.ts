@@ -15,40 +15,15 @@ import { use_role_store } from '../stores/role_store';
 import type {
     Agent_Connector_Config,
     Agent_Model_Slot_Key,
-    Agent_Model_Slot_State,
-    Agent_Stt_Engine,
-    Agent_Voice_Engine,
+    AgentFormState,
 } from '../types';
 
-export interface Agent_Config_State {
-    main_tab: 'cognition' | 'memory' | 'governance';
-    active_tab: Agent_Model_Slot_Key;
-    active_model_slot: 1 | 2 | 3;
-    identity: {
-        name: string;
-        role: string;
-        department: string;
-    };
-    voice: {
-        voice_id: string;
-        voice_engine: Agent_Voice_Engine;
-        stt_engine?: Agent_Stt_Engine;
-    };
-    slots: Record<Agent_Model_Slot_Key, Agent_Model_Slot_State>;
-    mcp_tools: string[];
-    governance: {
-        budget_usd: number;
-        requires_oversight: boolean;
-    };
-    ui: {
-        direct_message: string;
-        saving: boolean;
-        theme_color: string;
-        new_role_name: string;
-        show_promote: boolean;
-    };
-    connector_configs: Agent_Connector_Config[];
-}
+/**
+ * Agent_Config_State
+ * Re-exported from the canonical AgentFormState contract.
+ * All form state is defined in contracts/agent/form.ts to prevent drift.
+ */
+export type Agent_Config_State = AgentFormState;
 
 export type Agent_Config_Action =
     | { type: 'SET_MAIN_TAB'; payload: 'cognition' | 'memory' | 'governance' }
@@ -65,6 +40,7 @@ export type Agent_Config_Action =
     | { type: 'TOGGLE_MCP_TOOL'; value: string }
     | { type: 'ADD_CONNECTOR'; payload: Agent_Connector_Config }
     | { type: 'REMOVE_CONNECTOR'; uri: string }
+    | { type: 'RESET_FROM_STATE'; payload: Agent_Config_State }
     | { type: 'SET_UI'; field: 'direct_message' | 'saving' | 'theme_color' | 'new_role_name' | 'show_promote'; value: string | boolean };
 
 /**
@@ -101,7 +77,7 @@ export function config_reducer(state: Agent_Config_State, action: Agent_Config_A
         case 'TOGGLE_SKILL': {
             const current_list = state.slots[action.slot][action.kind];
             const new_list = current_list.includes(action.value)
-                ? current_list.filter(item => item !== action.value)
+                ? current_list.filter((item: string) => item !== action.value)
                 : [...current_list, action.value];
             return {
                 ...state,
@@ -134,7 +110,7 @@ export function config_reducer(state: Agent_Config_State, action: Agent_Config_A
             };
         case 'TOGGLE_MCP_TOOL': {
             const new_list = state.mcp_tools.includes(action.value)
-                ? state.mcp_tools.filter(t => t !== action.value)
+                ? state.mcp_tools.filter((t: string) => t !== action.value)
                 : [...state.mcp_tools, action.value];
             return { ...state, mcp_tools: new_list };
         }
@@ -156,7 +132,16 @@ export function config_reducer(state: Agent_Config_State, action: Agent_Config_A
         case 'REMOVE_CONNECTOR':
             return {
                 ...state,
-                connector_configs: state.connector_configs.filter(c => c.uri !== action.uri)
+                connector_configs: state.connector_configs.filter((c: Agent_Connector_Config) => c.uri !== action.uri)
+            };
+        case 'RESET_FROM_STATE':
+            return {
+                ...action.payload,
+                main_tab: state.main_tab, // Preserve current tab
+                ui: {
+                    ...action.payload.ui,
+                    saving: state.ui.saving // Preserve saving status
+                }
             };
         default:
             return state;

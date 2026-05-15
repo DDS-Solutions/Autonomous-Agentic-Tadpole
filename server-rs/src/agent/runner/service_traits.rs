@@ -30,3 +30,11 @@ pub trait AclServiceTrait: Send + Sync {
 }
 
 // Metadata: [service_traits]
+
+/// Interface for system health monitoring.
+/// Abstracts `SecurityMonitor` to allow mock injection in unit tests.
+/// Enables coverage of the SSCP memory pressure hard-fail path (SSCP-01).
+pub trait SystemMonitorTrait: Send + Sync {
+    /// Returns a snapshot of current system resource pressure and isolation state.
+    fn get_system_defense_stats(&self) -> crate::security::monitoring::SystemDefenseStats;
+}

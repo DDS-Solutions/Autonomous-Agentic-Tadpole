@@ -399,6 +399,15 @@ impl AgentRunner {
 
         let depth = payload.swarm_depth.unwrap_or(0);
         let lineage = payload.swarm_lineage.clone().unwrap_or_default();
+
+        // ♻️ [SSCP] Rehydrate BEFORE context preparation to ensure prompt has state
+        if let Some(restored) = self.state.resources.continuity_arbiter.rehydrate(&agent_id).await {
+            if let Some(mut agent) = self.state.registry.agents.get_mut(&agent_id) {
+                agent.state.working_memory = restored;
+                tracing::info!("♻️ [SSCP] Rehydrated working memory for agent {} before context resolution", agent_id);
+            }
+        }
+
         let ctx = self
             .prepare_run_context(&agent_id, &payload, &mission_id, depth, &lineage)
             .await?;

@@ -14,7 +14,7 @@
 
 import { useState } from 'react';
 import { tadpole_os_service } from '../services/tadpoleos_service';
-import { resolve_provider } from '../utils/model_utils';
+import { resolve_provider, resolve_technical_model_id } from '../utils/model_utils';
 import { event_bus } from '../services/event_bus';
 import { useDashboardData } from '../hooks/use_dashboard_data';
 import { use_dropdown_store, type Dropdown_State } from '../stores/dropdown_store';
@@ -134,18 +134,21 @@ export default function Ops_Dashboard() {
     };
 
     const handle_model_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: model_id, provider } });
     };
 
     const handle_model_2_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: model_id, provider } });
     };
 
     const handle_model_3_change = (agent_id: string, new_model: string) => {
-        const provider = resolve_provider(new_model);
-        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: new_model, provider } });
+        const model_id = resolve_technical_model_id(new_model);
+        const provider = resolve_provider(model_id);
+        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: model_id, provider } });
     };
 
 

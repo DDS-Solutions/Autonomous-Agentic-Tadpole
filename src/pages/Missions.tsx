@@ -46,7 +46,7 @@ export default function Missions() {
         update_cluster_budget,
         toggle_mission_analysis
     } = use_workspace_store();
-    const [selected_cluster_id, set_selected_cluster_id] = useState<string | null>(clusters[0]?.id || null);
+    const [selected_cluster_id, set_selected_cluster_id] = useState<string | null>((clusters && clusters[0]) ? clusters[0].id : null);
     const { agents, fetch_agents, update_agent: store_update_agent, is_loading: agents_loading } = use_agent_store();
 
     useEffect(() => {
@@ -142,9 +142,28 @@ export default function Missions() {
         try {
             const { get_settings } = await import('../stores/settings_store');
             const { model_id, provider } = resolve_agent_model_config(alpha_agent as Agent, get_settings().default_model);
+
+            // Build a structured mission directive instead of sending the bare objective title.
+            // Small local models stall on vague titles — they need explicit, actionable instructions.
+            const team_names = (active_cluster.collaborators || [])
+                .map(id => agents.find(a => a.id === id))
+                .filter(Boolean)
+                .map(a => `${a!.name} (ID: ${a!.id}, Role: ${a!.role})`)
+                .join(', ');
+
+            const mission_directive = [
+                `MISSION OBJECTIVE: ${active_cluster.objective}`,
+                `DEPARTMENT: ${active_cluster.department}`,
+                team_names ? `AVAILABLE TEAM: ${team_names}` : null,
+                active_cluster.budget_usd ? `BUDGET: $${active_cluster.budget_usd} USD` : null,
+                `ACTION REQUIRED: You are the mission commander. Begin executing this objective IMMEDIATELY. ` +
+                `Recruit and delegate sub-tasks to your available team members using their Agent IDs. ` +
+                `Do NOT ask for clarification — you have full authority to act autonomously.`
+            ].filter(Boolean).join('\n');
+
             const success = await tadpole_os_service.send_command(
                 alpha_agent.id,
-                active_cluster.objective,
+                mission_directive,
                 model_id,
                 provider,
                 active_cluster.id,

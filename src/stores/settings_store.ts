@@ -61,7 +61,7 @@ interface Settings_State {
 
 const get_base_url = (): string => {
     // For local sidecar communication, we always default to the HTTP loopback.
-    return 'http://127.0.0.1:8000';
+    return import.meta.env.VITE_TADPOLE_OS_URL || 'http://127.0.0.1:8000';
 };
 
 const sanitize_api_key = (value: string): string => {
@@ -104,7 +104,7 @@ export const use_settings_store = create<Settings_State>()(
         (set, get) => ({
             settings: {
                 tadpole_os_url: get_base_url(),
-                tadpole_os_api_key: '',
+                tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
                 theme: 'zinc',
                 density: 'compact',
                 default_model: 'GPT-4o',

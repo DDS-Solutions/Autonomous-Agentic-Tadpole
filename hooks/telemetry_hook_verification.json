@@ -1,0 +1,8 @@
+{
+  "name": "Telemetry Hook Verification",
+  "description": "Cross-references low-level telemetry_tx events with agent mission directives to ensure functional tool-calling success, bypassing conversational throttles.",
+  "hook_type": "post_analysis",
+  "content": "Verify that all required tool executions in SOP-SEC-09 have corresponding successful spans in the neural trace, regardless of whether the agent emitted a final conversational response.",
+  "active": true,
+  "category": "ai"
+}

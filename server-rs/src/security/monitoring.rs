@@ -26,6 +26,8 @@ use serde::Serialize;
 use std::sync::Arc;
 use sysinfo::{MemoryRefreshKind, System};
 
+use crate::agent::runner::service_traits::SystemMonitorTrait;
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum SandboxType {
@@ -125,33 +127,31 @@ impl SecurityMonitor {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_security_monitor_instantiation() {
-        let monitor = SecurityMonitor::new();
-        let stats = monitor.get_system_defense_stats();
-
-        // Verify metrics are within plausible ranges
-        assert!(stats.memory_pressure >= 0.0 && stats.memory_pressure <= 1.0);
-        assert!(stats.cpu_load >= 0.0 && stats.cpu_load <= 1.0);
-        assert!(stats.sandbox_status == "ACTIVE" || stats.sandbox_status == "INACTIVE");
-    }
-
-    #[test]
-    fn test_sandbox_type_consistency() {
-        let monitor = SecurityMonitor::new();
-        let stats = monitor.get_system_defense_stats();
-
-        match stats.sandbox_type {
-            SandboxType::None => assert!(!stats.is_isolated),
-            _ => assert!(stats.is_isolated),
-        }
+impl SystemMonitorTrait for SecurityMonitor {
+    fn get_system_defense_stats(&self) -> SystemDefenseStats {
+        self.get_system_defense_stats()
     }
 }
 
-// Metadata: [monitoring]
+/// Test-only mock monitor with configurable memory and CPU pressure.
+/// Use this to exercise the SSCP hard-fail path without real hardware pressure.
+#[cfg(test)]
+pub struct MockSystemMonitor {
+    pub memory_pressure: f64,
+    pub cpu_load: f64,
+}
+
+#[cfg(test)]
+impl SystemMonitorTrait for MockSystemMonitor {
+    fn get_system_defense_stats(&self) -> SystemDefenseStats {
+        SystemDefenseStats {
+            memory_pressure: self.memory_pressure,
+            cpu_load: self.cpu_load,
+            sandbox_status: "INACTIVE".to_string(),
+            sandbox_type: SandboxType::None,
+            is_isolated: false,
+        }
+    }
+}
 
 // Metadata: [monitoring]

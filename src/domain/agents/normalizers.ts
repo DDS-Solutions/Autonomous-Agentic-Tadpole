@@ -24,6 +24,7 @@ import { resolve_friendly_model_name } from '../../utils/model_utils';
 import { get_settings } from '../../stores/settings_store';
 import { use_trace_store } from '../../stores/trace_store';
 import { v4 as uuidv4 } from 'uuid';
+import { slugify_role } from '../../utils/agent_uiutils';
 
 /**
  * RobustAgentDto
@@ -137,20 +138,32 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
     const settings = get_settings();
     const default_model = settings.default_model || 'Gemma 4 (Local)';
 
-    // Model Resolution logic: prefer friendly Name, fallback to ID, resolve if needed.
+    // Model Resolution logic: 
+    // Priority: 1. `model` wire field (live, derived from model_config.model_id in backend)
+    //           2. `modelConfig.modelId` (authoritative config)
+    //           3. `modelId` wire field (legacy identity field, can be stale)
     const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
+    const model_config_id = (get_val('modelConfig', 'model_config', undefined) as any)?.modelId as string | undefined;
     const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
-    const raw_model_final = model_name_wire || model_id_wire || default_model;
-    const model = resolve_friendly_model_name(raw_model_final) || default_model;
+    
+    // Use the live model name first (most accurate), then resolve from config/identity IDs
+    const model = model_name_wire 
+        || (model_config_id ? resolve_friendly_model_name(model_config_id) : undefined)
+        || (model_id_wire ? resolve_friendly_model_name(model_id_wire) : undefined)
+        || default_model;
+
+    const input_tokens = (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0);
+    const output_tokens = (dto.tokenUsage?.outputTokens ?? d.output_tokens ?? existing_agent?.output_tokens ?? 0);
+    const tokens_used = (dto.tokenUsage?.totalTokens ?? d.tokensUsed ?? d.tokens_used ?? (input_tokens + output_tokens) ?? 0);
 
     return {
         id: dto.id || existing_agent?.id || 'unknown',
         name: get_non_empty_string('name', 'name', 'Unnamed Agent'),
-        role: get_non_empty_string('role', 'role', 'AI Agent', 'role'),
+        role: slugify_role(get_non_empty_string('role', 'role', 'AI Agent', 'role')),
         department: dept,
         description: get_val('description', 'description', ''),
         status: status,
-        tokens_used: get_val('tokensUsed', 'tokens_used', 0),
+        tokens_used,
         model: model,
         model_config: get_val('modelConfig', 'model_config', undefined),
         workspace_path: workspace_path || get_val('workspace', 'workspace_path', undefined),
@@ -162,8 +175,16 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         budget_usd: get_val('budgetUsd', 'budget_usd', 0),
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
-        model_2: resolve_friendly_model_name(get_val('model2', 'model_2', undefined) || (get_val('modelConfig2', 'model_config2', undefined) as any)?.modelId),
-        model_3: resolve_friendly_model_name(get_val('model3', 'model_3', undefined) || (get_val('modelConfig3', 'model_config3', undefined) as any)?.modelId),
+        model_2: (() => {
+            const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
+            const m2_config_id = (get_val('modelConfig2', 'model_config2', undefined) as any)?.modelId as string | undefined;
+            return m2_name || (m2_config_id ? resolve_friendly_model_name(m2_config_id) : undefined) || undefined;
+        })(),
+        model_3: (() => {
+            const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
+            const m3_config_id = (get_val('modelConfig3', 'model_config3', undefined) as any)?.modelId as string | undefined;
+            return m3_name || (m3_config_id ? resolve_friendly_model_name(m3_config_id) : undefined) || undefined;
+        })(),
         model_config2: get_val('modelConfig2', 'model_config2', undefined),
         model_config3: get_val('modelConfig3', 'model_config3', undefined),
         active_model_slot: (get_val('activeModelSlot', 'active_model_slot', 1) as 1 | 2 | 3),
@@ -176,8 +197,8 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         voice_id: get_val('voiceId', 'voice_id', undefined),
         voice_engine: get_val<Agent_Voice_Engine | undefined>('voiceEngine', 'voice_engine', undefined),
         stt_engine: get_val<Agent_Stt_Engine | undefined>('sttEngine', 'stt_engine', get_metadata_string('stt_engine') as Agent_Stt_Engine | undefined),
-        input_tokens: (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0),
-        output_tokens: (dto.tokenUsage?.outputTokens ?? d.output_tokens ?? existing_agent?.output_tokens ?? 0),
+        input_tokens,
+        output_tokens,
         category: get_val('category', 'category', 'user'),
         current_reasoning_turn: get_val('currentReasoningTurn', 'current_reasoning_turn', undefined),
         reasoning_depth: get_val('reasoningDepth', 'reasoning_depth', undefined),

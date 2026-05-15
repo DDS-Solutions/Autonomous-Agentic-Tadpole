@@ -35,6 +35,7 @@ use std::str::FromStr;
 const CONNECTOR_COLUMN_FIX_MIGRATION_VERSION: i64 = 20260328000100;
 const CREATED_AT_FIX_MIGRATION_VERSION: i64 = 20260405000100;
 const CURRENT_TASK_FIX_MIGRATION_VERSION: i64 = 20260405000200;
+const AGENT_AWARE_PERMISSIONS_MIGRATION_VERSION: i64 = 20260513000100;
 
 /// Initializes the SQLite database pool and executes pending migrations.
 ///
@@ -74,6 +75,7 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
         premark_connector_column_fix_migration_if_needed(&pool, &migrator).await?;
         premark_created_at_fix_migration_if_needed(&pool, &migrator).await?;
         premark_current_task_fix_migration_if_needed(&pool, &migrator).await?;
+        premark_agent_aware_permissions_migration_if_needed(&pool, &migrator).await?;
     }
 
     if let Err(e) = migrator.run(&pool).await {
@@ -480,6 +482,22 @@ async fn premark_current_task_fix_migration_if_needed(
         label: "Current-task",
         check_table_exists: false, // Table guaranteed to exist at this point
         force_checksum_sync: true,
+    }).await
+}
+
+/// Handles environments where `permission_policies` table might have been created
+/// without `agent_id` due to a broken migration logic in `20260513000100`.
+async fn premark_agent_aware_permissions_migration_if_needed(
+    pool: &SqlitePool,
+    migrator: &sqlx::migrate::Migrator,
+) -> Result<()> {
+    premark_hotfix_migration(pool, migrator, &HotfixMigration {
+        table: "permission_policies",
+        column: "agent_id",
+        version: AGENT_AWARE_PERMISSIONS_MIGRATION_VERSION,
+        label: "Agent-aware-permissions",
+        check_table_exists: true,
+        force_checksum_sync: true, // Crucial: sync checksum if file was corrected
     }).await
 }
 

@@ -23,11 +23,14 @@
 pub mod aggregator;
 pub mod pulse;
 pub mod pulse_types;
+pub mod bridge;
 
 #[cfg(test)]
 mod pulse_tests;
 #[cfg(test)]
 mod telemetry_layer_tests;
+#[cfg(test)]
+mod bridge_tests;
 use crate::secret_redactor::SecretRedactor;
 use once_cell::sync::Lazy;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -76,27 +79,16 @@ where
         &self,
         attrs: &span::Attributes<'_>,
         id: &span::Id,
-        ctx: tracing_subscriber::layer::Context<'_, S>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        let span = match ctx.span(id) {
-            Some(s) => s,
-            None => {
-                tracing::warn!("⚠️ [Telemetry] Span not found during creation: {:?}", id);
-                return;
-            }
-        };
-        let name = span.name();
+        let metadata = attrs.metadata();
+        let name = metadata.name();
 
-        // Capture parentId if it exists
-        let parent_id = span.parent().map(|p| format!("{:x}", p.id().into_u64()));
+        // Capture parentId if it exists in the attributes or context
+        let parent_id = attrs.parent().map(|p| format!("{:x}", p.into_u64()));
 
-        // Try to get traceId from OTel context if it's not in attributes
-        let mut trace_id = None;
-        if let Some(otel_data) = span.extensions().get::<tracing_opentelemetry::OtelData>() {
-            if let Some(tid) = otel_data.trace_id() {
-                trace_id = Some(tid.to_string());
-            }
-        }
+        // Try to get traceId from attributes first (our standard convention)
+        let trace_id: Option<String> = None;
 
         // Basic span info
         let mut event = ::serde_json::json!({
@@ -141,11 +133,10 @@ where
         let _ = TELEMETRY_TX.send(event);
     }
 
-    fn on_close(&self, id: span::Id, ctx: tracing_subscriber::layer::Context<'_, S>) {
-        if ctx.span(&id).is_none() {
-            tracing::warn!("⚠️ [Telemetry] Span not found during closure: {:?}", id);
-            return;
-        }
+    fn on_close(&self, id: span::Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {
+        // SEC-AUDIT: We emit the span update directly using the ID. 
+        // Avoiding ctx.span(&id) lookup here prevents a known race condition in 
+        // tracing-subscriber's sharded registry when spans are concurrently closed.
 
         let event = ::serde_json::json!({
             "type": "trace:span_update",

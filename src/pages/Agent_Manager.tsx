@@ -35,8 +35,9 @@ import { resolve_provider, get_active_model_name } from '../utils/model_utils';
  */
 export default function Agent_Manager() {
     const { agents, fetch_agents, update_agent, add_agent } = use_agent_store();
-    const [selected_agent, set_selected_agent] = useState<Agent | null>(null);
+    const [selected_agent_id, set_selected_agent_id] = useState<string | null>(null);
     const [is_creating, set_is_creating] = useState(false);
+    const [new_agent_template, set_new_agent_template] = useState<Agent | null>(null);
     const [search_query, set_search_query] = useState('');
     const [filter_role, set_filter_role] = useState<string>('all');
     const [active_tab, set_active_tab] = useState<'user' | 'ai'>(() => {
@@ -59,22 +60,25 @@ export default function Agent_Manager() {
         return () => controller.abort();
     }, [agents.length, fetch_agents]);
 
+    // Derive selected agent from the authoritative store to prevent stale local state drift
+    const selected_agent: Agent | null = is_creating 
+        ? new_agent_template 
+        : (selected_agent_id ? agents.find(a => a.id === selected_agent_id) || null : null);
+
     /**
      * Synchronizes agent state with the parent store to maintain panel feedback.
      * If in 'creation' mode, invokes the persistent registration flow.
      */
     const handle_update_agent = (id: string, updates: Partial<Agent>) => {
-        if (is_creating) {
+        if (is_creating && new_agent_template) {
             // If we're creating, we use add_agent instead of update
             // Ensure the new agent has the correct category based on where it was created
-            add_agent({ ...selected_agent!, category: active_tab, ...updates } as Agent);
+            add_agent({ ...new_agent_template, category: active_tab, ...updates } as Agent);
             set_is_creating(false);
-            set_selected_agent(null);
+            set_new_agent_template(null);
+            set_selected_agent_id(null);
         } else {
             update_agent(id, updates);
-            if (selected_agent && selected_agent.id === id) {
-                set_selected_agent(prev => prev ? { ...prev, ...updates } : null);
-            }
         }
     };
 
@@ -119,7 +123,8 @@ export default function Agent_Manager() {
         };
 
         set_is_creating(true);
-        set_selected_agent(new_agent);
+        set_new_agent_template(new_agent);
+        set_selected_agent_id(new_agent.id);
     };
 
     const filtered_agents = agents.filter(agent => {
@@ -146,7 +151,7 @@ export default function Agent_Manager() {
     ])).sort(), [all_role_names, agents, active_tab]);
 
     const handle_select_agent = useMemo(() => (agent: Agent) => {
-        set_selected_agent(agent);
+        set_selected_agent_id(agent.id);
     }, []);
 
     return (
@@ -241,7 +246,7 @@ export default function Agent_Manager() {
                                         >
                                             <option value="all">{i18n.t('agent_manager.filter_all')}</option>
                                     {filter_roles.map(role => (
-                                        <option key={role} value={role}>{role}</option>
+                                        <option key={role} value={role}>{role.replace(/-/g, ' ')}</option>
                                     ))}
                                 </select>
                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
@@ -282,8 +287,9 @@ export default function Agent_Manager() {
                     key={selected_agent.id}
                     agent={selected_agent}
                     onClose={() => {
-                        set_selected_agent(null);
+                        set_selected_agent_id(null);
                         set_is_creating(false);
+                        set_new_agent_template(null);
                     }}
                     onUpdate={handle_update_agent}
                     isNew={is_creating}
@@ -352,7 +358,7 @@ export const Agent_Card = ({ agent, on_select }: { agent: Agent; on_select: (age
                     </div>
                     <Tooltip content={i18n.t('agent_manager.tooltip_role')} position="top">
                         <p className="text-[10px] text-zinc-500 font-mono truncate uppercase flex items-center gap-1.5 cursor-help">
-                            <Shield size={10} /> {agent.role}
+                            <Shield size={10} /> {agent.role.replace(/-/g, ' ')}
                         </p>
                     </Tooltip>
 

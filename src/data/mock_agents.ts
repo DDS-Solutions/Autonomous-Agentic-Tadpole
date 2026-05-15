@@ -22,6 +22,8 @@ export const agents: Agent[] = [
     status: 'active',
     active_model_slot: 1,
     tokens_used: 1200,
+    cost_usd: 0.12,
+    budget_usd: 5.0,
     model: 'Gemma 4 (Local)',
     model_2: 'Claude Opus 4.5',
     model_3: 'LLaMA 4 Maverick',
@@ -54,7 +56,8 @@ export const agents: Agent[] = [
     skills: ['deep_research', 'system_audit', 'issue_alpha_directive'],
     workflows: ['deploy_to_prod', 'emergency_shutdown', 'neural_handoff', 'Deep Analysis'],
     voice_id: 'onyx',
-    voice_engine: 'openai'
+    voice_engine: 'openai',
+    created_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() // 48h ago
   },
   {
     category: 'ai', id: '2',
@@ -64,28 +67,32 @@ export const agents: Agent[] = [
     status: 'active',
     active_model_slot: 1,
     tokens_used: 15400,
+    cost_usd: 1.54,
+    budget_usd: 10.0,
     model: 'Gemma 4 (Local)',
     model_2: 'GPT-5.2',
     model_3: 'Gemini 3 Pro',
     model_config: {
       modelId: 'gemma4:e4b',
       provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
       skills: ['schedule_meeting', 'task_prioritization'],
       workflows: ['resource_allocation']
     },
     model_config2: {
-      modelId: 'gpt-5.2',
-      provider: 'openai',
+      modelId: 'llama-4-8b',
+      provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11435/v1', // Secondary local instance
       temperature: 0.6,
-      systemPrompt: 'Backup strategic model',
+      systemPrompt: 'Backup local model instance',
       skills: ['performance_tracking'],
       workflows: ['sprint_planning']
     },
     model_config3: {
-      modelId: 'gemini-3-pro',
+      modelId: 'gemini-1.5-pro',
       provider: 'google',
       temperature: 0.8,
-      systemPrompt: 'Creative input',
+      systemPrompt: 'Creative input and cloud backup',
       skills: ['brainstorming'],
       workflows: ['team_retrospective']
     },
@@ -99,7 +106,8 @@ export const agents: Agent[] = [
       objective: 'Establish Swarm Goal Protocol for multi-agent coordination, ensuring that all neural uplinks are synchronized with zero-latency overhead and robust retry logic for Groq and OpenAI providers in the neural sector.',
       constraints: ['Zero token waste', 'Persistence required'],
       priority: 'high'
-    }
+    },
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2h ago
   },
   {
     category: 'ai', id: '3',
@@ -109,6 +117,8 @@ export const agents: Agent[] = [
     status: 'thinking',
     active_model_slot: 1,
     tokens_used: 42000,
+    cost_usd: 4.20,
+    budget_usd: 20.0,
     model: 'Gemma 4 (Local)',
     model_2: 'GPT-5.3 Codex',
     model_3: 'DeepSeek V3.2',
@@ -145,7 +155,8 @@ export const agents: Agent[] = [
       objective: 'Refactor Auth Module',
       constraints: ['No downtime', 'Maintain 100% test coverage'],
       priority: 'high'
-    }
+    },
+    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() // 5h ago
   },
   {
     category: 'ai', id: '4',
@@ -289,15 +300,23 @@ export const agents: Agent[] = [
     budget_usd: 10.0,
     model: 'Gemini 3 Pro',
     workspace_path: './workspaces/qa-99',
-    skills: [],
-    workflows: [],
+    skills: ['code_audit', 'system_audit', 'verify_telemetry'],
+    workflows: ['Mission Analysis'],
     model_config: {
-      modelId: 'gemini-3-pro',
+      modelId: 'gemini-1.5-pro',
       provider: 'google',
       temperature: 0.7,
       systemPrompt: 'You are the quality assurance agent. Analyze missions for correctness and completeness.',
-      skills: [],
-      workflows: []
+      skills: ['code_audit', 'system_audit', 'verify_telemetry'],
+      workflows: ['Mission Analysis']
+    },
+    model_config2: {
+      modelId: 'claude-3-5-sonnet-20240620',
+      provider: 'anthropic',
+      temperature: 0.5,
+      systemPrompt: 'You are the quality assurance agent. Analyze missions for correctness and completeness.',
+      skills: ['code_audit', 'system_audit', 'verify_telemetry'],
+      workflows: ['Mission Analysis']
     }
   }
 ];

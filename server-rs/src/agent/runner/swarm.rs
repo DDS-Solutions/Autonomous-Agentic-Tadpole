@@ -118,6 +118,15 @@ impl AgentRunner {
             let _ = tx.commit().await;
         }
 
+        let arbiter = self.state.resources.continuity_arbiter.clone();
+        for sub_id in &target_ids {
+            let id = sub_id.clone();
+            let arb_clone = arbiter.clone();
+            tokio::spawn(async move {
+                arb_clone.warm_up(&id).await;
+            });
+        }
+
         use futures::stream::{FuturesUnordered, StreamExt};
         let mut swarm_tasks = FuturesUnordered::new();
         let mut results = Vec::new();
@@ -375,7 +384,7 @@ impl AgentRunner {
                 model_3: None,
                 model_config2: None,
                 model_config3: None,
-                active_model_slot: None,
+                active_model_slot: Some(1),
             },
             economics: crate::agent::types::AgentEconomics {
                 budget_usd: 10.0,

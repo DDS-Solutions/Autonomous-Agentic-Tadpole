@@ -342,6 +342,21 @@ impl AgentRunner {
 
         if ContextManager::calculate_tokens(&history_text) > TOKEN_SUMMARIZATION_THRESHOLD {
             tracing::info!("💡 [Runner] Mission history exceeds 4k tokens for {}. Summarizing...", mission_id);
+            
+            // SSCP Integration: Flash raw history to SSD Cold Tier before summarization
+            let arbiter = self.state.resources.continuity_arbiter.clone();
+            let agent_id = ctx.agent_id.clone();
+            let mission_id_str = mission_id.to_string();
+            let history_clone = history_text.clone();
+            
+            tokio::spawn(async move {
+                let blocks = crate::agent::continuity::partition_context(&agent_id, &mission_id_str, &history_clone);
+                for block in &blocks {
+                    let _ = arbiter.ssd.flush_block(&block).await;
+                }
+                tracing::debug!("❄️ [SSCP] Flushed {} context blocks to SSD for agent {}", blocks.len(), agent_id);
+            });
+
             match ContextManager::summarize_history(self, &ctx, &history_text).await {
                 Ok(summary) => {
                     ctx.summarized_history = Some(summary);

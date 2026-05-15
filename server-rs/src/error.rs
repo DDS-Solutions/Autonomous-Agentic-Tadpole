@@ -117,6 +117,9 @@ pub enum AppError {
     #[error("Internal Server Error: {0}")]
     InternalServerError(String),
 
+    #[error("Annealing Required: {0}")]
+    AnnealingRequired(String),
+
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
@@ -151,6 +154,7 @@ impl AppError {
             AppError::RecursionBlocked(_) => StatusCode::LOOP_DETECTED,
             AppError::NotImplemented(_) => StatusCode::NOT_IMPLEMENTED,
             AppError::RateLimit(_) => StatusCode::TOO_MANY_REQUESTS,
+            AppError::AnnealingRequired(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -172,6 +176,7 @@ impl AppError {
             AppError::RecursionBlocked(_) => "recursion-blocked".to_string(),
             AppError::NotImplemented(_) => "not-implemented".to_string(),
             AppError::RateLimit(_) => "rate-limit".to_string(),
+            AppError::AnnealingRequired(_) => "annealing-required".to_string(),
             AppError::InternalServerError(_) | AppError::Anyhow(_) | AppError::Sqlx(_) | AppError::Io(_) | AppError::Reqwest(_) | AppError::Serde(_) | AppError::WalkDir(_) => "internal-error".to_string(),
         }
     }

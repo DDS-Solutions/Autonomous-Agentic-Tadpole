@@ -144,7 +144,7 @@ impl AppState {
             budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
             secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
+            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
         });
@@ -173,6 +173,9 @@ impl AppState {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
+                    crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
+                ))),
                 parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
@@ -264,7 +267,7 @@ impl AppState {
             budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
             secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
+            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
         });
@@ -293,6 +296,9 @@ impl AppState {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
+                    crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
+                ))),
                 parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
@@ -403,14 +409,13 @@ impl AppState {
         let agents_list = crate::agent::persistence::load_agents_db(&pool)
             .await
             .unwrap_or_default();
-
+ 
         let agents = DashMap::new();
         for a in agents_list {
             agents.insert(a.identity.id.clone(), a);
         }
         tracing::info!("✅ [Registries] Agents loaded (count: {}).", agents.len());
 
-        tracing::info!("🚀 [Engines] Initializing HTTP Client...");
         let http_client = Arc::new(
             reqwest::Client::builder()
                 .user_agent("TadpoleOS/1.1.57")
@@ -547,6 +552,9 @@ impl AppState {
             hooks,
             tool_registry,
         });
+ 
+        // 🧬 [Reconciliation] Fix configuration drift before subsystems start
+        registry.reconcile_agents();
 
         let security = Arc::new(SecurityHub {
             audit_trail: Arc::new(crate::security::audit::MerkleAuditTrail::new(pool.clone())),
@@ -555,7 +563,7 @@ impl AppState {
                 secret_redactor.clone(),
             )),
             secret_redactor,
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
+            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token,
         });
@@ -582,6 +590,14 @@ impl AppState {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(16)),
+                continuity_arbiter: {
+                    let cache_dir = std::env::var("TADPOLE_CACHE_DIR")
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|_| base_dir.join("data").join("cache").join("context"));
+                    Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
+                        crate::agent::continuity::SSDManager::new(cache_dir),
+                    )))
+                },
                 parser: Arc::new(SymbolParser::new()),
             }),
             base_dir,
@@ -1182,6 +1198,9 @@ impl Default for AppState {
             renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
             base_dir: std::path::PathBuf::from("data"),
             arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
+            continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
+                crate::agent::continuity::SSDManager::new(std::path::PathBuf::from("data").join("cache").join("context")),
+            ))),
             parser: Arc::new(SymbolParser::new()),
         });
 

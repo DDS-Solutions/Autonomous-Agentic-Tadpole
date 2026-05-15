@@ -56,7 +56,7 @@ const REVERSE_MODEL_MAP: Record<string, string> = Object.fromEntries(
  * Returns the original name if no mapping is found.
  */
 export function resolve_technical_model_id(model_name: string | undefined): string {
-    if (!model_name) return '';
+    if (!model_name) return 'unknown';
     
     // Check for exact match in MODEL_MAP first
     if (MODEL_MAP[model_name]) return MODEL_MAP[model_name];

@@ -49,13 +49,35 @@ export async function process_command(
     const telemetry_source = '[CommandProcessor]';
     
     // 1. Lexical Analysis: Split by spaces but preserve quoted strings (e.g. "quoted msg")
+    // Hardened Parser: Handles escaped quotes and prevents ReDoS compared to simple regex.
     const parts: string[] = [];
-    const regex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-    let match;
-    while ((match = regex.exec(command_text)) !== null) {
-        // match[1] or [2] contains the content inside quotes, match[0] is the fallback for unquoted words.
-        parts.push(match[1] || match[2] || match[0]);
+    let current_part = '';
+    let in_quotes = false;
+    let quote_char = '';
+
+    for (let i = 0; i < command_text.length; i++) {
+        const char = command_text[i];
+        if ((char === '"' || char === "'") && (i === 0 || command_text[i - 1] !== '\\')) {
+            if (in_quotes && char === quote_char) {
+                in_quotes = false;
+                parts.push(current_part);
+                current_part = '';
+            } else if (!in_quotes) {
+                in_quotes = true;
+                quote_char = char;
+            } else {
+                current_part += char;
+            }
+        } else if (char === ' ' && !in_quotes) {
+            if (current_part) {
+                parts.push(current_part);
+                current_part = '';
+            }
+        } else {
+            current_part += char;
+        }
     }
+    if (current_part) parts.push(current_part);
 
     if (parts.length === 0) return { should_clear_logs: false };
     const cmd = parts[0].toLowerCase();
@@ -306,8 +328,7 @@ export async function process_command(
             }
 
             // Sanitize: strip control characters and enforce length limit
-            // eslint-disable-next-line no-control-regex
-            message = message.replace(/[\x00-\x1F\x7F]/g, '').trim();
+            message = sanitize_directive(message);
             if (message.length > MAX_MSG_LENGTH) {
                 event_bus.emit_log({
                     source: 'System',
@@ -375,6 +396,17 @@ export async function process_command(
             }
 
             agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
+                .then(async (task_id) => {
+                    // Mission Critical Tracking: If the command is an audit or critical deployment, poll for status.
+                    if (message.toLowerCase().includes('audit') || message.toLowerCase().includes('integrity')) {
+                        const status = await agent_api_service.poll_task_status(agent.id, task_id);
+                        if (status === 'success') {
+                            event_bus.emit_log({ source: 'System', text: `✅ Task ${task_id.slice(0, 8)} resolved: Mission Objectives Met.`, severity: 'success' });
+                        } else if (status === 'error') {
+                            event_bus.emit_log({ source: 'System', text: `❌ Task ${task_id.slice(0, 8)} resolved: Failure Detected in Audit Trail.`, severity: 'error' });
+                        }
+                    }
+                })
                 .catch(err => {
                     event_bus.emit_log({
                         source: 'System',
@@ -521,6 +553,16 @@ export async function process_command(
                     }
 
                     agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
+                        .then(async (task_id) => {
+                            if (message.toLowerCase().includes('audit') || message.toLowerCase().includes('integrity')) {
+                                const status = await agent_api_service.poll_task_status(agent.id, task_id);
+                                if (status === 'success') {
+                                    event_bus.emit_log({ source: 'System', text: `✅ Task ${task_id.slice(0, 8)} resolved: Mission Objectives Met.`, severity: 'success' });
+                                } else if (status === 'error') {
+                                    event_bus.emit_log({ source: 'System', text: `❌ Task ${task_id.slice(0, 8)} resolved: Failure Detected in Audit Trail.`, severity: 'error' });
+                                }
+                            }
+                        })
                         .catch(err => {
                             event_bus.emit_log({
                                 source: 'System',
@@ -616,6 +658,19 @@ export async function process_command(
     }
 }
 
+
+/**
+ * Hardened Directive Sanitizer
+ * Strips control characters and common injection vectors (shell expansion, template tags).
+ */
+function sanitize_directive(text: string): string {
+    return text
+        .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
+        .replace(/\$\([^)]*\)/g, '[REDACTED_SHELL]') // Shell expansion: $(...)
+        .replace(/`[^`]*`/g, '[REDACTED_TICKS]') // Backticks
+        .replace(/\{\{[^}]*\}\}/g, '[REDACTED_TEMPLATE]') // Template tags: {{...}}
+        .trim();
+}
 
 /**
  * Heuristic-based tactical intent detection.

@@ -49,14 +49,25 @@ export function useAgentConfig(
     const [state, dispatch] = useReducer(config_reducer, initial_state);
     const models = use_model_store((s) => s.models);
 
-    // Phase 4: Sync empty model slots once model store hydrates
+    // Background Sync: Rehydrate form if authoritative store state changes (e.g., via Agent Card updates)
+    // Hardened: Skip rehydration during active save or if the incoming agent matches current identity (Sync-Fix-01)
     useEffect(() => {
-        if (models.length > 0) {
-            const slots: Agent_Model_Slot_Key[] = ['primary', 'secondary', 'tertiary'];
-            // [DEBT] Removed aggressive auto-fill logic that was overriding user selections.
-            // Slots should remain empty if not explicitly configured to avoid unintended model reverts.
+        if (!agent || state.ui.saving) return;
+
+        // Semantic Check: Only reset if structural fields have drifted
+        const current_form_model = state.slots.primary.model;
+        const normalized_agent_role = (agent.role || '').toLowerCase().replace(/\s+/g, '-');
+        
+        if (agent.name === state.identity.name && 
+            normalized_agent_role === state.identity.role && 
+            agent.model === current_form_model &&
+            agent.active_model_slot === state.active_model_slot) {
+            return;
         }
-    }, [models, state.slots]);
+        
+        console.debug(`[useAgentConfig] Authoritative Drift Detected for ${agent.id}. Rehydrating form state.`);
+        dispatch({ type: 'RESET_FROM_STATE', payload: buildAgentFormState(agent) });
+    }, [agent, state.ui.saving, state.identity.name, state.identity.role, state.slots.primary.model, state.active_model_slot]);
 
     const add_role = use_role_store((s) => s.add_role);
 

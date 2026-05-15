@@ -96,6 +96,42 @@ describe('agent_api_service', () => {
                 body: expect.stringContaining('"currentTask":"Testing recovery"')
             }));
         });
+
+        it('should resolve technical IDs and sanitize numbers in complex multi-slot updates', async () => {
+            vi.mocked(api_request).mockResolvedValueOnce({});
+            const patch = {
+                model: 'Gemini 3 Flash',
+                model_config: {
+                    modelId: 'gemini-3-flash-preview',
+                    provider: 'google',
+                    temperature: 0.8,
+                    systemPrompt: 'Primary Prompt',
+                    reasoningDepth: 2,
+                    actThreshold: 0.95
+                },
+                model_2: 'Claude 3.5 Sonnet',
+                model_config2: {
+                    modelId: 'claude-3-5-sonnet-20240620',
+                    provider: 'anthropic',
+                    temperature: 0.5,
+                    reasoningDepth: 1,
+                    actThreshold: 0.9
+                }
+            } as any;
+
+            await agent_api_service.update_agent('agent-1', patch);
+
+            expect(api_request).toHaveBeenCalledWith('/v1/agents/agent-1', expect.objectContaining({
+                method: 'PUT',
+                body: expect.stringContaining('"modelId":"gemini-3-flash-preview"')
+            }));
+            expect(api_request).toHaveBeenCalledWith('/v1/agents/agent-1', expect.objectContaining({
+                body: expect.stringContaining('"model2":"claude-3-5-sonnet-20240620"')
+            }));
+            expect(api_request).toHaveBeenCalledWith('/v1/agents/agent-1', expect.objectContaining({
+                body: expect.stringContaining('"reasoningDepth":2')
+            }));
+        });
     });
 
     describe('create_agent', () => {

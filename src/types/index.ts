@@ -19,6 +19,7 @@ export type { Mission_Cluster } from '../stores/workspace_store';
 import type {
   Agent,
   AgentPatch,
+  AgentFormState,
   Agent_Connector_Config,
   Agent_Metadata,
   Agent_Model_Slot_Key,
@@ -32,6 +33,7 @@ import type {
 export type {
   Agent,
   AgentPatch,
+  AgentFormState,
   Agent_Connector_Config,
   Agent_Metadata,
   Agent_Model_Slot_Key,

@@ -147,7 +147,7 @@ impl McpHost {
         if let Some(ref path) = self.mcp_config_path {
             let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             if let Ok(safe_path) = crate::utils::security::validate_path(&authorized_base, &path.to_string_lossy()) {
-                if let Ok(content) = std::fs::read_to_string(safe_path) {
+                if let Ok(content) = tokio::fs::read_to_string(safe_path).await {
                     if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
                         for (server_name, _) in config.mcp_servers {
                             // Discover tools from the server
@@ -194,12 +194,13 @@ impl McpHost {
     ) -> Result<McpResult, AppError> {
         let start_time = std::time::Instant::now();
 
-        let mode = self.policy.get_mode(tool_name).await;
+        let mode = self.policy.get_mode(tool_name, &ctx.agent_id).await;
         match mode {
             PermissionMode::Deny => {
                 return Err(AppError::Forbidden(format!(
-                    "Permission denied: Tool {} is explicitly blocked by policy.",
-                    tool_name
+                    "Permission denied: Tool {} is explicitly blocked for agent {} by policy.",
+                    tool_name,
+                    ctx.agent_id
                 )))
             }
             PermissionMode::Prompt => {
@@ -252,7 +253,7 @@ impl McpHost {
         if let Some(ref path) = self.mcp_config_path {
             let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             if let Ok(safe_path) = crate::utils::security::validate_path(&authorized_base, &path.to_string_lossy()) {
-                if let Ok(content) = std::fs::read_to_string(safe_path) {
+                if let Ok(content) = tokio::fs::read_to_string(safe_path).await {
                     if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
                         for (server_name, _) in config.mcp_servers {
                             if let Ok(client) = self.get_or_spawn_client(&server_name).await {
@@ -336,7 +337,7 @@ impl McpHost {
         let safe_path = crate::utils::security::validate_path(&authorized_base, &config_path.to_string_lossy())
             .map_err(|e| AppError::Forbidden(e.to_string()))?;
 
-        let content = std::fs::read_to_string(safe_path).map_err(AppError::Io)?;
+        let content = tokio::fs::read_to_string(safe_path).await.map_err(AppError::Io)?;
         let config: McpConfig = serde_json::from_str(&content).map_err(|e| AppError::BadRequest(e.to_string()))?;
 
         let server_config = config.mcp_servers.get(server_name)

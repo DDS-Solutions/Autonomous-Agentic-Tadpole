@@ -76,6 +76,57 @@ impl RegistryHub {
             })
             .collect()
     }
+
+    /// ### 🧬 [Reconciliation] Registry Normalization
+    /// Iterates through all registered agents and fixes configuration drift 
+    /// (e.g., missing model IDs, invalid slots, or legacy provider strings).
+    /// Ensures the backend strictly aligns with the current model registry.
+    pub fn reconcile_agents(&self) {
+        tracing::info!("🧬 [Registry] Starting agent configuration reconciliation...");
+        let mut fixed_count = 0;
+
+        for mut entry in self.agents.iter_mut() {
+            let agent = entry.value_mut();
+            let mut changed = false;
+
+            // 1. Ensure active model slot is valid
+            if agent.models.active_model_slot.is_none() || !matches!(agent.models.active_model_slot, Some(1) | Some(2) | Some(3)) {
+                agent.models.active_model_slot = Some(1);
+                changed = true;
+            }
+
+            // 2. Sync legacy model_id if empty
+            if agent.models.model_id.is_none() || agent.models.model_id.as_deref().unwrap_or_default().is_empty() {
+                let primary_id = &agent.models.model.model_id;
+                if !primary_id.is_empty() {
+                    agent.models.model_id = Some(primary_id.clone());
+                    changed = true;
+                }
+            }
+
+            // 3. Validate STT Engine defaults
+            if agent.stt_engine.is_none() {
+                agent.stt_engine = Some("groq".to_string());
+                changed = true;
+            }
+
+            if changed {
+                fixed_count += 1;
+                tracing::debug!(
+                    "🔧 [Registry] Normalized agent '{}' (Slot: {:?}, Model: {:?})",
+                    agent.identity.id,
+                    agent.models.active_model_slot,
+                    agent.models.model_id
+                );
+            }
+        }
+
+        if fixed_count > 0 {
+            tracing::info!("✅ [Registry] Reconciliation complete. Fixed {} agents.", fixed_count);
+        } else {
+            tracing::info!("✅ [Registry] Reconciliation complete. No drift detected.");
+        }
+    }
 }
 
 // Metadata: [reg]

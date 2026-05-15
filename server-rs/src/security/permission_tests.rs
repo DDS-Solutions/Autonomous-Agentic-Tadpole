@@ -27,9 +27,11 @@ async fn setup_test_db() -> sqlx::SqlitePool {
     sqlx::query(
         "CREATE TABLE permission_policies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tool_name TEXT NOT NULL UNIQUE,
+            tool_name TEXT NOT NULL,
+            agent_id TEXT,
             mode TEXT NOT NULL CHECK(mode IN ('allow', 'deny', 'prompt')),
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tool_name, agent_id)
         )",
     )
     .execute(&pool)
@@ -46,20 +48,21 @@ async fn test_permission_policy_persistence() {
 
     // 1. Initially, unknown tool should default to Prompt (Sovereign Safety)
     assert_eq!(
-        policy.get_mode("dangerous_tool").await,
+        policy.get_mode("dangerous_tool", "test-agent").await,
         PermissionMode::Prompt
     );
 
     // 2. Insert a policy into the DB
-    sqlx::query("INSERT INTO permission_policies (tool_name, mode) VALUES (?, ?)")
+    sqlx::query("INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, ?, ?)")
         .bind("read_file")
+        .bind("test-agent")
         .bind("allow")
         .execute(&pool)
         .await
         .expect("Failed to insert policy");
 
     // 3. get_mode should now return Allow (fetches from DB and caches)
-    assert_eq!(policy.get_mode("read_file").await, PermissionMode::Allow);
+    assert_eq!(policy.get_mode("read_file", "test-agent").await, PermissionMode::Allow);
 }
 
 #[tokio::test]
@@ -68,8 +71,9 @@ async fn test_permission_policy_cache_refresh() {
     let policy = PermissionPolicy::new(pool.clone());
 
     // 1. Seed the DB
-    sqlx::query("INSERT INTO permission_policies (tool_name, mode) VALUES (?, ?)")
+    sqlx::query("INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, ?, ?)")
         .bind("execute_shell")
+        .bind("test-agent")
         .bind("prompt")
         .execute(&pool)
         .await
@@ -77,7 +81,7 @@ async fn test_permission_policy_cache_refresh() {
 
     // 2. Warm the cache
     assert_eq!(
-        policy.get_mode("execute_shell").await,
+        policy.get_mode("execute_shell", "test-agent").await,
         PermissionMode::Prompt
     );
 
@@ -89,7 +93,7 @@ async fn test_permission_policy_cache_refresh() {
 
     // 4. Mode should still be Prompt (from cache)
     assert_eq!(
-        policy.get_mode("execute_shell").await,
+        policy.get_mode("execute_shell", "test-agent").await,
         PermissionMode::Prompt
     );
 
@@ -100,7 +104,7 @@ async fn test_permission_policy_cache_refresh() {
         .expect("Failed to refresh cache");
 
     // 6. Mode should now be Deny
-    assert_eq!(policy.get_mode("execute_shell").await, PermissionMode::Deny);
+    assert_eq!(policy.get_mode("execute_shell", "test-agent").await, PermissionMode::Deny);
 }
 
 #[tokio::test]
@@ -110,7 +114,7 @@ async fn test_permission_policy_unknown_tool_safety() {
 
     // Default behavior for any unregistered tool must be Prompt
     assert_eq!(
-        policy.get_mode("zero_day_exploit_tool").await,
+        policy.get_mode("zero_day_exploit_tool", "test-agent").await,
         PermissionMode::Prompt
     );
 }

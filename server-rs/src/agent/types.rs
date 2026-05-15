@@ -47,6 +47,9 @@ pub enum ModelProvider {
     Openrouter,
     Cerebras,
     Sambanova,
+    Meta,
+    Alibaba,
+    Local,
 }
 
 impl ModelProvider {
@@ -67,6 +70,9 @@ impl ModelProvider {
             "openrouter" | "open-router" => Some(Self::Openrouter),
             "cerebras" => Some(Self::Cerebras),
             "sambanova" | "samba-nova" => Some(Self::Sambanova),
+            "meta" | "llama" => Some(Self::Meta),
+            "alibaba" | "qwen" => Some(Self::Alibaba),
+            "local" | "custom" => Some(Self::Local),
             _ => None,
         }
     }
@@ -90,6 +96,9 @@ impl std::fmt::Display for ModelProvider {
             Self::Openrouter => "openrouter",
             Self::Cerebras => "cerebras",
             Self::Sambanova => "sambanova",
+            Self::Meta => "meta",
+            Self::Alibaba => "alibaba",
+            Self::Local => "local",
         };
         write!(f, "{}", s)
     }
@@ -322,6 +331,7 @@ impl ModelCapabilities {
 pub struct ModelConfig {
     #[serde(default, alias = "model_id")]
     pub model_id: String,
+    #[serde(default)]
     pub provider: ModelProvider,
     #[serde(default, alias = "system_prompt")]
     pub system_prompt: Option<String>,
@@ -631,6 +641,7 @@ pub struct EngineAgent {
     pub requires_oversight: bool,
     pub voice_id: Option<String>,
     pub voice_engine: Option<String>,
+    pub stt_engine: Option<String>,
     pub connector_configs: Vec<ConnectorConfig>,
     pub version: u32,
 }
@@ -655,6 +666,7 @@ struct AgentResponse<'a> {
     requires_oversight: bool,
     voice_id: &'a Option<String>,
     voice_engine: &'a Option<String>,
+    stt_engine: &'a Option<String>,
     connector_configs: &'a [ConnectorConfig],
     version: u32,
 }
@@ -719,6 +731,7 @@ impl Serialize for EngineAgent {
             requires_oversight: self.requires_oversight,
             voice_id: &self.voice_id,
             voice_engine: &self.voice_engine,
+            stt_engine: &self.stt_engine,
             connector_configs: &self.connector_configs,
             version: self.version,
         };
@@ -787,6 +800,8 @@ struct EngineAgentWire {
     voice_id: Option<String>,
     #[serde(default, alias = "voiceEngine")]
     voice_engine: Option<String>,
+    #[serde(default, alias = "sttEngine", alias = "stt_engine")]
+    stt_engine: Option<String>,
     #[serde(default = "default_category")]
     category: String,
     #[serde(default, alias = "failureCount")]
@@ -892,6 +907,7 @@ impl<'de> Deserialize<'de> for EngineAgent {
             requires_oversight: wire.requires_oversight,
             voice_id: wire.voice_id,
             voice_engine: wire.voice_engine,
+            stt_engine: wire.stt_engine,
             connector_configs: wire.connector_configs,
             version: wire.version,
         })

@@ -82,10 +82,26 @@ impl SymbolParser {
         };
 
         let mut parser = Parser::new();
-        parser.set_language(&language).expect("Failed to set language");
+        if let Err(e) = parser.set_language(&language) {
+            tracing::error!("❌ [Parser] Failed to set language for {}: {}", path, e);
+            return Vec::new();
+        }
 
-        let tree = parser.parse(content, None).expect("Failed to parse content");
-        let query = Query::new(&language, query_str).expect("Failed to create query");
+        let tree = match parser.parse(content, None) {
+            Some(t) => t,
+            None => {
+                tracing::error!("❌ [Parser] Failed to parse content for {}", path);
+                return Vec::new();
+            }
+        };
+
+        let query = match Query::new(&language, query_str) {
+            Ok(q) => q,
+            Err(e) => {
+                tracing::error!("❌ [Parser] Failed to create query for {}: {}", path, e);
+                return Vec::new();
+            }
+        };
         let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
 

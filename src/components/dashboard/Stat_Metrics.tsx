@@ -38,10 +38,10 @@ export const Stat_Metrics: React.FC<StatMetricsProps> = ({
         },
         { 
             label: i18n.t('stats.swarm_cost'), 
-            value: `${i18n.t('agent_config.label_currency_symbol')}${total_cost.toFixed(3)}`, 
+            value: `${i18n.t('agent_config.label_currency_symbol')}${total_cost.toFixed(2)}`, 
             icon: Zap, 
-            color: 'text-green-500', 
-            bg: 'bg-blue-900/10', 
+            color: 'text-emerald-500', 
+            bg: 'bg-emerald-900/10', 
             tooltip: i18n.t('stats.swarm_cost_tooltip')
         },
         { 
@@ -62,7 +62,11 @@ export const Stat_Metrics: React.FC<StatMetricsProps> = ({
         },
         { 
             label: i18n.t('stats.swarm_tokens'), 
-            value: total_tokens > 1000 ? `${(total_tokens / 1000).toFixed(1)}k` : `${total_tokens}`, 
+            value: total_tokens >= 1000000 
+                ? `${(total_tokens / 1000000).toFixed(2)}M` 
+                : total_tokens >= 1000 
+                    ? `${(total_tokens / 1000).toFixed(1)}k` 
+                    : `${total_tokens}`, 
             icon: Database, 
             color: 'text-emerald-400', 
             bg: 'bg-emerald-900/10', 

@@ -97,6 +97,21 @@ impl MerkleAuditTrail {
         }
     }
 
+    /// Reconciles the in-memory `last_hash` cache with the current DB head.
+    ///
+    /// Call this on startup to guard against stale cache in multi-instance
+    /// deployments or after a DB restore (IV-01).
+    pub async fn verify_head(&self) -> anyhow::Result<()> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
+        let db_head = row.map(|r| r.0).unwrap_or_else(|| "0".repeat(64));
+        *self.last_hash.write() = Some(db_head);
+        tracing::info!("🔐 [Audit] Head cache reconciled with DB.");
+        Ok(())
+    }
+
     /// Creates a mock audit trail for testing and development (Synchronous/Lazy).
     pub fn mock() -> Self {
         let pool = SqlitePool::connect_lazy("sqlite::memory:").unwrap();
@@ -218,7 +233,7 @@ impl MerkleAuditTrail {
         }
 
         let row: Option<(String,)> =
-            sqlx::query_as("SELECT current_hash FROM audit_trail ORDER BY timestamp DESC LIMIT 1")
+            sqlx::query_as("SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1")
                 .fetch_optional(&self.pool)
                 .await?;
 
@@ -233,7 +248,7 @@ impl MerkleAuditTrail {
     #[tracing::instrument(skip(self), name = "security::audit_verify_all")]
     pub async fn verify_chain(&self, public_key_hex: Option<&str>) -> Result<bool> {
         let entries: Vec<AuditEntry> =
-            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp ASC")
+            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp ASC, rowid ASC")
                 .fetch_all(&self.pool)
                 .await?;
 
@@ -246,7 +261,7 @@ impl MerkleAuditTrail {
     #[tracing::instrument(skip(self), fields(n = n), name = "security::audit_verify_n")]
     pub async fn verify_last_n(&self, n: usize, public_key_hex: Option<&str>) -> Result<(usize, usize)> {
         let entries: Vec<AuditEntry> =
-            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT ?")
+            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT ?")
                 .bind(n as i64)
                 .fetch_all(&self.pool)
                 .await?;

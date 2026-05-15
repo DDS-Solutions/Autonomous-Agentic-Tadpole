@@ -170,6 +170,16 @@ fn check_sovereign_config() {
 /// ### AI Assist Note
 /// This is the primary orchestrator for the engine's background lifecycle.
 pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapIntent) {
+    // 0. Verify Merkle Audit Trail integrity
+    let audit_state = app_state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = audit_state.security.audit_trail.verify_head().await {
+            tracing::error!("🚨 [Audit] Merkle Audit Trail verification failed: {}", e);
+        } else {
+            tracing::info!("🔒 [Audit] Merkle Audit Trail synchronized with database.");
+        }
+    });
+
     // 1. Hydra-RS: Initial Code Scan (Optional in Fast Path)
     if intent == BootstrapIntent::Full {
         let state_for_graph = app_state.clone();
@@ -345,7 +355,13 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     let aggregator = crate::telemetry::aggregator::MetricAggregator::new(1000); // Window of 1000 spans
     tokio::spawn(aggregator.run(aggregator_rx));
 
-    // 10. Launch Debounced Token Usage Flush (every 10 seconds)
+    // 10. Launch Telemetry Bridge (Mission Log Persistence)
+    let bridge_rx_telemetry = crate::telemetry::TELEMETRY_TX.subscribe();
+    let bridge_rx_logs = app_state.comms.tx.subscribe();
+    let bridge = crate::telemetry::bridge::TelemetryBridge::new(app_state.clone());
+    tokio::spawn(bridge.run(bridge_rx_telemetry, bridge_rx_logs));
+
+    // 11. Launch Debounced Token Usage Flush (every 10 seconds)
     let flush_state = app_state.clone();
     tokio::spawn(async move {
         loop {

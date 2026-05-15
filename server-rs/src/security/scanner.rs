@@ -23,8 +23,33 @@
 //!   degradation under high-frequency command scanning.
 //! - **Trace Scope**: `server-rs::security::scanner`
 use crate::secret_redactor::SecretRedactor;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::Arc;
+
+/// Lazy-initialized secret detection patterns (compiled once at first use, reused on every scan).
+static SECRET_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+    vec![
+        (Regex::new(r"(?i)sk-[a-zA-Z0-9]{48}").unwrap(), "OpenAI API Key"),
+        (Regex::new(r"(?i)AIza[0-9A-Za-z-_]{35}").unwrap(), "Google API Key"),
+        (Regex::new(r"(?i)ghp_[a-zA-Z0-9]{36}").unwrap(), "GitHub Personal Access Token"),
+        (Regex::new(r"(?i)xox[pborsa]-[a-zA-Z0-9-]{10,48}").unwrap(), "Slack Token"),
+        (Regex::new(r"(?i)SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}").unwrap(), "SendGrid API Key"),
+        (Regex::new(r"(?i)sq0atp-[a-zA-Z0-9_-]{22}").unwrap(), "Square Access Token"),
+        (Regex::new(r"(?i)aws_access_key_id\s*[:=]\s*[A-Z0-9]{20}").unwrap(), "AWS Access Key"),
+        (Regex::new(r"(?i)aws_secret_access_key\s*[:=]\s*[A-Za-z0-9/+=]{40}").unwrap(), "AWS Secret Key"),
+    ]
+});
+
+/// Lazy-initialized heuristic patterns for raw secret export detection.
+static HEURISTIC_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        Regex::new(r"(?i)export\s+[A-Z0-9_]+=").unwrap(),
+        Regex::new(r"(?i)set\s+[A-Z0-9_]+=").unwrap(),
+        Regex::new(r"(?i)env\s+[A-Z0-9_]+=").unwrap(),
+    ]
+});
+
 
 /// Result of a shell safety scan.
 pub enum ScannerResult {
@@ -78,47 +103,26 @@ impl ShellScanner {
             return ScannerResult::Risky("Known environment secret detected in script".to_string());
         }
 
-        // 2. Regex patterns for common secret formats (Proactive detection)
-        let patterns = [
-            (r"(?i)sk-[a-zA-Z0-9]{48}", "OpenAI API Key"),
-            (r"(?i)AIza[0-9A-Za-z-_]{35}", "Google API Key"),
-            (r"(?i)ghp_[a-zA-Z0-9]{36}", "GitHub Personal Access Token"),
-            (r"(?i)xox[pborsa]-[a-zA-Z0-9-]{10,48}", "Slack Token"),
-            (r"(?i)SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}", "SendGrid API Key"),
-            (r"(?i)sq0atp-[a-zA-Z0-9_-]{22}", "Square Access Token"),
-            (r"(?i)aws_access_key_id\s*[:=]\s*[A-Z0-9]{20}", "AWS Access Key"),
-            (r"(?i)aws_secret_access_key\s*[:=]\s*[A-Za-z0-9/+=]{40}", "AWS Secret Key"),
-        ];
-
-        for (pattern, name) in patterns {
-            if let Ok(re) = Regex::new(pattern) {
-                if re.is_match(input) {
-                    return ScannerResult::Risky(format!("Potential {} detected", name));
-                }
+        // 2. Regex patterns for common secret formats (Proactive detection — compiled once via Lazy static)
+        for (re, name) in SECRET_PATTERNS.iter() {
+            if re.is_match(input) {
+                return ScannerResult::Risky(format!("Potential {} detected", name));
             }
         }
 
         // 3. Heuristic: Look for "export KEY=" or "SET KEY=" patterns
-        let heuristics = [
-            r"(?i)export\s+[A-Z0-9_]+=",
-            r"(?i)set\s+[A-Z0-9_]+=",
-            r"(?i)env\s+[A-Z0-9_]+=",
-        ];
-
-        for pattern in heuristics {
-            if let Ok(re) = Regex::new(pattern) {
-                if let Some(mat) = re.find(input) {
-                    // Check if there is a value after the equals sign
-                    let after = &input[mat.end()..];
-                    if !after.trim().is_empty()
-                        && !after.trim().starts_with('"')
-                        && !after.trim().starts_with('\'')
-                    {
-                        // Likely a raw secret being exported
-                        return ScannerResult::Risky(
-                            "Prohibited raw secret export detected".to_string(),
-                        );
-                    }
+        for re in HEURISTIC_PATTERNS.iter() {
+            if let Some(mat) = re.find(input) {
+                // Check if there is a value after the equals sign
+                let after = &input[mat.end()..];
+                if !after.trim().is_empty()
+                    && !after.trim().starts_with('"')
+                    && !after.trim().starts_with('\'')
+                {
+                    // Likely a raw secret being exported
+                    return ScannerResult::Risky(
+                        "Prohibited raw secret export detected".to_string(),
+                    );
                 }
             }
         }

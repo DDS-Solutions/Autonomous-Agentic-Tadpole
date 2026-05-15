@@ -161,7 +161,32 @@ impl AgentRunner {
                             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                             continue; // Retry reasoning turn after wait
                         }
-                        return Err((e, usage));
+
+                        // ### 🛠️ [Self-Annealing] Catch parsing failures
+                        if let AppError::AnnealingRequired(detail) = e {
+                            let mut anneal_attempts = 0;
+                            let mut anneal_text = String::new();
+                            let mut anneal_calls = Vec::new();
+                            let mut anneal_usage = None;
+
+                            self.handle_extraction_failure(
+                                ctx,
+                                &system_prompt,
+                                &payload.message,
+                                &detail,
+                                &mut anneal_text,
+                                &mut anneal_calls,
+                                &mut anneal_usage,
+                                &mut anneal_attempts,
+                            )
+                            .await
+                            .map_err(|e| (e, usage.clone()))?;
+
+                            self.accumulate_usage(&mut usage, anneal_usage);
+                            (anneal_text, anneal_calls, None)
+                        } else {
+                            return Err((e, usage));
+                        }
                     }
                 };
                 self.accumulate_usage(&mut usage, turn_usage);
@@ -322,6 +347,16 @@ impl AgentRunner {
                                 }
                                 output_text.push_str(&report);
                             }
+
+                            if scrub_mythos_tags(&output_text).trim().is_empty() {
+                                tracing::info!("🔄 [Intelligence] Mission completed silently. Enforcing report synthesis...");
+                                let synthesis_prompt = "You have completed your technical tasks. Provide a CONCISE and TECHNICAL summary of your findings and the current state of the workspace.";
+                                if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, synthesis_prompt, None).await {
+                                    output_text.push_str(&summary);
+                                    self.accumulate_usage(&mut usage, s_usage);
+                                }
+                            }
+
                             return Ok(IntelligenceOutput {
                                 text: scrub_mythos_tags(&output_text),
                                 usage
@@ -337,7 +372,7 @@ impl AgentRunner {
         // If the agent performed technical steps (tools) but failed to provide
         // a narrative summary (common with smaller models or turn caps), we
         // force a final synthesis to ensure the user and auditors receive a report.
-        if scrub_mythos_tags(&output_text).trim().is_empty() && conversation_history.len() > 2 {
+        if scrub_mythos_tags(&output_text).trim().is_empty() && conversation_history.len() > 1 {
             tracing::info!("🔄 [Intelligence] Post-turn silent completion detected for {}. Enforcing report synthesis...", ctx.agent_id);
             let final_tools = self.build_tools(ctx).await;
             let synthesis_prompt = "You have completed your technical tasks. Provide a CONCISE and TECHNICAL summary of your findings and the current state of the workspace. If you performed a discovery tool (like list_files), summarize the results now.";
@@ -450,6 +485,97 @@ impl AgentRunner {
             *function_calls = sent_calls;
             self.accumulate_usage(usage, sent_usage);
         }
+
+        // 🛡️ [Sentinel] Orchestrator Stall Detection
+        // Orchestrators are allowed to be conversational, but NOT to stall by asking for input.
+        // If an orchestrator produces no tool calls and its response contains stall phrases,
+        // re-prompt with the mission directive to force autonomous action.
+        if is_orchestrator
+            && !ctx.safe_mode
+            && function_calls.is_empty()
+            && !output_text.contains("complete_mission")
+        {
+            let lower_output = output_text.to_lowercase();
+            let is_stalled = lower_output.contains("please provide")
+                || lower_output.contains("ready to proceed")
+                || lower_output.contains("what would you like")
+                || lower_output.contains("provide the specific")
+                || lower_output.contains("waiting for")
+                || lower_output.contains("need more information")
+                || lower_output.contains("please share")
+                || lower_output.contains("let me know");
+
+            if is_stalled {
+                tracing::warn!(
+                    "🛡️ [Sentinel] Orchestrator {} stalled (asking for input instead of acting). Re-prompting with mission directive...",
+                    ctx.agent_id
+                );
+
+                let sentinel_directive = format!(
+                    "SYSTEM_SENTINEL: You are an AUTONOMOUS ORCHESTRATOR. Your response was a STALL — you asked the user for instructions instead of acting. \
+                     This is a PROTOCOL VIOLATION. You have the mission objective: '{}'. \
+                     IMMEDIATELY begin work: recruit agents from the CLUSTER DIRECTORY, delegate sub-tasks, or call tools. \
+                     DO NOT ask for instructions. DO NOT wait. ACT NOW.",
+                    user_directive
+                );
+
+                let swarm_tool = self.build_tools(ctx).await;
+                let sentinel_result = self
+                    .call_provider(
+                        ctx,
+                        system_prompt,
+                        &sentinel_directive,
+                        Some(vec![swarm_tool]),
+                    )
+                    .await;
+
+                *attempt_count += 1;
+                let (sent_text, sent_calls, sent_usage) = sentinel_result?;
+                *output_text = sent_text;
+                *function_calls = sent_calls;
+                self.accumulate_usage(usage, sent_usage);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handles re-prompting when the model produces malformed tool calls.
+    async fn handle_extraction_failure(
+        &self,
+        ctx: &RunContext,
+        system_prompt: &str,
+        user_directive: &str,
+        error_detail: &str,
+        output_text: &mut String,
+        function_calls: &mut Vec<crate::agent::types::ToolCall>,
+        usage: &mut Option<crate::agent::types::TokenUsage>,
+        attempt_count: &mut u32,
+    ) -> Result<(), AppError> {
+        if *attempt_count >= 2 {
+            tracing::error!("🚨 [Self-Annealing] Max attempts reached for {}. Giving up on malformed JSON.", ctx.agent_id);
+            return Err(AppError::BadRequest(format!("Self-Annealing failed after 2 attempts: {}", error_detail)));
+        }
+
+        tracing::warn!("🛠️ [Self-Annealing] Model {} produced malformed tool call: {}. Re-prompting...", ctx.agent_id, error_detail);
+
+        let correction_prompt = format!(
+            "SYSTEM_ANNEAL: Your previous tool call was MALFORMED. \
+             Error: {}\n\n\
+             You MUST fix the JSON syntax. Ensure all arguments are properly quoted and brackets are balanced. \
+             Directive: {}",
+            error_detail, user_directive
+        );
+
+        let tools = vec![self.build_tools(ctx).await];
+        let result = self.call_provider(ctx, system_prompt, &correction_prompt, Some(tools)).await?;
+        
+        *attempt_count += 1;
+        let (sent_text, sent_calls, sent_usage) = result;
+        *output_text = sent_text;
+        *function_calls = sent_calls;
+        self.accumulate_usage(usage, sent_usage);
+
         Ok(())
     }
 }

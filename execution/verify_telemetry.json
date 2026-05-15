@@ -1,0 +1,13 @@
+{
+  "name": "verify_telemetry",
+  "description": "Performs a deterministic audit of mission telemetry to verify functional success, bypassing conversational gaps caused by resource throttling.",
+  "execution_command": "python execution/verify_telemetry.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "mission_id": { "type": "string", "description": "The ID of the mission to audit." },
+      "agent_id": { "type": "string", "description": "The ID of the primary agent to check." }
+    }
+  },
+  "category": "ai"
+}

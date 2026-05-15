@@ -16,6 +16,7 @@ console.debug("[FormState] Domain logic loaded");
 import { resolve_technical_model_id } from '../../utils/model_utils';
 import type { Agent, AgentFormState, AgentPatch, Department } from '../../contracts/agent';
 import { resolve_provider } from '../../utils/model_utils';
+import { slugify_role } from '../../utils/agent_uiutils';
 
 /** Shape of legacy/mixed model_config objects that may have either camelCase or snake_case keys. */
 type LegacyModelConfig = {
@@ -23,6 +24,7 @@ type LegacyModelConfig = {
     reasoningDepth?: number; reasoning_depth?: number;
     actThreshold?: number; act_threshold?: number;
 };
+
 
 /**
  * buildAgentFormState
@@ -40,7 +42,7 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
         active_model_slot: agent.active_model_slot || 1,
         identity: {
             name: agent.name,
-            role: agent.role,
+            role: slugify_role(agent.role || ''),
             department: agent.department
         },
         voice: {
@@ -57,7 +59,8 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 reasoning_depth: (agent.model_config as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config as LegacyModelConfig)?.reasoning_depth ?? 1,
                 act_threshold: (agent.model_config as LegacyModelConfig)?.actThreshold ?? (agent.model_config as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config?.skills ?? agent.skills ?? [],
-                workflows: agent.model_config?.workflows ?? agent.workflows ?? []
+                workflows: agent.model_config?.workflows ?? agent.workflows ?? [],
+                base_url: agent.model_config?.baseUrl ?? ''
             },
             secondary: {
                 provider: secondary_provider,
@@ -67,7 +70,8 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 reasoning_depth: (agent.model_config2 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config2 as LegacyModelConfig)?.reasoning_depth ?? 1,
                 act_threshold: (agent.model_config2 as LegacyModelConfig)?.actThreshold ?? (agent.model_config2 as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config2?.skills ?? [],
-                workflows: agent.model_config2?.workflows ?? []
+                workflows: agent.model_config2?.workflows ?? [],
+                base_url: agent.model_config2?.baseUrl ?? ''
             },
             tertiary: {
                 provider: tertiary_provider,
@@ -77,7 +81,8 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
                 reasoning_depth: (agent.model_config3 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config3 as LegacyModelConfig)?.reasoning_depth ?? 1,
                 act_threshold: (agent.model_config3 as LegacyModelConfig)?.actThreshold ?? (agent.model_config3 as LegacyModelConfig)?.act_threshold ?? 0.9,
                 skills: agent.model_config3?.skills ?? [],
-                workflows: agent.model_config3?.workflows ?? []
+                workflows: agent.model_config3?.workflows ?? [],
+                base_url: agent.model_config3?.baseUrl ?? ''
             }
         },
         mcp_tools: agent.mcp_tools || [],
@@ -126,7 +131,8 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             reasoningDepth: slots.primary.reasoning_depth,
             actThreshold: slots.primary.act_threshold,
             skills: slots.primary.skills,
-            workflows: slots.primary.workflows
+            workflows: slots.primary.workflows,
+            ...(slots.primary.base_url ? { baseUrl: slots.primary.base_url } : {})
         },
         model_config2: {
             modelId: resolve_technical_model_id(slots.secondary.model),
@@ -136,7 +142,8 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             reasoningDepth: slots.secondary.reasoning_depth,
             actThreshold: slots.secondary.act_threshold,
             skills: slots.secondary.skills,
-            workflows: slots.secondary.workflows
+            workflows: slots.secondary.workflows,
+            ...(slots.secondary.base_url ? { baseUrl: slots.secondary.base_url } : {})
         },
         model_config3: {
             modelId: resolve_technical_model_id(slots.tertiary.model),
@@ -146,7 +153,8 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
             reasoningDepth: slots.tertiary.reasoning_depth,
             actThreshold: slots.tertiary.act_threshold,
             skills: slots.tertiary.skills,
-            workflows: slots.tertiary.workflows
+            workflows: slots.tertiary.workflows,
+            ...(slots.tertiary.base_url ? { baseUrl: slots.tertiary.base_url } : {})
         },
         active_model_slot: state.active_tab === 'secondary' ? 2 : state.active_tab === 'tertiary' ? 3 : 1,
         skills: Array.from(new Set([

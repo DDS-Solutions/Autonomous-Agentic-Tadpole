@@ -26,7 +26,7 @@
  * - **Telemetry Link**: Search for `[AgentConfigPanel]` in UI traces or check `tadpole_os_service.get_agent_memory` calls.
  */
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { use_model_store } from '../stores/model_store';
 import type { Model_State } from '../stores/model_store';
@@ -124,7 +124,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
             initialized_mcp: s.initialized_mcp
         }))
     );
-
+    
     // Local state for memories (separate from config form)
     const [memories, setMemories] = useState<Memory_Entry[]>([]);
     const [isLoadingMemories, setIsLoadingMemories] = useState(false);
@@ -155,21 +155,34 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
         }
     }, [fetch_skills, fetch_mcp_tools, initialized_skills, initialized_mcp, is_loading]);
 
+    // Guard ref to prevent stale memory responses from overwriting current state
+    const memoryAbortRef = React.useRef<AbortController | null>(null);
+
     const loadMemories = useCallback(async () => {
         if (!agent?.id) return;
+        
+        // Abort any in-flight memory request before starting a new one
+        memoryAbortRef.current?.abort();
+        const controller = new AbortController();
+        memoryAbortRef.current = controller;
+        
         setIsLoadingMemories(true);
         try {
             const response = await tadpole_os_service.get_agent_memory(agent.id) as { entries: Memory_Entry[] };
+            if (controller.signal.aborted) return; // Discard stale response
             setMemories(response.entries || []);
             setMemoryError(null);
             setIsMemoryFeatureDisabled(false);
         } catch (err) {
+            if (controller.signal.aborted) return;
             const isFeatureDisabled = err instanceof ApiError && err.status === 501;
             setIsMemoryFeatureDisabled(isFeatureDisabled);
             setMemoryError(err instanceof Error ? err.message : i18n.t('agent_config.memory_unavailable'));
             setMemories([]);
         } finally {
-            setIsLoadingMemories(false);
+            if (!controller.signal.aborted) {
+                setIsLoadingMemories(false);
+            }
         }
     }, [agent?.id]);
 
@@ -178,6 +191,10 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
             // eslint-disable-next-line react-hooks/set-state-in-effect
             loadMemories();
         }
+        return () => {
+            // Cleanup: abort in-flight memory request on tab change or unmount
+            memoryAbortRef.current?.abort();
+        };
     }, [agent?.id, mainTab, loadMemories]);
 
     const handleSaveMemory = async () => {

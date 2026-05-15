@@ -83,15 +83,16 @@ impl PermissionPolicy {
 
     /// Reloads the policy cache from the database.
     pub async fn refresh_cache(&self) -> anyhow::Result<()> {
-        let rows: Vec<(String, String)> =
-            sqlx::query_as("SELECT tool_name, mode FROM permission_policies")
+        let rows: Vec<(String, Option<String>, String)> =
+            sqlx::query_as("SELECT tool_name, agent_id, mode FROM permission_policies")
                 .fetch_all(&self.pool)
                 .await?;
 
         self.cache.clear();
-        for (name, mode_str) in rows {
+        for (name, agent_id, mode_str) in rows {
             if let Ok(mode) = mode_str.parse::<PermissionMode>() {
-                self.cache.insert(name, mode);
+                let key = agent_id.map(|id| format!("{}:{}", id, name)).unwrap_or(name);
+                self.cache.insert(key, mode);
             }
         }
 
@@ -102,18 +103,39 @@ impl PermissionPolicy {
         Ok(())
     }
 
-    /// Determines the default permission mode for a tool.
+    /// Determines the permission mode for a tool, considering agent-specific overrides.
     /// Checks the cache first, falling back to database query if missing.
-    #[tracing::instrument(skip(self), fields(tool = tool_name), name = "security::get_permission_mode")]
-    pub async fn get_mode(&self, tool_name: &str) -> PermissionMode {
-        // 1. Try Cache
+    #[tracing::instrument(skip(self), fields(tool = tool_name, agent = agent_id), name = "security::get_permission_mode")]
+    pub async fn get_mode(&self, tool_name: &str, agent_id: &str) -> PermissionMode {
+        // 1. Try Cache (Agent-Specific)
+        let cache_key = format!("{}:{}", agent_id, tool_name);
+        if let Some(mode) = self.cache.get(&cache_key) {
+            return *mode;
+        }
+
+        // 2. Try Cache (Global)
         if let Some(mode) = self.cache.get(tool_name) {
             return *mode;
         }
 
-        // 2. Try DB
+        // 3. Try DB (Agent-Specific)
         let res: Result<(String,), sqlx::Error> =
-            sqlx::query_as("SELECT mode FROM permission_policies WHERE tool_name = ?")
+            sqlx::query_as("SELECT mode FROM permission_policies WHERE tool_name = ? AND agent_id = ?")
+                .bind(tool_name)
+                .bind(agent_id)
+                .fetch_one(&self.pool)
+                .await;
+
+        if let Ok((mode_str,)) = res {
+            if let Ok(mode) = mode_str.parse::<PermissionMode>() {
+                self.cache.insert(cache_key, mode);
+                return mode;
+            }
+        }
+
+        // 4. Try DB (Global)
+        let res: Result<(String,), sqlx::Error> =
+            sqlx::query_as("SELECT mode FROM permission_policies WHERE tool_name = ? AND agent_id IS NULL")
                 .bind(tool_name)
                 .fetch_one(&self.pool)
                 .await;
