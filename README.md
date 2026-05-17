@@ -42,6 +42,7 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Manages providers and models** across local and cloud backends, with Ollama support and provider-key configuration.
 - **Streams telemetry live** through WebSocket routes, heartbeat events, system logs, and dashboard health panels.
 - **Enforces governance and security controls** through bearer-token auth, request middleware, shell scanning, audit trails, quotas, oversight queues, and privacy-mode behavior.
+- **Visualizes codebase interdependencies** with an interactive 2D Force-Directed Knowledge Graph and down-stream blast-radius impact analysis.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
 ## System At A Glance
@@ -193,6 +194,7 @@ Protected route groups:
 | `/v1/system` | Compute profile and system introspection |
 | `/v1/governance` | Blueprints and sovereign manifest |
 | `/v1/sovereign` | Mission session tree and branch state |
+| `/v1/intelligence` | High-fidelity symbol graph mapping and dependent blast-radius analytics |
 | `/v1/search/memory` | Global memory search |
 | `/v1/env-schema` | Runtime environment schema |
 | `/v1/engine/*` | Deploy, kill, shutdown, transcribe, speak, template install |

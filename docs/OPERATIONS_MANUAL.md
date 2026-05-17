@@ -218,6 +218,17 @@ Useful log tags in code comments and traces:
 - `[Auth]`
 - `[Router]`
 - `[SecurityHeaders]`
+- `[Graph]` - tracing symbol graph builds and blast radius computations
+
+## Code Intelligence & Blast Radius Operations
+
+Primary API group: `/v1/intelligence`.
+
+Operational capabilities include:
+- **Codebase Dependency Graph**: Request the complete directed dependency graph of functions, structs, classes, and interfaces (`GET /v1/intelligence/graph`).
+- **Dependent Blast Radius**: Calculate downstream dependency paths for a specific symbol to foresee refactoring scope (`GET /v1/intelligence/blast-radius?name=<Name>&path=<Path>`).
+- **Interactive Swarm HUD**: The **Neural Map** toggle in the Operations Dashboard compiles the codebase structure on the first click (triggering lazy backend evaluation with a `"Synthesizing Symbol Graph..."` overlay) and caches it in memory for instant subsequent loads.
+- **Sovereign Agent Safety**: The `get_blast_radius` MCP agent tool allows autonomous execution agents to map codebase linkages before executing code edits, ensuring zero-regression commits.
 
 ## Database Operations
 

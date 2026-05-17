@@ -14,7 +14,6 @@
 > Traceability via `execution/parity_guard.py`.
 
 **Version**: 1.1.57
-**Last Updated**: 2026-05-14
 **Source of truth**: `server-rs/src/router.rs`
 
 The Rust engine binds to `127.0.0.1:8000` by default and nests application routes under `/v1`.

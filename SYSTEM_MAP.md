@@ -29,6 +29,7 @@ This map reflects the current code layout and should be used as the first orient
 | Global state | `server-rs/src/state/mod.rs` | Rust | Owns AppState hubs, registries, DB pool, actor registry, and boot gate. |
 | Startup workers | `server-rs/src/startup.rs` | Rust | Starts CodeGraph warmup, heartbeat, scheduler, reaper, ingestion, discovery, privacy guard, telemetry aggregation, and pulse loop. |
 | Python MCP host | `execution/tadpole_mcp_server.py` | Python | Runs JSON-defined tools and modular skill execution. |
+| CodeGraph API | `server-rs/src/routes/intelligence.rs` | Rust | Exposes codebase-wide symbol graph synthesis and dependent blast-radius calculations. |
 
 ## Major Subsystems
 
@@ -39,6 +40,7 @@ This map reflects the current code layout and should be used as the first orient
 | Frontend services | `src/services/` | API clients, sockets, model/provider services, browser inference, VRAM monitoring, governance, and mission services. |
 | Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
 | Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, oversight, model manager, skills, docs, governance, system, and engine control. |
+| Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, and downstream blast-radius analysis. |
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, rate limiting, security headers, scanner, permissions, privacy, audit, budget guard, and redaction. |
@@ -67,6 +69,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
 - `/v1/system`
 - `/v1/governance`
 - `/v1/sovereign`
+- `/v1/intelligence/*` symbol graph and blast radius APIs
 - `/v1/search/memory`
 - `/v1/env-schema`
 - `/v1/engine/*` management routes
