@@ -54,3 +54,5 @@ describe('Sidebar Component', () => {
 
 
 // Metadata: [Sidebar_test]
+
+// Metadata: [Sidebar_test]

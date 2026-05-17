@@ -1,3 +1,16 @@
+"""
+@docs ARCHITECTURE:Core:Orchestration
+
+### AI Assist Note
+**🛡️ Tadpole OS: SkillRegistry orchestrator**
+Discovers, instantiates, and executes Python-class skills dynamically from the skills/ subdirectory.
+Redirects standard output to standard error to prevent MCP stdio stream corruption.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Import errors during discovery, arguments schema validation errors, directory not found.
+- **Telemetry Link**: Search for `[SkillRegistry]` in skill loading and execution logs.
+"""
+
 import os
 import importlib.util
 import inspect
@@ -28,7 +41,7 @@ class SkillRegistry:
         self.skills.clear()
         
         if not self.skills_dir.exists():
-            print(f"[Registry] Warning: Skills directory {self.skills_dir} does not exist.", file=sys.stderr)
+            print(f"[Registry] [SkillRegistry] Warning: Skills directory {self.skills_dir} does not exist.", file=sys.stderr)
             return
 
         # Recursively find all .py files
@@ -53,10 +66,10 @@ class SkillRegistry:
                         skill_instance = obj(registry=self)
                         skill_name = getattr(skill_instance, "name", py_file.stem)
                         self.skills[skill_name] = skill_instance
-                        print(f"[Registry] Loaded skill: {skill_name}", file=sys.stderr)
+                        print(f"[Registry] [SkillRegistry] Loaded skill: {skill_name}", file=sys.stderr)
                         
             except Exception as e:
-                print(f"[Registry] Failed to load skill from {py_file}: {str(e)}", file=sys.stderr)
+                print(f"[Registry] [SkillRegistry] Failed to load skill from {py_file}: {str(e)}", file=sys.stderr)
 
     async def call_skill(self, name: str, arguments: Dict[str, Any]) -> str:
         """
@@ -78,13 +91,13 @@ class SkillRegistry:
                 result = await skill.execute(validated_args.model_dump())
                 
             duration = (time.perf_counter() - start_time) * 1000
-            print(f"[Registry] Skill {name} executed in {duration:.2f}ms", file=sys.stderr)
+            print(f"[Registry] [SkillRegistry] Skill {name} executed in {duration:.2f}ms", file=sys.stderr)
             return result
             
         except Exception as e:
             duration = (time.perf_counter() - start_time) * 1000
             error_msg = f"Error executing skill '{name}' after {duration:.2f}ms: {str(e)}"
-            print(f"[Registry] {error_msg}", file=sys.stderr)
+            print(f"[Registry] [SkillRegistry] {error_msg}", file=sys.stderr)
             return error_msg
 
     def get_all_tools(self) -> List[Dict[str, Any]]:
@@ -99,3 +112,7 @@ class SkillRegistry:
                 "schema": skill.get_schema()
             })
         return tools
+
+# Metadata: [registry]
+
+# Metadata: [registry]

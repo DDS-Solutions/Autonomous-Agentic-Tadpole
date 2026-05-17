@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Intelligence Api Service**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 /**
  * @docs ARCHITECTURE:Services
  * 
@@ -32,3 +42,7 @@ class IntelligenceApiService {
 }
 
 export const intelligence_api_service = new IntelligenceApiService();
+
+// Metadata: [intelligence_api_service]
+
+// Metadata: [intelligence_api_service]

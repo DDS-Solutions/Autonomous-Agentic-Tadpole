@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Supervisor**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! Worker Supervision System — Sovereign Reliability Layer
 //!
 //! @docs ARCHITECTURE:Reliability
@@ -105,3 +115,7 @@ impl SupervisedSpawn for Arc<AppState> {
         WorkerSupervisor::new(self.clone())
     }
 }
+
+// Metadata: [supervisor]
+
+// Metadata: [supervisor]

@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[README]` in audit logs.
+>
+> ### AI Assist Note
+> Directives Index
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # Directives Index
 
 This directory contains operating directives used by Tadpole OS agents and workflows.
@@ -43,3 +56,5 @@ Feature-specific docs live under:
 - Prefer adding new workflow directives with a clear title and scope instead of editing core directives for one-off tasks.
 
 [//]: # (Metadata: [directives_index])
+
+[//]: # (Metadata: [README])

@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Run Test Mission**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 import asyncio
 import os
 import sys
@@ -62,3 +74,7 @@ async def run_mission():
 
 if __name__ == "__main__":
     asyncio.run(run_mission())
+
+# Metadata: [run_test_mission]
+
+# Metadata: [run_test_mission]

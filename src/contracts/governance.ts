@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Governance**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 /**
  * @docs ARCHITECTURE:Contracts
  * 
@@ -34,5 +44,7 @@ export interface GovernanceQuotas {
 }
 
 export const GOVERNANCE_VERSION = '1.2.0';
+
+// Metadata: [governance]
 
 // Metadata: [governance]

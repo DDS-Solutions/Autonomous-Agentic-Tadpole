@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Bridge Tests**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 use std::sync::Arc;
 use crate::state::AppState;
 use crate::telemetry::TELEMETRY_TX;
@@ -45,3 +57,7 @@ async fn test_telemetry_bridge_persistence() {
     let found = logs.iter().any(|l| l.text.contains("testing the telemetry bridge"));
     assert!(found, "Expected log message not found in database");
 }
+
+// Metadata: [bridge_tests]
+
+// Metadata: [bridge_tests]

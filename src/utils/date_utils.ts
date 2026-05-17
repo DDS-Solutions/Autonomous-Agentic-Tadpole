@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Date Utils**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 /**
  * @file date_utils.ts
  * @description Centralized date handling utilities for Tadpole OS.
@@ -35,3 +47,7 @@ export const get_safe_date = (input: any, fallback: Date | null = null): Date | 
     const d = new Date(raw);
     return isNaN(d.getTime()) ? fallback : d;
 };
+
+// Metadata: [date_utils]
+
+// Metadata: [date_utils]

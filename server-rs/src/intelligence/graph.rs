@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Graph**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! Symbol-Level Knowledge Graph — Codebase Topology
 //!
 //! @docs ARCHITECTURE:Intelligence
@@ -179,5 +189,7 @@ impl CodeSymbolGraph {
         affected
     }
 }
+
+// Metadata: [graph]
 
 // Metadata: [graph]

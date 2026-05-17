@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:Interface
+
+### AI Assist Note
+**🛡️ Tadpole OS: Vram Monitor**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vram_monitor_service } from './vram_monitor';
 import { event_bus } from './event_bus';
@@ -90,3 +102,7 @@ describe('VramMonitor', () => {
         }));
     });
 });
+
+// Metadata: [vram_monitor_test]
+
+// Metadata: [vram_monitor_test]

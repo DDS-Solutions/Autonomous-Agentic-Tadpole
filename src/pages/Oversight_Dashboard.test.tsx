@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Oversight Dashboard**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 /**
  * @file Oversight_Dashboard.test.tsx
  * @description Suite for the High-Level Governance and Proposal Oversight dashboard.
@@ -153,3 +165,7 @@ describe('Oversight_Dashboard Page', () => {
         expect(select).toHaveValue('c1');
     });
 });
+
+// Metadata: [Oversight_Dashboard_test]
+
+// Metadata: [Oversight_Dashboard_test]

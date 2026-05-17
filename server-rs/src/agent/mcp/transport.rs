@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Transport**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! MCP SSE Transport
 //! Provides the Server-Sent Events (SSE) bridge to expose TadpoleOS internal tools
 //! to external MCP clients (e.g. Claude Desktop, Cursor).
@@ -190,3 +202,7 @@ pub async fn mcp_message_handler(
 
     Ok(Json(json!({ "status": "accepted" })))
 }
+
+// Metadata: [transport]
+
+// Metadata: [transport]

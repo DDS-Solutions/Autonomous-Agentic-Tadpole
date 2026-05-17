@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Sscp Tests**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! SSCP Phase 1, 2 & 3 Verification Tests — Drive G
 //! 
 //! All tests write to G:\Tadpole_Intelligence_Cache to validate
@@ -401,3 +413,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&path).await;
     }
 }
+
+// Metadata: [sscp_tests]
+
+// Metadata: [sscp_tests]

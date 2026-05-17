@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Verify Telemetry**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 import json
 import sys
 import os
@@ -32,7 +44,7 @@ def verify_telemetry():
     print(f"[TelemetryAudit] Detected Resource Guard Resume event. Confirming silence was intentional.")
     
     if "read_directory" in audit_findings["spans_detected"]:
-        print("✅ SUCCESS: Tool 'read_directory' execution verified in telemetry_tx.")
+        print("[OK] SUCCESS: Tool 'read_directory' execution verified in telemetry_tx.")
     
     print("\n--- FINAL VERDICT ---")
     print(json.dumps(audit_findings, indent=2))
@@ -44,3 +56,7 @@ def verify_telemetry():
 
 if __name__ == "__main__":
     verify_telemetry()
+
+# Metadata: [verify_telemetry]
+
+# Metadata: [verify_telemetry]

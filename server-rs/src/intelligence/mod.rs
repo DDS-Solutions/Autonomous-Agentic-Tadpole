@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Mod**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! @docs ARCHITECTURE:Intelligence
 //!
 //! ### AI Assist Note
@@ -9,5 +19,7 @@
 //! relevant code context during tool execution (INTEL-01).
 
 pub mod graph;
+
+// Metadata: [mod]
 
 // Metadata: [mod]

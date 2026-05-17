@@ -1,6 +1,14 @@
 """
-Register Agent 2 (Tadpole/COO) into the tadpole.db agents table.
-This is a targeted INSERT/REPLACE that matches the server-rs persistence schema.
+@docs ARCHITECTURE:Agent:Setup
+
+### AI Assist Note
+**🛡️ Tadpole OS: Agent 2 SQLite Bootstrapper**
+Registers or updates Agent 2 (Tadpole/COO) in the SQLite agents table.
+Performs PRAGMA column checks to ensure backward/forward schema compatibility.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: sqlite3.OperationalError due to database locking or missing data/ directory, column mismatch.
+- **Telemetry Link**: Search for `[AgentBoot]` in database registration logs.
 """
 import sqlite3
 import json
@@ -64,13 +72,13 @@ cursor = conn.cursor()
 # Get columns from the actual table
 cursor.execute("PRAGMA table_info(agents)")
 cols = [row[1] for row in cursor.fetchall()]
-print(f"DB columns ({len(cols)}): {cols}")
+print(f"[AgentBoot] DB columns ({len(cols)}): {cols}")
 
 # Only insert columns that exist in this DB version
 insert_data = {k: v for k, v in agent.items() if k in cols}
 missing = [k for k in agent if k not in cols]
 if missing:
-    print(f"⚠️  Skipping columns not in DB: {missing}")
+    print(f"⚠️ [AgentBoot] Skipping columns not in DB: {missing}")
 
 col_names = ", ".join(insert_data.keys())
 placeholders = ", ".join(["?" for _ in insert_data])
@@ -81,4 +89,8 @@ cursor.execute(sql, values)
 conn.commit()
 conn.close()
 
-print(f"✅ Agent 2 (Tadpole/COO) registered in tadpole.db with provider=ollama, model=gemma4:e4b, base_url={agent['base_url']}")
+print(f"✅ [AgentBoot] Agent 2 (Tadpole/COO) registered in tadpole.db with provider=ollama, model=gemma4:e4b, base_url={agent['base_url']}")
+
+# Metadata: [register_agent_2]
+
+# Metadata: [register_agent_2]

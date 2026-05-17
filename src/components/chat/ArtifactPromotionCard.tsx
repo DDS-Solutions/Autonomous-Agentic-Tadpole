@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Artifactpromotioncard**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Rocket, Check, AlertCircle, Terminal, FileCode, Shield } from 'lucide-react';
@@ -149,3 +161,7 @@ export const ArtifactPromotionCard: React.FC<ArtifactPromotionCardProps> = ({
         </motion.div>
     );
 };
+
+// Metadata: [ArtifactPromotionCard]
+
+// Metadata: [ArtifactPromotionCard]

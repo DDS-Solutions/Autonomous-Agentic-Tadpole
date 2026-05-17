@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Ld Json**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import React from 'react';
 
 interface LD_Json_Props {
@@ -27,3 +39,5 @@ export const LD_Json: React.FC<LD_Json_Props> = ({ data }) => {
         />
     );
 };
+
+// Metadata: [LD_Json]

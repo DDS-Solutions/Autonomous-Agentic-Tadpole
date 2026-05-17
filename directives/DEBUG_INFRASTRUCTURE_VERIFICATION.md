@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[DEBUG_INFRASTRUCTURE_VERIFICATION]` in audit logs.
+>
+> ### AI Assist Note
+> Mission: Infrastructure Integrity Stress-Test (SOP-VER-01)
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # Mission: Infrastructure Integrity Stress-Test (SOP-VER-01)
 
 ## Objective
@@ -23,3 +36,5 @@ Verify the full-stack reliability of the TadpoleOS sovereign swarm under simulat
     - `LOAD_TEST.tmp` was created.
     - Agent 7's `check_server_health` span is present.
 3. **Verdict**: If the telemetry spans are valid, issue a **FUNCTIONALLY_SUCCESSFUL** verdict. Do NOT report failure due to "missing transcript" or "aborted process."
+
+[//]: # (Metadata: [DEBUG_INFRASTRUCTURE_VERIFICATION])

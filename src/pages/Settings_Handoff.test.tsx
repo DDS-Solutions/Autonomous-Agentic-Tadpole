@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Settings Handoff**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -124,3 +136,7 @@ describe('Settings: Sovereign Neural Handoff Verification', () => {
         }));
     });
 });
+
+// Metadata: [Settings_Handoff_test]
+
+// Metadata: [Settings_Handoff_test]

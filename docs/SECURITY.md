@@ -6,6 +6,19 @@
 > - **Telemetry Link**: Search `[SECURITY]` in audit logs.
 >
 > ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[SECURITY]` in audit logs.
+>
+> ### AI Assist Note
 > Tadpole OS security policy.
 >
 > ### Debugging & Observability
@@ -156,5 +169,7 @@ Before deploying beyond local development:
 | CORS wildcard | `ALLOWED_ORIGINS=*` disables credentials | verify wildcard response has no credential support |
 | Vector memory disabled | memory routes return `501` without feature | run engine without `vector-memory` and call memory route |
 | Vector memory enabled | memory routes become available | run engine with `--features vector-memory` |
+
+[//]: # (Metadata: [SECURITY])
 
 [//]: # (Metadata: [SECURITY])

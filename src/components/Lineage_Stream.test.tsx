@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Lineage Stream**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -135,3 +147,7 @@ describe('Lineage_Stream Verification', () => {
         // Resizing logic verified by lack of errors and coverage of event handlers
     });
 });
+
+// Metadata: [Lineage_Stream_test]
+
+// Metadata: [Lineage_Stream_test]

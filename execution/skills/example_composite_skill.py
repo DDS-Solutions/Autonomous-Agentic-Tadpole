@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Example Composite Skill**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 from core.base_skill import BaseSkill
 from pydantic import Field
 from typing import Dict, Any
@@ -34,3 +46,7 @@ class ResearchOrchestrator(BaseSkill):
         report += "- Key Finding 2: Tadpole OS is evolving fast.\n"
         
         return report
+
+# Metadata: [example_composite_skill]
+
+# Metadata: [example_composite_skill]

@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: System Telemetry Skill**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 from typing import Dict, Any, List
 import os
 import platform
@@ -124,3 +136,7 @@ class SystemTelemetrySkill(BaseSkill):
     def _format_output(self, data: Dict[str, Any]) -> str:
         import json
         return json.dumps(data, indent=2)
+
+# Metadata: [system_telemetry_skill]
+
+# Metadata: [system_telemetry_skill]

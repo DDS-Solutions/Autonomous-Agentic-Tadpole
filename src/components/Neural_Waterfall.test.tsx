@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Neural Waterfall**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { render, screen, act } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -142,3 +154,7 @@ describe('Neural_Waterfall Verification', () => {
         expect(mock_tab_state.toggle_trace_stream_detachment).toHaveBeenCalled();
     });
 });
+
+// Metadata: [Neural_Waterfall_test]
+
+// Metadata: [Neural_Waterfall_test]

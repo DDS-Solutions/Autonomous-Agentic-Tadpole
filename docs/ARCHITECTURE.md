@@ -6,6 +6,19 @@
 > - **Telemetry Link**: Search `[ARCHITECTURE]` in audit logs.
 >
 > ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[ARCHITECTURE]` in audit logs.
+>
+> ### AI Assist Note
 > Tadpole OS architecture.
 >
 > ### Debugging & Observability
@@ -164,5 +177,7 @@ The engine implements several strategies to ensure resilience and zero-panic ope
 - **Self-Annealing Intelligence**: The `PolyglotParser` provides structured feedback on malformed tool calls, allowing the `IntelligenceLoop` to automatically re-prompt models for correction.
 - **Panic Remediation**: Critical paths in the bridge, parser, and security modules use safe error propagation (via `Result` and `AppError`) rather than non-recoverable panics.
 - **Non-Blocking Orchestration**: All filesystem I/O in the MCP execution and Memory Palace rehydration modules is migrated to `tokio::fs` to prevent event-loop stalling.
+
+[//]: # (Metadata: [ARCHITECTURE])
 
 [//]: # (Metadata: [ARCHITECTURE])

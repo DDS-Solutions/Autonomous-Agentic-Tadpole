@@ -1,4 +1,17 @@
 > [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[api_integrity_audit]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
 > **AI Assist Note (Sovereign Security)**:
 > This directive enforces the **Delegate-First** protocol for AgentAPI validation.
 > - **Alpha Restriction**: Agent 2 is prohibited from direct system status checks.
@@ -37,5 +50,7 @@ The COO MUST NOT attempt `system:check_system_status`. Instead, it must:
 - [x] External connectivity verified (Alpha).
 - [x] Kernel health verified (Delegated to Agent 7).
 - [x] Zero security violations (`CBS` or `PermissionPolicy`) recorded in the audit trail.
+
+[//]: # (Metadata: [api_integrity_audit])
 
 [//]: # (Metadata: [api_integrity_audit])

@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Generate Api Reference**
 Generate docs/openapi.yaml and docs/API_REFERENCE.md from server-rs/src/router.rs.
 
 This intentionally keeps schemas shallow until route handlers expose typed
 request/response metadata. The route list, auth boundary, and feature-disabled
 memory behavior are generated from the Axum router source.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
 """
 
 from __future__ import annotations
@@ -462,5 +470,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# Metadata: [generate_api_reference]
 
 # Metadata: [generate_api_reference]

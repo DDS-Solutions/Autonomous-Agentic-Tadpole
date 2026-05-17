@@ -1,3 +1,16 @@
+"""
+@docs ARCHITECTURE:Infrastructure:Execution
+
+### AI Assist Note
+**🛡️ Tadpole OS: MCP Execution Host**
+This host orchestrates modular and legacy skill execution for the Tadpole OS agent swarm. 
+Uses stdio to communicate with clients, discovering class-based skills via the SkillRegistry.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Failed stdio streams, missing skill manifest JSON, or subprocess timeouts.
+- **Telemetry Link**: Search for `[MCPHost]` in log traces.
+"""
+
 import asyncio
 import json
 import os
@@ -90,7 +103,7 @@ async def handle_call_tool(
         raise ValueError(f"Tool not found: {name}")
 
     # Log Deprecation Warning
-    print(f"⚠️ [MCP] DEPRECATION WARNING: Tool '{name}' is running in legacy subprocess mode. Consider migrating to BaseSkill.", file=sys.stderr)
+    print(f"⚠️ [MCPHost] DEPRECATION WARNING: Tool '{name}' is running in legacy subprocess mode. Consider migrating to BaseSkill.", file=sys.stderr)
 
     manifest = _TOOL_MANIFESTS[name]
     command = manifest.get("execution_command")
@@ -127,7 +140,7 @@ async def handle_call_tool(
         stderr_str = stderr.decode('utf-8', errors='replace')
 
         duration = (time.perf_counter() - start_time) * 1000
-        print(f"🕒 [MCP] Legacy Tool '{name}' executed in {duration:.2f}ms (Subprocess)", file=sys.stderr)
+        print(f"🕒 [MCPHost] Legacy Tool '{name}' executed in {duration:.2f}ms (Subprocess)", file=sys.stderr)
 
         if process.returncode == 0:
             return [types.TextContent(type="text", text=stdout_str)]
@@ -161,3 +174,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Metadata: [tadpole_mcp_server]
+
+# Metadata: [tadpole_mcp_server]

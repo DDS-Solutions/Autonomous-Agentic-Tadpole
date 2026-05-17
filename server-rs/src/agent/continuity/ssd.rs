@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Ssd**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use crate::error::AppError;
@@ -238,3 +250,7 @@ impl SSDManager {
         Ok(deleted)
     }
 }
+
+// Metadata: [ssd]
+
+// Metadata: [ssd]

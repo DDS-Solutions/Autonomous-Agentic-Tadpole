@@ -105,3 +105,5 @@ class Governance_Service {
 export const governance_service = Governance_Service.get_instance();
 
 // Metadata: [governance_service]
+
+// Metadata: [governance_service]

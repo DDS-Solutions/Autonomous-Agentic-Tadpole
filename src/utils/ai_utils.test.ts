@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Ai Utils**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { describe, it, expect } from 'vitest';
 import { sanitize_ui_context, extract_neural_output } from './ai_utils';
 
@@ -55,3 +67,7 @@ describe('ai_utils', () => {
         });
     });
 });
+
+// Metadata: [ai_utils_test]
+
+// Metadata: [ai_utils_test]

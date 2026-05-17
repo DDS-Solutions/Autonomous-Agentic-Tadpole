@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Intelligence**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! Intelligence Layer Routes — Code Graph & Blast Radius Analysis
 //!
 //! @docs ARCHITECTURE:Intelligence
@@ -78,3 +88,7 @@ pub async fn get_blast_radius(
     let affected = guard.calculate_blast_radius(&query.name, &query.path);
     Ok(Json(affected))
 }
+
+// Metadata: [intelligence]
+
+// Metadata: [intelligence]

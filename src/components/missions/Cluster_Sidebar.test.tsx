@@ -128,3 +128,7 @@ describe('Cluster_Sidebar Component', () => {
         // Check for alpha glow/dot if possible, but at least name initial
     });
 });
+
+// Metadata: [Cluster_Sidebar_test]
+
+// Metadata: [Cluster_Sidebar_test]

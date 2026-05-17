@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Mission Analysis]` in audit logs.
+>
+> ### AI Assist Note
+> Mission Analysis Directive (QA-99)
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # Mission Analysis Directive (QA-99)
 
 ## Role: Quality Assurance Auditor
@@ -12,3 +25,5 @@ You MUST NOT fail a mission solely based on the absence of a final conversationa
 
 ## Objective
 Normalize "Success" to mean "Functional Completion" rather than "Conversational Politeness."
+
+[//]: # (Metadata: [Mission Analysis])

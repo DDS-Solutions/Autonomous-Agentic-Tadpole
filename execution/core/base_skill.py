@@ -1,3 +1,16 @@
+"""
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**🛡️ Tadpole OS: BaseSkill Abstract Base Class**
+Provides the base blueprint for modular class-based skills in the Tadpole OS execution layer.
+Ensures unified logging and runtime composition via SkillRegistry orchestration.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Registry missing for sub-skill calls, pydantic schema validation failures.
+- **Telemetry Link**: Search for `[BaseSkill]` in skill execution logs.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Type, List, Optional, Any, Dict
 from pydantic import BaseModel, ConfigDict
@@ -48,7 +61,7 @@ class BaseSkill(ABC):
         
     def log(self, message: str):
         """Standardized logging for skills."""
-        print(f"[{self.name}] {message}")
+        print(f"[{self.name}] [BaseSkill] {message}")
 
     async def call_sub_skill(self, name: str, arguments: Dict[str, Any]) -> str:
         """
@@ -69,3 +82,7 @@ class CompositeSkill(BaseSkill):
     async def execute(self, args: Dict[str, Any]) -> str:
         """Composite skills usually coordinate multiple sub-calls here."""
         pass
+
+# Metadata: [base_skill]
+
+# Metadata: [base_skill]

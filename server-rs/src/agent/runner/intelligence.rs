@@ -679,3 +679,7 @@ mod tests {
         assert!(output_text.contains("DEGRADED"));
     }
 }
+
+// Metadata: [intelligence]
+
+// Metadata: [intelligence]

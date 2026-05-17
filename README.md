@@ -6,6 +6,19 @@
 > - **Telemetry Link**: Search `[README]` in audit logs.
 >
 > ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[README]` in audit logs.
+>
+> ### AI Assist Note
 > Core technical resource for the Tadpole OS runtime, dashboard, Rust engine, and Python execution layer.
 >
 > ### Debugging & Observability
@@ -357,5 +370,7 @@ Python-side verification utilities:
 - Vite runs on port `5173`; the Rust engine runs on port `8000`.
 - The Rust engine can serve the built dashboard directly from `dist/`, so production mode does not require a separate Vite server.
 - `vector-memory` and `neural-audio` are opt-in Cargo features because they can introduce heavier native dependencies.
+
+[//]: # (Metadata: [README])
 
 [//]: # (Metadata: [README])

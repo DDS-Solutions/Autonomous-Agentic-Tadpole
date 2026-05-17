@@ -143,3 +143,9 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
     return dto;
 };
 
+
+// Telemetry Trace: [Serializer]
+
+// Metadata: [serializers]
+
+// Metadata: [serializers]

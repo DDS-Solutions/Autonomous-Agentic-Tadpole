@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Model Manager Hardening**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -126,3 +138,7 @@ describe('Model_Manager Hardening Verification', () => {
         expect(tooltip_wrapper).toBeInTheDocument();
     });
 });
+
+// Metadata: [Model_Manager_Hardening_test]
+
+// Metadata: [Model_Manager_Hardening_test]

@@ -70,3 +70,7 @@ export const use_agent_telemetry_store = create<Telemetry_State>()((set) => ({
         return unsubscribe;
     }
 }));
+
+// Metadata: [agent_telemetry_store]
+
+// Metadata: [agent_telemetry_store]

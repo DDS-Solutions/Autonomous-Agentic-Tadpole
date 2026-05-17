@@ -978,3 +978,7 @@ mod tests {
         assert!(prompt.contains("MEMORY_FAILURE"), "Prompt should mention MEMORY_FAILURE");
     }
 }
+
+// Metadata: [synthesis]
+
+// Metadata: [synthesis]

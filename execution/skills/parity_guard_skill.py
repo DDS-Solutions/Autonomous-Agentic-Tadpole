@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Parity Guard Skill**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 from typing import Dict, Any
 from core.base_skill import BaseSkill
 from pydantic import Field
@@ -50,3 +62,7 @@ class ParityGuardSkill(BaseSkill):
 
         except Exception as e:
             return f"Error during parity audit: {str(e)}"
+
+# Metadata: [parity_guard_skill]
+
+# Metadata: [parity_guard_skill]

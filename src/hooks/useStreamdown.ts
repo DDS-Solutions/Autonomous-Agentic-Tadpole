@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Usestreamdown**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import { useState, useEffect } from 'react';
 import { use_sovereign_store } from '../stores/sovereign_store';
 
@@ -49,3 +61,7 @@ export const useStreamdown = () => {
         activeStreams,
     };
 };
+
+// Metadata: [useStreamdown]
+
+// Metadata: [useStreamdown]

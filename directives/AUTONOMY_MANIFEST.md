@@ -6,6 +6,19 @@
 > - **Telemetry Link**: Search `[AUTONOMY_MANIFEST]` in audit logs.
 >
 > ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[AUTONOMY_MANIFEST]` in audit logs.
+>
+> ### AI Assist Note
 > Autonomy Manifest: Seed 002 (The Sovereign Audit)
 >
 > ### Debugging & Observability
@@ -30,5 +43,7 @@
 - **Mode**: Deep Diagnostic & Documentation
 - **Governance**: Aletheia Protocol (Zero-Trust Enforcement)
 - **Reporting Format**: Standardized Markdown Table in `audit_full_report.md`
+
+[//]: # (Metadata: [AUTONOMY_MANIFEST])
 
 [//]: # (Metadata: [AUTONOMY_MANIFEST])

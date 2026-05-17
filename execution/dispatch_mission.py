@@ -1,12 +1,27 @@
+"""
+@docs ARCHITECTURE:Agent:Tasks
+
+### AI Assist Note
+**🛡️ Tadpole OS: Mission Dispatcher**
+Dispatches high-scrutiny autonomous tasks (such as security scans, AI context alignment, and parity checks)
+to the active Tadpole Agent 2 over HTTP.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Connection failures to localhost:8000, 401 Unauthorized errors from incorrect token.
+- **Telemetry Link**: Search for `[Dispatcher]` in task dispatch traces.
+"""
+
 import requests
 import json
 import os
 
 def dispatch_mission():
+    neural_token = os.getenv("NEURAL_TOKEN", "Tadpole-OS-2026")
     url = "http://127.0.0.1:8000/v1/agents/2/tasks"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": "Bearer Tadpole-OS-2026"
+        "Authorization": f"Bearer {neural_token}",
+        "User-Agent": "TadpoleOS/1.1.57"
     }
     
     payload = {
@@ -27,3 +42,7 @@ def dispatch_mission():
 
 if __name__ == "__main__":
     dispatch_mission()
+
+# Metadata: [dispatch_mission]
+
+# Metadata: [dispatch_mission]

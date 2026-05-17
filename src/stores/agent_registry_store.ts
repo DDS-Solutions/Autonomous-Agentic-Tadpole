@@ -143,3 +143,7 @@ if (sync_channel) {
         }
     };
 }
+
+// Metadata: [agent_registry_store]
+
+// Metadata: [agent_registry_store]

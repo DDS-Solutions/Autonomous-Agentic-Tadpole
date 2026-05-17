@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Artifactworkspace**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Code, Box, Layers, Play, X, Zap } from 'lucide-react';
@@ -122,3 +134,7 @@ export const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({
         </AnimatePresence>
     );
 };
+
+// Metadata: [ArtifactWorkspace]
+
+// Metadata: [ArtifactWorkspace]

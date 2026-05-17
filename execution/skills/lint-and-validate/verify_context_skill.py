@@ -1,3 +1,15 @@
+"""
+@docs ARCHITECTURE:Infrastructure
+
+### AI Assist Note
+**🛡️ Tadpole OS: Verify Context Skill**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+"""
+
 from typing import Dict, Any, List
 from core.base_skill import BaseSkill
 from pydantic import Field
@@ -71,3 +83,7 @@ class VerifyContextSkill(BaseSkill):
 
         except Exception as e:
             return f"Error during AI context audit: {str(e)}"
+
+# Metadata: [verify_context_skill]
+
+# Metadata: [verify_context_skill]

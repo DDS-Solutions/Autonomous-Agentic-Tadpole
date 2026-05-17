@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:UI
+
+### AI Assist Note
+**🛡️ Tadpole OS: Security Dashboard**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 /**
  * @file Security_Dashboard.test.tsx
  * @description Verifies the rendering and data handling of the Security Dashboard components.
@@ -196,3 +208,7 @@ describe('Security_Dashboard', () => {
         expect(await screen.findByText(/Enabled/i)).toBeInTheDocument();
     });
 });
+
+// Metadata: [Security_Dashboard_test]
+
+// Metadata: [Security_Dashboard_test]

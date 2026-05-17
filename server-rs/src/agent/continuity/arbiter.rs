@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Arbiter**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use sysinfo::System;
@@ -171,3 +183,7 @@ impl ContextArbiter {
         self.flush_count.fetch_add(1, Ordering::Relaxed);
     }
 }
+
+// Metadata: [arbiter]
+
+// Metadata: [arbiter]

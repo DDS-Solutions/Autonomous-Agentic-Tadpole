@@ -1,3 +1,15 @@
+/*
+@docs ARCHITECTURE:SovereignKernel
+
+### AI Assist Note
+**🛡️ Tadpole OS: Sscp Smoke**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! Quick smoke test that writes real SSCP blocks to Drive G.
 //! Run with: cargo test sscp_drive_g_smoke -- --nocapture --ignored
 
@@ -44,3 +56,7 @@ mod tests {
         println!("\n✅ Drive G smoke test PASSED. Check G:\\Tadpole_Intelligence_Cache\\agent-42\\");
     }
 }
+
+// Metadata: [sscp_smoke]
+
+// Metadata: [sscp_smoke]

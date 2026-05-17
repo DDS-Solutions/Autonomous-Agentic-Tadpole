@@ -1,3 +1,13 @@
+/*
+### AI Assist Note
+**🛡️ Tadpole OS: Schema Gen**
+Core system module providing specialized functionality for the agent swarm.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Unexpected execution drift or type compatibility issues.
+- **Telemetry Link**: Traced via active system logging channels.
+*/
+
 //! Type Synchronization Utility — Rust to TypeScript
 //!
 //! @docs ARCHITECTURE:Toolchain
@@ -65,3 +75,7 @@ pub fn export_types() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ [Schema] Export complete.");
     Ok(())
 }
+
+// Metadata: [schema_gen]
+
+// Metadata: [schema_gen]
