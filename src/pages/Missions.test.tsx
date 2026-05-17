@@ -60,7 +60,7 @@ vi.mock('../services/socket', () => ({
 const mock_workspace_state = {
     clusters: [
         {
-            id: 'c-001',
+            id: 'cl-command',
             name: 'Alpha Cluster',
             department: 'Engineering',
             theme: 'blue',
@@ -76,10 +76,10 @@ const mock_workspace_state = {
         }
     ],
     active_proposals: {
-        'c-001': { reasoning: 'Proposal reasoning' }
+        'cl-command': { reasoning: 'Proposal reasoning' }
     },
     active_cluster: {
-        id: 'c-001',
+        id: 'cl-command',
         name: 'Alpha Cluster',
         department: 'Engineering',
         theme: 'blue',
@@ -147,10 +147,10 @@ vi.mock('../components/missions/Cluster_Sidebar', () => ({
         <div data-testid="sidebar">
             <button onClick={() => props.on_select_cluster('c-002')}>Select Cluster</button>
             <button onClick={() => props.on_create_cluster()}>Create Cluster</button>
-            <button onClick={() => props.on_delete_cluster('c-001')}>Delete Cluster</button>
-            <button onClick={() => props.on_toggle_active('c-001')}>Toggle Active</button>
-            <button onClick={() => props.on_update_department('c-001', 'Test Dept')}>Update Dept</button>
-            <button onClick={() => props.on_update_budget('c-001', 999)}>Update Budget</button>
+            <button onClick={() => props.on_delete_cluster('cl-command')}>Delete Cluster</button>
+            <button onClick={() => props.on_toggle_active('cl-command')}>Toggle Active</button>
+            <button onClick={() => props.on_update_department('cl-command', 'Test Dept')}>Update Dept</button>
+            <button onClick={() => props.on_update_budget('cl-command', 999)}>Update Budget</button>
         </div>
     )
 }));
@@ -158,6 +158,7 @@ vi.mock('../components/missions/Cluster_Sidebar', () => ({
 vi.mock('../components/missions/Mission_Header', () => ({
     Mission_Header: ({ on_run_mission, on_toggle_analysis, active_cluster }: any) => (
         <div>
+            <h2>{active_cluster.name}</h2>
             <button onClick={on_run_mission}>RUN MISSION</button>
             <button onClick={() => on_toggle_analysis(active_cluster.id)}>Toggle Analysis</button>
         </div>
@@ -265,10 +266,10 @@ describe('Missions Page', () => {
         expect(screen.getByText('Proposal reasoning')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Dismiss'));
-        expect(mock_workspace_state.dismiss_proposal).toHaveBeenCalledWith('c-001');
+        expect(mock_workspace_state.dismiss_proposal).toHaveBeenCalledWith('cl-command');
 
         fireEvent.click(screen.getByText(/Authorize Sync/i));
-        expect(mock_workspace_state.apply_proposal).toHaveBeenCalledWith('c-001');
+        expect(mock_workspace_state.apply_proposal).toHaveBeenCalledWith('cl-command');
     });
 
     it('handles incoming handoffs (approve and reject)', () => {
@@ -289,7 +290,7 @@ describe('Missions Page', () => {
         render(<Missions />);
         const textarea = screen.getByPlaceholderText(/Describe the cluster/i);
         fireEvent.change(textarea, { target: { value: 'New Objective' } });
-        expect(mock_workspace_state.update_cluster_objective).toHaveBeenCalledWith('c-001', 'New Objective');
+        expect(mock_workspace_state.update_cluster_objective).toHaveBeenCalledWith('cl-command', 'New Objective');
     });
 
     it('handles cluster management actions from sidebar', () => {
@@ -297,37 +298,72 @@ describe('Missions Page', () => {
         
         fireEvent.click(screen.getByText('Create Cluster'));
         expect(mock_workspace_state.create_cluster).toHaveBeenCalled();
-
+        
         fireEvent.click(screen.getByText('Delete Cluster'));
-        expect(mock_workspace_state.delete_cluster).toHaveBeenCalledWith('c-001');
+        expect(mock_workspace_state.delete_cluster).toHaveBeenCalledWith('cl-command');
 
         fireEvent.click(screen.getByText('Toggle Active'));
-        expect(mock_workspace_state.toggle_cluster_active).toHaveBeenCalledWith('c-001');
+        expect(mock_workspace_state.toggle_cluster_active).toHaveBeenCalledWith('cl-command');
 
         fireEvent.click(screen.getByText('Update Dept'));
-        expect(mock_workspace_state.update_cluster_department).toHaveBeenCalledWith('c-001', 'Test Dept');
+        expect(mock_workspace_state.update_cluster_department).toHaveBeenCalledWith('cl-command', 'Test Dept');
 
         fireEvent.click(screen.getByText('Update Budget'));
-        expect(mock_workspace_state.update_cluster_budget).toHaveBeenCalledWith('c-001', 999);
+        expect(mock_workspace_state.update_cluster_budget).toHaveBeenCalledWith('cl-command', 999);
     });
 
     it('handles agent team management actions', () => {
         render(<Missions />);
         
         fireEvent.click(screen.getByText('Assign Agent'));
-        expect(mock_workspace_state.assign_agent_to_cluster).toHaveBeenCalledWith('2', 'c-001');
+        expect(mock_workspace_state.assign_agent_to_cluster).toHaveBeenCalledWith('2', 'cl-command');
 
         fireEvent.click(screen.getByText('Unassign Agent'));
-        expect(mock_workspace_state.unassign_agent_from_cluster).toHaveBeenCalledWith('1', 'c-001');
+        expect(mock_workspace_state.unassign_agent_from_cluster).toHaveBeenCalledWith('1', 'cl-command');
 
         fireEvent.click(screen.getByText('Set Alpha'));
-        expect(mock_workspace_state.set_alpha_node).toHaveBeenCalledWith('c-001', '1');
+        expect(mock_workspace_state.set_alpha_node).toHaveBeenCalledWith('cl-command', '1');
     });
 
     it('toggles mission analysis', () => {
         render(<Missions />);
         fireEvent.click(screen.getByText('Toggle Analysis'));
-        expect(mock_workspace_state.toggle_mission_analysis).toHaveBeenCalledWith('c-001');
+        expect(mock_workspace_state.toggle_mission_analysis).toHaveBeenCalledWith('cl-command');
+    });
+
+    it('renders the Strategic Command cluster by default', async () => {
+        // Update mock state to include Strategic Command as default
+        const original_clusters = [...mock_workspace_state.clusters];
+        const original_active = mock_workspace_state.active_cluster;
+        
+        mock_workspace_state.clusters = [
+            { 
+                id: 'cl-command', 
+                name: 'Strategic Command', 
+                theme: 'blue', 
+                alpha_id: '1', 
+                collaborators: ['1'], 
+                objective: 'Master Command', 
+                is_active: true,
+                department: 'Command',
+                budget_usd: 1000,
+                analysis_enabled: false
+            } as any
+        ];
+        mock_workspace_state.active_cluster = mock_workspace_state.clusters[0];
+
+        render(<Missions />);
+
+        await waitFor(() => {
+            // Header shows cluster name
+            expect(screen.getByText('Strategic Command')).toBeInTheDocument();
+            // Input shows objective
+            expect(screen.getByDisplayValue('Master Command')).toBeInTheDocument();
+        });
+
+        // Restore mock state
+        mock_workspace_state.clusters = original_clusters;
+        mock_workspace_state.active_cluster = original_active;
     });
 
     it('calls receive_handoff when socket event arrives', () => {
@@ -342,7 +378,7 @@ describe('Missions Page', () => {
         if (handoff_cb) {
             handoff_cb({
                 from_cluster: 'src',
-                to_cluster: 'c-001',
+                to_cluster: 'cl-command',
                 payload: { description: 'New Handoff via Socket' }
             });
         }

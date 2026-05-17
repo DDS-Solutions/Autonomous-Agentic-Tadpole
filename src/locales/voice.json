@@ -1,0 +1,40 @@
+{
+  "standups": {
+    "title": "Neural Sync Interface",
+    "tooltip_interface": "High-fidelity voice uplink to specific agents or mission clusters for direct neural coordination.",
+    "status_ready": "Status: Ready for Handshake",
+    "status_live": "{{time}} • ENCRYPTED LIVE CHANNEL",
+    "tooltip_agent": "Direct sync with a specific sovereign agent node.",
+    "tooltip_cluster": "Broadcast sync to all agents within a mission cluster",
+    "label_agent_node": "Agent Node",
+    "label_mission_cluster": "Mission Cluster",
+    "placeholder_select_target": "Select Neural Handshake Target",
+    "tooltip_end": "Terminate neural uplink and close channel.",
+    "tooltip_start": "Initialize sovereign channel for neural handoff.",
+    "btn_end": "End Sync",
+    "btn_start": "Start Sync",
+    "tooltip_mic": "Toggle local microphone capture.",
+    "tooltip_transcript": "Live stream of processed neural communications and STT translations.",
+    "header_transcript": "Live Transcript",
+    "status_rec": "REC",
+    "status_idle": "IDLE",
+    "empty_transcript": "Waiting for audio input...",
+    "label_speaking": "{{name}} is speaking...",
+    "msg_online": "System: Voice Communications Online. Select target and click 'Start Sync'.",
+    "msg_transcribing": "System: Transcribing neural uplink...",
+    "msg_failed": "System: Transcription failed or no audio detected.",
+    "label_target_agent": "Agent",
+    "label_target_cluster": "Cluster",
+    "debug_ending_sync": "DEBUG: Ending neural sync...",
+    "debug_start_recording": "DEBUG: Starting vocal recording..."
+  },
+  "voice": {
+    "listening": "Neural Link Active • Listening...",
+    "tap_to_start": "Tap to Initialize Voice Uplink",
+    "connecting": "Synchronizing Neural Modalities...",
+    "service_gemini": "Gemini Live",
+    "close": "Close Link",
+    "start": "Initialize Link",
+    "stop": "Terminate Link"
+  }
+}

@@ -31,7 +31,7 @@ export const Confirm_Dialog: React.FC<Confirm_Dialog_Props> = ({
     is_open,
     title,
     message,
-    confirm_label = i18n.t('common.confirm'),
+    confirm_label = i18n.t('common.btn_confirm'),
     cancel_label = i18n.t('common.cancel'),
     variant = 'danger',
     on_confirm,

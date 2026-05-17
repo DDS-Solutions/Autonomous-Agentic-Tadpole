@@ -1,0 +1,25 @@
+{
+  "template_store": {
+    "title": "Swarm Template Store",
+    "desc": "Browse and deploy pre-configured agent swarms.",
+    "subtitle": "Discover and install industry-specific agent swarms natively via GitHub MCP.",
+    "shield_active": "Sapphire Shield Active",
+    "search_placeholder": "Search templates, agents, or skills...",
+    "label_size": "Company Size",
+    "employees": "Employees",
+    "connecting": "Syncing with GitHub Registry...",
+    "seats": "Seats",
+    "btn_installed": "Already Installed",
+    "btn_deploying": "Deploying Swarm...",
+    "btn_install": "Deploy Swarm to Local System",
+    "btn_preview": "Preview Swarm Configuration",
+    "empty_title": "No templates found matching your criteria.",
+    "modal_fetching": "Resolving swarm.json...",
+    "modal_fail_resolve": "Failed to resolve swarm.json. Check network connectivity.",
+    "security_verified_title": "Security Verified",
+    "security_verified_desc": "This template has been audited for security and compliance.",
+    "hot_loading_title": "Hot Loading",
+    "hot_loading_desc": "Templates are loaded dynamically without stopping the engine.",
+    "btn_back": "Back to Marketplace"
+  }
+}

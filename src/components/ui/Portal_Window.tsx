@@ -120,6 +120,33 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
 
         // --- BROWSER PORTAL FALLBACK (DEV / BROWSER) ---
         const features = `width=${width},height=${height},left=100,top=100,resizable=yes,scrollbars=yes,status=no,menubar=no,toolbar=no,location=no,directories=no`;
+        
+        if (url) {
+            const win = window.open(url, window_name, features);
+            if (!win) {
+                console.error('[Portal_Window] Popup blocked or failed to open.');
+                on_popup_block_ref.current?.();
+                on_close_ref.current();
+                return;
+            }
+            
+            external_window_ref.current = win;
+            
+            // Poll for window closure since navigation can break unload listeners
+            const interval = setInterval(() => {
+                if (win.closed) {
+                    clearInterval(interval);
+                    on_close_ref.current();
+                }
+            }, 500);
+
+            return () => {
+                clearInterval(interval);
+                win.close();
+                external_window_ref.current = null;
+            };
+        }
+
         const win = window.open('', window_name, features);
 
         if (!win) {

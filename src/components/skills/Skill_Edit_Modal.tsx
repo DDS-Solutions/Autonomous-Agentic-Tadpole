@@ -106,7 +106,7 @@ export const Skill_Edit_Modal: React.FC<Skill_Edit_Modal_Props> = ({
                 </div>
                 <div className="p-5 border-t border-zinc-800 flex justify-end gap-3 shrink-0 relative z-10 bg-zinc-950/90 items-center">
                     {skill_save_error && <div className="text-xs text-red-400 font-mono mr-auto flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> {skill_save_error}</div>}
-                    <button onClick={on_close} className="px-5 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-100 transition-colors">{i18n.t('skills.btn_cancel')}</button>
+                    <button onClick={on_close} className="px-5 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-100 transition-colors">{i18n.t('common.btn_cancel')}</button>
                     <button onClick={on_save} disabled={is_saving || !!schema_error || !editing_skill.name || !editing_skill.execution_command} className="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50">{is_saving ? i18n.t('skills.btn_saving') : i18n.t('skills.btn_save_skill')}</button>
                 </div>
             </div>

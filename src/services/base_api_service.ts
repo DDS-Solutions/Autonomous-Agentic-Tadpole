@@ -194,10 +194,9 @@ export async function api_request<T = unknown>(
             } catch (err) {
                 // Only retry safe, idempotent methods. POST/PUT/DELETE/PATCH
                 // must NOT be retried to avoid duplicate side effects (unless it's a network failure).
-                const method = (options.method || 'GET').toUpperCase();
-                const is_safe_method = method === 'GET' || method === 'HEAD';
+                const _is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
                 
-                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError')) {
+                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError') || !_is_safe_method) {
                     if (err instanceof Error && err.message === 'TIMEOUT') {
                         throw new Error(`Request timed out after ${options.timeout || DEFAULT_TIMEOUT}ms for: ${url}`, { cause: err });
                     }

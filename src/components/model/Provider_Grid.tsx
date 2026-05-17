@@ -56,16 +56,24 @@ export function Provider_Grid({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {providers.map(p => (
-                    <Provider_Card
-                        key={p.id}
-                        provider={p}
-                        is_selected={selected_provider_id === p.id}
-                        on_select={(id: string) => on_select_provider(selected_provider_id === id ? null : id)}
-                        on_delete={on_delete_provider}
-                        models_count={models.filter(m => m.provider === p.id).length}
-                    />
-                ))}
+                {providers.length === 0 ? (
+                    <div className="col-span-full py-12 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl animate-in fade-in zoom-in duration-500">
+                        <Database size={24} className="text-zinc-800 mb-2" />
+                        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{i18n.t('model_manager.grid.empty_state')}</h3>
+                        <p className="text-[11px] text-zinc-600 font-medium">{i18n.t('model_manager.grid.empty_hint')}</p>
+                    </div>
+                ) : (
+                    providers.map(p => (
+                        <Provider_Card
+                            key={p.id}
+                            provider={p}
+                            is_selected={selected_provider_id === p.id}
+                            on_select={(id: string) => on_select_provider(selected_provider_id === id ? null : id)}
+                            on_delete={on_delete_provider}
+                            models_count={models.filter(m => m.provider === p.id).length}
+                        />
+                    ))
+                )}
                 {children}
             </div>
         </section>

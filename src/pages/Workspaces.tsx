@@ -11,20 +11,28 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Folder, Database, Globe, Code2, Server, Users, ArrowUpRight, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Folder, Database, Globe, Code2, Server, Users, ArrowUpRight, CheckCircle2, XCircle, Clock, RefreshCw, Copy, Check } from 'lucide-react';
 import { use_workspace_store } from '../stores/workspace_store';
 import { Tooltip } from '../components/ui';
 import { load_agents } from '../services/agent_service';
 import { i18n } from '../i18n';
 import type { Agent } from '../types';
+import { get_safe_date } from '../utils/date_utils';
 
 export default function Workspaces() {
     const { clusters, approve_branch, reject_branch } = use_workspace_store();
     const [agents, set_agents] = useState<Agent[]>([]);
+    const [copied_path, set_copied_path] = useState<string | null>(null);
 
     useEffect(() => {
         load_agents().then(set_agents);
     }, []);
+
+    const copy_path = (path: string) => {
+        navigator.clipboard.writeText(path);
+        set_copied_path(path);
+        setTimeout(() => set_copied_path(null), 2000);
+    };
 
     return (
         <div className="h-full flex flex-col bg-zinc-950">
@@ -70,11 +78,28 @@ export default function Workspaces() {
                                     </div>
                                 </Tooltip>
                                 <div>
-                                    <h2 className="text-lg font-bold text-zinc-100 tracking-tight">{cluster.name.toUpperCase()}</h2>
+                                    <h2 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2">
+                                        {cluster.name.toUpperCase()}
+                                        <button 
+                                            onClick={() => copy_path(cluster.path)}
+                                            aria-label={i18n.t('workspaces.aria_copy_path', { defaultValue: 'Copy Workspace Path' })}
+                                            className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-600 hover:text-zinc-400"
+                                        >
+                                            {copied_path === cluster.path ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                        </button>
+                                    </h2>
                                     <p className="text-xs text-zinc-500 font-mono tracking-widest mt-0.5">{i18n.t('workspaces.label_cluster_info', { dept: cluster.department, path: cluster.path })}</p>
                                 </div>
                             </div>
-                            <div className="flex -space-x-2 p-1">
+                            <div className="flex items-center gap-4">
+                                <button 
+                                    aria-label={i18n.t('workspaces.aria_resync', { defaultValue: 'Resync Cluster' })}
+                                    className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-300 transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest border border-transparent hover:border-zinc-700"
+                                >
+                                    <RefreshCw size={14} className="hover:animate-spin" />
+                                    {i18n.t('workspaces.btn_resync', { defaultValue: 'Resync' })}
+                                </button>
+                                <div className="flex -space-x-2 p-1 bg-zinc-900/50 rounded-full border border-zinc-800/50">
                                 {(cluster.collaborators || []).map(id => {
                                     const agent = agents.find(a => a.id === id);
                                     const is_alpha = cluster.alpha_id === id;
@@ -100,6 +125,7 @@ export default function Workspaces() {
                                 })}
                             </div>
                         </div>
+                    </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                             {/* Workspace Details Card */}
@@ -121,7 +147,10 @@ export default function Workspaces() {
                                 </div>
 
                                 <div className="space-y-2 bg-zinc-950 p-3 rounded-xl border border-zinc-900">
-                                    <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em] mb-1">{i18n.t('workspaces.header_environments')}</div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('workspaces.header_environments')}</div>
+                                        <div className="text-[8px] font-bold text-emerald-500 uppercase tracking-[0.1em]">{i18n.t('workspaces.label_root_info')}</div>
+                                    </div>
                                     <div className="flex flex-wrap gap-2">
                                         <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/5 text-green-400 border border-green-500/10 text-[10px] font-mono"><Code2 size={10} /> VS_CODE</span>
                                         <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 text-emerald-400 border border-emerald-500/10 text-[10px] font-mono"><Server size={10} /> K8S_NODE</span>
@@ -158,19 +187,27 @@ export default function Workspaces() {
                                                         <div className="flex items-center gap-2 mt-1">
                                                             <span className="text-[9px] font-mono text-zinc-500 uppercase">{i18n.t('workspaces.label_from_agent', { id: task.agent_id })}</span>
                                                             <span className="text-zinc-800">•</span>
-                                                            <span className="text-[9px] font-mono text-zinc-500 uppercase">{new Date(task.timestamp).toLocaleTimeString()}</span>
+                                                            <span className="text-[9px] font-mono text-zinc-500 uppercase">{get_safe_date(task.timestamp)?.toLocaleTimeString() || '--:--:--'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 {task.status === 'pending' && (
                                                     <div className="flex items-center gap-2">
                                                         <Tooltip content={i18n.t('workspaces.tooltip_merge')} position="top">
-                                                            <button onClick={() => approve_branch(cluster.id, task.id)} className="p-2 hover:bg-emerald-500/10 text-zinc-600 hover:text-emerald-500 transition-all rounded-lg">
+                                                            <button 
+                                                                onClick={() => approve_branch(cluster.id, task.id)} 
+                                                                aria-label={i18n.t('workspaces.tooltip_merge')}
+                                                                className="p-2 hover:bg-emerald-500/10 text-zinc-600 hover:text-emerald-500 transition-all rounded-lg"
+                                                            >
                                                                 <CheckCircle2 size={16} />
                                                             </button>
                                                         </Tooltip>
                                                         <Tooltip content={i18n.t('workspaces.tooltip_reject')} position="top">
-                                                            <button onClick={() => reject_branch(cluster.id, task.id)} className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 transition-all rounded-lg">
+                                                            <button 
+                                                                onClick={() => reject_branch(cluster.id, task.id)} 
+                                                                aria-label={i18n.t('workspaces.tooltip_reject')}
+                                                                className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 transition-all rounded-lg"
+                                                            >
                                                                 <XCircle size={16} />
                                                             </button>
                                                         </Tooltip>

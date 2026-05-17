@@ -130,11 +130,11 @@ export const Node_Stats: React.FC<Node_Stats_Props> = ({ agent, on_skill_trigger
 
             <div className="flex items-center gap-3 shrink-0">
                 <div className="flex items-center gap-1 font-mono text-xs text-emerald-500/80">
-                    {i18n.t('common_units.currency')}{(agent.cost_usd || 0).toFixed(3)}
+                    {i18n.t('common.units.currency')}{(agent.cost_usd || 0).toFixed(3)}
                 </div>
                 <div className="w-px h-2.5 bg-zinc-800" />
                 <div className="flex items-center gap-1 font-mono text-xs text-zinc-500">
-                    {((agent.tokens_used || 0) / 1000).toFixed(1)}{i18n.t('common_units.token_k')}
+                    {((agent.tokens_used || 0) / 1000).toFixed(1)}{i18n.t('common.units.token_k')}
                 </div>
             </div>
         </div>

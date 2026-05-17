@@ -48,6 +48,9 @@ export async function process_command(
 ): Promise<Command_Result> {
     const telemetry_source = '[CommandProcessor]';
     
+    // Ensure agents is a valid array for safety (prevents 'agents is not iterable' crash)
+    const safe_agents = Array.isArray(agents) ? agents : [];
+    
     // 1. Lexical Analysis: Split by spaces but preserve quoted strings (e.g. "quoted msg")
     // Hardened Parser: Handles escaped quotes and prevents ReDoS compared to simple regex.
     const parts: string[] = [];
@@ -145,7 +148,7 @@ export async function process_command(
     // Build O(1) lookup indexes for agent resolution (name + id + partial match)
     const agent_by_name = new Map<string, Agent>();
     const agent_by_id = new Map<string, Agent>();
-    for (const a of agents) {
+    for (const a of safe_agents) {
         agent_by_name.set(a.name.toLowerCase(), a);
         agent_by_id.set(a.id, a);
     }
@@ -165,14 +168,14 @@ export async function process_command(
         const found = agent_by_name.get(lower)
             || agent_by_id.get(name_or_id)
             // 2. Inclusion Match (e.g. "@alpha" matches "Alpha (CEO)")
-            || agents.find(a => a.name.toLowerCase().includes(lower))
+            || safe_agents.find(a => a.name.toLowerCase().includes(lower))
             // 3. ID Prefix Match (e.g. "@1" matches ID "1")
-            || agents.find(a => a.id === name_or_id || a.id.startsWith(name_or_id));
+            || safe_agents.find(a => a.id === name_or_id || a.id.startsWith(name_or_id));
 
         if (!found) {
             event_bus.emit_log({ 
                 source: 'System', 
-                text: `Agent "${name_or_id}" not found. Available: ${agents.map(a => a.name).slice(0, 10).join(', ')}...`, 
+                text: `Agent "${name_or_id}" not found. Available: ${safe_agents.map(a => a.name).slice(0, 10).join(', ')}...`, 
                 severity: 'error' 
             });
             return null;
@@ -212,10 +215,10 @@ export async function process_command(
 
         // ────────────── STATUS ──────────────
         case '/status': {
-            const active = agents.filter(a => a.status === 'active' || a.status === 'thinking' || a.status === 'coding').length;
-            const idle = agents.filter(a => a.status === 'idle').length;
-            const offline = agents.filter(a => a.status === 'offline').length;
-            const total_tokens = agents.reduce((sum, a) => sum + (a.tokens_used || 0), 0);
+            const active = safe_agents.filter(a => a.status === 'active' || a.status === 'thinking' || a.status === 'coding').length;
+            const idle = safe_agents.filter(a => a.status === 'idle').length;
+            const offline = safe_agents.filter(a => a.status === 'offline').length;
+            const total_tokens = safe_agents.reduce((sum, a) => sum + (a.tokens_used || 0), 0);
 
             event_bus.emit_log({
                 source: 'System',
@@ -426,7 +429,7 @@ export async function process_command(
             if (sub_cmd === 'status') {
                 const cluster_info = workspace_store.clusters.map(c =>
                     `🔹 ${c.name} [${c.theme.toUpperCase()}]\n` +
-                    `  Alpha: ${agents.find(a => a.id === c.alpha_id)?.name || 'NONE'}\n` +
+                    `  Alpha: ${safe_agents.find(a => a.id === c.alpha_id)?.name || 'NONE'}\n` +
                     `  Objective: ${c.objective || 'No objective set'}\n` +
                     `  Collaborators: ${c.collaborators.length}`
                 ).join('\n\n');
@@ -451,7 +454,7 @@ export async function process_command(
                         setTimeout(() => {
                             event_bus.emit_log({
                                 source: 'Agent',
-                                agent_id: agents.find(a => a.id === cluster.alpha_id)?.name || 'Alpha Node',
+                                agent_id: safe_agents.find(a => a.id === cluster.alpha_id)?.name || 'Alpha Node',
                                 text: proposal.reasoning,
                                 severity: 'info'
                             });
@@ -496,7 +499,7 @@ export async function process_command(
             if (!cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#') && active_scope !== 'swarm' && target_node) {
                 console.debug(`${telemetry_source} Auto-routing intent to ${active_scope}:${target_node}`);
                 const prefix = active_scope === 'cluster' ? '#' : '@';
-                return process_command(`${prefix}${target_node} ${command_text}`, agents, is_safe_mode, active_scope, target_node);
+                return process_command(`${prefix}${target_node} ${command_text}`, safe_agents, is_safe_mode, active_scope, target_node);
             }
 
             // Check for conversational targeting (@agent)
@@ -581,7 +584,7 @@ export async function process_command(
                 const cluster = workspace_store.clusters.find(c => (c.name?.toLowerCase() === cluster_name) || c.id === cluster_name);
 
                 if (cluster && cluster.alpha_id) {
-                    const alpha_agent = agents.find(a => a.id === cluster.alpha_id);
+                    const alpha_agent = safe_agents.find(a => a.id === cluster.alpha_id);
                     if (alpha_agent) {
                         const message = args.join(' ');
                         const settings = get_settings();

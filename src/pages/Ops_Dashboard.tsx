@@ -28,8 +28,9 @@ import Error_Boundary from '../components/Error_Boundary';
 
 import { Stat_Metrics } from '../components/dashboard/Stat_Metrics';
 import { Agent_Status_Grid } from '../components/dashboard/Agent_Status_Grid';
+import { KnowledgeGraph } from '../components/intelligence/KnowledgeGraph';
 import { Portal_Window, LD_Json } from '../components/ui';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Grid, Map } from 'lucide-react';
 import type { Agent } from '../types';
 
 /**
@@ -49,6 +50,7 @@ export default function Ops_Dashboard() {
     const [config_agent_id, set_config_agent_id] = useState<string | null>(null);
 
     const close_dropdowns = use_dropdown_store((s: Dropdown_State) => s.close_dropdown);
+    const [view_mode, set_view_mode] = useState<'grid' | 'graph'>('grid');
 
     // ── Handlers ──────────────────────────────────────────────
 
@@ -184,6 +186,25 @@ export default function Ops_Dashboard() {
                             recruit_velocity={recruit_velocity}
                         />
 
+                        <div className="flex items-center justify-between px-2">
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => set_view_mode('grid')}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${view_mode === 'grid' ? 'bg-zinc-100 text-black' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'}`}
+                                >
+                                    <Grid size={12} />
+                                    <span>Agent Grid</span>
+                                </button>
+                                <button 
+                                    onClick={() => set_view_mode('graph')}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${view_mode === 'graph' ? 'bg-zinc-100 text-black' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'}`}
+                                >
+                                    <Map size={12} />
+                                    <span>Neural Map</span>
+                                </button>
+                            </div>
+                        </div>
+
 
                         {is_agent_grid_detached ? (
                             <div className="flex-1 bg-zinc-950/20 backdrop-blur-sm border border-zinc-800 rounded-xl overflow-hidden group flex items-center justify-center relative min-h-[400px]">
@@ -204,6 +225,10 @@ export default function Ops_Dashboard() {
                                         {i18n.t('layout.recall_sector') || 'Recall Agent Grid'}
                                     </button>
                                 </div>
+                            </div>
+                        ) : view_mode === 'graph' ? (
+                            <div className="flex-1 min-h-[500px]">
+                                <KnowledgeGraph />
                             </div>
                         ) : (
                             <Agent_Status_Grid

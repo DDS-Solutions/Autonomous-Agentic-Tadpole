@@ -1,0 +1,19 @@
+{
+  "system": {
+    "connection_lost": "CONNECTION LOST",
+    "reconnecting": "RECONNECTING",
+    "reconnect_fail_hint": "Neural Engine unreachable. Verify infrastructure URL.",
+    "reconnect_attempt_hint": "Attempting to re-establish neural link...",
+    "safety_protocol": "TadpoleOS v{{version}} Safety Protocol Active",
+    "neural_fault": "Neural Sector Fault: {{name}}",
+    "reinitialize_sector": "Re-initialize Sector",
+    "critical_exception": "A critical rendering exception was detected in this sector.",
+    "neural_engine": "Neural Engine",
+    "terminal_prompt": ">",
+    "fault_detected": "Fault detected: {{message}}",
+    "connection_error": "Connection Error",
+    "disconnected": "Disconnected"
+  },
+  "terminal_prompt": ">",
+  "throttled": "Throttled"
+}

@@ -62,10 +62,16 @@ export default function Engine_Dashboard() {
         { 
             id: 'latency',
             label: i18n.t('engine_dashboard.label_latency'), 
-            value: `${latency.toFixed(0)}ms`, 
-            percent: Math.min((latency / 500) * 100, 100), // Normalized against 500ms upper bound
+            value: latency === null ? '---' : `${latency.toFixed(0)}ms`, 
+            percent: latency === null ? 0 : Math.min((latency / 500) * 100, 100), // Normalized against 500ms upper bound
             icon: Zap, 
-            color: latency > 150 ? 'text-yellow-400' : 'text-emerald-400' 
+            color: latency === null 
+                ? 'text-zinc-600' 
+                : latency > 500 
+                    ? 'text-red-400 animate-pulse' 
+                    : latency > 150 
+                        ? 'text-yellow-400' 
+                        : 'text-emerald-400' 
         },
     ];
 

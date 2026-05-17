@@ -23,6 +23,7 @@ pub mod security;
 pub mod serialization;
 pub mod data_weighting;
 pub mod normalization;
+pub mod schema_gen;
 
 // Metadata: [mod]
 

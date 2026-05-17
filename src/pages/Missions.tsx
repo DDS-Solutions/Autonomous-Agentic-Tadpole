@@ -204,7 +204,33 @@ export default function Missions() {
 
     const active_proposals = use_workspace_store(state => state.active_proposals);
     const dismiss_proposal = use_workspace_store(state => state.dismiss_proposal);
-    const apply_proposal = use_workspace_store(state => state.apply_proposal);
+    const apply_proposal_store = use_workspace_store(state => state.apply_proposal);
+
+    const handle_apply_proposal = useCallback(async (cluster_id: string) => {
+        const proposal = active_proposals[cluster_id];
+        if (!proposal) return;
+
+        // Commit all proposed changes to the live agent registry
+        for (const change of (proposal.changes || [])) {
+            const updates: any = {};
+            if (change.proposed_role) updates.role = change.proposed_role;
+            if (change.proposed_model) {
+                updates.primary_model_id = change.proposed_model;
+            }
+            if (change.added_skills) {
+                const agent = agents.find(a => a.id === change.agent_id);
+                if (agent) {
+                    updates.skills = [...new Set([...(agent.skills || []), ...change.added_skills])];
+                }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await store_update_agent(change.agent_id, updates);
+            }
+        }
+
+        apply_proposal_store(cluster_id);
+    }, [active_proposals, agents, store_update_agent, apply_proposal_store]);
 
     return (
         <div className="h-full flex flex-col animate-in fade-in duration-500" aria-label="Missions Board">
@@ -296,7 +322,7 @@ export default function Missions() {
                                                         {i18n.t('missions.btn_dismiss')}
                                                     </button>
                                                 <button
-                                                    onClick={() => apply_proposal(active_cluster.id)}
+                                                    onClick={() => handle_apply_proposal(active_cluster.id)}
                                                     className={`px-3 py-1.5 rounded-lg border ${get_theme_colors(active_cluster.theme).text} ${get_theme_colors(active_cluster.theme).border} bg-zinc-900 text-xs font-bold uppercase shadow-lg ${get_theme_colors(active_cluster.theme).glow}`}
                                                 >
                                                     {i18n.t('missions.btn_authorize')}

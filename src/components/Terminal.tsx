@@ -28,6 +28,7 @@ import { process_command } from '../logic/command_processor';
 import type { Agent } from '../types';
 import { Tooltip } from './ui';
 import { i18n } from '../i18n';
+import { get_safe_date } from '../utils/date_utils';
 
 /** Maximum number of log entries to retain in the Terminal buffer. */
 const MAX_LOG_ENTRIES = 500;
@@ -226,7 +227,7 @@ export default function Terminal_Component({ agents }: Terminal_Props) {
                     <div className="flex-1 overflow-y-auto space-y-1 mb-2 px-2 custom-scrollbar">
                         {active_logs.map((log) => (
                             <div key={log.id} className="flex gap-2">
-                                <span className="text-zinc-600">[{log.timestamp.toLocaleTimeString()}]</span>
+                                <span className="text-zinc-600">[{get_safe_date(log.timestamp)?.toLocaleTimeString() || '--:--:--'}]</span>
                                 <span className={`font-bold ${log.source === 'User' ? 'text-green-400' :
                                     log.source === 'Agent' ? 'text-green-400' :
                                         'text-zinc-400'

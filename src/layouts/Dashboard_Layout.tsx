@@ -28,7 +28,7 @@ import { ExternalLink } from 'lucide-react';
 import { i18n } from '../i18n';
 import { use_notification_store } from '../stores/notification_store';
 import { event_bus } from '../services/event_bus';
-import { use_agent_store } from '../stores/agent_store';
+import { use_agent_registry_store } from '../stores/agent_store';
 import { APP_ROUTES } from '../constants/routes';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
@@ -152,7 +152,7 @@ export default function Dashboard_Layout() {
 
     useEffect(() => {
         const handle_refresh_agents = () => {
-            void use_agent_store.getState().fetch_agents();
+            void use_agent_registry_store.getState().fetch_agents();
         };
         window.addEventListener('app:refresh-agents', handle_refresh_agents);
         return () => window.removeEventListener('app:refresh-agents', handle_refresh_agents);

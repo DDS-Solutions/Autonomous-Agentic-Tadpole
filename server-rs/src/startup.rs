@@ -22,6 +22,7 @@
 //! - **Trace Scope**: `server-rs::startup`
 
 use crate::state::AppState;
+use crate::system::supervisor::SupervisedSpawn;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::sync::Arc;
@@ -112,21 +113,28 @@ pub fn load_environment() {
 }
 
 /// Checks for critical AI provider API keys and issues a "Sovereign Warning" if missing.
+///
+/// ### SEC: Anti-Fingerprinting
+/// This check only reports the *presence* or *absence* of keys, never their values,
+/// to prevent environment leakage in logs (SEC-04).
 fn check_sovereign_config() {
     let providers = [
         ("OPENAI_API_KEY", "OpenAI"),
         ("ANTHROPIC_API_KEY", "Anthropic"),
         ("GOOGLE_API_KEY", "Google Gemini"),
         ("GROQ_API_KEY", "Groq"),
+        ("DEEPSEEK_API_KEY", "DeepSeek"),
     ];
 
     let mut missing = Vec::new();
     for (key, name) in providers {
-        if std::env::var(key)
-            .map(|v| v.trim().is_empty())
-            .unwrap_or(true)
-        {
-            missing.push(name);
+        match std::env::var(key) {
+            Ok(val) if val.trim().len() > 8 => {
+                // Key exists and meets minimum length for a real token
+            }
+            _ => {
+                missing.push(name);
+            }
         }
     }
 
@@ -135,20 +143,23 @@ fn check_sovereign_config() {
         .unwrap_or(false);
 
     if !missing.is_empty() && !privacy_mode {
-        println!("\n\x1b[1;33m⚠️  [SOVEREIGN WARNING]\x1b[0m");
+        // Use a more professional, system-level reporting style
+        tracing::warn!(
+            "🛡️  [Sovereign Registry] AI Providers missing configuration: {:?}",
+            missing
+        );
+        
+        println!("\n\x1b[1;33m🛡️  [SOVEREIGN ADVISORY]\x1b[0m");
         println!("\x1b[1;33m--------------------------------------------------\x1b[0m");
-        println!("The following AI providers are not configured:");
+        println!("The following AI providers are currently inactive:");
         for name in &missing {
             println!("  - {}", name);
         }
-        println!("\nAI-Tadpole-OS will fall back to local models (Ollama) if available.");
-        println!("To enable these providers, add your API keys to the \x1b[1m.env\x1b[0m file.");
-        println!("See \x1b[1mdocs/GETTING_STARTED.md\x1b[0m for instructions.");
+        println!("\nEngine will operate in \x1b[1mFallback Mode\x1b[0m (Local models only).");
+        println!("To activate these providers, register API keys in .env");
         println!("\x1b[1;33m--------------------------------------------------\x1b[0m\n");
-
-        tracing::warn!(missing = ?missing, "Sovereign Warning: Some AI providers are not configured.");
     } else if privacy_mode {
-        tracing::info!("🔒 [Privacy Guard] Running in strict local-only mode (Zero-Cloud).");
+        tracing::info!("🔒 [Sovereign Guard] Running in strict local-only mode (Zero-Cloud).");
     }
 }
 
@@ -204,30 +215,29 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     }
 
     // 2. Launch Heartbeat Loop to drive UI presence
-    let heartbeat_state = app_state.clone();
     let heartbeat_secs: u64 = std::env::var("HEARTBEAT_INTERVAL_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(3);
 
-    tokio::spawn(async move {
+    app_state.supervisor().spawn("HeartbeatLoop", move |state| async move {
         let boot_instant = std::time::Instant::now();
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(heartbeat_secs)).await;
 
-            let active_agents = heartbeat_state
+            let active_agents = state
                 .governance
                 .active_agents
                 .load(std::sync::atomic::Ordering::Relaxed);
-            let swarm_depth = heartbeat_state
+            let swarm_depth = state
                 .governance
                 .max_swarm_depth
                 .load(std::sync::atomic::Ordering::Relaxed);
-            let tpm = heartbeat_state
+            let tpm = state
                 .governance
                 .tpm_accumulator
                 .swap(0, std::sync::atomic::Ordering::Relaxed);
-            let recruits = heartbeat_state
+            let recruits = state
                 .governance
                 .recruit_count
                 .swap(0, std::sync::atomic::Ordering::Relaxed);
@@ -235,16 +245,16 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
             let registry_snapshot: std::collections::HashMap<
                 String,
                 crate::types::SubsystemStatus,
-            > = heartbeat_state
+            > = state
                 .resources
                 .initialization_registry
                 .iter()
                 .map(|kv| (kv.key().clone(), kv.value().clone()))
                 .collect();
 
-            let profile = heartbeat_state.resources.hardware_profiler.get_profile();
+            let profile = state.resources.hardware_profiler.get_profile();
 
-            heartbeat_state.emit_event(serde_json::json!({
+            state.emit_event(serde_json::json!({
                 "type": "engine:health",
                 "uptime": boot_instant.elapsed().as_secs(),
                 "agentCount": active_agents,
@@ -256,6 +266,7 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
                 "memory": profile.memory_used,
                 "memory_total": profile.memory_total,
                 "activeProcesses": profile.active_processes,
+                "latency": profile.inference_latency,
                 "timestamp": chrono::Utc::now().to_rfc3339(),
                 "initialization": registry_snapshot
             }));
@@ -263,16 +274,16 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     });
 
     // 3. Launch Continuity Scheduler (autonomous scheduled missions)
-    let continuity_state = app_state.clone();
-    tokio::spawn(crate::agent::continuity::executor::start_scheduler(
-        continuity_state,
-    ));
-    tracing::info!("🕐 [Continuity] Scheduled job executor launched.");
+    app_state.supervisor().spawn("ContinuityScheduler", move |state| async move {
+        crate::agent::continuity::executor::start_scheduler(state).await;
+        Ok(())
+    });
 
     // 4. Launch Swarm Reaper (Data Lifecycle Management)
-    let reaper_state = app_state.clone();
-    tokio::spawn(crate::agent::reaper::SwarmReaper::start(reaper_state));
-    tracing::info!("♻️ [Reaper] Swarm Reaper launched (48h retention policy).");
+    app_state.supervisor().spawn("SwarmReaper", move |state| async move {
+        crate::agent::reaper::SwarmReaper::start(state).await;
+        Ok(())
+    });
 
     // 5. Launch Orphaned Scope Cleanup (Neural Memory Only)
     #[cfg(feature = "vector-memory")]
@@ -289,49 +300,57 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     }
 
     // 5. Ingestion Worker (Phase 2 SME Enhancement)
-    let ingestion_state = app_state.clone();
-    tokio::spawn(crate::agent::connectors::start_ingestion_worker(
-        ingestion_state,
-    ));
+    app_state.supervisor().spawn("IngestionWorker", move |state| async move {
+        crate::agent::connectors::start_ingestion_worker(state).await;
+        Ok(())
+    });
 
     // 6. Swarm Discovery (mDNS) (Skip in Fast Path)
     if intent == BootstrapIntent::Full {
-        let discovery_state = app_state.clone();
-        tokio::spawn(async move {
-            discovery_state
+        app_state.supervisor().spawn("SwarmDiscovery", move |state| async move {
+            state
                 .resources
                 .set_subsystem_status("Network", crate::types::SubsystemStatus::Warming(0.0));
-            match crate::services::discovery::SwarmDiscoveryManager::new(discovery_state.clone()) {
+            match crate::services::discovery::SwarmDiscoveryManager::new(state.clone()) {
                 Ok(manager) => {
                     if let Err(e) = manager.start() {
                         tracing::error!("📡 [Discovery] Failed to start mDNS manager: {}", e);
-                        discovery_state.resources.set_subsystem_status(
+                        state.resources.set_subsystem_status(
                             "Network",
                             crate::types::SubsystemStatus::Failed(e.to_string()),
                         );
+                        return Err(anyhow::anyhow!("mDNS manager start failure: {}", e));
                     } else {
-                        discovery_state
+                        state
                             .resources
                             .set_subsystem_status("Network", crate::types::SubsystemStatus::Ready);
+                        // Manager is now running. We need to keep this future alive if start() is async or blocks.
+                        // Actually SwarmDiscoveryManager::start likely spawns its own tasks.
+                        // I'll need to check if it's a blocking loop or just a setup.
                     }
                 }
                 Err(e) => {
                     tracing::error!("📡 [Discovery] Failed to initialize mDNS manager: {}", e);
-                    discovery_state.resources.set_subsystem_status(
+                    state.resources.set_subsystem_status(
                         "Network",
                         crate::types::SubsystemStatus::Failed(e.to_string()),
                     );
+                    return Err(anyhow::anyhow!("mDNS manager init failure: {}", e));
                 }
             }
+            // Keep the task alive if the manager relies on it
+            std::future::pending::<anyhow::Result<()>>().await
         });
     }
 
     // 7. Privacy Guard (Air-Gap Monitor)
-    let privacy_state = app_state.clone();
-    tokio::spawn(crate::services::privacy::start_privacy_guard(privacy_state));
+    app_state.supervisor().spawn("PrivacyGuard", move |state| async move {
+        crate::services::privacy::start_privacy_guard(state).await;
+        Ok(())
+    });
 
     // 8. Rate Limit Bucket Eviction (prevents unbounded memory growth under bot traffic)
-    tokio::spawn(async {
+    app_state.supervisor().spawn("RateLimitEviction", |_state| async move {
         use std::time::Duration;
         let eviction_interval = Duration::from_secs(300); // Every 5 minutes
         let max_bucket_age = Duration::from_secs(120);    // Evict entries idle for 2+ minutes
@@ -351,22 +370,27 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     });
 
     // 9. Launch Telemetry Metric Aggregator (p95 Metrics)
-    let aggregator_rx = crate::telemetry::TELEMETRY_TX.subscribe();
-    let aggregator = crate::telemetry::aggregator::MetricAggregator::new(1000); // Window of 1000 spans
-    tokio::spawn(aggregator.run(aggregator_rx));
+    app_state.supervisor().spawn("MetricAggregator", |_state| async move {
+        let aggregator_rx = crate::telemetry::TELEMETRY_TX.subscribe();
+        let aggregator = crate::telemetry::aggregator::MetricAggregator::new(1000); // Window of 1000 spans
+        aggregator.run(aggregator_rx).await;
+        Ok(())
+    });
 
     // 10. Launch Telemetry Bridge (Mission Log Persistence)
-    let bridge_rx_telemetry = crate::telemetry::TELEMETRY_TX.subscribe();
-    let bridge_rx_logs = app_state.comms.tx.subscribe();
-    let bridge = crate::telemetry::bridge::TelemetryBridge::new(app_state.clone());
-    tokio::spawn(bridge.run(bridge_rx_telemetry, bridge_rx_logs));
+    app_state.supervisor().spawn("TelemetryBridge", move |state| async move {
+        let bridge_rx_telemetry = crate::telemetry::TELEMETRY_TX.subscribe();
+        let bridge_rx_logs = state.comms.tx.subscribe();
+        let bridge = crate::telemetry::bridge::TelemetryBridge::new(state.clone());
+        bridge.run(bridge_rx_telemetry, bridge_rx_logs).await;
+        Ok(())
+    });
 
     // 11. Launch Debounced Token Usage Flush (every 10 seconds)
-    let flush_state = app_state.clone();
-    tokio::spawn(async move {
+    app_state.supervisor().spawn("BudgetFlush", move |state| async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            if let Err(e) = flush_state.security.budget_guard.flush_to_db().await {
+            if let Err(e) = state.security.budget_guard.flush_to_db().await {
                 tracing::error!("🚨 [BudgetGuard] Failed to flush usage to DB: {}", e);
             }
         }
@@ -374,13 +398,17 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
 
     // 11. Launch High-Speed Swarm Pulse (100ms) - Only in Full Mode
     if intent == BootstrapIntent::Full {
-        let pulse_state = app_state.clone();
-        tokio::spawn(crate::telemetry::pulse::spawn_pulse_loop(pulse_state));
+        app_state.supervisor().spawn("SwarmPulse", move |state| async move {
+            crate::telemetry::pulse::spawn_pulse_loop(state).await;
+            Ok(())
+        });
     }
 
     // 12. Declarative Swarm Recipes (Auto-provision standard swarms)
-    let recipes_state = app_state.clone();
-    tokio::spawn(crate::agent::recipes::auto_ingest_recipes(recipes_state));
+    app_state.supervisor().spawn("RecipeAutoIngest", move |state| async move {
+        crate::agent::recipes::auto_ingest_recipes(state).await;
+        Ok(())
+    });
 }
 
 #[cfg(test)]

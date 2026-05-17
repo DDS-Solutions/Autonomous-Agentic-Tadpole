@@ -20,10 +20,12 @@ pub struct ComputeProfile {
     pub memory_total: u64, // bytes
     pub active_processes: usize,
     pub gpu_usage: Option<f32>, // sysinfo doesn't easily track cross-platform GPU natively yet
+    pub inference_latency: f32, // ms
 }
 
 pub struct HardwareProfiler {
     sys: Mutex<System>,
+    pub last_inference_latency: std::sync::atomic::AtomicUsize, // ms
 }
 
 impl HardwareProfiler {
@@ -33,7 +35,13 @@ impl HardwareProfiler {
         sys.refresh_all();
         Self {
             sys: Mutex::new(sys),
+            last_inference_latency: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+
+    pub fn record_inference_latency(&self, ms: f32) {
+        self.last_inference_latency
+            .store(ms.round() as usize, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn get_profile(&self) -> ComputeProfile {
@@ -55,12 +63,15 @@ impl HardwareProfiler {
         let memory_total = sys.total_memory();
         let active_processes = sys.processes().len();
 
+        let inference_latency = self.last_inference_latency.load(std::sync::atomic::Ordering::Relaxed) as f32;
+
         ComputeProfile {
             cpu_usage,
             memory_used,
             memory_total,
             active_processes,
             gpu_usage: None,
+            inference_latency,
         }
     }
 }

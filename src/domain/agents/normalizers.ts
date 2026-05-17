@@ -24,7 +24,7 @@ import { resolve_friendly_model_name } from '../../utils/model_utils';
 import { get_settings } from '../../stores/settings_store';
 import { use_trace_store } from '../../stores/trace_store';
 import { v4 as uuidv4 } from 'uuid';
-import { slugify_role } from '../../utils/agent_uiutils';
+
 
 /**
  * RobustAgentDto
@@ -154,12 +154,12 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
 
     const input_tokens = (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0);
     const output_tokens = (dto.tokenUsage?.outputTokens ?? d.output_tokens ?? existing_agent?.output_tokens ?? 0);
-    const tokens_used = (dto.tokenUsage?.totalTokens ?? d.tokensUsed ?? d.tokens_used ?? (input_tokens + output_tokens) ?? 0);
+    const tokens_used = (dto.tokenUsage?.totalTokens ?? d.tokensUsed ?? d.tokens_used ?? (input_tokens + output_tokens));
 
     return {
         id: dto.id || existing_agent?.id || 'unknown',
         name: get_non_empty_string('name', 'name', 'Unnamed Agent'),
-        role: slugify_role(get_non_empty_string('role', 'role', 'AI Agent', 'role')),
+        role: get_non_empty_string('role', 'role', 'AI Agent', 'role'),
         department: dept,
         description: get_val('description', 'description', ''),
         status: status,

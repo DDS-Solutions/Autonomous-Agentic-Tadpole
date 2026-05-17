@@ -11,5 +11,18 @@
     "name": "Ollama",
     "protocol": "ollama",
     "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
+    "baseUrl": "https://generativelanguage.googleapis.com",
+    "customHeaders": {},
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "☁️",
+    "id": "google",
+    "name": "Google Vertex",
+    "protocol": "google",
+    "supportsSteeringVectors": false
   }
 ]

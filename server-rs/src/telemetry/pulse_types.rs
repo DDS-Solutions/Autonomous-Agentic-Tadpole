@@ -11,8 +11,9 @@
 //! - **Telemetry Link**: Search for `[PulseCollector]` or `SwarmPulse` in backend logs.
 
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Type)]
 pub struct PulseNode {
     pub id: String,
     pub x: f32,
@@ -23,21 +24,21 @@ pub struct PulseNode {
     pub progress: f32,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Type)]
 pub struct PulseConnection {
     pub source: String,
     pub target: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Type)]
 pub struct SwarmPulse {
-    pub timestamp: u64,
+    pub timestamp: f64,
     pub nodes: Vec<PulseNode>,
     pub edges: Vec<PulseConnection>,
 }
 
 impl SwarmPulse {
-    pub fn new(timestamp: u64) -> Self {
+    pub fn new(timestamp: f64) -> Self {
         Self {
             timestamp,
             nodes: Vec::new(),

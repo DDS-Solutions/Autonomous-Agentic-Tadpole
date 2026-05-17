@@ -28,7 +28,7 @@ use streaming_iterator::StreamingIterator;
 use tree_sitter::{Parser, Query, QueryCursor};
 
 /// A semantic code element extracted from source text.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct Symbol {
     /// The unadorned name of the symbol (e.g., function name).
     pub name: String,
@@ -42,7 +42,16 @@ pub struct Symbol {
     pub body: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+/// A reference to another symbol (e.g., a function call or type usage).
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+pub struct Reference {
+    /// The name of the symbol being referenced.
+    pub name: String,
+    /// Exact byte and line coordinates of the reference.
+    pub range: SymbolRange,
+}
+
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct SymbolRange {
     pub start_byte: usize,
     pub end_byte: usize,
@@ -83,6 +92,16 @@ impl SymbolExtractor {
         }
     }
 
+    pub fn extract_references(&mut self, path: &Path, content: &str) -> Vec<Reference> {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        match ext {
+            "rs" => self.extract_rust_refs(content),
+            "ts" | "tsx" => self.extract_typescript_refs(content),
+            _ => Vec::new(),
+        }
+    }
+
     fn extract_rust(&mut self, content: &str) -> Vec<Symbol> {
         let tree = match self.rust_parser.parse(content, None) {
             Some(t) => t,
@@ -103,6 +122,27 @@ impl SymbolExtractor {
         self.query_symbols(content, &query, tree.root_node())
     }
 
+    fn extract_rust_refs(&mut self, content: &str) -> Vec<Reference> {
+        let tree = match self.rust_parser.parse(content, None) {
+            Some(t) => t,
+            None => return Vec::new(),
+        };
+        let query_str = r#"
+            (call_expression
+              function: [
+                (identifier) @ref
+                (field_expression field: (field_identifier) @ref)
+              ]
+            )
+            (type_identifier) @ref
+        "#;
+        let query = match Query::new(&tree_sitter_rust::LANGUAGE.into(), query_str) {
+            Ok(q) => q,
+            Err(_) => return Vec::new(),
+        };
+        self.query_references(content, &query, tree.root_node())
+    }
+
     fn extract_typescript(&mut self, content: &str) -> Vec<Symbol> {
         let tree = match self.ts_parser.parse(content, None) {
             Some(t) => t,
@@ -121,6 +161,27 @@ impl SymbolExtractor {
             Err(_) => return Vec::new(),
         };
         self.query_symbols(content, &query, tree.root_node())
+    }
+
+    fn extract_typescript_refs(&mut self, content: &str) -> Vec<Reference> {
+        let tree = match self.ts_parser.parse(content, None) {
+            Some(t) => t,
+            None => return Vec::new(),
+        };
+        let query_str = r#"
+            (call_expression
+              function: [
+                (identifier) @ref
+                (member_expression property: (property_identifier) @ref)
+              ]
+            )
+            (type_identifier) @ref
+        "#;
+        let query = match Query::new(&tree_sitter_typescript::LANGUAGE_TSX.into(), query_str) {
+            Ok(q) => q,
+            Err(_) => return Vec::new(),
+        };
+        self.query_references(content, &query, tree.root_node())
     }
 
     fn query_symbols(
@@ -174,6 +235,37 @@ impl SymbolExtractor {
         }
 
         symbols
+    }
+
+    fn query_references(
+        &self,
+        content: &str,
+        query: &Query,
+        root_node: tree_sitter::Node,
+    ) -> Vec<Reference> {
+        let mut cursor = QueryCursor::new();
+        let mut matches = cursor.matches(query, root_node, content.as_bytes());
+        let mut refs = Vec::new();
+
+        while let Some(m) = matches.next() {
+            for capture in m.captures {
+                let name = capture
+                    .node
+                    .utf8_text(content.as_bytes())
+                    .unwrap_or("")
+                    .to_string();
+
+                let range = SymbolRange {
+                    start_byte: capture.node.start_byte(),
+                    end_byte: capture.node.end_byte(),
+                    start_line: capture.node.start_position().row,
+                    end_line: capture.node.end_position().row,
+                };
+
+                refs.push(Reference { name, range });
+            }
+        }
+        refs
     }
 }
 

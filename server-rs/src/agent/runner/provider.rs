@@ -417,7 +417,14 @@ impl AgentRunner {
 
         // Unified provider dispatch (local and cloud share the same failure tracking path)
         let provider = self.resolve_provider(ctx, client);
+        let start = std::time::Instant::now();
         let result = provider.generate(system_prompt, user_message, tools.clone()).await;
+        let duration = start.elapsed().as_secs_f32() * 1000.0;
+        
+        // Record latency if successful (we don't record failures to avoid skewing the performance baseline)
+        if result.is_ok() {
+            self.state.resources.hardware_profiler.record_inference_latency(duration);
+        }
 
         match result {
             Ok((text, tool_calls, usage)) => {

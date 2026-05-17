@@ -49,7 +49,12 @@ vi.mock('../services/tadpoleos_service', () => ({
 }));
 
 vi.mock('../stores/agent_store', () => ({
-    use_agent_store: Object.assign(vi.fn(), {
+    use_agent_store: Object.assign(vi.fn(() => ({
+        agents: [
+            { id: 'agent-1', name: 'Alpha Agent', role: 'Dev' },
+            { id: 'agent-2', name: 'Beta Agent', role: 'Tester' }
+        ]
+    })), {
         getState: vi.fn(() => ({
             fetch_agents: vi.fn(),
             agents: [
@@ -57,7 +62,16 @@ vi.mock('../stores/agent_store', () => ({
                 { id: 'agent-2', name: 'Beta Agent', role: 'Tester' }
             ]
         }))
-    })
+    }),
+    use_agent_registry_store: {
+        getState: vi.fn(() => ({
+            fetch_agents: vi.fn(),
+            agents: [
+                { id: 'agent-1', name: 'Alpha Agent', role: 'Dev' },
+                { id: 'agent-2', name: 'Beta Agent', role: 'Tester' }
+            ]
+        }))
+    }
 }));
 
 vi.mock('../services/event_bus', () => ({
@@ -151,10 +165,9 @@ describe('Scheduled_Jobs Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         
-        // Ensure use_agent_store hook returns our mocked agents array directly
-        (use_agent_store as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: any) => {
+        (use_agent_store as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
             const state = (use_agent_store as any).getState();
-            return selector(state);
+            return state;
         });
 
         (tadpole_os_service.get_scheduled_jobs as any).mockResolvedValue(mock_jobs);
@@ -307,6 +320,29 @@ describe('Scheduled_Jobs Page', () => {
             name: 'New WF Job',
             workflow_id: 'wf-1'
         }));
+    });
+
+    it('filters agents in the creation form', async () => {
+        await act(async () => {
+            render(<Scheduled_Jobs />);
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /scheduled_jobs.new_job/i }));
+        });
+
+        const filter_input = screen.getByPlaceholderText(/scheduled_jobs.filter_agents/i);
+        
+        await act(async () => {
+            fireEvent.change(filter_input, { target: { value: 'Beta' } });
+        });
+
+        // Should only show Beta Agent in the select
+        const select = screen.getByLabelText(/scheduled_jobs.target_agent/i) as HTMLSelectElement;
+        const options = Array.from(select.options).map(o => o.text);
+        
+        expect(options).toContain('Beta Agent (Tester)');
+        expect(options).not.toContain('Alpha Agent (Dev)');
     });
 });
 

@@ -99,8 +99,9 @@ describe('Workspaces Page', () => {
             render(<Workspaces />);
         });
 
-        expect(screen.getByText('WORKSPACE MANAGER')).toBeInTheDocument();
-        expect(screen.getByText('1 ACTIVE WORKSPACES', { exact: false })).toBeInTheDocument();
+        expect(screen.getByText(/WORKSPACE MANAGER/i)).toBeInTheDocument();
+        expect(screen.getByText(/FILE SYSTEM & REPOSITORY SYNC/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 ACTIVE WORKSPACES/i)).toBeInTheDocument();
     });
 
     it('renders cluster details correctly', async () => {
@@ -111,6 +112,10 @@ describe('Workspaces Page', () => {
         // Cluster name & Department
         expect(screen.getByText('FRONTEND CORE')).toBeInTheDocument();
         expect(screen.getByText(/Engineering CLUSTER/i)).toBeInTheDocument();
+
+        // New buttons
+        expect(screen.getByRole('button', { name: /Resync Cluster/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Copy Workspace Path/i })).toBeInTheDocument();
 
         // Active Tasks count (1 pending)
         expect(screen.getByText(/Active Task Branches \(1\)/i)).toBeInTheDocument();
@@ -126,7 +131,7 @@ describe('Workspaces Page', () => {
         });
 
         // The approve button should be present for the 'pending' task
-        const approve_button = screen.getAllByRole('button')[0]; // first button is approve, second is reject
+        const approve_button = screen.getByRole('button', { name: /Approve and merge changes/i });
         
         expect(approve_button).toBeInTheDocument();
         
@@ -142,7 +147,7 @@ describe('Workspaces Page', () => {
             render(<Workspaces />);
         });
 
-        const reject_button = screen.getAllByRole('button')[1]; // second button is reject
+        const reject_button = screen.getByRole('button', { name: /Reject and discard proposed changes/i });
         
         expect(reject_button).toBeInTheDocument();
         

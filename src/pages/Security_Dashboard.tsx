@@ -12,18 +12,17 @@
 
 import { useEffect, useState } from 'react';
 import { 
-    ShieldCheck, 
-    Lock, 
     Activity, 
-    AlertCircle, 
-    Heart, 
+    ShieldCheck, 
+    DollarSign, 
     Zap, 
-    History,
-    DollarSign,
-    CheckCircle2,
-    ArrowUpDown,
-    Plus,
-    Minus
+    Heart, 
+    Lock, 
+    History, 
+    AlertCircle, 
+    ArrowUpDown, 
+    Minus, 
+    Plus 
 } from 'lucide-react';
 import { governance_service } from '../services/governance_service';
 import { tadpole_os_service, type Audit_Entry, type Agent_Health } from '../services/tadpoleos_service';
@@ -31,6 +30,8 @@ import { Tooltip } from '../components/ui';
 import { LD_Json } from '../components/ui/LD_Json';
 import { i18n } from '../i18n';
 import type { GovernanceQuotas } from '../contracts/governance';
+import { use_agent_store } from '../stores/agent_store';
+import { get_safe_date } from '../utils/date_utils';
 
 export default function Security_Dashboard() {
     const [quotas_state, set_quotas_state] = useState<GovernanceQuotas | null>(governance_service.get_current_quotas());
@@ -40,6 +41,9 @@ export default function Security_Dashboard() {
     const [sort_config, set_sort_config] = useState<{ key: 'name' | 'status' | 'quota', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
     const [is_updating_quota, set_is_updating_quota] = useState<string | null>(null);
 
+    const { agents } = use_agent_store();
+
+
     const fetch_data = async () => {
         try {
             const [q, a, h] = await Promise.all([
@@ -48,7 +52,7 @@ export default function Security_Dashboard() {
                 tadpole_os_service.get_agent_health()
             ]);
             set_quotas_state(q);
-            set_audit_trail_state(a.data || []);
+            set_audit_trail_state(Array.isArray(a) ? a : (a.data || []));
             set_agent_health_state(h.agents || []);
         } catch (error: unknown) {
             console.error("Failed to fetch security data", error);
@@ -106,7 +110,7 @@ export default function Security_Dashboard() {
 
         // Still poll for audit trail and agent health since they are not in governance_service yet
         const interval = setInterval(() => {
-            tadpole_os_service.get_audit_trail(1, 10).then(a => set_audit_trail_state(a.data || []));
+            tadpole_os_service.get_audit_trail(1, 10).then(a => set_audit_trail_state(Array.isArray(a) ? a : (a.data || [])));
             tadpole_os_service.get_agent_health().then(h => set_agent_health_state(h.agents || []));
         }, 10000);
 
@@ -146,7 +150,7 @@ export default function Security_Dashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="grid grid-rows-4 grid-flow-col gap-1">
+                    <div className="grid grid-rows-4 grid-flow-col gap-1" aria-label="Agent Status Indicators">
                         {agent_health_state.map(a => (
                             <Tooltip key={a.agent_id} content={`${a.name}: ${a.is_healthy ? i18n.t('security.status_healthy') : i18n.t('security.status_degraded')}`}>
                                 <div className={`w-8 h-8 rounded-full border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold ${a.is_healthy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -255,31 +259,36 @@ export default function Security_Dashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/50">
-                                {audit_trail_state.map(entry => (
-                                    <tr key={entry.id} className="hover:bg-zinc-800/20 transition-colors group">
-                                        <td className="p-3 text-zinc-500 font-mono">
-                                            {entry.decided_at ? new Date(entry.decided_at).toLocaleTimeString() : i18n.t('security.status_pending')}
-                                        </td>
-                                        <td className="p-3 text-zinc-300 font-medium">
-                                            {entry.agent_id}
-                                        </td>
-                                        <td className="p-3 text-green-400 font-mono">
-                                            {entry.skill || 'â€”'}
-                                        </td>
-                                        <td className="p-3">
-                                            <div className="flex items-center gap-2">
-                                                {entry.is_verified ? (
-                                                    <CheckCircle2 size={12} className="text-emerald-500" />
-                                                ) : (
-                                                    <AlertCircle size={12} className="text-red-500" />
-                                                )}
-                                                <span className={`uppercase font-bold tracking-tighter ${entry.is_verified ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                    {entry.is_verified ? (entry.decision || i18n.t('security.status_recorded')) : i18n.t('security.status_recorded')}
-                                                </span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {audit_trail_state.map(entry => {
+                                    const date = get_safe_date(entry);
+                                    const agent = agents.find(a => a.id === entry.agent_id);
+                                    
+                                    return (
+                                        <tr key={entry.id} className="hover:bg-zinc-800/20 transition-colors group">
+                                            <td className="p-3 text-zinc-500 font-mono" data-testid="audit-date">
+                                                {date ? date.toLocaleTimeString() : i18n.t('security.status_pending')}
+                                            </td>
+                                            <td className="p-3 text-zinc-300 font-medium">
+                                                {agent?.name || entry.agent_id}
+                                            </td>
+                                            <td className="p-3 text-green-400 font-mono">
+                                                {entry.skill || '—'}
+                                            </td>
+                                            <td className="p-3">
+                                                <div className="flex items-center gap-2">
+                                                    {entry.is_verified ? (
+                                                        <ShieldCheck size={12} className="text-emerald-500" />
+                                                    ) : (
+                                                        <AlertCircle size={12} className="text-red-500" />
+                                                    )}
+                                                    <span className={`uppercase font-bold tracking-tighter text-[10px] ${entry.is_verified ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {entry.is_verified ? (entry.decision || i18n.t('security.status_recorded')) : i18n.t('security.unverified')}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

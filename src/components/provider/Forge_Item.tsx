@@ -199,7 +199,7 @@ export function Forge_Item({ model, is_editing, on_edit, on_cancel, on_save, on_
                         </span>
                         <div className="w-1 h-1 rounded-full bg-zinc-800" />
                         <span className="text-[10px] text-zinc-400 font-mono font-bold">
-                            {(model.tpm || 100000).toLocaleString()} <span className="text-zinc-600 opacity-80">{i18n.t('common_units.tpm')}</span>
+                            {(model.tpm || 100000).toLocaleString()} <span className="text-zinc-600 opacity-80">{i18n.t('common.units.tpm')}</span>
                         </span>
                     </div>
                 </div>

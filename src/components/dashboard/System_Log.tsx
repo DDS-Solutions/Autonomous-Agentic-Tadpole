@@ -17,6 +17,7 @@ import { Tooltip } from '../ui';
 import { i18n } from '../../i18n';
 import { useLogs } from '../../hooks/use_logs';
 import { use_tab_store } from '../../stores/tab_store';
+import { get_safe_date } from '../../utils/date_utils';
 
 interface System_Log_Props {
     is_detached_view?: boolean;
@@ -73,7 +74,7 @@ export const System_Log: React.FC<System_Log_Props> = ({ is_detached_view = fals
                     <div key={log.id} className="space-y-1 group animate-in fade-in slide-in-from-left-4 duration-500 ease-out">
                         <div className="flex items-center gap-2">
                             <span className="text-zinc-500 text-[10px]">
-                                {is_client ? log.timestamp.toLocaleTimeString([], { hour12: false }) : '--:--:--'}
+                                {is_client ? get_safe_date(log.timestamp)?.toLocaleTimeString([], { hour12: false }) || '--:--:--' : '--:--:--'}
                             </span>
                             {log.agent_id ? (
                                 <span className="text-green-400 font-bold">

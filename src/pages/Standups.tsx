@@ -56,15 +56,36 @@ export default function Standups() {
     const clusters = use_workspace_store(state => state.clusters);
     const [target_type, set_target_type] = useState<'agent' | 'cluster'>('agent');
     const [selected_target_id, set_selected_target_id] = useState<string>('');
+    const [session_time, set_session_time] = useState(0);
     const last_spoken_ref = useRef<string | null>(null);
+    const recording_in_progress_ref = useRef(false);
+    const scroll_ref = useRef<HTMLDivElement>(null);
 
     // Initial setup fetch
     useEffect(() => {
         load_agents().then(data => {
             set_agents(data);
-            if (data.length > 0) set_selected_target_id(data[0].id);
+            if (data.length > 0 && !selected_target_id) set_selected_target_id(data[0].id);
         });
-    }, []);
+    }, [selected_target_id]);
+
+    // Timer logic
+    useEffect(() => {
+        let interval: ReturnType<typeof setInterval>;
+        if (is_live) {
+            set_session_time(0);
+            interval = setInterval(() => {
+                set_session_time(prev => prev + 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [is_live]);
+
+    const format_time = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
 
     // ── Voice & Transcript Subscriptions ──────────────────────────────────
     useEffect(() => {
@@ -86,13 +107,26 @@ export default function Standups() {
             }
         });
 
-        // 3. Neural Handoff: High-Fidelity Backend Transcription Orchestration
+        return unsubscribe_bus;
+    }, []);
+
+    // Auto-scroll to bottom of transcript
+    useEffect(() => {
+        if (scroll_ref.current) {
+            scroll_ref.current.scrollTop = scroll_ref.current.scrollHeight;
+        }
+    }, [transcript_history]);
+
+    // 3. Neural Handoff: High-Fidelity Backend Transcription Orchestration
+    useEffect(() => {
         const handle_neural_sync = async () => {
-            if (is_live) {
+            if (is_live && !recording_in_progress_ref.current) {
                 console.debug(`🎙️ [Sovereignty] ${i18n.t('standups.debug_start_recording')}`);
+                recording_in_progress_ref.current = true;
                 await voice_client.start_recording();
-            } else {
+            } else if (!is_live && recording_in_progress_ref.current) {
                 console.debug(`🎙️ [Sovereignty] ${i18n.t('standups.debug_ending_sync')}`);
+                recording_in_progress_ref.current = false;
                 const audio_blob = await voice_client.stop_recording();
                 if (audio_blob && selected_target_id) {
                     // Show a temporary "processing" message
@@ -147,7 +181,6 @@ export default function Standups() {
         handle_neural_sync();
 
         return () => {
-            unsubscribe_bus();
             voice_client.stop_recording();
         };
     }, [is_live, selected_target_id, agents, clusters, target_type]);
@@ -182,9 +215,12 @@ export default function Standups() {
                     </div>
 
                     <Tooltip content={i18n.t('standups.tooltip_interface')} position="bottom">
-                        <div>
-                            <h2 className="text-2xl font-bold text-zinc-100 cursor-help">{i18n.t('standups.title')}</h2>
-                            <p className="text-zinc-500 mt-2 font-mono text-[10px] uppercase tracking-widest">{is_live ? i18n.t('standups.status_live', { time: '00:14:23' }) : i18n.t('standups.status_ready')}</p>
+                        <div className="bg-zinc-900/30 backdrop-blur-md px-8 py-4 rounded-2xl border border-zinc-800/50 shadow-xl">
+                            <h2 className="text-2xl font-bold text-zinc-100 cursor-help tracking-tight">{i18n.t('standups.title')}</h2>
+                            <p className="text-zinc-500 mt-2 font-mono text-[10px] uppercase tracking-[0.3em] flex items-center justify-center gap-2">
+                                {is_live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>}
+                                {is_live ? i18n.t('standups.status_live', { time: format_time(session_time) }) : i18n.t('standups.status_ready')}
+                            </p>
                         </div>
                     </Tooltip>
 
@@ -233,12 +269,15 @@ export default function Standups() {
                         <Tooltip content={is_live ? i18n.t('standups.tooltip_end') : i18n.t('standups.tooltip_start')} position="top">
                             <button
                                 onClick={() => set_is_live(!is_live)}
-                                className={`px-6 py-2 rounded-full font-bold flex items-center gap-2 transition-all ${is_live ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'bg-emerald-500 text-black hover:bg-emerald-400'}`}>
+                                aria-label={is_live ? i18n.t('standups.btn_end') : i18n.t('standups.btn_start')}
+                                className={`px-8 py-3 rounded-full font-bold flex items-center gap-3 transition-all duration-300 transform hover:scale-105 active:scale-95 ${is_live ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20' : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]'}`}>
                                 {is_live ? <><Pause size={18} /> {i18n.t('standups.btn_end')}</> : <><Play size={18} /> {i18n.t('standups.btn_start')}</>}
                             </button>
                         </Tooltip>
                         <Tooltip content={i18n.t('standups.tooltip_mic')} position="top">
-                            <button className={`p-2 rounded-full text-zinc-400 hover:bg-zinc-700 transition-colors ${is_live ? 'bg-red-900/40 text-red-400' : 'bg-zinc-800'}`}>
+                            <button 
+                                aria-label={i18n.t('standups.tooltip_mic')}
+                                className={`p-3 rounded-full text-zinc-400 hover:bg-zinc-700 transition-all duration-300 ${is_live ? 'bg-red-900/40 text-red-400' : 'bg-zinc-800'}`}>
                                 <Mic size={20} />
                             </button>
                         </Tooltip>
@@ -260,33 +299,58 @@ export default function Standups() {
                     </div>
                 </Tooltip>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div 
+                    ref={scroll_ref}
+                    className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
+                >
                     {transcript_history.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-zinc-600 italic text-sm">
                             {i18n.t('standups.empty_transcript')}
                         </div>
                     ) : (
                         transcript_history.map((line, i) => {
-                            const [speaker, text] = line.split(': ');
+                            const separator_idx = line.indexOf(': ');
+                            const speaker = separator_idx !== -1 ? line.substring(0, separator_idx) : 'System';
+                            const text = separator_idx !== -1 ? line.substring(separator_idx + 2) : line;
+                            
+                            const is_user = speaker === 'User';
+                            const is_system = speaker === 'System';
+                            const agent = !is_user && !is_system ? agents.find(a => a.name === speaker || a.id === speaker) : null;
+
                             return (
-                                <div key={i} className="flex gap-3">
-                                    <div className={`w-8 h-8 rounded shrink-0 flex items-center justify-center text-xs font-bold ${speaker === 'User' ? 'bg-emerald-900/50 text-emerald-400' :
-                                        speaker === 'Agent' ? 'bg-blue-900/50 text-green-400' :
-                                            speaker === 'Dev-1' ? 'bg-zinc-900/50 text-zinc-400' :
-                                                speaker === 'User' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-zinc-800 text-zinc-400'
-                                        }`}>
-                                        {speaker.substring(0, 1)}
+                                <div key={i} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <div 
+                                        className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-[10px] font-bold border transition-all ${
+                                            is_user ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' :
+                                            is_system ? 'bg-zinc-800 border-zinc-700 text-zinc-500' :
+                                            'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                                        }`}
+                                        style={agent?.theme_color ? { color: agent.theme_color, borderColor: `${agent.theme_color}40`, backgroundColor: `${agent.theme_color}10` } : {}}
+                                    >
+                                        {speaker.substring(0, 1).toUpperCase()}
                                     </div>
-                                    <div>
-                                        <div className="text-xs font-bold text-zinc-400 mb-0.5">{speaker}</div>
-                                        <p className="text-sm text-zinc-200">{text}</p>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                                                is_user ? 'text-emerald-500' : 
+                                                is_system ? 'text-zinc-500' : 
+                                                'text-blue-400'
+                                            }`} style={agent?.theme_color ? { color: agent.theme_color } : {}}>
+                                                {speaker}
+                                            </span>
+                                            {is_system && <span className="text-[8px] bg-zinc-800 px-1 rounded text-zinc-600 font-mono">SYS</span>}
+                                        </div>
+                                        <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-900/50 p-2 rounded-lg border border-transparent hover:border-zinc-800 transition-colors">
+                                            {text}
+                                        </p>
                                     </div>
                                 </div>
                             )
                         })
                     )}
                     {active_speaker && (
-                        <div className="flex gap-2 items-center text-zinc-500 text-xs pl-11 animate-pulse">
+                        <div className="flex gap-2 items-center text-zinc-500 text-[10px] pl-11 animate-pulse font-mono uppercase tracking-widest">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700"></span>
                             {i18n.t('standups.label_speaking', { name: active_speaker })}
                         </div>
                     )}

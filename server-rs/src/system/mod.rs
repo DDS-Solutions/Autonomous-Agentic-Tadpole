@@ -18,5 +18,6 @@ pub mod profiler;
 pub mod actors;
 pub mod orchestrator;
 pub mod manifest;
+pub mod supervisor;
 
 // Metadata: [mod]

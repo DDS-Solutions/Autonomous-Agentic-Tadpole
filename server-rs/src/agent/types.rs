@@ -1103,6 +1103,7 @@ pub struct ToolCall {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolDefinition {
     pub function_declarations: Vec<FunctionDeclaration>,
 }

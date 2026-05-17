@@ -93,7 +93,7 @@ export type Connection_State = 'connecting' | 'connected' | 'disconnected' | 're
 type State_Listener = (state: Connection_State) => void;
 
 type Store_Bindings = {
-    use_agent_store: typeof import('../stores/agent_store').use_agent_store;
+    use_agent_registry_store: typeof import('../stores/agent_store').use_agent_registry_store;
     use_sovereign_store: typeof import('../stores/sovereign_store').use_sovereign_store;
     use_trace_store: typeof import('../stores/trace_store').use_trace_store;
 };
@@ -247,7 +247,7 @@ class Tadpole_OS_Socket_Client {
                 import('../stores/sovereign_store'),
                 import('../stores/trace_store')
             ]).then(([agent_store, sovereign_store, trace_store]) => ({
-                use_agent_store: agent_store.use_agent_store,
+                use_agent_registry_store: agent_store.use_agent_registry_store,
                 use_sovereign_store: sovereign_store.use_sovereign_store,
                 use_trace_store: trace_store.use_trace_store
             }));
@@ -382,15 +382,18 @@ class Tadpole_OS_Socket_Client {
     private async handle_socket_message(raw_data: Record<string, unknown>): Promise<void> {
         // SEC-02: Sanitize all incoming telemetry data before it reaches the event bus or stores.
         const data = sanitize_payload(raw_data);
-        const { use_agent_store, use_sovereign_store, use_trace_store } = await this.get_store_bindings();
+        const { use_agent_registry_store, use_sovereign_store, use_trace_store } = await this.get_store_bindings();
         const sovereign_store = use_sovereign_store.getState();
 
         // Refresh agent name cache lazily (only when stale)
         if (this.cache_stale) {
-            const agents = use_agent_store.getState().agents;
+            const raw_agents = use_agent_registry_store.getState().agents;
+            const agents = Array.isArray(raw_agents) ? raw_agents : [];
             this.agent_name_cache.clear();
             for (const a of agents) {
-                this.agent_name_cache.set(a.id, a.name);
+                if (a && a.id && a.name) {
+                    this.agent_name_cache.set(a.id, a.name);
+                }
             }
             this.cache_stale = false;
         }

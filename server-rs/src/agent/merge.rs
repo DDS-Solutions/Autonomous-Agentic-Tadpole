@@ -57,7 +57,7 @@ pub struct AgentConfigUpdate {
     pub provider: Option<ModelProvider>,
     #[serde(alias = "model")]
     pub model_id: Option<String>,
-    #[serde(default, alias = "modelConfig")]
+    #[serde(default, alias = "modelConfig", alias = "model_config")]
     pub model_config: Option<ModelConfig>,
     #[serde(default, alias = "model2")]
     pub model_2: Option<String>,
@@ -76,7 +76,9 @@ pub struct AgentConfigUpdate {
     pub workflows: Option<Vec<String>>,
     pub mcp_tools: Option<Vec<String>>,
     pub active_model_slot: Option<i32>,
+    #[serde(default, alias = "modelConfig2", alias = "model_config2")]
     pub model_config2: Option<ModelConfig>,
+    #[serde(default, alias = "modelConfig3", alias = "model_config3")]
     pub model_config3: Option<ModelConfig>,
     pub voice_id: Option<String>,
     pub voice_engine: Option<String>,

@@ -106,7 +106,7 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                                 </Tooltip>
                             </div>
                             <div className="relative">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-[10px]">{i18n.t('common_units.currency')}</span>
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-[10px]">{i18n.t('common.units.currency')}</span>
                                 <input
                                     type="number"
                                     step="0.01"
@@ -205,7 +205,7 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                                         <span className="text-[10px] text-zinc-600 font-mono">| {(cluster.collaborators || []).length} {i18n.t('missions.label_nodes')}</span>
                                         <Tooltip content={i18n.t('missions.tooltip_treasury')} position="top">
                                             <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-green-500/10 border border-green-500/20 hover:border-green-500/40 transition-all cursor-text">
-                                                <span className="text-xs text-green-400 font-mono font-bold">{i18n.t('common_units.currency')}</span>
+                                                <span className="text-xs text-green-400 font-mono font-bold">{i18n.t('common.units.currency')}</span>
                                                 <input
                                                     type="number"
                                                     step="0.01"
@@ -235,6 +235,7 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Tooltip content={is_active_cluster ? i18n.t('missions.tooltip_deactivate') : i18n.t('missions.tooltip_activate')} position="top">
                                     <button
+                                        aria-label={is_active_cluster ? i18n.t('missions.tooltip_deactivate') : i18n.t('missions.tooltip_activate')}
                                         onClick={(e) => { e.stopPropagation(); on_toggle_active(cluster.id); }}
                                         className={`p-1 rounded hover:bg-zinc-800 transition-colors ${is_active_cluster ? 'text-emerald-400' : 'text-zinc-600'}`}
                                     >
@@ -243,6 +244,7 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                                 </Tooltip>
                                 <Tooltip content={i18n.t('missions.tooltip_delete')} position="top">
                                     <button
+                                        aria-label={i18n.t('missions.tooltip_delete')}
                                         onClick={(e) => { e.stopPropagation(); on_delete_cluster(cluster.id); }}
                                         className="p-1 rounded hover:bg-red-900/20 text-zinc-600 hover:text-red-400 transition-colors"
                                     >

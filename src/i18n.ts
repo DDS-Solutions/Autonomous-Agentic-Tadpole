@@ -10,7 +10,39 @@
  * - **Telemetry Link**: Search for `[I18n]` or `i18n.t` in browser logs.
  */
 
-import en from './locales/en.json';
+import common from './locales/common.json';
+import system from './locales/system.json';
+import layout from './locales/layout.json';
+import swarm from './locales/swarm.json';
+import telemetry from './locales/telemetry.json';
+import security from './locales/security.json';
+import skills from './locales/skills.json';
+import provider from './locales/provider.json';
+import config from './locales/config.json';
+import jobs from './locales/jobs.json';
+import templates from './locales/templates.json';
+import docs from './locales/docs.json';
+import workspaces from './locales/workspaces.json';
+import voice from './locales/voice.json';
+import chat from './locales/chat.json';
+
+const en = {
+  common,
+  system,
+  layout,
+  swarm,
+  telemetry,
+  security,
+  skills,
+  provider,
+  config,
+  templates,
+  scheduled_jobs: jobs,
+  docs,
+  workspaces,
+  voice,
+  chat
+};
 
 type LocaleData = typeof en;
 
@@ -23,7 +55,7 @@ interface TOptions {
  * Core internationalization class for the Tadpole OS ecosystem.
  */
 class I18n {
-  private data: LocaleData = en;
+  private data: any = en;
 
   /**
    * t
@@ -35,9 +67,12 @@ class I18n {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t(key: string, params?: Record<string, string | number> | TOptions): any {
+    if (!key) return '';
+
     const keys = key.split('.');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any = this.data;
+    let found = true;
     
     for (const k of keys) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,30 +80,82 @@ class I18n {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         result = (result as Record<string, any>)[k];
       } else {
-        result = key;
+        found = false;
         break;
       }
     }
 
-    // If returnObjects is requested, return the raw result
-    if (params && (params as TOptions).returnObjects) {
+    // Defensive legacy fallback: scan modules for the first part of the dot-notation path
+    if (!found) {
+      const fallbackKeys = key.split('.');
+      const firstKey = fallbackKeys[0];
+      for (const [moduleName, moduleContent] of Object.entries(this.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (moduleContent && typeof moduleContent === 'object' && firstKey in (moduleContent as Record<string, any>)) {
+          // Try to resolve the full path starting from this module
+          let fallbackResult = moduleContent;
+          let fallbackFound = true;
+          for (const k of fallbackKeys) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (fallbackResult && typeof fallbackResult === 'object' && k in (fallbackResult as Record<string, any>)) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              fallbackResult = (fallbackResult as Record<string, any>)[k];
+            } else {
+              fallbackFound = false;
+              break;
+            }
+          }
+          if (fallbackFound) {
+            result = fallbackResult;
+            found = true;
+            console.warn(`[I18n Warning] Legacy flat lookup used for "${key}". Please migrate to absolute dot-notation path: "${moduleName}.${key}"`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      result = key;
+    }
+
+    const return_objects = params && (params as any).returnObjects;
+    if (return_objects) {
       return result;
     }
     
-    let text = typeof result === 'string' ? result : key;
+    let text = found && typeof result === 'string' ? result : (params && (params as any).defaultValue) || key;
     
-    if (params && !(params as TOptions).returnObjects) {
+    if (params) {
       Object.entries(params as Record<string, string | number>).forEach(([k, v]) => {
-        text = text.replace(new RegExp(`{{${k}}}`, 'g'), String(v));
+        if (k !== 'defaultValue') {
+          const valStr = typeof v === 'string' ? this.escapeHtml(v) : String(v);
+          text = text.replace(new RegExp(`{{${k}}}`, 'g'), valStr);
+        }
       });
     }
     
     return text;
   }
+
+  /**
+   * escapeHtml
+   * Neutralizes dynamic XSS injection vectors in parameters.
+   */
+  private escapeHtml(str: string): string {
+    return str.replace(/[&<>"']/g, (m) => {
+      switch (m) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#039;';
+        default: return m;
+      }
+    });
+  }
 }
 
 export const i18n = new I18n();
-
-// Metadata: [i18n]
 
 // Metadata: [i18n]

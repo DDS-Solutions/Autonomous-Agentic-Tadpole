@@ -185,7 +185,7 @@ export const agent_api_service = {
 
                 if (provider_api_key) {
                     body.api_key = provider_api_key;
-                    const inventory_model = model_store.models.find((m: Model_Entry) => m.name === current_model_id || m.modelId === current_model_id);
+                    const inventory_model = model_store.models.find((m: Model_Entry) => m.name === current_model_id || m.id === current_model_id);
                     if (inventory_model) {
                         if (inventory_model.rpm) body.rpm = inventory_model.rpm;
                         if (inventory_model.tpm) body.tpm = inventory_model.tpm;
@@ -223,8 +223,8 @@ export const agent_api_service = {
                                        err.status === 504;
 
                     if (is_conn_fail && attempt_count < 2) {
-                        const agent_store = (await import('../stores/agent_store')).use_agent_store.getState();
-                        const agent = agent_store.get_agent(agent_id);
+                        const agent_registry_store = (await import('../stores/agent_store')).use_agent_registry_store.getState();
+                        const agent = agent_registry_store.agents.find(a => a.id === agent_id);
                         
                         if (agent) {
                             const next_slot = attempt_count === 0 ? 2 : 3;

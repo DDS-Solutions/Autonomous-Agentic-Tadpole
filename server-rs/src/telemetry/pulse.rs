@@ -33,7 +33,7 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
         interval.tick().await;
 
         // 1. Build the pulse from the current registry state
-        let timestamp = chrono::Utc::now().timestamp_millis() as u64;
+        let timestamp = chrono::Utc::now().timestamp_millis() as f64;
         let mut pulse = SwarmPulse::new(timestamp);
         let mut active_missions = HashSet::new();
 

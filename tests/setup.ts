@@ -10,8 +10,10 @@
  * - **Telemetry Link**: Search `[setup]` in observability traces.
  */
 
-import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+import { expect, vi } from 'vitest';
+
+expect.extend(matchers);
 
 const createStorageMock = (): Storage => {
   let store: Record<string, string> = {};

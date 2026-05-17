@@ -140,6 +140,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/system", build_system_routes())
         .nest("/governance", build_governance_routes())
         .nest("/sovereign", build_sovereign_routes())
+        .nest("/intelligence", build_intelligence_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/env-schema", get(routes::env_schema::get_env_schema))
         .route_layer(axum::middleware::from_fn_with_state(
@@ -166,6 +167,12 @@ fn build_sovereign_routes() -> Router<Arc<AppState>> {
             "/missions/{mission_id}/nodes",
             post(routes::sovereign_state::append_session_node),
         )
+}
+
+fn build_intelligence_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/graph", get(routes::intelligence::get_code_graph))
+        .route("/blast-radius", get(routes::intelligence::get_blast_radius))
 }
 
 fn build_governance_routes() -> Router<Arc<AppState>> {

@@ -92,8 +92,30 @@ class event_bus_service {
             this.channel.onmessage = (event) => {
                 if (event.data?.type === 'EVENT_EMIT' && event.data.payload) {
                     this.internal_emit(event.data.payload, false);
+                } else if (event.data?.type === 'HISTORY_REQUEST') {
+                    // Another tab wants our history. Send it if we have any.
+                    if (this.count > 0 && this.channel) {
+                        this.channel.postMessage({
+                            type: 'HISTORY_RESPONSE',
+                            payload: this.get_history()
+                        });
+                    }
+                } else if (event.data?.type === 'HISTORY_RESPONSE' && event.data.payload) {
+                    // We received history from another tab.
+                    // Only apply if we are currently empty (to avoid overwriting our own recent logs)
+                    if (this.count === 0) {
+                        const history = event.data.payload as log_entry[];
+                        history.forEach(entry => this.internal_emit(entry, false));
+                    }
                 }
             };
+
+            // Request history from any active tabs
+            setTimeout(() => {
+                if (this.count === 0 && this.channel) {
+                    this.channel.postMessage({ type: 'HISTORY_REQUEST' });
+                }
+            }, 100);
         }
     }
 

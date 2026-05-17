@@ -205,7 +205,7 @@ export const Import_Preview_Modal: React.FC<Import_Preview_Modal_Props> = ({
                         onClick={handle_confirm}
                         className="primary-cta min-h-[48px] px-10 py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white rounded-xl text-[clamp(12px,1.5vw,14px)] font-black shadow-xl shadow-cyan-500/25 active:scale-[0.96] transition-all uppercase tracking-[0.15em] flex items-center gap-3 border border-cyan-400/20"
                     >
-                        <span>{i18n.t('import.btn_confirm')}</span>
+                        <span>{i18n.t('common.btn_confirm')}</span>
                         <span className="text-base opacity-70 leading-none mt-0.5">⇢</span>
                     </button>
                 </div>

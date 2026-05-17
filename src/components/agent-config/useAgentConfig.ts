@@ -47,8 +47,6 @@ export function useAgentConfig(
     }, [agent]);
 
     const [state, dispatch] = useReducer(config_reducer, initial_state);
-    const models = use_model_store((s) => s.models);
-
     // Background Sync: Rehydrate form if authoritative store state changes (e.g., via Agent Card updates)
     // Hardened: Skip rehydration during active save or if the incoming agent matches current identity (Sync-Fix-01)
     useEffect(() => {

@@ -75,7 +75,7 @@ export const Command_Table: React.FC = (): React.ReactElement => {
                             <span>{i18n.t('command.system_load')}</span>
                         </div>
                         <span className="text-[11px] font-mono text-zinc-500 mt-0.5 uppercase">
-                            {i18n.t('command.nominal')} (0.42{i18n.t('common_units.ms')})
+                            {i18n.t('command.nominal')} (0.42{i18n.t('common.units.ms')})
                         </span>
                     </div>
                 </div>
@@ -201,13 +201,13 @@ export const Command_Table: React.FC = (): React.ReactElement => {
                         <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                         <span>{i18n.t('command.nodes_online', { count: online_nodes_count })}</span>
                     </div>
-                    <span>{i18n.t('command.sync_freq', { freq: '60' })}{i18n.t('common_units.hz')}</span>
+                    <span>{i18n.t('command.sync_freq', { freq: '60' })}{i18n.t('common.units.hz')}</span>
                     <span className="text-zinc-700 hidden sm:inline">|</span>
                     <span className="hidden sm:inline">{i18n.t('command.version', { ver: '4.2.0-STABLE' })}</span>
                 </div>
                 <div className="flex items-center gap-2 group-hover:text-zinc-400 transition-colors">
                     <Activity size={12} className="text-zinc-600" />
-                    <span className="uppercase tracking-widest text-[9px] font-bold">{i18n.t('command.latency', { val: '0.04' })}{i18n.t('common_units.ms')}</span>
+                    <span className="uppercase tracking-widest text-[9px] font-bold">{i18n.t('command.latency', { val: '0.04' })}{i18n.t('common.units.ms')}</span>
                 </div>
             </div>
         </motion.div>

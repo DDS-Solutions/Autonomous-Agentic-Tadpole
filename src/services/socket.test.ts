@@ -72,6 +72,14 @@ vi.mock('../stores/agent_store', () => ({
                 { id: '2', name: 'Tadpole Alpha' }
             ]
         }))
+    },
+    use_agent_registry_store: {
+        getState: vi.fn(() => ({
+            agents: [
+                { id: '1', name: 'Agent of Nine' },
+                { id: '2', name: 'Tadpole Alpha' }
+            ]
+        }))
     }
 }));
 

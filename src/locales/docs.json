@@ -1,0 +1,18 @@
+{
+  "tab_knowledge": "Knowledge Base",
+  "tab_manual": "Operations Manual",
+  "search_placeholder": "Search repository...",
+  "manual_sections": "Manual Index",
+  "aria_search": "Search Documentation",
+  "aria_toggle_category": "Toggle Category {{category}}",
+  "aria_select_doc": "View Document: {{title}}",
+  "aria_scroll_to": "Scroll to Section: {{section}}",
+  "no_sections": "No sections found.",
+  "loading": "Synchronizing Neural Docs...",
+  "error_title": "# Connection Failed",
+  "error_desc": "The neural link to the documentation engine could not be established.",
+  "error_diagnostics": "Diagnostics:",
+  "error_endpoint": "- **Endpoint:** {{endpoint}}",
+  "error_protocol": "- **Protocol Error:** {{message}}",
+  "error_footer": "*Try refreshing the dashboard or checking your Engine connection in Settings.*"
+}

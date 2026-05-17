@@ -381,7 +381,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                                 onClick={handlePromote}
                                 className="px-4 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-emerald-500/20 transition-all"
                             >
-                                {i18n.t('agent_config.btn_confirm')}
+                                {i18n.t('common.btn_confirm')}
                             </button>
                         </div>
                     )}

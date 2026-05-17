@@ -130,6 +130,12 @@ const DEFAULT_CLUSTERS: Mission_Cluster[] = [
 
 let proposal_timeout: ReturnType<typeof setTimeout> | undefined;
 
+const SYNC_CHANNEL = 'tadpole-os-workspace-sync';
+const sync_channel = typeof window !== 'undefined' ? new BroadcastChannel(SYNC_CHANNEL) : null;
+const TAB_ID = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}`;
+
+let is_applying_sync = false;
+
 export const use_workspace_store = create<Workspace_State>()(
     persist(
         (set, get) => ({
@@ -425,6 +431,41 @@ export const use_workspace_store = create<Workspace_State>()(
         }
     )
 );
+
+if (sync_channel) {
+    sync_channel.onmessage = (event) => {
+        if (event.data.type === 'SYNC_WORKSPACE' && event.data.source_id !== TAB_ID) {
+            is_applying_sync = true;
+            use_workspace_store.setState({ 
+                clusters: event.data.payload.clusters,
+                active_proposals: event.data.payload.active_proposals
+            });
+            is_applying_sync = false;
+        } else if (event.data.type === 'REQUEST_WORKSPACE') {
+            const state = use_workspace_store.getState();
+            sync_channel.postMessage({ 
+                type: 'SYNC_WORKSPACE', 
+                payload: { clusters: state.clusters, active_proposals: state.active_proposals },
+                source_id: TAB_ID 
+            });
+        }
+    };
+
+    use_workspace_store.subscribe((state) => {
+        if (!is_applying_sync && sync_channel) {
+            sync_channel.postMessage({ 
+                type: 'SYNC_WORKSPACE', 
+                payload: { clusters: state.clusters, active_proposals: state.active_proposals },
+                source_id: TAB_ID 
+            });
+        }
+    });
+
+    // Request initial state
+    setTimeout(() => {
+        sync_channel.postMessage({ type: 'REQUEST_WORKSPACE', source_id: TAB_ID });
+    }, 250);
+}
 
 
 // Metadata: [workspace_store]

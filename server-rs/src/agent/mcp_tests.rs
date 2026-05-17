@@ -23,6 +23,7 @@ mod tests {
     use crate::agent::script_skills::SkillDefinition;
     use crate::security::permissions::PermissionPolicy;
     use dashmap::DashMap;
+    use crate::secret_redactor::SecretRedactor;
     use serde_json::json;
     use sqlx::SqlitePool;
     use std::sync::Arc;
@@ -38,6 +39,7 @@ mod tests {
             tokio::sync::broadcast::channel(1).0,
             None,
             setup_mock_policy().await,
+            Arc::new(SecretRedactor::noop()),
         );
         let all_skills = DashMap::new();
         let agent_skills = vec![];
@@ -56,6 +58,7 @@ mod tests {
             tokio::sync::broadcast::channel(1).0,
             None,
             setup_mock_policy().await,
+            Arc::new(SecretRedactor::noop()),
         );
         let all_skills = DashMap::new();
 
@@ -88,6 +91,7 @@ mod tests {
             tokio::sync::broadcast::channel(1).0,
             None,
             setup_mock_policy().await,
+            Arc::new(SecretRedactor::noop()),
         );
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");
@@ -128,6 +132,7 @@ mod tests {
             tokio::sync::broadcast::channel(1).0,
             None,
             setup_mock_policy().await,
+            Arc::new(SecretRedactor::noop()),
         );
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");
@@ -169,6 +174,7 @@ mod tests {
             tokio::sync::broadcast::channel(1).0,
             None,
             setup_mock_policy().await,
+            Arc::new(SecretRedactor::noop()),
         );
         let all_skills = DashMap::new();
         let workspace = std::path::PathBuf::from(".");

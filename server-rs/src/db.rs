@@ -6,11 +6,9 @@
 //! Tadpole OS engine. Features **WAL (Write-Ahead Logging)** and
 //! `synchronous=NORMAL`: optimized for the high-throughput state
 //! updates required by autonomous agent swarms. Implements **Automated
-//! Migrations** via `sqlx` and a **Hotfix Reconciler**: handles
-//! out-of-band schema modifications (e.g., manual column additions) to
-//! prevent migration checksum failures during system boot. AI agents
-//! should monitor the `_sqlx_migrations` table to verify schema
-//! integrity before executing complex data operations (DB-01).
+//! Migrations** via `sqlx`: ensures the schema is always consistent 
+//! and up-to-date with the `migrations/` directory before system 
+//! boot (DB-01).
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Database locked (`SQLITE_BUSY`) during
@@ -32,10 +30,7 @@ use anyhow::Result;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 use std::str::FromStr;
 
-const CONNECTOR_COLUMN_FIX_MIGRATION_VERSION: i64 = 20260328000100;
-const CREATED_AT_FIX_MIGRATION_VERSION: i64 = 20260405000100;
-const CURRENT_TASK_FIX_MIGRATION_VERSION: i64 = 20260405000200;
-const AGENT_AWARE_PERMISSIONS_MIGRATION_VERSION: i64 = 20260513000100;
+
 
 /// Initializes the SQLite database pool and executes pending migrations.
 ///
@@ -62,21 +57,7 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
     // SEC: This ensures the schema is always consistent and up-to-date.
     let migrator = sqlx::migrate!("./migrations");
 
-    // Fresh DB detection: if migrations table doesn't exist, we skip hotfix pre-marking
-    // to save overhead on every unit test boot.
-    let is_fresh = sqlx::query_scalar::<_, i64>(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_sqlx_migrations' LIMIT 1",
-    )
-    .fetch_optional(&pool)
-    .await?
-    .is_none();
 
-    if !is_fresh || !database_url.contains(":memory:") {
-        premark_connector_column_fix_migration_if_needed(&pool, &migrator).await?;
-        premark_created_at_fix_migration_if_needed(&pool, &migrator).await?;
-        premark_current_task_fix_migration_if_needed(&pool, &migrator).await?;
-        premark_agent_aware_permissions_migration_if_needed(&pool, &migrator).await?;
-    }
 
     if let Err(e) = migrator.run(&pool).await {
         tracing::error!("❌ Critical failure during database migrations: {}", e);
@@ -316,282 +297,7 @@ fn find_bundled_file(resource_root: &str, relative_path: &str) -> Option<std::pa
     None
 }
 
-// ─────────────────────────────────────────────────────────
-//  Hotfix Reconciler: Generic Migration Pre-Marker
-// ─────────────────────────────────────────────────────────
 
-/// Configuration for a single hotfix migration pre-mark operation.
-struct HotfixMigration {
-    /// The table to check for the pre-existing column.
-    table: &'static str,
-    /// The column name to check for.
-    column: &'static str,
-    /// The migration version to pre-mark.
-    version: i64,
-    /// Human-readable label for logging.
-    label: &'static str,
-    /// Whether to check that the table exists first (skip for non-initial migrations).
-    check_table_exists: bool,
-    /// Whether to force-update the checksum if the migration is already applied.
-    force_checksum_sync: bool,
-}
-
-/// Generic migration pre-marker that handles all hotfix reconciliation scenarios.
-///
-/// This function prevents migration failures when schema changes were applied
-/// out-of-band (e.g., manual `ALTER TABLE` commands, previous broken migrations).
-/// It checks if a target column already exists, and if so, pre-marks the migration
-/// as applied using the embedded checksum so SQLx validation remains intact.
-async fn premark_hotfix_migration(
-    pool: &SqlitePool,
-    migrator: &sqlx::migrate::Migrator,
-    config: &HotfixMigration,
-) -> Result<()> {
-    // 1. Optionally check if the target table exists (fresh DB guard)
-    if config.check_table_exists {
-        let table_exists = sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1 LIMIT 1",
-        )
-        .bind(config.table)
-        .fetch_optional(pool)
-        .await?
-        .is_some();
-        if !table_exists {
-            return Ok(());
-        }
-    }
-
-    // 2. Check if the column already exists
-    let query = format!(
-        "SELECT 1 FROM pragma_table_info('{}') WHERE name='{}' LIMIT 1",
-        config.table, config.column
-    );
-    let column_exists = sqlx::query_scalar::<_, i64>(&query)
-        .fetch_optional(pool)
-        .await?
-        .is_some();
-    if !column_exists {
-        return Ok(());
-    }
-
-    // 3. Ensure the migrations table exists
-    sqlx::query(
-        r#"
-CREATE TABLE IF NOT EXISTS _sqlx_migrations (
-    version BIGINT PRIMARY KEY,
-    description TEXT NOT NULL,
-    installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    success BOOLEAN NOT NULL,
-    checksum BLOB NOT NULL,
-    execution_time BIGINT NOT NULL
-);
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // 4. Check if already applied
-    let already_applied =
-        sqlx::query_scalar::<_, i64>("SELECT 1 FROM _sqlx_migrations WHERE version = ?1 LIMIT 1")
-            .bind(config.version)
-            .fetch_optional(pool)
-            .await?
-            .is_some();
-
-    // 5. Find the migration in the embedded set
-    let Some(migration) = migrator.iter().find(|m| m.version == config.version) else {
-        tracing::warn!(
-            "⚠️ {} fix migration {} not found in embedded migrations; skipping pre-mark",
-            config.label,
-            config.version
-        );
-        return Ok(());
-    };
-
-    if already_applied {
-        if config.force_checksum_sync {
-            // Force-update the checksum to resolve VersionMismatch errors.
-            sqlx::query("UPDATE _sqlx_migrations SET checksum = ?1 WHERE version = ?2")
-                .bind(migration.checksum.as_ref())
-                .bind(config.version)
-                .execute(pool)
-                .await?;
-        }
-        return Ok(());
-    }
-
-    // 6. Pre-mark as applied
-    sqlx::query(
-        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (?1, ?2, TRUE, ?3, 0)",
-    )
-    .bind(migration.version)
-    .bind(migration.description.as_ref())
-    .bind(migration.checksum.as_ref())
-    .execute(pool)
-    .await?;
-
-    tracing::warn!(
-        "⚠️ Pre-marked migration {} because {}.{} already exists",
-        config.version,
-        config.table,
-        config.column
-    );
-
-    Ok(())
-}
-
-/// Handles legacy hotfixed environments where `connector_configs` was added manually.
-async fn premark_connector_column_fix_migration_if_needed(
-    pool: &SqlitePool,
-    migrator: &sqlx::migrate::Migrator,
-) -> Result<()> {
-    premark_hotfix_migration(pool, migrator, &HotfixMigration {
-        table: "agents",
-        column: "connector_configs",
-        version: CONNECTOR_COLUMN_FIX_MIGRATION_VERSION,
-        label: "Connector",
-        check_table_exists: true,
-        force_checksum_sync: false,
-    }).await
-}
-
-/// Handles environments where `created_at` column was added out-of-band.
-async fn premark_created_at_fix_migration_if_needed(
-    pool: &SqlitePool,
-    migrator: &sqlx::migrate::Migrator,
-) -> Result<()> {
-    premark_hotfix_migration(pool, migrator, &HotfixMigration {
-        table: "agents",
-        column: "created_at",
-        version: CREATED_AT_FIX_MIGRATION_VERSION,
-        label: "Created-at",
-        check_table_exists: true,
-        force_checksum_sync: true,
-    }).await
-}
-
-/// Handles environments where `current_task` column was added out-of-band.
-async fn premark_current_task_fix_migration_if_needed(
-    pool: &SqlitePool,
-    migrator: &sqlx::migrate::Migrator,
-) -> Result<()> {
-    premark_hotfix_migration(pool, migrator, &HotfixMigration {
-        table: "agents",
-        column: "current_task",
-        version: CURRENT_TASK_FIX_MIGRATION_VERSION,
-        label: "Current-task",
-        check_table_exists: false, // Table guaranteed to exist at this point
-        force_checksum_sync: true,
-    }).await
-}
-
-/// Handles environments where `permission_policies` table might have been created
-/// without `agent_id` due to a broken migration logic in `20260513000100`.
-async fn premark_agent_aware_permissions_migration_if_needed(
-    pool: &SqlitePool,
-    migrator: &sqlx::migrate::Migrator,
-) -> Result<()> {
-    premark_hotfix_migration(pool, migrator, &HotfixMigration {
-        table: "permission_policies",
-        column: "agent_id",
-        version: AGENT_AWARE_PERMISSIONS_MIGRATION_VERSION,
-        label: "Agent-aware-permissions",
-        check_table_exists: true,
-        force_checksum_sync: true, // Crucial: sync checksum if file was corrected
-    }).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        premark_connector_column_fix_migration_if_needed, CONNECTOR_COLUMN_FIX_MIGRATION_VERSION,
-    };
-    use sqlx::SqlitePool;
-
-    #[tokio::test]
-    async fn premarks_connector_fix_migration_when_column_exists() {
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("failed to open sqlite memory database");
-        let migrator = sqlx::migrate!("./migrations");
-
-        sqlx::query("CREATE TABLE agents (id TEXT PRIMARY KEY, connector_configs TEXT)")
-            .execute(&pool)
-            .await
-            .expect("failed to create agents table");
-
-        premark_connector_column_fix_migration_if_needed(&pool, &migrator)
-            .await
-            .expect("premark helper failed");
-
-        let applied: Option<i64> =
-            sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE version = ?1 LIMIT 1")
-                .bind(CONNECTOR_COLUMN_FIX_MIGRATION_VERSION)
-                .fetch_optional(&pool)
-                .await
-                .expect("failed to query _sqlx_migrations");
-
-        assert_eq!(applied, Some(CONNECTOR_COLUMN_FIX_MIGRATION_VERSION));
-    }
-
-    #[tokio::test]
-    async fn does_not_premark_when_connector_column_missing() {
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("failed to open sqlite memory database");
-        let migrator = sqlx::migrate!("./migrations");
-
-        sqlx::query("CREATE TABLE agents (id TEXT PRIMARY KEY)")
-            .execute(&pool)
-            .await
-            .expect("failed to create agents table");
-
-        premark_connector_column_fix_migration_if_needed(&pool, &migrator)
-            .await
-            .expect("premark helper failed");
-
-        let migrations_table_exists: Option<i64> = sqlx::query_scalar(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_sqlx_migrations' LIMIT 1",
-        )
-        .fetch_optional(&pool)
-        .await
-        .expect("failed to inspect sqlite_master");
-
-        assert!(
-            migrations_table_exists.is_none(),
-            "_sqlx_migrations should not be created when connector column is absent"
-        );
-    }
-
-    #[tokio::test]
-    async fn premark_is_idempotent_for_connector_fix_migration() {
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("failed to open sqlite memory database");
-        let migrator = sqlx::migrate!("./migrations");
-
-        sqlx::query("CREATE TABLE agents (id TEXT PRIMARY KEY, connector_configs TEXT)")
-            .execute(&pool)
-            .await
-            .expect("failed to create agents table");
-
-        premark_connector_column_fix_migration_if_needed(&pool, &migrator)
-            .await
-            .expect("first premark failed");
-        premark_connector_column_fix_migration_if_needed(&pool, &migrator)
-            .await
-            .expect("second premark failed");
-
-        let count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE version = ?1")
-                .bind(CONNECTOR_COLUMN_FIX_MIGRATION_VERSION)
-                .fetch_one(&pool)
-                .await
-                .expect("failed to count migration rows");
-
-        assert_eq!(count, 1);
-    }
-}
 
 // Metadata: [db]
 

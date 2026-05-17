@@ -27,6 +27,7 @@ pub mod docs;
 pub mod engine_control;
 pub mod env_schema;
 pub mod health;
+pub mod intelligence;
 pub mod mcp;
 #[cfg(feature = "vector-memory")]
 pub mod memory;

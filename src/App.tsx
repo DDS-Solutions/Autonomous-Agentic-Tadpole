@@ -132,8 +132,8 @@ export default function App(): React.ReactElement {
 
         // --- Phase 5: Agent Registry Hydration ---
         // Finalize the boot sequence by fetching the latest agent configurations.
-        const { use_agent_store } = await import('./stores/agent_store');
-        void use_agent_store.getState().fetch_agents();
+        const { use_agent_registry_store } = await import('./stores/agent_store');
+        void use_agent_registry_store.getState().fetch_agents();
         console.debug('[AppKernel] Agent registry hydration initiated.');
       } catch (err) {
         console.error('[AppKernel] Critical Initialization Failure:', err);

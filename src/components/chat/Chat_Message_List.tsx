@@ -18,6 +18,7 @@ import clsx from 'clsx';
 import { type Message_Part } from '../../stores/sovereign_store';
 import { i18n } from '../../i18n';
 import { ArtifactPromotionCard } from './ArtifactPromotionCard';
+import { get_safe_date } from '../../utils/date_utils';
 
 const ARTIFACT_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/g;
 
@@ -49,14 +50,8 @@ interface Chat_Message_Item_Props {
 const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }) => {
     // Robust date parsing for UNIX seconds vs milliseconds vs ISO
     const render_time = useMemo(() => {
-        try {
-            const date = typeof msg.timestamp === 'number' && msg.timestamp < 10000000000 
-                ? new Date(msg.timestamp * 1000) 
-                : new Date(msg.timestamp);
-            return date.toLocaleTimeString([], { hour12: false, minute: '2-digit' });
-        } catch {
-            return '--:--';
-        }
+        const date = get_safe_date(msg.timestamp);
+        return date?.toLocaleTimeString([], { hour12: false, minute: '2-digit' }) || '--:--';
     }, [msg.timestamp]);
 
     return (

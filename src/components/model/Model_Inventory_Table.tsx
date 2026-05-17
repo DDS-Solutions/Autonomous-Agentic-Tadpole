@@ -49,11 +49,15 @@ export function Model_Inventory_Table({
                     {i18n.t('model_manager.inventory.title')}
                 </h2>
                 <div className="flex items-center gap-3">
-                    <Tooltip content={i18n.t('model_manager.inventory.tooltip_provision')} position="top">
+                    <Tooltip 
+                        content={providers.length === 0 ? i18n.t('model_manager.inventory.btn_add_disabled_tooltip') : i18n.t('model_manager.inventory.tooltip_provision')} 
+                        position="top"
+                    >
                         <button
                             onClick={on_add_node}
+                            disabled={providers.length === 0}
                             aria-label={i18n.t('model_manager.inventory.btn_add')}
-                            className="flex items-center gap-1.5 text-[10px] font-bold text-green-500 hover:bg-green-500/5 px-2 py-1 rounded-md border border-green-500/10 transition-colors uppercase tracking-widest"
+                            className="flex items-center gap-1.5 text-[10px] font-bold text-green-500 hover:bg-green-500/5 px-2 py-1 rounded-md border border-green-500/10 transition-colors uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             <Plus size={12} /> {i18n.t('model_manager.inventory.btn_add')}
                         </button>
@@ -90,6 +94,15 @@ export function Model_Inventory_Table({
                     </thead>
                     <tbody className="divide-y divide-zinc-800/30 font-mono text-[11px]">
                         {children}
+                        {models.length === 0 && !children && (
+                            <tr>
+                                <td colSpan={4} className="px-8 py-12 text-center space-y-2">
+                                    <Cpu size={24} className="text-zinc-800 mx-auto mb-2 opacity-50" />
+                                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{i18n.t('model_manager.inventory.empty_state')}</h3>
+                                    <p className="text-[11px] text-zinc-600 font-medium">{i18n.t('model_manager.inventory.empty_hint')}</p>
+                                </td>
+                            </tr>
+                        )}
                         {models.map((m) => (
                             <Model_Row
                                 key={m.id}

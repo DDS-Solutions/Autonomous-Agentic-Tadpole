@@ -29,6 +29,7 @@ pub mod error;
 #[cfg(test)]
 mod db_tests;
 mod env_schema;
+mod intelligence;
 mod middleware;
 mod router;
 mod routes;
@@ -56,6 +57,13 @@ fn main() -> anyhow::Result<()> {
         } else {
             "Unknown panic".to_string()
         };
+
+        // ### 🔐 Security: Neural Shield Redaction
+        // Scrub secrets (API keys, tokens) from the panic message before it 
+        // hits the disk in sidecar_panic.log (SEC-04).
+        let redactor = crate::secret_redactor::SecretRedactor::from_env();
+        let message = redactor.redact(&message);
+
         let location = panic_info
             .location()
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
@@ -152,7 +160,16 @@ async fn async_main() -> anyhow::Result<()> {
         println!("  -v, --version    Show version and exit");
         println!("  -h, --help       Show this help and exit");
         println!("  --status         Show engine status and exit (Fast Path)");
+        println!("  --export-types   Export TypeScript schemas and exit");
         println!("  --port <PORT>    Set the port to listen on (Default: 8000)");
+        return Ok(());
+    }
+
+    if args.iter().any(|arg| arg == "--export-types") {
+        if let Err(e) = crate::utils::schema_gen::export_types() {
+            eprintln!("❌ FATAL: Failed to export types: {:?}", e);
+            std::process::exit(1);
+        }
         return Ok(());
     }
 

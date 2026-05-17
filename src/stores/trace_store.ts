@@ -143,6 +143,64 @@ export const use_trace_store = create<Trace_Store_State>((set, get) => ({
 }));
 
 
-// Metadata: [trace_store]
+// TRACE_STORE_SYNC: High-fidelity cross-tab layout parity
+const sync_channel = typeof window !== 'undefined' ? new BroadcastChannel('trace_store_sync') : null;
+
+if (sync_channel) {
+    const get_sync_payload = (state: Trace_Store_State) => ({
+        spans: state.spans,
+        active_trace_id: state.active_trace_id
+    });
+
+    let last_broadcast = JSON.stringify(get_sync_payload(use_trace_store.getState()));
+
+    sync_channel.onmessage = (event) => {
+        if (event.data.type === 'SYNC_STATE_TRACES') {
+            const { spans, active_trace_id } = event.data.payload;
+            const next_payload = JSON.stringify({ spans, active_trace_id });
+
+            if (last_broadcast !== next_payload) {
+                last_broadcast = next_payload;
+                use_trace_store.setState({ spans, active_trace_id });
+            }
+        } else if (event.data.type === 'REQUEST_STATE_TRACES') {
+            // Another tab wants our traces. Send them.
+            if (sync_channel) {
+                sync_channel.postMessage({
+                    type: 'SYNC_STATE_TRACES',
+                    payload: get_sync_payload(use_trace_store.getState())
+                });
+            }
+        }
+    };
+
+    // Request state from any active tabs
+    setTimeout(() => {
+        const state = use_trace_store.getState();
+        if (Object.keys(state.spans).length === 0 && sync_channel) {
+            sync_channel.postMessage({ type: 'REQUEST_STATE_TRACES' });
+        }
+    }, 150);
+
+    let sync_timeout: ReturnType<typeof setTimeout> | null = null;
+
+    use_trace_store.subscribe((state) => {
+        const payload = get_sync_payload(state);
+        const current = JSON.stringify(payload);
+        
+        if (current !== last_broadcast) {
+            last_broadcast = current;
+            
+            if (sync_timeout) clearTimeout(sync_timeout);
+            sync_timeout = setTimeout(() => {
+                sync_channel.postMessage({ 
+                    type: 'SYNC_STATE_TRACES', 
+                    payload
+                });
+            }, 50); // 50ms debounce for high-velocity traces
+        }
+    });
+}
+
 
 // Metadata: [trace_store]

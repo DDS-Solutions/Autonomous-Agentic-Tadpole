@@ -15,7 +15,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard_Layout from './Dashboard_Layout';
 import { use_tab_store } from '../stores/tab_store';
-import { use_agent_store } from '../stores/agent_store';
+import { use_agent_registry_store } from '../stores/agent_store';
 import { event_bus } from '../services/event_bus';
 
 const { mock_fetch_agents, page_render_spies } = vi.hoisted(() => ({
@@ -55,7 +55,13 @@ vi.mock('../stores/tab_store', () => ({
     use_tab_store: vi.fn()
 }));
 vi.mock('../stores/agent_store', () => ({
-    use_agent_store: {
+    use_agent_store: vi.fn(() => ({
+        agents: [],
+        is_loading: false,
+        error: null,
+        fetch_agents: mock_fetch_agents,
+    })),
+    use_agent_registry_store: {
         getState: vi.fn(() => ({
             fetch_agents: mock_fetch_agents,
         })),
@@ -86,7 +92,7 @@ describe('Dashboard_Layout', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(use_tab_store).mockReturnValue(mock_tab_store as any);
-        vi.mocked(use_agent_store.getState).mockReturnValue({
+        vi.mocked(use_agent_registry_store.getState).mockReturnValue({
             fetch_agents: mock_fetch_agents,
         } as any);
     });

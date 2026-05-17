@@ -29,6 +29,7 @@ import {
 
 import type { GovernanceQuotas } from '../contracts/governance';
 import { LD_Json } from '../components/ui/LD_Json';
+import { get_safe_date } from '../utils/date_utils';
 
 export default function Governance_View() {
     const [manifest, setManifest] = useState<string>('');
@@ -114,7 +115,7 @@ export default function Governance_View() {
                     )}
                     <div className="text-right">
                         <p className="text-[10px] text-zinc-600 uppercase font-mono tracking-widest">Last Intelligence Sync</p>
-                        <p className="text-xs text-zinc-400 font-mono">{lastRefresh.toLocaleTimeString()}</p>
+                        <p className="text-xs text-zinc-400 font-mono">{get_safe_date(lastRefresh)?.toLocaleTimeString() || '--:--:--'}</p>
                     </div>
                     <button 
                         onClick={fetchGovernance}

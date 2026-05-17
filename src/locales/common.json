@@ -1,0 +1,57 @@
+{
+  "common": {
+    "loading": "Loading Module...",
+    "retry": "Retry",
+    "dismiss": "Dismiss",
+    "authorizing": "Authorizing Sync",
+    "mission_delegation": "Mission Delegation Request",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "departments": {
+      "executive": "Executive",
+      "engineering": "Engineering",
+      "operations": "Operations",
+      "product": "Product",
+      "marketing": "Marketing",
+      "sales": "Sales",
+      "design": "Design",
+      "research": "Research",
+      "support": "Support",
+      "qa": "Quality Assurance",
+      "intelligence": "Intelligence",
+      "finance": "Finance",
+      "growth": "Growth",
+      "success": "Success"
+    },
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "max": "MAX",
+    "detached_suffix": "Tadpole OS Detached",
+    "units": {
+      "tpm": "TPM",
+      "hz": "HZ",
+      "ms": "ms",
+      "ver_prefix": "v",
+      "currency": "$",
+      "token_k": "k",
+      "placeholder_budget": "0.00"
+    },
+    "btn_confirm": "Confirm",
+    "btn_cancel": "Cancel",
+    "btn_save": "Save Changes",
+    "btn_saving": "Saving...",
+    "status_nominal": "System Nominal",
+    "status_active": "Active",
+    "status_degraded": "Degraded",
+    "status_healthy": "Healthy"
+  },
+  "common_units": {
+    "tpm": "TPM",
+    "hz": "HZ",
+    "ms": "ms",
+    "ver_prefix": "v",
+    "currency": "$",
+    "token_k": "k",
+    "placeholder_budget": "0.00"
+  }
+}

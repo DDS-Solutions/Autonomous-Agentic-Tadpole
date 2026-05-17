@@ -82,6 +82,8 @@ static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
 pub struct SecretRedactor {
     /// The actual secret values to scan for (never logged).
     secrets: Arc<Vec<String>>,
+    /// Flag indicating if this is a no-op redactor.
+    is_noop: bool,
 }
 
 impl SecretRedactor {
@@ -114,12 +116,16 @@ impl SecretRedactor {
 
         Self {
             secrets: Arc::new(secrets),
+            is_noop: false,
         }
     }
 
     /// Returns a new copy of the input where any known secret is replaced
     /// with `[REDACTED]`. Performs a simple substring scan AND pattern matching.
     pub fn scrub(&self, text: &str) -> String {
+        if self.is_noop {
+            return text.to_string();
+        }
         let mut result = text.to_string();
 
         // 1. Scrub registered environment secrets
@@ -157,6 +163,9 @@ impl SecretRedactor {
     /// Checks both runtime env-var secrets AND the always-compiled Neural Shield patterns.
     #[allow(dead_code)]
     pub fn is_active(&self) -> bool {
+        if self.is_noop {
+            return false;
+        }
         !self.secrets.is_empty() || !PATTERNS.0.is_empty()
     }
 
@@ -175,6 +184,7 @@ impl SecretRedactor {
     pub fn noop() -> Self {
         Self {
             secrets: Arc::new(Vec::new()),
+            is_noop: true,
         }
     }
 }
@@ -187,6 +197,7 @@ mod tests {
     fn test_redact_known_secret() {
         let redactor = SecretRedactor {
             secrets: Arc::new(vec!["sk-abcdef123456789".to_string()]),
+            is_noop: false,
         };
         let input = "Error: Invalid API Key: sk-abcdef123456789";
         let output = redactor.redact(input);
@@ -198,6 +209,7 @@ mod tests {
     fn test_no_false_positive() {
         let redactor = SecretRedactor {
             secrets: Arc::new(vec!["my-secret-key-12345".to_string()]),
+            is_noop: false,
         };
         let input = "Normal log message with no secrets";
         assert_eq!(redactor.redact(input), input);
@@ -210,6 +222,7 @@ mod tests {
                 "secret-one-12345678".to_string(),
                 "secret-two-87654321".to_string(),
             ]),
+            is_noop: false,
         };
         let input = "Key1: secret-one-12345678, Key2: secret-two-87654321";
         let output = redactor.redact(input);

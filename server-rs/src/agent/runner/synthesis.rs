@@ -593,11 +593,14 @@ impl AgentRunner {
             let http_client = self.state.resources.http_client.clone();
 
             let vec = crate::agent::memory::get_gemini_embedding(&http_client, &api_key, query).await?;
-            let vault = self.state.resources.get_swarm_vault().await?;
-            let results = vault.search_knowledge(vec, 3).await?;
-            
-            if !results.is_empty() {
-                return Ok(format!("Relevant global intelligence retrieved:\n- {}", results.join("\n- ")));
+            #[cfg(feature = "vector-memory")]
+            {
+                let vault = self.state.resources.get_swarm_vault().await?;
+                let results = vault.search_knowledge(vec, 3).await?;
+                
+                if !results.is_empty() {
+                    return Ok(format!("Relevant global intelligence retrieved:\n- {}", results.join("\n- ")));
+                }
             }
         }
 
@@ -916,7 +919,12 @@ mod tests {
                 skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(base_dir.clone())),
                 skill_registry: Arc::new(crate::agent::skill_manifest::SkillRegistry::new()),
                 tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
-                mcp_host: Arc::new(crate::agent::mcp::McpHost::new(tokio::sync::broadcast::channel(1).0, None, permission_policy.clone())),
+                mcp_host: Arc::new(crate::agent::mcp::McpHost::new(
+                    tokio::sync::broadcast::channel(1).0,
+                    None,
+                    permission_policy.clone(),
+                    Arc::new(crate::secret_redactor::SecretRedactor::noop())
+                )),
                 hooks: Arc::new(crate::agent::hooks::HooksManager::new(&base_dir)),
             }),
             security: Arc::new(crate::state::hubs::sec::SecurityHub {
@@ -934,6 +942,7 @@ mod tests {
                 audio_engine: tokio::sync::OnceCell::new(),
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
+                symbol_graph: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 rate_limiters: dashmap::DashMap::new(),
@@ -947,6 +956,8 @@ mod tests {
                     crate::agent::continuity::SSDManager::new(base_dir.clone()),
                 ))),
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
+                #[cfg(feature = "vector-memory")]
+                swarm_vault: tokio::sync::OnceCell::new(),
             }),
             base_dir,
             actors: tokio::sync::OnceCell::new(),

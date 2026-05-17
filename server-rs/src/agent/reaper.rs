@@ -69,12 +69,9 @@ impl SwarmReaper {
             sqlx::query("DELETE FROM mission_logs WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM swarm_context WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM oversight_log WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
-            sqlx::query("DELETE FROM mission_relationships WHERE from_id = ? OR to_id = ?")
-                .bind(&mission_id)
-                .bind(&mission_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(AppError::Sqlx)?;
+            sqlx::query("DELETE FROM agent_directives WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
+            sqlx::query("DELETE FROM peer_reviews WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
+            sqlx::query("DELETE FROM mission_nodes WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             
             sqlx::query("DELETE FROM mission_history WHERE id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
 

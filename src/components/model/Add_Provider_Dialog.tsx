@@ -62,7 +62,7 @@ export function Add_Provider_Dialog({
                     onClick={on_cancel}
                     className="flex-1 py-2 bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 rounded-xl transition-all text-[9px] font-bold uppercase tracking-widest"
                 >
-                    {i18n.t('model_manager.add_provider.btn_cancel')}
+                    {i18n.t('common.btn_cancel')}
                 </button>
             </div>
         </div>

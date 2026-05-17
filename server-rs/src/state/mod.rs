@@ -121,6 +121,8 @@ impl AppState {
             pool.clone(),
         ));
 
+        let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::noop());
+
         let registry = Arc::new(RegistryHub {
             agents: DashMap::new(),
             providers: DashMap::new(),
@@ -134,6 +136,7 @@ impl AppState {
                 telemetry_tx,
                 None,
                 permission_policy.clone(),
+                secret_redactor.clone(),
             )),
             hooks: Arc::new(crate::agent::hooks::HooksManager::new(&base_dir)),
             tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
@@ -143,7 +146,7 @@ impl AppState {
             audit_trail: Arc::new(crate::security::audit::MerkleAuditTrail::mock_async().await),
             budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
-            secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
+            secret_redactor,
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
@@ -162,6 +165,7 @@ impl AppState {
                 audio_engine: tokio::sync::OnceCell::new(),
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
+                symbol_graph: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -242,6 +246,8 @@ impl AppState {
             pool.clone(),
         ));
 
+        let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::noop());
+
         let registry = Arc::new(RegistryHub {
             agents: DashMap::new(),
             providers: DashMap::new(),
@@ -255,6 +261,7 @@ impl AppState {
                 telemetry_tx,
                 None,
                 permission_policy.clone(),
+                secret_redactor.clone(),
             )),
             hooks: Arc::new(crate::agent::hooks::HooksManager::new(
                 &base_dir,
@@ -266,7 +273,7 @@ impl AppState {
             audit_trail: Arc::new(crate::security::audit::MerkleAuditTrail::mock_async().await),
             budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
-            secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
+            secret_redactor,
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
@@ -285,6 +292,7 @@ impl AppState {
                 audio_engine: tokio::sync::OnceCell::new(),
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
+                symbol_graph: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -528,6 +536,7 @@ impl AppState {
             event_tx.clone(),
             mcp_config_opt,
             permission_policy.clone(),
+            secret_redactor.clone(),
         ));
 
         tracing::info!("🛰️ [Registry] Initializing Hooks Manager...");
@@ -579,6 +588,7 @@ impl AppState {
                 audio_engine: OnceCell::new(),
                 audio_cache,
                 code_graph: OnceCell::new(),
+                symbol_graph: OnceCell::new(),
                 identity_context: OnceCell::new(),
                 memory_context: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -1165,6 +1175,7 @@ impl Default for AppState {
                 broadcast::channel(1).0,
                 None,
                 permission_policy.clone(),
+                Arc::new(crate::secret_redactor::SecretRedactor::noop()),
             )),
             hooks: Arc::new(crate::agent::hooks::HooksManager::new(
                 &std::path::PathBuf::from("tmp"),
@@ -1187,6 +1198,7 @@ impl Default for AppState {
             audio_engine: OnceCell::new(),
             audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
             code_graph: OnceCell::new(),
+            symbol_graph: OnceCell::new(),
             identity_context: OnceCell::new(),
             memory_context: OnceCell::new(),
             #[cfg(feature = "vector-memory")]

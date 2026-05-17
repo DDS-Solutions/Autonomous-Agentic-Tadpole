@@ -41,6 +41,7 @@ export interface LedgerEntry extends Partial<Omit<ToolCall, 'id'>> {
         error?: string;
         duration_ms: number;
     };
+    is_verified?: boolean;
     timestamp: string;
 }
 
@@ -85,6 +86,7 @@ export const MOCK_LEDGER: LedgerEntry[] = [
             timestamp: new Date(Date.now() - 500000).toISOString()
         },
         decision: 'approved',
+        is_verified: true,
         result: {
             success: true,
             output: 'Scan complete. 0 critical errors found.',
@@ -103,6 +105,7 @@ export const MOCK_LEDGER: LedgerEntry[] = [
             timestamp: new Date(Date.now() - 300000).toISOString()
         },
         decision: 'rejected',
+        is_verified: true,
         timestamp: new Date(Date.now() - 290000).toISOString()
     }
 ];

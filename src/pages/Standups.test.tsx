@@ -96,6 +96,7 @@ describe('Standups Page', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.useRealTimers();
         
         (use_workspace_store as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mock_clusters);
         (load_agents as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mock_agents as any);
@@ -110,15 +111,35 @@ describe('Standups Page', () => {
     });
 
     it('renders the neural sync interface and live transcript base', async () => {
+        vi.useFakeTimers();
         await act(async () => {
              render(<Standups />);
         });
 
-        expect(screen.getByText('Neural Sync Interface')).toBeInTheDocument();
-        expect(screen.getByText('Live Transcript')).toBeInTheDocument();
-        expect(screen.getAllByText('System').length).toBeGreaterThan(0);
-        expect(screen.getByText("Voice Communications Online. Select target and click 'Start Sync'.")).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Start Sync/i })).toBeInTheDocument();
+        expect(screen.getByText(/Neural Sync Interface/i)).toBeInTheDocument();
+        expect(screen.getByText(/Status: Ready for Handshake/i)).toBeInTheDocument();
+        expect(screen.getByText(/Live Transcript/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/System/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/Voice Communications Online/i)).toBeInTheDocument();
+        
+        const start_button = screen.getByRole('button', { name: /Start Sync/i });
+        expect(start_button).toBeInTheDocument();
+
+        // Toggle Live
+        await act(async () => {
+            fireEvent.click(start_button);
+        });
+
+        expect(screen.getByText(/00:00 • ENCRYPTED LIVE CHANNEL/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /End Sync/i })).toBeInTheDocument();
+        expect(screen.getByLabelText(/End Sync/i)).toBeInTheDocument();
+
+        // Advance timer
+        await act(async () => {
+            vi.advanceTimersByTime(1000);
+        });
+        
+        expect(screen.getByText(/00:01 • ENCRYPTED LIVE CHANNEL/i)).toBeInTheDocument();
     });
 
     it('populates agent and cluster targets', async () => {

@@ -50,7 +50,7 @@ async fn test_pulse_aggregation_logic() {
     state.registry.agents.insert("agent-007".to_string(), agent);
 
     // 2. Build the pulse (simulating pulse.rs logic with synthesis)
-    let timestamp = 123456789;
+    let timestamp = 123456789.0;
     let mut pulse = SwarmPulse::new(timestamp);
     let mut active_missions = std::collections::HashSet::new();
 
@@ -107,7 +107,7 @@ async fn test_pulse_aggregation_logic() {
 
 #[test]
 fn test_messagepack_serialization_density() {
-    let mut pulse = SwarmPulse::new(123456789);
+    let mut pulse = SwarmPulse::new(123456789.0);
     for i in 0..10 {
         pulse.nodes.push(PulseNode {
             id: format!("agent-{}", i),

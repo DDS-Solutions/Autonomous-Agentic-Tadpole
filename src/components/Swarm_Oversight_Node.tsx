@@ -16,6 +16,7 @@ import { use_workspace_store } from '../stores/workspace_store';
 import { agents as allAgents } from '../data/mock_agents';
 import { i18n } from '../i18n';
 import { Tooltip } from './ui';
+import { get_safe_date } from '../utils/date_utils';
 
 interface Swarm_Oversight_Node_Props {
     cluster_id?: string;
@@ -55,7 +56,7 @@ export const Swarm_Oversight_Node: React.FC<Swarm_Oversight_Node_Props> = ({ clu
                                 <div className="flex items-center gap-1.5">
                                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                                     <span className="text-[9px] font-mono text-blue-300/70">
-                                        {new Date(proposal.timestamp).toLocaleTimeString()}
+                                        {get_safe_date(proposal.timestamp)?.toLocaleTimeString() || '--:--:--'}
                                     </span>
                                     {on_close && (
                                         <button 

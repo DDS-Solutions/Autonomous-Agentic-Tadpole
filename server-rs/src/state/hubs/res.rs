@@ -23,6 +23,7 @@ use crate::agent::memory::VectorMemory;
 use crate::agent::rate_limiter::RateLimiter;
 use crate::types::SubsystemStatus;
 use crate::utils::graph::CodeGraph;
+use crate::intelligence::graph::CodeSymbolGraph;
 use crate::services::parser::SymbolParser;
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -54,6 +55,8 @@ pub struct ResourceHub {
     /// Graph of code relationships for RAG-enhanced tool search.
     /// @state: Deferred (Warmed up lazily to prevent CPU/RAM spikes)
     pub code_graph: OnceCell<Arc<RwLock<CodeGraph>>>,
+    /// Symbol-level knowledge graph for blast radius analysis.
+    pub symbol_graph: OnceCell<Arc<RwLock<CodeSymbolGraph>>>,
     /// Global system identity context loaded from `directives/IDENTITY.md`.
     /// @state: Deferred
     pub identity_context: OnceCell<String>,
@@ -141,7 +144,20 @@ impl ResourceHub {
                 Arc::new(RwLock::new(CodeGraph::new(std::path::PathBuf::from("."))))
             })
             .await;
-        // Note: graph.scan() still needs to be called to be truly "Ready"
+        graph.clone()
+    }
+
+    /// Lazily initializes and returns the symbol-level knowledge graph.
+    pub async fn get_symbol_graph(&self) -> Arc<RwLock<CodeSymbolGraph>> {
+        if self.symbol_graph.get().is_none() {
+            self.set_subsystem_status("SymbolGraph", SubsystemStatus::Warming(0.0));
+        }
+        let graph = self
+            .symbol_graph
+            .get_or_init(|| async {
+                Arc::new(RwLock::new(CodeSymbolGraph::new(self.base_dir.clone())))
+            })
+            .await;
         graph.clone()
     }
 

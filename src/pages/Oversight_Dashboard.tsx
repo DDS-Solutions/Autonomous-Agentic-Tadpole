@@ -30,12 +30,13 @@ import { useNavigate } from 'react-router-dom';
 import { Tw_Empty_State, Tooltip } from '../components/ui';
 import { useEngineStatus } from '../hooks/use_engine_status';
 import { use_workspace_store } from '../stores/workspace_store';
+import { use_agent_store } from '../stores/agent_store';
 import { tadpole_os_service } from '../services/tadpoleos_service';
-import { agents as all_agents } from '../data/mock_agents';
 import { MOCK_PENDING, MOCK_LEDGER, type OversightEntry, type LedgerEntry } from '../data/mock_oversight';
 import { Command_Table } from '../components/Command_Table';
 import { i18n } from '../i18n';
 import { LD_Json } from '../components/ui/LD_Json';
+import { get_safe_date } from '../utils/date_utils';
 
 // Types mirrored from server/types.ts
 // Types are now imported from ../data/mockOversight
@@ -61,7 +62,8 @@ export default function Oversight_Dashboard() {
     const [is_simulated, set_is_simulated] = useState(false);
     const [has_attempted_fetch, set_has_attempted_fetch] = useState(false);
     const [selected_cluster_id, set_selected_cluster_id] = useState<string>('all');
-    const { clusters, active_proposals } = use_workspace_store();
+    const { clusters, active_proposals, apply_proposal, dismiss_proposal } = use_workspace_store();
+    const { agents: all_agents, update_agent: store_update_agent } = use_agent_store();
 
     // Persistence: Save to localStorage on change
     useEffect(() => {
@@ -121,11 +123,30 @@ export default function Oversight_Dashboard() {
     }, [is_simulated, has_attempted_fetch]);
 
     // Use useMemo for stats to avoid cascading renders
-    const stats = useMemo(() => ({
-        pending: pending.length,
-        approved: ledger.filter((entry) => entry.decision === 'approved').length,
-        rejected: ledger.filter((entry) => entry.decision === 'rejected').length
-    }), [pending, ledger]);
+    // Reactive stats that respect the current cluster filter
+    const stats = useMemo(() => {
+        const base_ledger = selected_cluster_id === 'all' 
+            ? ledger 
+            : ledger.filter(l => {
+                const tc = l.tool_call || l;
+                return tc.cluster_id === selected_cluster_id || 
+                       clusters.find(c => c.id === selected_cluster_id)?.collaborators?.includes(tc.agent_id || '');
+            });
+            
+        const base_pending = selected_cluster_id === 'all'
+            ? pending
+            : pending.filter(p => {
+                const tc = p.tool_call || p;
+                return tc.cluster_id === selected_cluster_id ||
+                       clusters.find(c => c.id === selected_cluster_id)?.collaborators?.includes(tc.agent_id || '');
+            });
+
+        return {
+            pending: base_pending.length,
+            approved: base_ledger.filter((entry) => entry.decision === 'approved').length,
+            rejected: base_ledger.filter((entry) => entry.decision === 'rejected').length
+        };
+    }, [pending, ledger, selected_cluster_id, clusters]);
 
     const handle_decide = async (id: string, decision: 'approved' | 'rejected') => {
         if (is_simulated) {
@@ -145,6 +166,33 @@ export default function Oversight_Dashboard() {
         } catch {
             // Silently fail, would be logged in a real environment
         }
+    };
+
+    const handle_apply_proposal = async (cluster_id: string) => {
+        const proposal = Object.values(active_proposals || {}).find(p => p.cluster_id === cluster_id);
+        if (!proposal) return;
+
+        // Commit all proposed changes to the live agent registry
+        for (const change of (proposal.changes || [])) {
+            const updates: any = {};
+            if (change.proposed_role) updates.role = change.proposed_role;
+            if (change.proposed_model) {
+                // Assuming primary slot update for swarm optimization
+                updates.primary_model_id = change.proposed_model;
+            }
+            if (change.added_skills) {
+                const agent = all_agents.find(a => a.id === change.agent_id);
+                if (agent) {
+                    updates.skills = [...new Set([...(agent.skills || []), ...change.added_skills])];
+                }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await store_update_agent(change.agent_id, updates);
+            }
+        }
+
+        apply_proposal(cluster_id);
     };
 
     const handle_kill_switch = async () => {
@@ -177,16 +225,28 @@ export default function Oversight_Dashboard() {
         }
     };
 
+
     const filtered_ledger = ledger
         .filter(l => {
-            const tool_call = l.tool_call || l; // Handle flat structures from older backend versions
-            const matches_cluster = selected_cluster_id === 'all' || tool_call.cluster_id === selected_cluster_id;
-            const matches_search = (tool_call.agent_id || '').toLowerCase().includes(filter.toLowerCase()) ||
-                (tool_call.skill || '').toLowerCase().includes(filter.toLowerCase()) ||
-                JSON.stringify(tool_call.params || {}).toLowerCase().includes(filter.toLowerCase());
+            const tool_call = l.tool_call || l;
+            const agent_id = tool_call.agent_id || '';
+            
+            // Comprehensive Cluster Filtering
+            const entry_cluster_id = tool_call.cluster_id || clusters.find(c => (c.collaborators || []).includes(agent_id))?.id;
+            const matches_cluster = selected_cluster_id === 'all' || entry_cluster_id === selected_cluster_id;
+            
+            // Robust Search Matching
+            const search_term = filter.toLowerCase();
+            const matches_search = 
+                (agent_id).toLowerCase().includes(search_term) ||
+                (tool_call.skill || '').toLowerCase().includes(search_term) ||
+                (tool_call.description || '').toLowerCase().includes(search_term) ||
+                JSON.stringify(tool_call.params || {}).toLowerCase().includes(search_term) ||
+                (l.decision || '').toLowerCase().includes(search_term);
+
             return matches_cluster && matches_search;
         })
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        .sort((a, b) => get_safe_date(b, new Date())!.getTime() - get_safe_date(a, new Date())!.getTime());
 
     const filtered_pending = pending.filter(p => {
         const tool_call = p.tool_call || p;
@@ -310,7 +370,7 @@ export default function Oversight_Dashboard() {
                                             {entry.tool_call?.skill || entry.skill || i18n.t('oversight.capability_proposal')}
                                         </span>
                                         <span className="text-xs text-zinc-500">
-                                            {new Date(entry.created_at).toLocaleTimeString()}
+                                            {get_safe_date(entry)?.toLocaleTimeString() || '--:--:--'}
                                         </span>
                                     </div>
                                     <p className="text-zinc-300">{entry.tool_call?.description || entry.description || i18n.t('oversight.awaiting_authorization')}</p>
@@ -397,15 +457,24 @@ export default function Oversight_Dashboard() {
                             {filtered_ledger.map(entry => (
                                 <tr key={entry.id} className="hover:bg-zinc-800/20 transition-colors">
                                     <td className="p-3 text-zinc-500 whitespace-nowrap font-mono text-xs">
-                                        {new Date(entry.timestamp).toLocaleTimeString()}
+                                        {get_safe_date(entry)?.toLocaleTimeString() || '--:--:--'}
                                     </td>
                                     <td className="p-3 text-zinc-300 font-medium">
-                                        {entry.tool_call?.agent_id || entry.agent_id || i18n.t('oversight.unknown_agent')}
+                                        {(() => {
+                                            const id = entry.tool_call?.agent_id || entry.agent_id;
+                                            const agent = all_agents.find(a => a.id === id);
+                                            return agent ? `${agent.name} (${id})` : (id || i18n.t('oversight.unknown_agent'));
+                                        })()}
                                     </td>
                                     <td className="p-3">
                                         <div className="flex items-center gap-2">
                                             <span className={`w-2 h-2 rounded-full ${entry.decision === 'approved' ? 'bg-green-500' : 'bg-red-500'}`} />
                                             <span className="font-mono text-green-400">{entry.tool_call?.skill || entry.skill || i18n.t('oversight.proposal_label')}</span>
+                                            {entry.is_verified && (
+                                                <Tooltip content={i18n.t('oversight.verified_audit_tooltip')} position="top">
+                                                    <ShieldCheck className="w-3 h-3 text-emerald-500/60" />
+                                                </Tooltip>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-3 max-w-xs truncate text-zinc-400 font-mono text-xs" title={JSON.stringify(entry.tool_call?.params || entry.params || {}, null, 2)}>
@@ -455,9 +524,25 @@ export default function Oversight_Dashboard() {
                                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                                                 <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">{cluster?.name || i18n.t('oversight.unknown_cluster')}</span>
                                             </div>
-                                            <span className="text-[10px] text-zinc-600 font-mono">
-                                                {i18n.t('oversight.alpha_node_prefix', { alpha_id: cluster?.alpha_id ?? '?' })} • {new Date(proposal.timestamp).toLocaleTimeString()}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-zinc-600 font-mono">
+                                                    {i18n.t('oversight.alpha_node_prefix', { alpha_id: cluster?.alpha_id ?? '?' })} • {get_safe_date(proposal)?.toLocaleTimeString() || '--:--:--'}
+                                                </span>
+                                                <div className="flex gap-2 ml-4">
+                                                    <button
+                                                        onClick={() => dismiss_proposal(proposal.cluster_id)}
+                                                        className="text-[9px] px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded border border-zinc-700 transition-colors uppercase font-bold"
+                                                    >
+                                                        {i18n.t('oversight.dismiss_button') || 'Dismiss'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handle_apply_proposal(proposal.cluster_id)}
+                                                        className="text-[9px] px-2 py-0.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded border border-green-500/30 transition-colors uppercase font-bold"
+                                                    >
+                                                        {i18n.t('missions.btn_authorize')}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div className="bg-black/40 p-3 rounded-lg border border-zinc-800/50">

@@ -25,7 +25,7 @@ export interface Engine_Status {
     cpu: number;
     memory: number;
     memory_total: number;
-    latency: number;
+    latency: number | null;
     active_agents: number;
     max_depth: number;
     tpm: number;
@@ -49,7 +49,7 @@ export function useEngineStatus(): Engine_Status {
         cpu: 0,
         memory: 0,
         memory_total: 0,
-        latency: 0,
+        latency: null as number | null,
         active_agents: 0,
         max_depth: 0,
         tpm: 0,
@@ -71,7 +71,7 @@ export function useEngineStatus(): Engine_Status {
                 cpu: Number.isFinite(h.cpu) ? (h.cpu as number) : 0,
                 memory: Number.isFinite(h.memory) ? (h.memory as number) : 0,
                 memory_total: Number.isFinite(h.memory_total) ? (h.memory_total as number) : 0,
-                latency: Number.isFinite(h.latency) ? (h.latency as number) : 0,
+                latency: (typeof h.latency === 'number' && h.latency > 0) ? h.latency : null,
                 active_agents: Number.isFinite(h.active_agents) ? (h.active_agents as number) : (Number.isFinite(h.agent_count) ? (h.agent_count as number) : 0),
                 max_depth: Number.isFinite(h.max_depth) ? (h.max_depth as number) : 0,
                 tpm: Number.isFinite(h.tpm) ? (h.tpm as number) : 0,

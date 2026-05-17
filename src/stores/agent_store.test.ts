@@ -11,21 +11,9 @@
  * - **Telemetry Link**: Search `[agent_store.test]` in tracing logs.
  */
 
-/**
- * @file agent_store.test.ts
- * @description Suite for the central Agent management state machine.
- * @module Stores/AgentStore
- * @testedBehavior
- * - Async Orchestration: Fetching agent rosters and handling error events.
- * - Reactive State: Optimistic updates with automatic rollback on persistence failure.
- * - Telemetry: Real-time socket integration and workspace-aware ID resolution.
- * @aiContext
- * - Mocks localStorage to prevent persistence side effects.
- * - Simulates socket 'agent:update' payloads to validate reactive UI updates.
- * - Refactored for architectural parity with agent_store.ts.
- */
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import type { Agent } from '../types';
+import { renderHook } from '@testing-library/react';
 
 // Block localStorage BEFORE imports
 vi.hoisted(() => {
@@ -40,12 +28,11 @@ vi.hoisted(() => {
     vi.stubGlobal('localStorage', mock_local_storage);
 });
 
-import { use_agent_store } from './agent_store';
+import { use_agent_store, use_agent_registry_store, use_agent_telemetry_store } from './agent_store';
 import * as agent_service from '../services/agent_service';
 import { agent_api_service } from '../services/agent_api_service';
 import { log_error } from '../services/system_utils';
 import { tadpole_os_socket } from '../services/socket';
-import { use_workspace_store } from './workspace_store';
 
 // Mock dependencies
 vi.mock('../services/agent_service', async (importOriginal) => {
@@ -80,13 +67,7 @@ vi.mock('../services/socket', () => ({
     }
 }));
 
-vi.mock('./workspace_store', () => ({
-    use_workspace_store: {
-        getState: vi.fn(),
-    }
-}));
-
-describe('agent_store', () => {
+describe('agent_store suites', () => {
     const mock_agent_1: Agent = {
         id: '1',
         name: 'Test Agent 1',
@@ -110,10 +91,13 @@ describe('agent_store', () => {
         vi.clearAllMocks();
         
         // Reset state
-        use_agent_store.setState({
+        use_agent_registry_store.setState({
             agents: [],
             is_loading: false,
             error: null
+        });
+        use_agent_telemetry_store.setState({
+            live_status: {}
         });
 
         (agent_service.load_agents as Mock).mockResolvedValue([mock_agent_1, mock_agent_2]);
@@ -121,111 +105,111 @@ describe('agent_store', () => {
         vi.mocked(agent_api_service.create_agent).mockResolvedValue(true);
     });
 
-    describe('fetch_agents', () => {
-        it('fetches agents successfully and updates state', async () => {
-            const promise = use_agent_store.getState().fetch_agents();
-            expect(use_agent_store.getState().is_loading).toBe(true);
-            
-            await promise;
-            
-            expect(use_agent_store.getState().is_loading).toBe(false);
-            expect(use_agent_store.getState().error).toBeNull();
-            expect(use_agent_store.getState().agents).toEqual([mock_agent_1, mock_agent_2]);
+    describe('use_agent_registry_store', () => {
+        describe('fetch_agents', () => {
+            it('fetches agents successfully and updates state', async () => {
+                const promise = use_agent_registry_store.getState().fetch_agents();
+                expect(use_agent_registry_store.getState().is_loading).toBe(true);
+                
+                await promise;
+                
+                expect(use_agent_registry_store.getState().is_loading).toBe(false);
+                expect(use_agent_registry_store.getState().error).toBeNull();
+                expect(use_agent_registry_store.getState().agents).toEqual([mock_agent_1, mock_agent_2]);
+            });
+
+            it('handles fetch errors correctly and logs the error', async () => {
+                (agent_service.load_agents as Mock).mockRejectedValue(new Error('Network error'));
+                
+                await use_agent_registry_store.getState().fetch_agents();
+                
+                expect(use_agent_registry_store.getState().is_loading).toBe(false);
+                expect(use_agent_registry_store.getState().error).toBe('Registry Sync Error');
+                
+                expect(log_error).toHaveBeenCalledWith(
+                    'AgentRegistry', 
+                    'Fetch Failed', 
+                    expect.any(Error)
+                );
+            });
         });
 
-        it('handles fetch errors correctly and logs the error', async () => {
-            (agent_service.load_agents as Mock).mockRejectedValue(new Error('Network error'));
-            
-            await use_agent_store.getState().fetch_agents();
-            
-            expect(use_agent_store.getState().is_loading).toBe(false);
-            expect(use_agent_store.getState().error).toBe('Failed to load agent registry. Check system logs for details.');
-            
-            expect(log_error).toHaveBeenCalledWith(
-                'AgentStore', 
-                'Agent Registry Failure', 
-                expect.any(Error)
-            );
+        describe('update_agent', () => {
+            beforeEach(() => {
+                use_agent_registry_store.setState({ agents: [mock_agent_1, mock_agent_2] });
+            });
+
+            it('performs an optimistic update and persists successfully', async () => {
+                await use_agent_registry_store.getState().update_agent('1', { name: 'Updated Name', status: 'working' });
+                
+                const agent = use_agent_registry_store.getState().agents.find(a => a.id === '1');
+                expect(agent?.name).toBe('Updated Name');
+                expect(agent?.status).toBe('working');
+                
+                expect(agent_service.persist_agent_update).toHaveBeenCalledWith('1', { name: 'Updated Name', status: 'working' });
+            });
+
+            it('retains optimistic state and logs a warning on persistence failure', async () => {
+                (agent_service.persist_agent_update as Mock).mockRejectedValue(new Error('Sync failed'));
+                (agent_service.load_agents as Mock).mockResolvedValue([mock_agent_1, mock_agent_2]);
+                
+                await use_agent_registry_store.getState().update_agent('1', { name: 'Updated Name' });
+                
+                const agent = use_agent_registry_store.getState().agents.find(a => a.id === '1');
+                expect(agent?.name).toBe('Updated Name'); 
+                
+                expect(log_error).toHaveBeenCalledWith(
+                    'AgentRegistry', 
+                    'Persistence Error: 1', 
+                    expect.any(Error),
+                    'warning'
+                );
+            });
+        });
+
+        describe('add_agent', () => {
+            beforeEach(() => {
+                use_agent_registry_store.setState({ agents: [mock_agent_1] });
+            });
+
+            it('optimistically adds an agent and persists', async () => {
+                const result = await use_agent_registry_store.getState().add_agent(mock_agent_2);
+                
+                expect(use_agent_registry_store.getState().agents).toHaveLength(2);
+                expect(use_agent_registry_store.getState().agents[1]).toEqual(mock_agent_2);
+                expect(result).toBe(true);
+                 
+                expect(agent_api_service.create_agent).toHaveBeenCalledWith(mock_agent_2);
+            });
+
+            it('reverts and logs error on persistence failure', async () => {
+                vi.mocked(agent_api_service.create_agent).mockRejectedValue(new Error('Create failed'));
+                (agent_service.load_agents as Mock).mockResolvedValue([mock_agent_1]); 
+                
+                const result = await use_agent_registry_store.getState().add_agent(mock_agent_2);
+                 
+                expect(use_agent_registry_store.getState().agents).toHaveLength(1); 
+                expect(result).toBe(false);
+                 
+                expect(log_error).toHaveBeenCalledWith(
+                    'AgentRegistry', 
+                    'Add Failed', 
+                    expect.any(Error)
+                );
+            });
+        });
+
+        describe('get_agent', () => {
+            it('retrieves an agent by id', () => {
+                use_agent_registry_store.setState({ agents: [mock_agent_1, mock_agent_2] });
+                
+                expect(use_agent_registry_store.getState().get_agent('2')).toEqual(mock_agent_2);
+                expect(use_agent_registry_store.getState().get_agent('non-existent')).toBeUndefined();
+            });
         });
     });
 
-    describe('update_agent', () => {
-        beforeEach(() => {
-            use_agent_store.setState({ agents: [mock_agent_1, mock_agent_2] });
-        });
-
-        it('performs an optimistic update and persists successfully', async () => {
-            await use_agent_store.getState().update_agent('1', { name: 'Updated Name', status: 'working' });
-            
-            const agent = use_agent_store.getState().agents.find(a => a.id === '1');
-            expect(agent?.name).toBe('Updated Name');
-            expect(agent?.status).toBe('working');
-            
-            expect(agent_service.persist_agent_update).toHaveBeenCalledWith('1', { name: 'Updated Name', status: 'working' });
-            expect(agent_service.load_agents).not.toHaveBeenCalled();
-        });
-
-        it('retains optimistic state and logs a warning on persistence failure', async () => {
-            (agent_service.persist_agent_update as Mock).mockRejectedValue(new Error('Sync failed'));
-            (agent_service.load_agents as Mock).mockResolvedValue([mock_agent_1, mock_agent_2]);
-            
-            await use_agent_store.getState().update_agent('1', { name: 'Updated Name' });
-            
-            const agent = use_agent_store.getState().agents.find(a => a.id === '1');
-            expect(agent?.name).toBe('Updated Name'); 
-            
-            expect(log_error).toHaveBeenCalledWith(
-                'AgentStore', 
-                expect.stringContaining('Persistence Failed'), 
-                expect.any(Error),
-                'warning'
-            );
-        });
-    });
-
-    describe('add_agent', () => {
-        beforeEach(() => {
-            use_agent_store.setState({ agents: [mock_agent_1] });
-        });
-
-        it('optimistically adds an agent and persists', async () => {
-            const result = await use_agent_store.getState().add_agent(mock_agent_2);
-            
-            expect(use_agent_store.getState().agents).toHaveLength(2);
-            expect(use_agent_store.getState().agents[1]).toEqual(mock_agent_2);
-            expect(result).toBe(true);
-             
-            expect(agent_api_service.create_agent).toHaveBeenCalledWith(mock_agent_2);
-        });
-
-        it('reverts and logs error on persistence failure', async () => {
-            vi.mocked(agent_api_service.create_agent).mockRejectedValue(new Error('Create failed'));
-            (agent_service.load_agents as Mock).mockResolvedValue([mock_agent_1]); 
-            
-            const result = await use_agent_store.getState().add_agent(mock_agent_2);
-             
-            expect(use_agent_store.getState().agents).toHaveLength(1); 
-            expect(use_agent_store.getState().error).toBe('Create failed');
-            expect(result).toBe(false);
-             
-            expect(log_error).toHaveBeenCalledWith(
-                'AgentStore', 
-                'Agent Registration Blocked', 
-                expect.any(Error)
-            );
-        });
-    });
-
-    describe('get_agent', () => {
-        it('retrieves an agent by id', () => {
-            use_agent_store.setState({ agents: [mock_agent_1, mock_agent_2] });
-            
-            expect(use_agent_store.getState().get_agent('2')).toEqual(mock_agent_2);
-            expect(use_agent_store.getState().get_agent('non-existent')).toBeUndefined();
-        });
-    });
-
-    describe('init_telemetry', () => {
+    describe('use_agent_telemetry_store', () => {
         let update_callback: (event: any) => void;
 
         beforeEach(() => {
@@ -233,18 +217,10 @@ describe('agent_store', () => {
                 update_callback = cb;
                 return vi.fn(); // mock unsubscribe
             });
-            
-            (use_workspace_store.getState as Mock).mockReturnValue({
-                clusters: [
-                    { path: '/org/frontend', collaborators: ['1'] }
-                ]
-            });
-
-            use_agent_store.setState({ agents: [mock_agent_1] });
         });
 
-        it('subscribes to updates and applies them with workspace resolution', () => {
-            const unsubscribe = use_agent_store.getState().init_telemetry();
+        it('subscribes to updates and applies them to live_status', () => {
+            const unsubscribe = use_agent_telemetry_store.getState().init_telemetry();
             expect(tadpole_os_socket.subscribe_agent_updates).toHaveBeenCalled();
             expect(typeof unsubscribe).toBe('function');
             
@@ -254,38 +230,83 @@ describe('agent_store', () => {
                 data: { status: 'working', telemetry: { cpu: 50 }, category: 'user' }
             });
             
-            const agent = use_agent_store.getState().agents.find(a => a.id === '1') as any;
-            
-            expect(agent).toMatchObject({
-                id: '1',
+            const live = use_agent_telemetry_store.getState().live_status['1'];
+            expect(live).toMatchObject({
                 status: 'working',
                 telemetry: { cpu: 50 },
-                department: 'Engineering', 
-                normalized: true
+                category: 'user'
             });
-
-            expect(agent_service.normalize_agent).toHaveBeenCalledWith(
-                expect.objectContaining({ id: '1', status: 'working' }),
-                '/org/frontend',
-                expect.objectContaining({ id: '1' })
-            );
         });
-        
-        it('resolves silo path if agent is not in any cluster', () => {
-            use_agent_store.setState({ agents: [{ ...mock_agent_1, id: '99' }] });
-            use_agent_store.getState().init_telemetry();
+
+        it('triggers fetch_agents when receiving agent:create for an unknown agent', () => {
+            let called = false;
+            use_agent_registry_store.setState({
+                fetch_agents: async () => { called = true; }
+            });
+            
+            use_agent_telemetry_store.getState().init_telemetry();
             
             update_callback({
-                type: 'agent:update',
-                agent_id: '99',
-                data: { status: 'working', category: 'user' }
+                type: 'agent:create',
+                agent_id: 'unknown-id',
+                data: { name: 'New Agent', status: 'idle' }
             });
             
-            expect(agent_service.normalize_agent).toHaveBeenCalledWith(
-                expect.objectContaining({ id: '99', status: 'working' }),
-                '/workspaces/agent-silo-99',
-                expect.objectContaining({ id: '99' })
-            );
+            expect(called).toBe(true);
+        });
+
+        it('triggers fetch_agents when receiving engine:ui_invalidate for agents', () => {
+            let called = false;
+            use_agent_registry_store.setState({
+                fetch_agents: async () => { called = true; }
+            });
+            
+            use_agent_telemetry_store.getState().init_telemetry();
+            
+            update_callback({
+                type: 'engine:ui_invalidate',
+                resource: 'agents'
+            });
+            
+            expect(called).toBe(true);
+        });
+    });
+
+    describe('use_agent_store facade', () => {
+        it('reconciles registry agents with live telemetry status', () => {
+            use_agent_registry_store.setState({ agents: [mock_agent_1] });
+            use_agent_telemetry_store.setState({
+                live_status: {
+                    '1': { status: 'thinking', current_task: 'Cognitive loop' }
+                }
+            });
+
+            const { result } = renderHook(() => use_agent_store());
+
+            expect(result.current.agents[0]).toMatchObject({
+                id: '1',
+                name: 'Test Agent 1',
+                status: 'thinking',
+                current_task: 'Cognitive loop'
+            });
+        });
+
+        it('supports optional selectors for backward compatibility', () => {
+            use_agent_registry_store.setState({ agents: [mock_agent_1] });
+            use_agent_telemetry_store.setState({
+                live_status: {
+                    '1': { status: 'thinking', current_task: 'Cognitive loop' }
+                }
+            });
+
+            const { result: agents_res } = renderHook(() => use_agent_store(s => s.agents));
+            expect(agents_res.current[0]).toMatchObject({
+                id: '1',
+                status: 'thinking'
+            });
+
+            const { result: status_res } = renderHook(() => use_agent_store(s => s.is_loading));
+            expect(status_res.current).toBe(false);
         });
     });
 });

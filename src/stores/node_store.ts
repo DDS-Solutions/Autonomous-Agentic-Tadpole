@@ -30,6 +30,12 @@ export interface Node_State {
     discover_nodes: () => Promise<void>;
 }
 
+const SYNC_CHANNEL = 'tadpole-os-nodes-sync';
+const sync_channel = typeof window !== 'undefined' ? new BroadcastChannel(SYNC_CHANNEL) : null;
+const TAB_ID = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}`;
+
+let is_applying_sync = false;
+
 /**
  * use_node_store
  * Global store for managing physical and virtual infrastructure nodes.
@@ -45,6 +51,10 @@ export const use_node_store = create<Node_State>()(
                 try {
                     const nodes = await tadpole_os_service.get_nodes(options) as unknown as Swarm_Node[];
                     set({ nodes, is_loading: false });
+                    
+                    if (!is_applying_sync && sync_channel) {
+                        sync_channel.postMessage({ type: 'SYNC_NODES', payload: nodes, source_id: TAB_ID });
+                    }
                 } catch (error: unknown) {
                     set({ is_loading: false });
                     log_error('NodeStore', 'Node Retrieval Failed', error);
@@ -70,7 +80,6 @@ export const use_node_store = create<Node_State>()(
                         });
                     }
                     set({ is_loading: false });
-                    set({ is_loading: false });
                 } catch (error: unknown) {
                     set({ is_loading: false });
                     log_error('NodeStore', 'Node Discovery Failed', error);
@@ -82,6 +91,29 @@ export const use_node_store = create<Node_State>()(
         }
     )
 );
+
+if (sync_channel) {
+    sync_channel.onmessage = (event) => {
+        if (event.data.type === 'SYNC_NODES' && event.data.source_id !== TAB_ID) {
+            is_applying_sync = true;
+            use_node_store.setState({ nodes: event.data.payload });
+            is_applying_sync = false;
+        } else if (event.data.type === 'REQUEST_NODES') {
+            sync_channel.postMessage({ 
+                type: 'SYNC_NODES', 
+                payload: use_node_store.getState().nodes,
+                source_id: TAB_ID 
+            });
+        }
+    };
+
+    // Request initial state from other tabs
+    setTimeout(() => {
+        if (use_node_store.getState().nodes.length === 0) {
+            sync_channel.postMessage({ type: 'REQUEST_NODES', source_id: TAB_ID });
+        }
+    }, 200);
+}
 
 
 // Metadata: [node_store]

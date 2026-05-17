@@ -18,6 +18,7 @@ import { i18n } from '../../i18n';
 import clsx from 'clsx';
 import { Tooltip } from '../ui';
 import { decodeAAAK, isAAAK } from '../../utils/aaak_decoder';
+import { get_safe_date } from '../../utils/date_utils';
 
 interface Buffered_Transcript_View_Props {
     agent_id?: string;
@@ -70,7 +71,7 @@ const TranscriptEntry = React.memo(({ entry }: { entry: log_entry }) => {
                 {icon}
                 <span className="text-[10px] font-mono uppercase tracking-widest">{entry.source}</span>
                 <span className="text-[9px] font-mono text-zinc-600 ml-auto">
-                    {entry.timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {get_safe_date(entry.timestamp)?.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) || '--:--:--'}
                 </span>
             </div>
             <div className={clsx("text-xs leading-relaxed break-words font-mono", color)}>
@@ -131,7 +132,7 @@ export const Buffered_Transcript_View: React.FC<Buffered_Transcript_View_Props> 
             if (entry.id && seen_ids.current.has(entry.id)) return;
             
             // Assign robust local ID if missing
-            const entry_to_buffer = entry.id ? entry : { ...entry, id: `local-${entry.timestamp.getTime()}-${local_id_counter++}` };
+            const entry_to_buffer = entry.id ? entry : { ...entry, id: `local-${get_safe_date(entry.timestamp)?.getTime() || Date.now()}-${local_id_counter++}` };
             seen_ids.current.add(entry_to_buffer.id!);
 
             buffer_ref.current.push(entry_to_buffer);

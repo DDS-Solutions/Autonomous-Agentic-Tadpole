@@ -1,13 +1,53 @@
 [
   {
-    "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
-    "name": "gemma4:e2b",
+    "id": "phi3.5:latest",
+    "name": "phi3.5:latest",
     "providerId": "ollama",
     "provider": "ollama",
-    "rpm": 100,
-    "tpm": 100000,
-    "rpd": 1000,
-    "tpd": 10000000,
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": false,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096
+    }
+  },
+  {
+    "id": "gemma4:26b",
+    "name": "gemma4:26b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096
+    }
+  },
+  {
+    "id": "qwen3.5:9b",
+    "name": "qwen3.5:9b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
     "modality": "llm",
     "capabilities": {
       "supportsTools": true,
@@ -40,34 +80,14 @@
     }
   },
   {
-    "id": "phi3.5:latest",
-    "name": "phi3.5:latest",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": false,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096
-    }
-  },
-  {
-    "id": "qwen3.5:9b",
-    "name": "qwen3.5:9b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
+    "id": "da821b7c-8857-488d-ac61-07c9de6bfb20",
+    "name": "Gemini 2.5 Flash",
+    "providerId": "google",
+    "provider": "google",
+    "rpm": 5,
+    "tpm": 250,
+    "rpd": 20,
+    "tpd": 10000000,
     "modality": "llm",
     "capabilities": {
       "supportsTools": true,
@@ -80,14 +100,14 @@
     }
   },
   {
-    "id": "gemma4:26b",
-    "name": "gemma4:26b",
+    "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
+    "name": "gemma4:e2b",
     "providerId": "ollama",
     "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
+    "rpm": 100,
+    "tpm": 100000,
+    "rpd": 1000,
+    "tpd": 10000000,
     "modality": "llm",
     "capabilities": {
       "supportsTools": true,
@@ -95,7 +115,7 @@
       "supportsStructuredOutput": false,
       "supportsReasoning": false,
       "supportsHaltingTool": true,
-      "contextWindow": 128000,
+      "contextWindow": 32768,
       "maxOutputTokens": 4096
     }
   }

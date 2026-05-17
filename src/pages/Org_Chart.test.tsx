@@ -184,6 +184,14 @@ describe('Org_Chart', () => {
         fireEvent.click(screen.getByText('Close'));
         expect(screen.queryByTestId('config-panel')).not.toBeInTheDocument();
     });
+
+    it('renders the Strategic Command label above the Alpha node', async () => {
+        render(<Org_Chart />);
+        await waitFor(() => {
+            expect(screen.getByText('org_chart.label_strategic_command')).toBeInTheDocument();
+            expect(screen.getByText('org_chart.label_command_chain')).toBeInTheDocument();
+        });
+    });
 });
 
 

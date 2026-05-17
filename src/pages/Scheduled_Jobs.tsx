@@ -14,11 +14,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Play, Pause, Trash2, ChevronRight, Activity, CheckCircle2, AlertCircle, Plus, Edit2 } from 'lucide-react';
 import { tadpole_os_service, type Scheduled_Job, type Scheduled_Job_Run, type Workflow_Entry } from '../services/tadpoleos_service';
-import { use_agent_store } from '../stores/agent_store';
+import { use_agent_store, use_agent_registry_store } from '../stores/agent_store';
 import { event_bus } from '../services/event_bus';
 import { Tooltip } from '../components/ui';
 import { Confirm_Dialog } from '../components/ui/Confirm_Dialog';
 import { i18n } from '../i18n';
+import { get_safe_date } from '../utils/date_utils';
 
 // --- TYPE DEFINITIONS ---
 
@@ -252,7 +253,7 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                         set_creating(false);
                         set_editing_job_id(null);
                     }} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-300">
-                        {i18n.t('scheduled_jobs.cancel')}
+                        {i18n.t('common.btn_cancel')}
                     </button>
                 </div>
             </form>
@@ -292,7 +293,7 @@ const Job_History_View: React.FC<job_history_view_props> = ({ job, runs }) => {
                         <div key={run.id} className="flex items-center justify-between bg-zinc-950 p-2 rounded border border-zinc-800 text-xs font-mono group">
                             <div className="flex items-center gap-4">
                                 {run.status === 'completed' ? <CheckCircle2 size={14} className="text-emerald-500" /> : <AlertCircle size={14} className="text-rose-500" />}
-                                <span className="text-zinc-400">{new Date(run.started_at).toLocaleString()}</span>
+                                <span className="text-zinc-400">{get_safe_date(run)?.toLocaleString() || i18n.t('common.unknown')}</span>
                                 <span className={`${run.status === 'completed' ? 'text-emerald-400' : 'text-rose-400'}`}>{run.status.toUpperCase()}</span>
                             </div>
                             <div className="flex items-center gap-4 text-zinc-500">
@@ -341,7 +342,7 @@ const Scheduled_Jobs: React.FC = () => {
         max_failures: 3
     });
 
-    const agents = use_agent_store(state => state.agents);
+    const { agents } = use_agent_store();
 
     // Filtered and Sorted Agent List
     const filtered_agents = useMemo(() => {
@@ -410,7 +411,7 @@ const Scheduled_Jobs: React.FC = () => {
     useEffect(() => {
         void (async () => {
             await Promise.resolve();
-            use_agent_store.getState().fetch_agents();
+            use_agent_registry_store.getState().fetch_agents();
             fetch_workflows();
             fetch_jobs();
         })();
@@ -637,7 +638,7 @@ const Scheduled_Jobs: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-green-400 font-mono text-xs font-bold">{job.cron_expr}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-zinc-400 font-mono text-xs">
-                                            {job.enabled ? new Date(job.next_run_at).toLocaleString() : '-'}
+                                            {job.enabled ? (get_safe_date({ next_run_at: job.next_run_at })?.toLocaleString() || '-') : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {get_status_indicator(job)}

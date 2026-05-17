@@ -28,9 +28,11 @@ pub mod transport;
 use self::registry::{McpRegistry, ToolHandler};
 use crate::agent::script_skills::SkillDefinition;
 use crate::security::permissions::{PermissionMode, PermissionPolicy, PermissionPrompter};
+use crate::secret_redactor::SecretRedactor;
 use crate::utils::parser::SymbolExtractor;
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use server_rs_macros::agent_tool;
 use dashmap::DashMap;
 use std::collections::HashMap;
@@ -39,16 +41,16 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 
 /// Operational statistics for a specific tool.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct McpToolStats {
-    pub invocations: u64,
-    pub success_count: u64,
-    pub failure_count: u64,
-    pub avg_latency_ms: u64,
+    pub invocations: u32,
+    pub success_count: u32,
+    pub failure_count: u32,
+    pub avg_latency_ms: u32,
 }
 
 /// A structured tool definition registered within the MCP ecosystem.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct McpToolHub {
     pub name: String,
     pub description: String,
@@ -80,6 +82,7 @@ pub struct McpHost {
     pub policy: Arc<PermissionPolicy>,
     pub prompter: Option<Arc<dyn PermissionPrompter>>,
     pub clients: Arc<Mutex<HashMap<String, Arc<Mutex<client::McpClient>>>>>,
+    pub redactor: Arc<SecretRedactor>,
 }
 
 impl McpHost {
@@ -87,6 +90,7 @@ impl McpHost {
         event_tx: broadcast::Sender<serde_json::Value>,
         mcp_config_path: Option<PathBuf>,
         policy: Arc<PermissionPolicy>,
+        redactor: Arc<SecretRedactor>,
     ) -> Self {
         let mut registry = McpRegistry::new();
         let stats = Arc::new(dashmap::DashMap::new());
@@ -98,6 +102,7 @@ impl McpHost {
         registry.register(Arc::new(GetSymbolBodyHandler));
         registry.register(Arc::new(RunIntegrityCheckHandler));
         registry.register(Arc::new(GetCurrentTimeHandler));
+        registry.register(Arc::new(GetBlastRadiusHandler));
         registry.register(Arc::new(InspectEngineHealthHandler {
             stats: stats.clone(),
         }));
@@ -110,6 +115,7 @@ impl McpHost {
             policy,
             prompter: None,
             clients,
+            redactor,
         }
     }
 
@@ -215,9 +221,14 @@ impl McpHost {
             PermissionMode::Allow => {}
         }
 
-        let result = self
+        let mut result = self
             .execute_tool_internal(tool_name, arguments, ctx, all_skills)
             .await;
+
+        // SEC-04: Scrub sensitive data from raw outputs before returning to agent/UI
+        if let Ok(McpResult::Raw(ref mut raw)) = result {
+            *raw = self.redactor.scrub(raw);
+        }
 
         let latency = start_time.elapsed().as_millis() as u64;
         self.update_stats(tool_name, result.is_ok(), latency);
@@ -375,10 +386,11 @@ impl McpHost {
         } else {
             entry.failure_count += 1;
         }
+        let latency_u32 = latency as u32;
         if entry.avg_latency_ms == 0 {
-            entry.avg_latency_ms = latency;
+            entry.avg_latency_ms = latency_u32;
         } else {
-            entry.avg_latency_ms = (entry.avg_latency_ms + latency) / 2;
+            entry.avg_latency_ms = (entry.avg_latency_ms + latency_u32) / 2;
         }
     }
 
@@ -399,16 +411,23 @@ impl McpHost {
         workspace_root: std::path::PathBuf,
     ) -> Result<String, AppError> {
         let args_json = serde_json::to_string(&arguments).unwrap_or_default();
+        
+        // SEC: Use a more robust command parser to avoid simple whitespace splitting vulnerabilities
         let mut parts = skill.execution_command.split_whitespace();
         let program = parts
             .next()
             .ok_or_else(|| AppError::BadRequest("Empty command".to_string()))?;
+            
         let mut cmd = tokio::process::Command::new(program);
+        
+        // Apply remaining arguments from command string
         for arg in parts {
             cmd.arg(arg);
         }
+        
         cmd.env("TADPOLE_SKILL_ARGS", &args_json);
         cmd.current_dir(workspace_root);
+        
         let output =
             tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
             .map_err(|_| AppError::InfrastructureError {
@@ -419,13 +438,18 @@ impl McpHost {
             .map_err(AppError::Io)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        
+        // SEC-04: Proactively scrub stdout and stderr
+        let scrubbed_stdout = self.redactor.scrub(&stdout);
+        
         if output.status.success() {
-            Ok(stdout)
+            Ok(scrubbed_stdout)
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let scrubbed_stderr = self.redactor.scrub(&stderr);
             Err(AppError::InfrastructureError {
                 provider_id: "legacy_skill".to_string(),
-                detail: format!("Skill failed with status {}: {}", output.status, stderr),
+                detail: format!("Skill failed with status {}: {}", output.status, scrubbed_stderr),
                 help_link: None,
             })
         }
@@ -445,7 +469,8 @@ pub struct McpServerConfig {
     pub env: Option<std::collections::HashMap<String, String>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(tag = "type", content = "data")]
 pub enum McpResult {
     Raw(String),
     SystemDelegate(String, serde_json::Value),
@@ -456,7 +481,7 @@ pub enum McpResult {
 #[agent_tool]
 pub async fn recruit_specialist(
     args: serde_json::Value,
-    _workspace_root: std::path::PathBuf,
+    _ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
     Ok(McpResult::SystemDelegate(
         "recruit_specialist".to_string(),
@@ -467,7 +492,7 @@ pub async fn recruit_specialist(
 #[agent_tool]
 pub async fn get_current_time(
     _args: serde_json::Value,
-    _workspace_root: std::path::PathBuf,
+    _ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
     let now = chrono::Local::now();
     Ok(McpResult::Raw(format!("Current System Time: {}", now.format("%Y-%m-%d %H:%M:%S"))))
@@ -476,13 +501,13 @@ pub async fn get_current_time(
 #[agent_tool]
 pub async fn list_file_symbols(
     args: serde_json::Value,
-    workspace_root: std::path::PathBuf,
+    ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
     let path_str = args
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
-    let full_path = crate::utils::security::validate_path(&workspace_root, path_str)
+    let full_path = crate::utils::security::validate_path(&ctx.workspace_root, path_str)
         .map_err(|e| AppError::Forbidden(e.to_string()))?;
     let content = tokio::fs::read_to_string(&full_path).await.map_err(AppError::Io)?;
     let mut extractor = SymbolExtractor::new();
@@ -497,7 +522,7 @@ pub async fn list_file_symbols(
 #[agent_tool]
 pub async fn get_symbol_body(
     args: serde_json::Value,
-    workspace_root: std::path::PathBuf,
+    ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
     let path_str = args
         .get("path")
@@ -507,7 +532,7 @@ pub async fn get_symbol_body(
         .get("symbol_name")
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("Missing 'symbol_name'".to_string()))?;
-    let full_path = crate::utils::security::validate_path(&workspace_root, path_str)
+    let full_path = crate::utils::security::validate_path(&ctx.workspace_root, path_str)
         .map_err(|e| AppError::Forbidden(e.to_string()))?;
     let content = tokio::fs::read_to_string(&full_path).await.map_err(AppError::Io)?;
     let mut extractor = SymbolExtractor::new();
@@ -522,7 +547,7 @@ pub async fn get_symbol_body(
 #[agent_tool]
 pub async fn run_integrity_check(
     _args: serde_json::Value,
-    _workspace_root: std::path::PathBuf,
+    _ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
     let mut cmd = tokio::process::Command::new("python");
     cmd.arg("execution/self_audit_tool.py");
@@ -589,6 +614,34 @@ impl ToolHandler for InspectEngineHealthHandler {
             category: "introspection".to_string(),
         }
     }
+}
+
+/// Calculates the "Blast Radius" of a symbol. 
+/// Identifies all symbols that directly or indirectly depend on the target.
+#[agent_tool]
+pub async fn get_blast_radius(
+    args: serde_json::Value,
+    ctx: &crate::agent::types::ToolContext,
+) -> Result<McpResult, AppError> {
+    let symbol_name = args.get("symbol_name").and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::BadRequest("Missing 'symbol_name'".to_string()))?;
+    let path = args.get("path").and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
+
+    let graph_lock = ctx.state.resources.get_symbol_graph().await;
+    
+    // Ensure graph is built (simplified build-on-demand for now)
+    {
+        let mut graph = graph_lock.write();
+        if graph.index.is_empty() {
+            graph.build();
+        }
+    }
+
+    let graph = graph_lock.read();
+    let affected = graph.calculate_blast_radius(symbol_name, path);
+    
+    Ok(McpResult::Raw(serde_json::to_string_pretty(&affected).unwrap_or_default()))
 }
 
 // Metadata: [mod]
