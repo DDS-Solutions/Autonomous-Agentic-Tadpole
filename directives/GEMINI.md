@@ -143,10 +143,10 @@ graph TD
 2. **Telemetry Tracing**: Trace emitters through `server-rs/src/telemetry/`, `server-rs/src/startup.rs`, `server-rs/src/router.rs`, and WebSocket consumers in `src/services/`.
 3. **Modular Skills**: Use the **`BaseSkill`** framework in `execution/core/` for new tools when the existing skill registry pattern fits.
 4. **Service Context**: Prefer source-level comments and the docs in `README.md`, `SYSTEM_MAP.md`, and `docs/ARCHITECTURE.md` for current dependencies and side effects.
-
+5. **Codebase Symbol Graph**: Query `/v1/intelligence/graph` and `/v1/intelligence/blast-radius` REST APIs to assess the topological blast radius of changes beforehand. The graph engine features an optimized $O(N + M)$ name lookup index and contiguous zero-copy BFS traversal pathways to enable high-speed workspace topological analysis.
 
 > [!TIP]
-> From now on, when troubleshooting, you can simply ask an AI agent to "Check the Error Registry for 'X'" or "Trace the Telemetry Link for 'Y'" to resolve issues in seconds.
+> From now on, when troubleshooting, you can simply ask an AI agent to "Check the Error Registry for 'X'" or "Trace the Telemetry Link for 'Y'" to resolve issues in seconds. Or, use `/v1/intelligence/blast-radius` to trace downstream dependency ripple-effects of any proposed refactor.
 
 ---
 

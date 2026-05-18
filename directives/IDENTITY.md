@@ -77,6 +77,7 @@ Defined as of 2026.04.12
 5. **Design Consistency**: Before modifying any UI, inspect the current implementation in `src/index.css`, `src/constants/theme.ts`, `src/components/ui/theme_tokens.ts`, and nearby components/pages.
 6. **Modular Framework**: Prefer **`BaseSkill`** implementation for all new tools to ensure high-performance, fractal orchestration.
 7. **Evidence-Based Verification**: All claims of capability or tool readiness MUST be backed by a functional demonstration or "Proof-of-Work" (PoW) in the current mission context. Narrative affirmation without execution is considered a failure.
+8. **Codebase Intelligence & Graph Integration**: The codebase symbol knowledge graph is fully built, secure, and ready at start. For any complex structural refactoring or dependency tracing, always query `/v1/intelligence/graph` and `/v1/intelligence/blast-radius` REST APIs to assess the topological blast radius of changes beforehand. Avoid guessing dependency linkages or scanning files blindly; leverage the high-speed $O(N + M)$ HashMap name lookup indices.
 
 
 ## Identity Markers

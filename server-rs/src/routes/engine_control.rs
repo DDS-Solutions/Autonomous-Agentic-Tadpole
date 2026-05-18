@@ -66,6 +66,9 @@ pub async fn kill_agents(
         }
     }
 
+    // Persist mutated agent states to SQLite to guarantee persistence across engine restarts
+    state.save_agents().await;
+
     tracing::warn!(
         "🛑 [Kill Switch] Halted {} agents, cleared {} pending oversight entries.",
         halted,
@@ -98,8 +101,8 @@ pub async fn shutdown_engine(
 ) -> impl IntoResponse {
     tracing::warn!("💀 [Shutdown] Engine shutdown requested by operator. Persisting state...");
 
-    // Save all agents before shutting down
-    state.save_agents().await;
+    // Flush all volatile registries and buffers to SQLite before shutting down
+    state.flush_all().await;
 
     state.emit_event(serde_json::json!({
         "type": "engine:shutdown",

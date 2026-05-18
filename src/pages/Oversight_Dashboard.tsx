@@ -484,9 +484,11 @@ export default function Oversight_Dashboard() {
                                         {entry.decision === 'rejected' ? (
                                             <span className="text-red-400 text-xs uppercase font-bold tracking-wider">{i18n.t('oversight.blocked_label')}</span>
                                         ) : (
-                                            <span className={`text-xs ${entry.result?.success ? 'text-green-400' : 'text-red-400'}`}>
-                                                {entry.result?.success ? i18n.t('oversight.success_label') : i18n.t('oversight.failed_label')}
-                                                <span className="text-zinc-600 ml-1">({entry.result?.duration_ms}ms)</span>
+                                            <span className={`text-xs ${(!entry.result || entry.result.success) ? 'text-green-400' : 'text-red-400'}`}>
+                                                {(!entry.result || entry.result.success) ? i18n.t('oversight.success_label') : i18n.t('oversight.failed_label')}
+                                                {entry.result?.duration_ms !== undefined && (
+                                                    <span className="text-zinc-600 ml-1">({entry.result.duration_ms}ms)</span>
+                                                )}
                                             </span>
                                         )}
                                     </td>

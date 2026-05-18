@@ -364,9 +364,11 @@ export const system_api_service = {
     /**
      * get_oversight_ledger
      * Fetches the historical ledger of all oversight decisions.
+     * Requests up to 100 items (the server-side clamp limit) to ensure accurate statistics
+     * and avoid card truncation issues when database entries exceed the default of 25.
      */
     get_oversight_ledger: async (): Promise<unknown[]> => {
-        const res = await api_request<unknown | unknown[]>('/v1/oversight/ledger', { method: 'GET' });
+        const res = await api_request<unknown | unknown[]>('/v1/oversight/ledger?per_page=100', { method: 'GET' });
         return Array.isArray(res) ? res : ((res as { data?: unknown[] }).data || []);
     },
 

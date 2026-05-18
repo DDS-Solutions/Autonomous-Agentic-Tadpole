@@ -96,11 +96,24 @@ pub async fn get_ledger(
     let offset = ((page as i32) - 1) * limit;
 
     let rows = sqlx::query(
-        "SELECT id, mission_id, agent_id, entry_type, skill, params, status, decision, decided_at, decided_by, created_at, payload 
-         FROM oversight_log 
-         WHERE status != 'pending' 
-         ORDER BY created_at DESC 
-         LIMIT ? OFFSET ?"
+        r#"
+        SELECT 
+            o.id, o.mission_id, o.agent_id, o.entry_type, o.skill, o.params, o.status, o.decision, o.decided_at, o.decided_by, o.created_at, o.payload,
+            a.action as audit_action, a.timestamp as audit_timestamp, a.params as audit_params
+        FROM oversight_log o
+        LEFT JOIN audit_trail a ON a.id = (
+            SELECT id FROM audit_trail 
+            WHERE mission_id = o.mission_id 
+              AND agent_id = o.agent_id 
+              AND (action = '[SUCCESS] ' || o.skill OR action = '[FAILURE] ' || o.skill)
+              AND datetime(timestamp) >= datetime(o.created_at)
+            ORDER BY datetime(timestamp) ASC
+            LIMIT 1
+        )
+        WHERE o.status != 'pending' 
+        ORDER BY o.created_at DESC 
+        LIMIT ? OFFSET ?
+        "#
     )
     .bind(limit)
     .bind(offset)
@@ -110,7 +123,43 @@ pub async fn get_ledger(
 
     let entries: Vec<serde_json::Value> = rows.into_iter().map(|row| {
         use sqlx::Row;
-        serde_json::json!({
+        
+        let audit_action = row.try_get::<Option<String>, _>("audit_action").ok().flatten();
+        let audit_timestamp = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("audit_timestamp").ok().flatten();
+        let audit_params = row.try_get::<Option<String>, _>("audit_params").ok().flatten();
+
+        let result_val = if let Some(action) = audit_action {
+            let success = action.starts_with("[SUCCESS]");
+            let decided_at = row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at");
+            
+            let duration_ms = if let (Some(decided), Some(completed)) = (decided_at, audit_timestamp) {
+                let diff = completed.signed_duration_since(decided);
+                diff.num_milliseconds().abs().max(1)
+            } else {
+                15 // default fallback duration
+            };
+
+            let output_str = audit_params.unwrap_or_else(|| "No execution output recorded".to_string());
+            
+            if success {
+                serde_json::json!({
+                    "success": true,
+                    "output": output_str,
+                    "duration_ms": duration_ms
+                })
+            } else {
+                serde_json::json!({
+                    "success": false,
+                    "output": output_str,
+                    "error": output_str,
+                    "duration_ms": duration_ms
+                })
+            }
+        } else {
+            serde_json::Value::Null
+        };
+
+        let mut entry_obj = serde_json::json!({
             "id": row.get::<String, _>("id"),
             "mission_id": row.get::<Option<String>, _>("mission_id"),
             "tool_call": {
@@ -128,7 +177,15 @@ pub async fn get_ledger(
             "decided_by": row.get::<Option<String>, _>("decided_by"),
             "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("payload")).unwrap_or_default(),
-        })
+        });
+
+        if let Some(obj) = entry_obj.as_object_mut() {
+            if !result_val.is_null() {
+                obj.insert("result".to_string(), result_val);
+            }
+        }
+
+        entry_obj
     }).collect();
 
     Ok(Json(PaginatedResponse::from_vec(

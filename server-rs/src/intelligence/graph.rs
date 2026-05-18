@@ -87,16 +87,22 @@ impl CodeSymbolGraph {
                 continue;
             }
 
-            if let Ok(content) = std::fs::read_to_string(path) {
-                let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
-                let symbols = extractor.extract_symbols(path, &content);
-                for sym in symbols {
-                    all_symbols.push((rel_path.clone(), sym));
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
+                    let symbols = extractor.extract_symbols(path, &content);
+                    for sym in symbols {
+                        all_symbols.push((rel_path.clone(), sym));
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
                 }
             }
         }
 
-        // 2. Add nodes to graph
+        // 2. Add nodes to graph and compile Inverted Name Index
+        let mut name_to_indices: HashMap<String, Vec<NodeIndex>> = HashMap::new();
         for (path, sym) in &all_symbols {
             let key = format!("{}::{}", path, sym.name);
             let node = SymbolNode {
@@ -107,11 +113,12 @@ impl CodeSymbolGraph {
             };
             let idx = self.graph.add_node(node);
             self.index.insert(key, idx);
+            name_to_indices.entry(sym.name.clone()).or_default().push(idx);
         }
 
         tracing::info!("✅ [Graph] Indexed {} symbols.", all_symbols.len());
 
-        // 3. Extract references and add edges (Dependencies)
+        // 3. Extract references and add edges (Dependencies - Optimized O(N+M) Complexity)
         for entry in WalkDir::new(&self.root)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -128,32 +135,36 @@ impl CodeSymbolGraph {
                 continue;
             }
 
-            if let Ok(content) = std::fs::read_to_string(path) {
-                let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
-                let refs = extractor.extract_references(path, &content);
-                
-                let file_symbols: Vec<_> = all_symbols.iter()
-                    .filter(|(p, _)| p == &rel_path)
-                    .collect();
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
+                    let refs = extractor.extract_references(path, &content);
+                    
+                    let file_symbols: Vec<_> = all_symbols.iter()
+                        .filter(|(p, _)| p == &rel_path)
+                        .collect();
 
-                for r in refs {
-                    // Try to find the target symbol (heuristic: global name match)
-                    for (target_key, &target_idx) in &self.index {
-                        let target_name = target_key.split("::").last().unwrap_or("");
-                        if target_name == r.name {
-                            // Find which source symbol in THIS file contains this reference
-                            for (_, src_sym) in &file_symbols {
-                                if r.range.start_byte >= src_sym.range.start_byte && r.range.end_byte <= src_sym.range.end_byte {
-                                    let src_key = format!("{}::{}", rel_path, src_sym.name);
-                                    if let Some(&src_idx) = self.index.get(&src_key) {
-                                        if src_idx != target_idx {
-                                            self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
+                    for r in refs {
+                        // 🚀 O(1) Lookup of matching target symbol names
+                        if let Some(target_indices) = name_to_indices.get(&r.name) {
+                            for &target_idx in target_indices {
+                                // Find which source symbol in THIS file contains this reference
+                                for (_, src_sym) in &file_symbols {
+                                    if r.range.start_byte >= src_sym.range.start_byte && r.range.end_byte <= src_sym.range.end_byte {
+                                        let src_key = format!("{}::{}", rel_path, src_sym.name);
+                                        if let Some(&src_idx) = self.index.get(&src_key) {
+                                            if src_idx != target_idx {
+                                                self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️ [Graph] Failed to read file {} for reference extraction: {}", path.display(), e);
                 }
             }
         }
@@ -174,19 +185,85 @@ impl CodeSymbolGraph {
             let mut stack = vec![start_idx];
             visited.insert(start_idx);
 
+            let mut affected_indices = Vec::new();
             while let Some(current_idx) = stack.pop() {
                 // Find all neighbors that point to current_idx
                 for edge in self.graph.edges_directed(current_idx, petgraph::Direction::Incoming) {
                     let neighbor_idx = edge.source();
                     if visited.insert(neighbor_idx) {
-                        affected.push(self.graph[neighbor_idx].clone());
+                        affected_indices.push(neighbor_idx);
                         stack.push(neighbor_idx);
                     }
                 }
             }
+
+            // Perform single contiguous clone of final affected payloads to avoid traversal allocation pressure
+            for idx in affected_indices {
+                affected.push(self.graph[idx].clone());
+            }
         }
         
         affected
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use std::fs::File;
+    use std::io::Write;
+
+    #[test]
+    fn test_empty_blast_radius_nonexistent() {
+        let dir = tempdir().unwrap();
+        let graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+        let affected = graph.calculate_blast_radius("nonexistent", "src/lib.rs");
+        assert!(affected.is_empty(), "Blast radius of nonexistent symbol must be empty");
+    }
+
+    #[test]
+    fn test_happy_path_symbol_dependency() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("main.rs");
+        
+        // Write mock code content with two symbols: main and helper
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "fn helper() {{ }}").unwrap();
+        writeln!(file, "fn main() {{ helper(); }}").unwrap();
+        
+        let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+        graph.build();
+        
+        // Check that nodes and edges are populated
+        assert!(graph.graph.node_count() >= 2, "Should index at least 2 symbols");
+        
+        // Calculate blast radius for helper() - main() should be affected
+        let affected = graph.calculate_blast_radius("helper", "main.rs");
+        assert!(!affected.is_empty(), "helper blast radius should not be empty");
+        let has_main = affected.iter().any(|node| node.name == "main");
+        assert!(has_main, "main should depend on helper");
+    }
+
+    #[test]
+    fn test_circular_dependency_handling() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("main.rs");
+        
+        // Write circular dependency mock code
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "fn alpha() {{ beta(); }}").unwrap();
+        writeln!(file, "fn beta() {{ alpha(); }}").unwrap();
+        
+        let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+        graph.build();
+        
+        // BFS should handle the cycle gracefully and terminate without infinite loop
+        let affected_alpha = graph.calculate_blast_radius("alpha", "main.rs");
+        let affected_beta = graph.calculate_blast_radius("beta", "main.rs");
+        
+        assert!(!affected_alpha.is_empty());
+        assert!(!affected_beta.is_empty());
     }
 }
 
