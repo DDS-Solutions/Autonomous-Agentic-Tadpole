@@ -147,6 +147,24 @@ impl AgentRunner {
                     format!("{}\n\nINTERNAL MONOLOGUE:\n{}", conversation_history.join("\n\n"), internal_monologue.join("\n\n"))
                 };
 
+                // 🕒 [Memory-Aware Throttle] If system memory exceeds 90%, dynamically throttle agent execution speeds.
+                let profile = self.state.resources.hardware_profiler.get_profile();
+                let mem_pct = (profile.memory_used as f64 / profile.memory_total as f64) * 100.0;
+                if mem_pct > 90.0 {
+                    let delay_ms = 500.0 + (mem_pct - 90.0) * 100.0;
+                    tracing::warn!(
+                        "⚠️ [Memory Throttle] System memory is {:.1}% (exceeding 90%). Dynamic throttling active: delaying execution by {:.0}ms...",
+                        mem_pct,
+                        delay_ms
+                    );
+                    self.broadcast_sys(
+                        &format!("⚠️ System memory high ({:.1}%). Dynamic throttling active: delaying execution by {:.0}ms.", mem_pct, delay_ms),
+                        "warning",
+                        Some(ctx.mission_id.clone()),
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
+                }
+
                 let provider_res = self
                     .call_provider(ctx, &system_prompt, &current_prompt, Some(tools))
                     .await;
@@ -295,7 +313,28 @@ impl AgentRunner {
                         self.broadcast_agent(ctx, "System: Capping concurrent tools", "warn");
                     }
 
-                    for fc in function_calls.into_iter().take(MAX_CONCURRENT_TOOLS) {
+                    for mut fc in function_calls.into_iter().take(MAX_CONCURRENT_TOOLS) {
+                        // 🔄 [Delegation Filter] Intercept COO direct recruitment and redirect to Alpha Node
+                        if ctx.agent_id == crate::agent::constants::AGENT_COO && (fc.name == "spawn_subagent" || fc.name == "recruit_specialist") {
+                            let target_opt = fc.args.get("agent_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            if let Some(target) = target_opt {
+                                if target != crate::agent::constants::AGENT_ALPHA {
+                                    tracing::warn!("🔄 [Hierarchy Intercept] COO (ID: {}) attempted direct recruitment of '{}'. Redirecting to Alpha Node (ID: {}).", ctx.agent_id, target, crate::agent::constants::AGENT_ALPHA);
+                                    self.broadcast_sys(
+                                        &format!("🔄 Hierarchy Intercept: Redirected COO recruitment request for '{}' to the Alpha Node Commander.", target),
+                                        "info",
+                                        Some(ctx.mission_id.clone()),
+                                    );
+                                    if let Some(map) = fc.args.as_object_mut() {
+                                        map.insert("agent_id".to_string(), serde_json::json!(crate::agent::constants::AGENT_ALPHA));
+                                        if let Some(msg) = map.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()) {
+                                            map.insert("message".to_string(), serde_json::json!(format!("Delegate complex task for worker '{}': {}", target, msg)));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         let runner = self.clone();
                         let ctx_clone = ctx.clone();
                         let user_msg_clone = payload.message.clone();
@@ -324,8 +363,6 @@ impl AgentRunner {
                         if name == "complete_mission" {
                             mission_completed = true;
                             final_report = Some(local_text);
-                        } else if let Ok(Some(_)) = result {
-                            mission_completed = true;
                         }
                     }
                     drop(_orbit_guard);

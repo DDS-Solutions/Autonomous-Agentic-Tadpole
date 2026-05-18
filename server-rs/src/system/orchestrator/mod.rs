@@ -60,6 +60,11 @@ impl Orchestrator {
         // 2. Health & Governance: Reap stale agents/missions
         self.reap_and_audit_stale_missions().await?;
 
+        // 2.5. Resource Optimization: Deprovision idle agents
+        if let Err(e) = self.deprovision_idle_agents().await {
+            error!("🚨 [Orchestrator] Automated agent deprovisioning failed: {:?}", e);
+        }
+
         // 3. System Awareness: Generate Manifest
         let manifest = crate::system::manifest::SovereignStateManifest::generate(&self.app_state).await;
         debug!("📊 [Orchestrator] System Manifest: {}", manifest);
@@ -120,6 +125,29 @@ impl Orchestrator {
                     .await
                     .map_err(crate::error::AppError::Sqlx)?;
             }
+        }
+
+        Ok(())
+    }
+
+    /// Automatically de-provisions idle agents with zero token utilization over a rolling 48-hour window.
+    async fn deprovision_idle_agents(&self) -> Result<(), crate::error::AppError> {
+        let pool = &self.app_state.resources.pool;
+        
+        let slept_count = sqlx::query(
+            "UPDATE agents 
+             SET status = 'offline' 
+             WHERE status = 'idle' 
+             AND tokens_used = 0 
+             AND (created_at IS NULL OR created_at < datetime('now', '-48 hours'))"
+        )
+        .execute(pool)
+        .await
+        .map_err(crate::error::AppError::Sqlx)?
+        .rows_affected();
+
+        if slept_count > 0 {
+            warn!("♻️ [Orchestrator] Auto-slept {} idle agents with zero token utilization over a rolling 48-hour window.", slept_count);
         }
 
         Ok(())

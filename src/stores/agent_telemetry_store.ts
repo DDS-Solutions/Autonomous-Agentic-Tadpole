@@ -16,7 +16,6 @@
 
 import { create } from 'zustand';
 import { tadpole_os_socket } from '../services/socket';
-import { use_workspace_store } from './workspace_store';
 import { use_agent_registry_store } from './agent_registry_store';
 import type { Agent } from '../types';
 
@@ -38,10 +37,6 @@ export const use_agent_telemetry_store = create<Telemetry_State>()((set) => ({
                 if (!event.agent_id || !event.data) return;
                 const id = event.agent_id;
                 
-                // Resolve Workspace context for normalization
-                const workspace_store = use_workspace_store.getState();
-                const cluster = (workspace_store.clusters || []).find(c => (c.collaborators || []).includes(id));
-
                 const updates = event.data as Partial<Agent>;
                 
                 set(state => ({

@@ -54,9 +54,43 @@ def check_health(db_path: str) -> Dict[str, Any]:
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 
+def resolve_default_db_path() -> str:
+    """
+    Dynamically resolves the database path:
+    1. Checks if the 'DATABASE_URL' environment variable is defined. If so, parses out the file path.
+    2. If not, falls back to locating 'data/tadpole.db' relative to the active workspace.
+    3. As a final legacy backup, falls back to 'D:\\TadpoleOS-Dev\\tadpole.db'.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        if db_url.lower().startswith("sqlite:"):
+            cleaned = db_url[7:]
+            if cleaned.startswith("///"):
+                cleaned = cleaned[3:]
+            elif cleaned.startswith("//"):
+                cleaned = cleaned[2:]
+            return cleaned
+        return db_url
+
+    # Check relative to current working directory
+    candidate_cwd = os.path.abspath("data/tadpole.db")
+    if os.path.exists(candidate_cwd):
+        return candidate_cwd
+
+    # Check relative to script's directory parent
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        candidate_script = os.path.abspath(os.path.join(script_dir, "..", "data", "tadpole.db"))
+        if os.path.exists(candidate_script):
+            return candidate_script
+    except NameError:
+        pass
+
+    return r"D:\TadpoleOS-Dev\tadpole.db"
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tadpole Database Health Check")
-    parser.add_argument("--db", type=str, default=r"D:\TadpoleOS-Dev\tadpole.db", help="Path to database")
+    parser.add_argument("--db", type=str, default=resolve_default_db_path(), help="Path to database")
     parser.add_argument("--output", type=str, help="Path to output log file")
     args = parser.parse_args()
 

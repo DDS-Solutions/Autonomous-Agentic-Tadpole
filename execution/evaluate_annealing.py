@@ -34,7 +34,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Constants
-DB_PATH = Path(os.getenv("DATABASE_URL", "D:/TadpoleOS-Dev/data/tadpole.db").replace("sqlite:", ""))
+def resolve_db_path() -> Path:
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        cleaned = db_url.replace("sqlite:", "")
+        if cleaned.startswith("///"):
+            cleaned = cleaned[3:]
+        elif cleaned.startswith("//"):
+            cleaned = cleaned[2:]
+        return Path(cleaned)
+    
+    # Try active workspace candidates
+    local_candidate = Path("data/tadpole.db")
+    if local_candidate.exists():
+        return local_candidate.absolute()
+        
+    parent_candidate = Path("../data/tadpole.db")
+    if parent_candidate.exists():
+        return parent_candidate.absolute()
+        
+    return Path(r"D:\TadpoleOS-Dev\tadpole.db")
+
+# Constants
+DB_PATH = resolve_db_path()
 DIRECTIVES_PATH = Path("directives")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")

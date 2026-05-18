@@ -61,15 +61,22 @@ impl CodeGraph {
     pub fn scan(&mut self) {
         let mut modules = HashMap::new();
 
-        for entry in WalkDir::new(&self.root)
+        let mut it = WalkDir::new(&self.root)
             .max_depth(3)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+            .into_iter();
+
+        loop {
+            let entry = match it.next() {
+                None => break,
+                Some(Err(_)) => continue,
+                Some(Ok(entry)) => entry,
+            };
+
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with('.') || name == "node_modules" || name == "target" {
+                    if path != self.root && (name.starts_with('.') || name == "node_modules" || name == "target" || name == "dist" || name == "build") {
+                        it.skip_current_dir();
                         continue;
                     }
 
@@ -79,6 +86,11 @@ impl CodeGraph {
                         .to_string_lossy()
                         .to_string()
                         .replace('\\', "/");
+                    
+                    if rel_path.is_empty() {
+                        continue;
+                    }
+
                     let description = self.extract_description(path);
 
                     modules.insert(

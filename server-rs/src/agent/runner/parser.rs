@@ -35,7 +35,7 @@ pub type ParserResult<T> = Result<T, ParserError>;
 pub struct PolyglotParser;
 
 static XML_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)<tool_call>(.*?)</tool_call>").unwrap()
+    Regex::new(r"(?s)<(?:tool_call|invoke_tool)>(.*?)</(?:tool_call|invoke_tool)>").unwrap()
 });
 
 static GEMMA_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -301,6 +301,15 @@ mod tests {
     #[test]
     fn test_extract_xml_format() {
         let input = "Calling tool: <tool_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"README.md\"}}</tool_call>";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read_file");
+        assert_eq!(calls[0].args["path"], "README.md");
+    }
+
+    #[test]
+    fn test_extract_invoke_tool_format() {
+        let input = "Calling tool: <invoke_tool>{\"name\": \"read_file\", \"arguments\": {\"path\": \"README.md\"}}</invoke_tool>";
         let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");

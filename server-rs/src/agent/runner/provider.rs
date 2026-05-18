@@ -405,7 +405,7 @@ impl AgentRunner {
                     stats.memory_pressure * 100.0
                 );
             }
-            if stats.memory_pressure >= 0.90 {
+            if stats.memory_pressure >= 0.98 {
                 tracing::error!("🚨 [SSCP] CRITICAL memory pressure ({:.1}%). Swarm execution suspended.", stats.memory_pressure * 100.0);
                 return Err(AppError::InfrastructureError { 
                     provider_id: "sscp_guard".to_string(), 
@@ -678,7 +678,7 @@ mod tests {
         let mut app_state = AppState::new_minimal_mock().await;
         
         let mock_monitor = crate::security::monitoring::MockSystemMonitor {
-            memory_pressure: 0.95, // Above 90% threshold
+            memory_pressure: 0.99, // Above 98% threshold
             cpu_load: 0.5,
         };
         

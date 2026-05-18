@@ -16,7 +16,8 @@ import re
 from pathlib import Path
 
 def audit_manual():
-    workspace_root = Path("D:/TadpoleOS-Dev")
+    script_dir = Path(__file__).parent.absolute()
+    workspace_root = script_dir.parent
     manual_path = workspace_root / "docs/OPERATIONS_MANUAL.md"
     
     if not manual_path.exists():

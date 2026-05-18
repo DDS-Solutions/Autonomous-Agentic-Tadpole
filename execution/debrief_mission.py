@@ -35,7 +35,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Constants
-DB_PATH = Path(os.getenv("DATABASE_URL", "D:/TadpoleOS-Dev/data/tadpole.db").replace("sqlite:", ""))
+def resolve_db_path() -> Path:
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        cleaned = db_url.replace("sqlite:", "")
+        if cleaned.startswith("///"):
+            cleaned = cleaned[3:]
+        elif cleaned.startswith("//"):
+            cleaned = cleaned[2:]
+        return Path(cleaned)
+    
+    # Try active workspace candidates
+    local_candidate = Path("data/tadpole.db")
+    if local_candidate.exists():
+        return local_candidate.absolute()
+        
+    parent_candidate = Path("../data/tadpole.db")
+    if parent_candidate.exists():
+        return parent_candidate.absolute()
+        
+    return Path(r"D:\TadpoleOS-Dev\tadpole.db")
+
+# Constants
+DB_PATH = resolve_db_path()
 MEMORY_PATH = Path("directives/LONG_TERM_MEMORY.md")
 FAULT_PATH = Path("directives/FAULT_REGISTRY.md")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

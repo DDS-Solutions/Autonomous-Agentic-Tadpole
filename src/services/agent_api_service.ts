@@ -255,6 +255,11 @@ export const agent_api_service = {
      */
     poll_task_status: async (agent_id: string, request_id: string, timeout_ms = 60000): Promise<'success' | 'error' | 'pending'> => {
         const start_time = Date.now();
+        
+        // Cache the engine status check to avoid redundant hits
+        const engine_status = await system_api_service.get_engine_status();
+        const has_vector_memory = engine_status?.features?.includes('vector-memory') ?? false;
+
         while (Date.now() - start_time < timeout_ms) {
             try {
                 const trail = await system_api_service.get_audit_trail(1, 10);
@@ -265,10 +270,12 @@ export const agent_api_service = {
                     if (entry.status === 'failed' || entry.status === 'error') return 'error';
                 }
                 
-                // Fallback: Check mission history if not in audit trail
-                const history = await api_request<{ entries: any[] }>(`/v1/agents/${agent_id}/memories`, { method: 'GET' });
-                const mission_completion = history.entries.find(e => e.metadata?.request_id === request_id && e.text?.toLowerCase().includes('mission completed'));
-                if (mission_completion) return 'success';
+                // Fallback: Only check mission history in vector memory if the feature is compiled and active
+                if (has_vector_memory) {
+                    const history = await api_request<{ entries: any[] }>(`/v1/agents/${agent_id}/memories`, { method: 'GET' });
+                    const mission_completion = history.entries.find(e => e.metadata?.request_id === request_id && e.text?.toLowerCase().includes('mission completed'));
+                    if (mission_completion) return 'success';
+                }
 
             } catch (e) {
                 console.warn('[AgentAPI] Status polling error:', e);

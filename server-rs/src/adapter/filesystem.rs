@@ -46,10 +46,21 @@ impl FilesystemAdapter {
     /// **TOCTOU** (Time-of-Check Time-of-Use) races by canonicalizing both 
     /// the root and the candidate before the prefix check.
     async fn get_safe_path(&self, requested_path: &str) -> Result<PathBuf> {
+        // Platform-agnostic path normalization (slash standardization and drive strip)
+        let mut cleaned = requested_path.replace('\\', "/");
+        if cleaned.len() >= 2 {
+            let first_char = cleaned.chars().next().unwrap();
+            let second_char = cleaned.chars().nth(1).unwrap();
+            if first_char.is_ascii_alphabetic() && second_char == ':' {
+                cleaned = cleaned[2..].to_string();
+            }
+        }
+        let cleaned = cleaned.trim_start_matches('/');
+
         // Build the candidate path (without canonicalization first)
         let mut candidate = self.root_path.clone();
 
-        for component in Path::new(requested_path).components() {
+        for component in Path::new(&cleaned).components() {
             match component {
                 std::path::Component::Normal(c) => candidate.push(c),
                 std::path::Component::ParentDir => {
@@ -64,9 +75,7 @@ impl FilesystemAdapter {
         // Resolve the real root (SEC-03: canonicalize to defeat symlinks).
         // We use the parent chain to canonicalize even if the leaf doesn't exist yet.
         let canonical_root = canonicalize_or_create(&self.root_path).await?;
-        let canonical_candidate = canonicalize_or_create_parent(&candidate)
-            .await
-            .unwrap_or_else(|_| candidate.clone());
+        let canonical_candidate = canonicalize_or_create_parent(&candidate).await?;
 
         if !canonical_candidate.starts_with(&canonical_root) {
             return Err(anyhow!(
@@ -92,6 +101,19 @@ impl FilesystemAdapter {
 
     pub async fn read_file(&self, filename: &str) -> Result<String> {
         let path = self.get_safe_path(filename).await?;
+        
+        // Memory allocation guard: check metadata size before allocating heap string to prevent OOM
+        let metadata = fs::metadata(&path).await?;
+        let file_size = metadata.len();
+        let max_size = 10 * 1024 * 1024; // 10 MB Cap
+        if file_size > max_size {
+            return Err(anyhow!(
+                "🚫 RESOURCE BLOCK: File '{}' exceeds safe memory allocation limit (Size: {} MB, Max Allowed: 10 MB). Reading aborted to prevent OOM.",
+                filename,
+                file_size / (1024 * 1024)
+            ));
+        }
+
         let content = fs::read_to_string(path).await?;
         Ok(content)
     }
@@ -174,7 +196,13 @@ async fn canonicalize_or_create_parent(path: &Path) -> Result<PathBuf> {
         }
     }
 
-    let mut canonical = fs::canonicalize(&existing).await.unwrap_or(existing);
+    let mut canonical = fs::canonicalize(&existing).await.map_err(|e| {
+        anyhow!(
+            "Failed to canonicalize ancestor path '{}': {}",
+            existing.display(),
+            e
+        )
+    })?;
 
     // Re-append the non-existent suffix in reverse
     for part in suffix.into_iter().rev() {
@@ -182,6 +210,107 @@ async fn canonicalize_or_create_parent(path: &Path) -> Result<PathBuf> {
     }
 
     Ok(canonical)
+}
+
+// ─────────────────────────────────────────────────────────
+//  TESTS
+// ─────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_get_safe_path_valid() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        let filename = "notes.txt";
+        let safe = adapter.get_safe_path(filename).await;
+        assert!(safe.is_ok());
+        assert!(safe.unwrap().ends_with("notes.txt"));
+    }
+
+    #[tokio::test]
+    async fn test_read_write_roundtrip() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        let filename = "docs/test.txt";
+        let content = "Hello TadpoleOS!";
+        adapter.write_file(filename, content).await.unwrap();
+
+        let read = adapter.read_file(filename).await.unwrap();
+        assert_eq!(read, content);
+    }
+
+    #[tokio::test]
+    async fn test_get_safe_path_relative_traversal() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        let dirty = "docs/../../outside.txt";
+        let safe = adapter.get_safe_path(dirty).await;
+        assert!(safe.is_err());
+        assert!(safe.unwrap_err().to_string().contains("Illegal path traversal"));
+    }
+
+    #[tokio::test]
+    async fn test_get_safe_path_absolute_traversal() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        let dirty = "/etc/passwd";
+        let safe = adapter.get_safe_path(dirty).await;
+        assert!(safe.is_ok());
+        let resolved = safe.unwrap();
+        let canonical_root = fs::canonicalize(&adapter.root_path).await.unwrap();
+        assert!(resolved.starts_with(&canonical_root));
+        assert!(resolved.ends_with("etc/passwd"));
+    }
+
+    #[tokio::test]
+    async fn test_get_safe_path_windows_drive_normalization() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        // Standard Windows-style absolute-ish format
+        let dirty = "D:\\projects\\secret.txt";
+        let safe = adapter.get_safe_path(dirty).await;
+        assert!(safe.is_ok());
+        let resolved = safe.unwrap();
+        let canonical_root = fs::canonicalize(&adapter.root_path).await.unwrap();
+        assert!(resolved.starts_with(&canonical_root));
+        assert!(resolved.ends_with("projects/secret.txt") || resolved.ends_with("projects\\secret.txt"));
+    }
+
+    #[tokio::test]
+    async fn test_symlink_escape_prevention() {
+        let dir = tempdir().unwrap();
+        let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
+
+        // Create target outside workspace root
+        let outside_dir = tempdir().unwrap();
+        let secret = outside_dir.path().join("secret.txt");
+        fs::write(&secret, "sensitive").await.unwrap();
+
+        // Create symlink pointing outside workspace root
+        let symlink_path = dir.path().join("link_to_outside");
+        
+        #[cfg(unix)]
+        let link_res = fs::symlink(&secret, &symlink_path).await;
+        
+        #[cfg(windows)]
+        let link_res = fs::symlink_file(&secret, &symlink_path).await;
+
+        if link_res.is_ok() {
+            // Attempt to get safe path for the symlink
+            let safe = adapter.get_safe_path("link_to_outside").await;
+            assert!(safe.is_err(), "Symlink escaped sandbox checking!");
+            assert!(safe.unwrap_err().to_string().contains("outside the designated workspace"));
+        }
+    }
 }
 
 // Metadata: [filesystem]

@@ -145,6 +145,9 @@ impl AgentRunner {
 
         let system_prompt = self.state.resources.renderer.render(self.state.resources.renderer.default_system_template(), &vars);
 
+        let _ = std::fs::create_dir_all(".tmp");
+        let _ = std::fs::write(".tmp/system_prompt.txt", &system_prompt);
+
         tracing::info!(
             "🏁 [Runner] Synthesizing system prompt for mission: {} (Depth: {})",
             ctx.mission_id,
@@ -201,6 +204,56 @@ impl AgentRunner {
     async fn fetch_mission_context(&self, ctx: &RunContext) -> Result<String, crate::error::AppError> {
         let context = crate::agent::mission::get_mission_context(&self.state.resources.pool, &ctx.mission_id).await?;
         Ok(context)
+    }
+
+    /// Generates a human-readable text directory of all available and allowed tools
+    /// with their descriptions and parameter JSON schemas.
+    fn generate_tool_directory_display(&self, ctx: &RunContext) -> String {
+        let tool_list = self.state.registry.tool_registry.list_tools();
+        let mut allowed_tools = Vec::new();
+
+        for tool in tool_list {
+            if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
+                // --- 🛡️ Strict Membership Filter ---
+                // Only include the tool if it's in the agent's context skills or is a system core tool.
+                let is_core_tool = tool.name == "complete_mission" || tool.name == "issue_alpha_directive" || tool.name == "set_confidence";
+                if !is_core_tool && !ctx.skills.contains(&tool.name) {
+                    continue;
+                }
+
+                // Specialized Skill Checks
+                if tool.name == "execute_shell" && !(ctx.skills.contains(&"shell".to_string()) || ctx.skills.contains(&"terminal".to_string())) {
+                    continue;
+                }
+
+                // Safe Mode Restrictions (Mutation Block)
+                if ctx.safe_mode && (tool.name == "write_file" || tool.name == "delete_file" || tool.name == "execute_shell" || tool.name == "synthesize_micro_script") {
+                    continue;
+                }
+
+                // Filesystem Capability Check
+                if (tool.name == "read_file" || tool.name == "write_file" || tool.name == "list_files" || tool.name == "delete_file") && !self.has_file_system_capability(ctx) {
+                    continue;
+                }
+
+                allowed_tools.push(tool);
+            }
+        }
+
+        if allowed_tools.is_empty() {
+            return "No tools are currently authorized or available for your security clearance/skills.".to_string();
+        }
+
+        let mut display = String::new();
+        for tool in allowed_tools {
+            display.push_str(&format!(
+                "- Tool Name: {}\n  Description: {}\n  Parameters Schema: {}\n\n",
+                tool.name,
+                tool.description,
+                serde_json::to_string(&tool.parameters).unwrap_or_else(|_| "{}".to_string())
+            ));
+        }
+        display
     }
 
     fn assemble_prompt_variables(
@@ -275,6 +328,9 @@ impl AgentRunner {
         vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")).to_string());
         vars.insert("safe_mode_prefix", safe_mode_prefix.clone());
         vars.insert("tool_mode_prefix", tool_mode_prefix.to_string());
+        
+        let tool_directory_str = self.generate_tool_directory_display(ctx);
+        vars.insert("tool_directory", tool_directory_str);
 
         if criticality_score > 0 {
             let warning = format!("\n\n!!! SYSTEM WARNING: Critical services failed (Score: {}/3) !!!\n- {}\n!!! ACTION: Acknowledge these failures in your internal reasoning and attempt to recover missing context manually if possible. !!!\n", criticality_score, failure_context.join("\n- "));
@@ -465,15 +521,41 @@ impl AgentRunner {
             "🔓 SECURITY: ACTIVE. You have authority to propose and execute mutations within your workspace scope.\n".to_string()
         };
 
-        let tool_mode_prefix = if ctx.analysis {
+        let mut tool_mode_prefix = if ctx.analysis {
             "🛠️ TOOL EVOLUTION: You are in ANALYSIS mode. Propose architectural changes."
                 .to_string()
         } else {
             "⚙️ TOOL REFINEMENT: Standard operation.".to_string()
         };
 
-        // ### 🧠 Resilience: Model-Specific Protocol Injection
-        // (Removed Gemma-specific XML injection as it caused tool-calling hallucinations)
+        // ### 🧠 Resilience: Model-Specific Protocol Injection for Ollama/Local Models
+        if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama 
+           || ctx.model_config.provider == crate::agent::types::ModelProvider::Local {
+            tool_mode_prefix.push_str("\n\n=== 🛠️ LOCAL MODEL TOOL CALLING MANDATE ===\n\
+            Since you are a local model, native JSON schemas can sometimes be parsed incorrectly by the runtime wrapper. \
+            To guarantee 100% tool execution reliability, you MUST invoke tools using XML tags in your response content!\n\
+            Format your tool calls exactly like this:\n\
+            <invoke_tool>{\n\
+              \"name\": \"read_file\",\n\
+              \"arguments\": {\n\
+                \"path\": \"execution/db_health_check.py\"\n\
+              }\n\
+            }</invoke_tool>\n\
+            \n\
+            Example of completing the mission:\n\
+            <invoke_tool>{\n\
+              \"name\": \"complete_mission\",\n\
+              \"arguments\": {\n\
+                \"output\": \"Audit successfully completed...\"\n\
+              }\n\
+            }</invoke_tool>\n\
+            \n\
+            CRITICAL RULES:\n\
+            1. You MUST call tools to gather facts or modify files. Narrative planning without tool calls is MISSION FAILURE.\n\
+            2. Never write raw JSON tool calls outside of the <invoke_tool>...</invoke_tool> XML tags.\n\
+            3. Always supply all required parameters within the JSON 'arguments' object.\n\
+            4. If you have finished, call 'complete_mission' with the final results.\n");
+        }
         
         (
             cluster_directory,
@@ -793,6 +875,7 @@ mod tests {
         let mut ctx = RunContext::default();
         ctx.agent_id = AGENT_CEO.to_string();
         ctx.skills = vec!["read_file".to_string()];
+        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
         
         let tools = runner.build_tools(&ctx).await;
         
@@ -812,6 +895,7 @@ mod tests {
         let mut ctx = RunContext::default();
         ctx.agent_id = "specialist-1".to_string();
         ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
         
         let tools = runner.build_tools(&ctx).await;
         
@@ -862,6 +946,7 @@ mod tests {
         ctx.authority_level = crate::agent::types::RoleAuthorityLevel::Observer;
         // Even if the observer is assigned a mutation skill, the ACL should block it
         ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
         
         let tools = runner.build_tools(&ctx).await;
         

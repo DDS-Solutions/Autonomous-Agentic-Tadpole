@@ -384,6 +384,11 @@ pub struct ConnectorConfig {
 
 impl ModelConfig {
     pub fn supports_native_tools(&self) -> bool {
+        // Local models (Ollama, Local) are much more reliable using our custom Polyglot XML tag parser
+        // than native tool calling schemas, which often fail, hallucinate, or skip tool execution entirely.
+        if self.provider == ModelProvider::Ollama || self.provider == ModelProvider::Local {
+            return false;
+        }
         let mid = self.model_id.to_lowercase();
         if mid.contains("phi3") || mid.contains("phi-3") {
             return false;

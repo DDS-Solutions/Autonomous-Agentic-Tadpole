@@ -304,6 +304,12 @@ impl OpenAIProvider {
             let error_text = res.text().await?;
             tracing::error!("📡 [OpenAI] Request failed with status {}: {}", status, error_text);
             
+            // Debugging payload dump
+            let _ = tokio::fs::create_dir_all(".tmp").await;
+            if let Ok(pretty_payload) = serde_json::to_string_pretty(&request_body) {
+                let _ = tokio::fs::write(".tmp/failed_ollama_payload.json", pretty_payload).await;
+            }
+            
             // ### 🧠 Resilience: Dynamic Quantization Fallback (OML-01)
             // Intercept OOM (Out Of Memory) from local providers (Ollama, vLLM, Mercury).
             // Logic: If the primary high-precision model (e.g. Llama-3-70b) fails 
