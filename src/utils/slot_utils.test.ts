@@ -23,7 +23,8 @@ describe('slot_utils', () => {
         reasoning_depth: 10,
         act_threshold: 0.5,
         skills: ['skill-1', 'skill-2'],
-        workflows: ['wf-1']
+        workflows: ['wf-1'],
+        base_url: ''
     };
 
     describe('build_slot_config', () => {

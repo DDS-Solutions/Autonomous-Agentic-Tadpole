@@ -17,11 +17,11 @@ import { normalize_agent_dto } from '../../domain/agents/normalizers';
 import { serialize_agent_update } from '../../domain/agents/serializers';
 import { normalize_role_blueprint } from '../../domain/roles/normalizer';
 // Note: serialize_role not found in roles/normalizer.ts, checking roles/ directory
-import type { AgentDto, RoleBlueprintDto } from '../../contracts/generated';
+import type { AgentDto } from '../../contracts/agent/wire';
+import type { Role_Blueprint_Dto } from '../../contracts/role/wire';
 
 // Define localized types for the test to bridge naming discrepancies
 type Agent_Dto = AgentDto;
-type Role_Blueprint_Dto = RoleBlueprintDto;
 
 // Mocking serialize_role if not available to allow file to compile, or checking roles dir
 const serialize_role = (domain: any): any => ({
@@ -45,17 +45,17 @@ describe('Contract Symmetry Tests', () => {
                 role: 'Analyst',
                 department: 'Engineering',
                 status: 'idle',
-                tokens_used: 1000,
+                tokensUsed: 1000,
                 model: 'claude-3-5-sonnet',
-                active_model_slot: 1,
+                activeModelSlot: 1,
                 skills: ['coding', 'research'],
                 workflows: [],
-                mcp_tools: [],
+                mcpTools: [],
                 budgetUsd: 50.0,
                 costUsd: 1.5,
-                requires_oversight: false,
+                requiresOversight: false,
                 category: 'user',
-                connector_configs: [],
+                connectorConfigs: [],
                 metadata: { 'internal_id': 'xyz' },
                 tokenUsage: {
                     inputTokens: 400,

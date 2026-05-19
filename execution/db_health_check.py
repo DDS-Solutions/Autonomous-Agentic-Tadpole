@@ -59,7 +59,7 @@ def resolve_default_db_path() -> str:
     Dynamically resolves the database path:
     1. Checks if the 'DATABASE_URL' environment variable is defined. If so, parses out the file path.
     2. If not, falls back to locating 'data/tadpole.db' relative to the active workspace.
-    3. As a final legacy backup, falls back to 'D:\\TadpoleOS-Dev\\tadpole.db'.
+    3. As a final legacy backup, falls back to 'G:\\TadpoleOS-Dev\\tadpole.db'.
     """
     db_url = os.getenv("DATABASE_URL")
     if db_url:
@@ -86,7 +86,7 @@ def resolve_default_db_path() -> str:
     except NameError:
         pass
 
-    return r"D:\TadpoleOS-Dev\tadpole.db"
+    return r"G:\TadpoleOS-Dev\tadpole.db"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tadpole Database Health Check")

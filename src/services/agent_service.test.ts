@@ -274,14 +274,14 @@ describe('agent_service', () => {
                 voice_id: 'verse',
                 voice_engine: 'openai',
                 metadata: { stt_engine: 'groq' },
-                connector_configs: [{ type: 'fs', uri: 'D:/TadpoleOS-Dev' }]
+                connector_configs: [{ type: 'fs', uri: 'G:/TadpoleOS-Dev' }]
             });
 
             expect(agent_api_service.update_agent).toHaveBeenCalledWith('agent-1', {
                 voice_id: 'verse',
                 voice_engine: 'openai',
                 metadata: { stt_engine: 'groq' },
-                connector_configs: [{ type: 'fs', uri: 'D:/TadpoleOS-Dev' }]
+                connector_configs: [{ type: 'fs', uri: 'G:/TadpoleOS-Dev' }]
             });
         });
     });

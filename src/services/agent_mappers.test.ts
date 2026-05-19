@@ -83,7 +83,8 @@ describe('agent_mappers', () => {
                 model: 'claude-3',
                 skills: ['old-skill'],
                 workflows: [],
-                budget_usd: 100
+                budget_usd: 100,
+                category: 'general'
             };
 
             const partial_dto = {

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { config_reducer, Agent_Config_State } from './useAgentForm';
+import { config_reducer, type Agent_Config_State } from './useAgentForm';
 
 // Mock role store for RESET_ROLE
 vi.mock('../stores/role_store', () => ({
@@ -28,12 +28,13 @@ describe('config_reducer', () => {
     const initialState: Agent_Config_State = {
         main_tab: 'cognition',
         active_tab: 'primary',
+        active_model_slot: 1,
         identity: { name: '', role: '', department: '' },
-        voice: { voice_id: '', voice_engine: 'elevenlabs' },
+        voice: { voice_id: '', voice_engine: 'browser' },
         slots: {
-            primary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [] },
-            secondary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [] },
-            tertiary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [] },
+            primary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [], base_url: '' },
+            secondary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [], base_url: '' },
+            tertiary: { model: '', provider: '', system_prompt: '', temperature: 0.7, reasoning_depth: 1, act_threshold: 0.5, skills: [], workflows: [], base_url: '' },
         },
         mcp_tools: [],
         governance: { budget_usd: 0, requires_oversight: false },

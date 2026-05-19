@@ -25,6 +25,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { use_role_store, select_role_names } from './role_store';
+import type { Role } from '../contracts/role/domain';
 
 describe('use_role_store', () => {
     beforeEach(() => {

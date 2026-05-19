@@ -291,10 +291,10 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
         let memory_cleanup_pool = app_state.resources.pool.clone();
         tokio::spawn(async move {
             // Run cleanup immediately on startup, then every 6 hours
-            crate::agent::memory::cleanup_orphaned_scopes(&memory_cleanup_pool).await;
+            crate::agent::memory::VectorMemory::cleanup_orphaned_scopes(&memory_cleanup_pool).await;
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
-                crate::agent::memory::cleanup_orphaned_scopes(&memory_cleanup_pool).await;
+                crate::agent::memory::VectorMemory::cleanup_orphaned_scopes(&memory_cleanup_pool).await;
             }
         });
     }

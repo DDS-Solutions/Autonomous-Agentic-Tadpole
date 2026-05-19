@@ -44,7 +44,8 @@ const en = {
   chat
 };
 
-type LocaleData = typeof en;
+export type LocaleData = typeof en;
+
 
 interface TOptions {
   returnObjects?: boolean;

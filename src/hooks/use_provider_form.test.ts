@@ -26,7 +26,9 @@ describe('panel_reducer', () => {
         persist_to_engine: false,
         is_testing: false,
         test_result: 'idle',
-        test_message: ''
+        test_message: '',
+        supports_steering_vectors: false,
+        is_syncing: false
     };
 
     it('updates name field correctly', () => {

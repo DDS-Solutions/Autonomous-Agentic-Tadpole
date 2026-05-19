@@ -186,6 +186,23 @@ impl RunContext {
             ..Default::default()
         }
     }
+
+    pub fn resolve_paths(&self) -> (String, String, String) {
+        let cluster_name = self
+            .workspace_root
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        let agent_memory_dir = format!("data/agents/{}/memory.lance", self.agent_id);
+        let mission_scope_dir = format!(
+            "data/workspaces/{}/missions/{}/scope.lance",
+            cluster_name, self.mission_id
+        );
+
+        (cluster_name, agent_memory_dir, mission_scope_dir)
+    }
 }
 
 #[derive(Clone)]

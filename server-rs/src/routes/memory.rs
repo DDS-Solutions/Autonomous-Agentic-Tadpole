@@ -19,11 +19,8 @@
 //! - **Trace Scope**: `server-rs::routes::memory`
 
 use crate::agent::memory::VectorMemory;
-use crate::agent::types::MemoryEntryDetailed;
 use crate::error::AppError;
 use crate::state::AppState;
-#[cfg(feature = "vector-memory")]
-use arrow_array::{Int64Array, StringArray};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -43,7 +40,7 @@ fn escape_lancedb_string_literal(value: &str) -> String {
 
 /// Resolves the canonical workspaces root from app state.
 fn workspaces_root(base_dir: &std::path::Path) -> Result<std::path::PathBuf, AppError> {
-    crate::utils::security::validate_path(base_dir, "data/workspaces")
+    crate::utils::security::validate_path(base_dir, "data/workspaces").map(|sp| sp.to_path_buf())
 }
 
 /// Robustly resolves the path to an agent's memory store by scanning workspaces.
@@ -117,10 +114,8 @@ pub struct MemoryEntry {
 }
 
 #[cfg(feature = "vector-memory")]
-impl TryFrom<&arrow_array::RecordBatch> for Vec<MemoryEntry> {
-    type Error = AppError;
-
-    fn try_from(batch: &arrow_array::RecordBatch) -> Result<Self, Self::Error> {
+impl MemoryEntry {
+    pub fn try_from_batch(batch: &arrow_array::RecordBatch) -> Result<Vec<Self>, AppError> {
         use arrow_array::{Int64Array, StringArray};
         
         let id_col = batch
@@ -216,7 +211,7 @@ pub async fn get_agent_memory(
                     ));
                 }
 
-                if let Ok(conn) = lancedb::connect(&format!("file://{}", path))
+                if let Ok(conn) = lancedb::connect(&format!("file://{}", path_str))
                     .execute()
                     .await
                 {
@@ -225,7 +220,7 @@ pub async fn get_agent_memory(
                             let mut entries = Vec::new();
                             while let Some(batch_result) = results.next().await {
                                 if let Ok(batch) = batch_result {
-                                    if let Ok(mut batch_entries) = Vec::<MemoryEntry>::try_from(&batch) {
+                                    if let Ok(mut batch_entries) = MemoryEntry::try_from_batch(&batch) {
                                         entries.append(&mut batch_entries);
                                     }
                                 }
@@ -499,7 +494,6 @@ mod tests {
 
     #[test]
     fn workspaces_root_anchors_under_base_dir() {
-        let base_dir = PathBuf::from("workspace-root");
         // validate_path expects absolute path if base is not absolute, 
         // so we use a mock absolute base for the test.
         #[cfg(not(windows))]

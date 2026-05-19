@@ -13,7 +13,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { Connection_Banner } from './Connection_Banner';
 
 // Mock i18n

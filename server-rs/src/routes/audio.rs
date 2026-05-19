@@ -92,7 +92,10 @@ pub async fn text_to_speech(
             }
 
             let tx = state.comms.audio_stream_tx.clone();
-            let engine = state.resources.get_audio_engine().await;
+            let engine = match state.resources.get_audio_engine().await {
+                Ok(eng) => eng,
+                Err(e) => return Err(e),
+            };
             let cache = state.resources.audio_cache.clone();
             let text = payload.text.clone();
 
@@ -202,13 +205,11 @@ pub async fn transcribe_audio(
     if engine == "local" {
         #[cfg(feature = "neural-audio")]
         {
-            match state
-                .resources
-                .get_audio_engine()
-                .await
-                .listen(audio_data)
-                .await
-            {
+            let engine = match state.resources.get_audio_engine().await {
+                Ok(eng) => eng,
+                Err(e) => return Err(e),
+            };
+            match engine.listen(audio_data).await {
                 Ok(text) => {
                     return Ok(Json(json!({
                         "status": "success",

@@ -170,6 +170,8 @@ impl AppState {
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
+                #[cfg(feature = "vector-memory")]
+                swarm_vault: tokio::sync::OnceCell::new(),
                 rate_limiters: DashMap::new(),
                 initialization_registry: DashMap::new(),
                 hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
@@ -181,6 +183,7 @@ impl AppState {
                     crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
                 ))),
                 parser: Arc::new(SymbolParser::new()),
+                obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -297,6 +300,8 @@ impl AppState {
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
+                #[cfg(feature = "vector-memory")]
+                swarm_vault: tokio::sync::OnceCell::new(),
                 rate_limiters: DashMap::new(),
                 initialization_registry: DashMap::new(),
                 hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
@@ -308,6 +313,7 @@ impl AppState {
                     crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
                 ))),
                 parser: Arc::new(SymbolParser::new()),
+                obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -593,6 +599,8 @@ impl AppState {
                 memory_context: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: OnceCell::new(),
+                #[cfg(feature = "vector-memory")]
+                swarm_vault: OnceCell::new(),
                 rate_limiters: DashMap::new(),
                 initialization_registry: DashMap::new(),
                 hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
@@ -609,6 +617,7 @@ impl AppState {
                     )))
                 },
                 parser: Arc::new(SymbolParser::new()),
+                obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -1203,6 +1212,8 @@ impl Default for AppState {
             memory_context: OnceCell::new(),
             #[cfg(feature = "vector-memory")]
             vector_memory: OnceCell::new(),
+            #[cfg(feature = "vector-memory")]
+            swarm_vault: OnceCell::new(),
             rate_limiters: DashMap::new(),
             initialization_registry: DashMap::new(),
             hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
@@ -1214,6 +1225,7 @@ impl Default for AppState {
                 crate::agent::continuity::SSDManager::new(std::path::PathBuf::from("data").join("cache").join("context")),
             ))),
             parser: Arc::new(SymbolParser::new()),
+            obfuscation_salt: uuid::Uuid::new_v4().to_string(),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

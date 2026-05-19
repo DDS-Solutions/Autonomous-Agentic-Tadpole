@@ -30,7 +30,7 @@ def run_swarm_audit():
         db_path = Path(cleaned)
     else:
         # Default local paths
-        candidates = [Path("data/tadpole.db"), Path("../data/tadpole.db"), Path(r"D:\TadpoleOS-Dev\tadpole.db")]
+        candidates = [Path("data/tadpole.db"), Path("../data/tadpole.db"), Path(r"G:\TadpoleOS-Dev\tadpole.db")]
         db_path = next((c.absolute() for c in candidates if c.exists()), candidates[0])
 
     if not db_path.exists():

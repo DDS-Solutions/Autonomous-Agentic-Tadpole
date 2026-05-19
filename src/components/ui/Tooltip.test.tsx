@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Tooltip } from './Tooltip';
-import React from 'react';
 
 // Mock the hook because it relies on DOM measurement that JSDOM might not handle perfectly
 vi.mock('../../hooks/use_viewport_position', () => ({

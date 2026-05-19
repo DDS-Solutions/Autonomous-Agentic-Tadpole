@@ -17,7 +17,7 @@ import { Lineage_Stream } from './Lineage_Stream';
 
 // Mock stores
 const mock_trace_state = {
-    active_trace_id: 'trace-123',
+    active_trace_id: 'trace-123' as string | null,
     get_trace_tree: vi.fn()
 };
 

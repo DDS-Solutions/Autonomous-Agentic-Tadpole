@@ -90,7 +90,7 @@ impl NeuralAudioEngine {
         let session = match Session::builder() {
             Ok(builder) => builder
                 .with_intra_threads(4)
-                .map_err(|e| AppError::Internal(format!("Failed to set threads: {}", e)))?
+                .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?
                 .commit_from_file(model_path)
                 .map_err(|e| AppError::InfrastructureError {
                     provider_id: "piper".to_string(),
@@ -120,7 +120,7 @@ impl NeuralAudioEngine {
         let session = match Session::builder() {
             Ok(builder) => builder
                 .with_intra_threads(4)
-                .map_err(|e| AppError::Internal(format!("Failed to set threads: {}", e)))?
+                .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?
                 .commit_from_file(model_path)
                 .map_err(|e| AppError::InfrastructureError {
                     provider_id: "whisper".to_string(),
@@ -150,7 +150,7 @@ impl NeuralAudioEngine {
         let session = match Session::builder() {
             Ok(builder) => builder
                 .with_intra_threads(1)
-                .map_err(|e| AppError::Internal(format!("Failed to set threads: {}", e)))?
+                .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?
                 .commit_from_file(model_path)
                 .map_err(|e| AppError::InfrastructureError {
                     provider_id: "vad".to_string(),

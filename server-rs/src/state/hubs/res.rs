@@ -90,6 +90,8 @@ pub struct ResourceHub {
     pub continuity_arbiter: Arc<crate::agent::continuity::ContextArbiter>,
     /// High-fidelity code parser for symbol extraction.
     pub parser: Arc<SymbolParser>,
+    /// Dynamic boot-time cryptographically secure salt. Used for path obfuscation.
+    pub obfuscation_salt: String,
 }
 
 impl ResourceHub {

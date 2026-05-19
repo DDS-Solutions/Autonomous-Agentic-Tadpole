@@ -32,7 +32,7 @@
     - Potential race conditions in `DashMap` or `Arc` usage.
     - Logic errors in mission state transitions (e.g., missions stuck in `Running`).
 
-2. **[PRIORITY: HIGH] Diagnostic Reporting**: Generate a detailed report file at `D:\Autonomous-Agentic-Tadpole\audit_full_report.md`. 
+2. **[PRIORITY: HIGH] Diagnostic Reporting**: Generate a detailed report file at `G:\Autonomous-Agentic-Tadpole\audit_full_report.md`. 
     - Each finding must include: **File Path**, **Line Number**, **Failure Mode**, and **Impact Severity**.
     - Do NOT fix the errors yet; document them for Nexus Engineer review.
 

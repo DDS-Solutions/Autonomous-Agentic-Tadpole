@@ -32,8 +32,7 @@ import 'reactflow/dist/style.css';
 import { THEME_COLORS } from '../constants/theme';
 import { i18n } from '../i18n';
 
-const dagre_graph = new dagre.graphlib.Graph();
-dagre_graph.setDefaultEdgeLabel(() => ({}));
+// Removed global dagre_graph instance to prevent layout state leaks between trace purges.
 
 const node_width = 220;
 const node_height = 80;
@@ -105,6 +104,8 @@ const node_types = {
 };
 
 const get_layouted_elements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+    const dagre_graph = new dagre.graphlib.Graph();
+    dagre_graph.setDefaultEdgeLabel(() => ({}));
     dagre_graph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 70 });
 
     nodes.forEach((node) => {
@@ -238,9 +239,9 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-3">
                             <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_12px_#06b6d4]" />
-                            <h2 className="text-sm font-black text-white uppercase tracking-[4px]">{i18n.t('telemetry_graph.title')}</h2>
+                            <h2 className="text-sm font-black text-white uppercase tracking-[4px]">{i18n.t('telemetry.telemetry_graph.title')}</h2>
                         </div>
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider ml-6">{i18n.t('telemetry_graph.subtitle')}</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider ml-6">{i18n.t('telemetry.telemetry_graph.subtitle')}</p>
                     </div>
 
                     <div className="flex gap-2 items-center">
@@ -248,20 +249,20 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
                             value={filter_mission_id || ''} 
                             onChange={(e) => set_filter_mission_id(e.target.value || undefined)}
                             className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-300 uppercase tracking-widest outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all hover:bg-zinc-900"
-                            aria-label={i18n.t('telemetry_graph.aria_filter_mission', { defaultValue: 'Filter by Mission ID' })}
+                            aria-label={i18n.t('telemetry.telemetry_graph.aria_filter_mission', { defaultValue: 'Filter by Mission ID' })}
                         >
-                            <option value="">{i18n.t('telemetry_graph.global_swarm')}</option>
+                            <option value="">{i18n.t('telemetry.telemetry_graph.global_swarm')}</option>
                             {(available_missions || []).map(m => (
-                                <option key={m} value={m}>{i18n.t('telemetry_graph.filter_mission', { id: m.substring(0, 8) })}</option>
+                                <option key={m} value={m}>{i18n.t('telemetry.telemetry_graph.filter_mission', { id: m.substring(0, 8) })}</option>
                             ))}
                         </select>
                         
                         <button 
                             onClick={clear_all}
                             className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest hover:text-rose-400 hover:border-rose-900/50 hover:bg-zinc-900 transition-all"
-                            aria-label={i18n.t('telemetry_graph.aria_purge_trace', { defaultValue: 'Purge Telemetry Trace' })}
+                            aria-label={i18n.t('telemetry.telemetry_graph.aria_purge_trace', { defaultValue: 'Purge Telemetry Trace' })}
                         >
-                            {i18n.t('telemetry_graph.purge_trace')}
+                            {i18n.t('telemetry.telemetry_graph.purge_trace')}
                         </button>
                     </div>
                 </Panel>
@@ -270,15 +271,15 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
                      <div className="px-4 py-2 bg-zinc-950/80 backdrop-blur-sm border border-zinc-900 rounded-xl flex items-center gap-4">
                         <div className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
-                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry_graph.legend_active')}</span>
+                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry.telemetry_graph.legend_active')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
-                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry_graph.legend_success')}</span>
+                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry.telemetry_graph.legend_success')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry_graph.legend_error')}</span>
+                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{i18n.t('telemetry.telemetry_graph.legend_error')}</span>
                         </div>
                     </div>
                 </Panel>

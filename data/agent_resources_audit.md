@@ -14,7 +14,7 @@
 # 🛰️ Sovereign Swarm Resource & Economic Audit
 
 **Audit Timestamp:** `2026-05-17 21:07:50`
-**Target Database:** `D:\Autonomous-Agentic-Tadpole\data\tadpole.db`
+**Target Database:** `G:\Autonomous-Agentic-Tadpole\data\tadpole.db`
 
 ## 📊 Swarm Economic Summary Table
 

@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search `[Cluster_Sidebar.test]` in tracing logs.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Cluster_Sidebar } from './Cluster_Sidebar';
@@ -29,6 +29,8 @@ describe('Cluster_Sidebar Component', () => {
                 objective: 'Objective One',
                 is_active: true,
                 budget_usd: 50,
+                path: '/workspaces/cl-1',
+                pending_tasks: []
             }
         ],
         selected_cluster_id: 'cl-1',

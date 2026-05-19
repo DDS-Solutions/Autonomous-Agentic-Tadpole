@@ -14,7 +14,6 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { Confirm_Dialog } from './Confirm_Dialog';
 
 // Mock i18n

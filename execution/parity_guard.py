@@ -172,7 +172,7 @@ def check_doc_file_refs(root):
             continue
         text = doc.read_text(encoding="utf-8")
         refs = re.findall(r'`([^`\n]+\.(?:md|yaml|yml|json|toml|rs|tsx|ts|py|bat|css))`', text)
-        refs += [m.replace("/", "\\") for m in re.findall(r'file:///D:/Autonomous-Agentic-Tadpole/([^\)\s]+)', text)]
+        refs += [m.replace("/", "\\") for m in re.findall(r'file:///G:/Autonomous-Agentic-Tadpole/([^\)\s]+)', text)]
         for ref in refs:
             if (
                 ref.startswith("http")

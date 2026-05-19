@@ -87,6 +87,16 @@ impl CodeSymbolGraph {
                 continue;
             }
 
+            // 🛡️ [DoS Protection] Enforce 2MB size limit to avoid scanning massive database/build/artifact dumps
+            if let Ok(metadata) = std::fs::metadata(path) {
+                if metadata.len() > 2 * 1024 * 1024 {
+                    tracing::warn!("⚠️ [Graph] Skipping oversized file ({} bytes): {}", metadata.len(), path.display());
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
             match std::fs::read_to_string(path) {
                 Ok(content) => {
                     let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
@@ -119,6 +129,7 @@ impl CodeSymbolGraph {
         tracing::info!("✅ [Graph] Indexed {} symbols.", all_symbols.len());
 
         // 3. Extract references and add edges (Dependencies - Optimized O(N+M) Complexity)
+        let mut added_edges = std::collections::HashSet::new();
         for entry in WalkDir::new(&self.root)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -132,6 +143,15 @@ impl CodeSymbolGraph {
 
             let path_str = path.to_string_lossy();
             if path_str.contains("target") || path_str.contains("node_modules") {
+                continue;
+            }
+
+            // 🛡️ [DoS Protection] Enforce 2MB size limit to avoid scanning massive database/build/artifact dumps
+            if let Ok(metadata) = std::fs::metadata(path) {
+                if metadata.len() > 2 * 1024 * 1024 {
+                    continue;
+                }
+            } else {
                 continue;
             }
 
@@ -154,7 +174,9 @@ impl CodeSymbolGraph {
                                         let src_key = format!("{}::{}", rel_path, src_sym.name);
                                         if let Some(&src_idx) = self.index.get(&src_key) {
                                             if src_idx != target_idx {
-                                                self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
+                                                if added_edges.insert((src_idx, target_idx)) {
+                                                    self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
+                                                }
                                             }
                                         }
                                     }
@@ -179,20 +201,24 @@ impl CodeSymbolGraph {
         let mut affected = Vec::new();
         
         if let Some(&start_idx) = self.index.get(&key) {
-            // BFS/DFS to find all symbols that reference this one
+            // BFS to find all symbols that reference this one up to depth 50
             // Note: edges are (source -> target), so we need to traverse in REVERSE (target -> source)
             let mut visited = std::collections::HashSet::new();
-            let mut stack = vec![start_idx];
+            let mut queue = std::collections::VecDeque::new();
+            queue.push_back((start_idx, 0));
             visited.insert(start_idx);
 
             let mut affected_indices = Vec::new();
-            while let Some(current_idx) = stack.pop() {
+            while let Some((current_idx, depth)) = queue.pop_front() {
+                if depth >= 50 {
+                    continue; // Shield against malicious/adversarial large depth chains
+                }
                 // Find all neighbors that point to current_idx
                 for edge in self.graph.edges_directed(current_idx, petgraph::Direction::Incoming) {
                     let neighbor_idx = edge.source();
                     if visited.insert(neighbor_idx) {
                         affected_indices.push(neighbor_idx);
-                        stack.push(neighbor_idx);
+                        queue.push_back((neighbor_idx, depth + 1));
                     }
                 }
             }

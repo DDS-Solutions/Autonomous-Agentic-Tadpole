@@ -66,13 +66,15 @@ pub(crate) fn spawn_post_mission_analysis(
                     .unwrap_or(0.85);
 
                 if let Ok(action_vec) = crate::agent::memory::get_gemini_embedding(&runner.state.resources.http_client, &api_key, &final_output).await {
-                    if let Ok(identity_vec) = crate::agent::memory::get_gemini_embedding(&runner.state.resources.http_client, &api_key, &identity_context).await {
-                        let dist: f32 = action_vec.iter().zip(identity_vec.iter())
-                            .map(|(a, b)| (a - b).powi(2))
-                            .sum::<f32>()
-                            .sqrt();
-                        if dist > drift_threshold {
-                            runner.state.broadcast_sys(&format!("🚨 Behavioral Drift Detected for Agent {}! Actions diverged from core identity (distance: {:.2}).", ctx_agent_id, dist), "error", Some(mission_id.clone()));
+                    if let Ok(ref id_str) = identity_context {
+                        if let Ok(identity_vec) = crate::agent::memory::get_gemini_embedding(&runner.state.resources.http_client, &api_key, id_str).await {
+                            let dist: f32 = action_vec.iter().zip(identity_vec.iter())
+                                .map(|(a, b)| (a - b).powi(2))
+                                .sum::<f32>()
+                                .sqrt();
+                            if dist > drift_threshold {
+                                runner.state.broadcast_sys(&format!("🚨 Behavioral Drift Detected for Agent {}! Actions diverged from core identity (distance: {:.2}).", ctx_agent_id, dist), "error", Some(mission_id.clone()));
+                            }
                         }
                     }
                 }

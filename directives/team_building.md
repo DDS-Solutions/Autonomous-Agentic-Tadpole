@@ -26,7 +26,7 @@ Construct and initialize high-performance specialized agent clusters. This direc
 - **Guidance**: Avoid generic names. Identities should reflect the agent's specific cognitive domain.
 
 ### 2. Capability Provisioning
-- **Check**: `D:\TadpoleOS-Dev\execution\`.
+- **Check**: `G:\TadpoleOS-Dev\execution\`.
 - **Action**: Bulk-assign necessary skills and workflows based on the agent's department (e.g., Engineering vs. Marketing).
 - **Security**: Only assign `Allow` or `Prompt` gated tools. Restricted tools must be omitted.
 

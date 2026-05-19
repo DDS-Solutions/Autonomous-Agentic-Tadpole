@@ -125,7 +125,7 @@ impl VectorMemory {
                 .map_err(|e| AppError::InternalServerError(format!("LanceDB create_table failed: {}", e)))?;
 
             // Create FTS index for hybrid search (on-demand creation for new tables)
-            let _ = table.create_index(&["text"], lancedb::index::Index::FullText(Default::default()))
+            let _ = table.create_index(&["text"], lancedb::index::Index::FTS(Default::default()))
                 .execute()
                 .await;
         }

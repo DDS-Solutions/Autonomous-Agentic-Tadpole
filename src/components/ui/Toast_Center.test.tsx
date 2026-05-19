@@ -14,7 +14,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Toast_Center } from './Toast_Center';
 import { use_notification_store } from '../../stores/notification_store';
-import React from 'react';
 
 // Mock the notification store
 vi.mock('../../stores/notification_store', () => ({

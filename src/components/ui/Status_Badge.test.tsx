@@ -13,7 +13,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Status_Badge } from './Status_Badge';
-import React from 'react';
 
 describe('Status_Badge', () => {
     it('renders with the correct status text', () => {

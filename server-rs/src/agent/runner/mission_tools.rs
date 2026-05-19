@@ -757,16 +757,11 @@ impl AgentRunner {
 
             if let Ok(vec) = crate::agent::memory::get_gemini_embedding(&http_client, &api_key, content).await {
                 if let Ok(vault) = crate::agent::memory::VectorMemory::connect(&global_vault_path.to_string_lossy(), "global").await {
-                    let metadata = serde_json::json!({
-                        "agent_id": ctx.agent_id,
-                        "mission_id": ctx.mission_id,
-                        "topic": topic,
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    });
-                    if let Ok(_) = vault.add_record(content, vec, Some(metadata)).await {
+                    let nugget_id = uuid::Uuid::new_v4().to_string();
+                    let nugget_text = format!("[Topic: {}] {}", topic, content);
+                    if let Ok(_) = vault.add_memory(&nugget_id, &nugget_text, &ctx.mission_id, vec).await {
                         self.broadcast_agent(ctx, &format!("🏛️ Global Vault: nugget archived on {}", topic), "success");
                         return Ok(format!("(GLOBAL ARCHIVE SUCCESS): Nugget on '{}' added to the swarm intelligence vault.", topic));
-                        return Ok("".to_string());
                     }
                 }
             }
@@ -802,7 +797,6 @@ impl AgentRunner {
                         } else {
                             return Ok(format!("(GLOBAL INTELLIGENCE RETRIEVED for '{}'):\n\n{}", query, results.join("\n\n----- \n\n")));
                         }
-                        return Ok("".to_string());
                     }
                 }
             }

@@ -52,8 +52,8 @@ vi.mock('../stores/agent_store', () => ({
     use_agent_store: {
         getState: vi.fn().mockReturnValue({
             agents: [
-                { id: '1', name: 'CEO', status: 'idle', tokens_used: 0, model: 'gpt-4', model_config: {} },
-                { id: '2', name: 'Tadpole_Alpha', status: 'idle', tokens_used: 0, model: 'gpt-4', model_config: {} }
+                { id: '1', name: 'CEO', status: 'idle', tokens_used: 0, model: 'gpt-4', model_config: {}, role: 'CEO', department: 'Executive', category: 'general' },
+                { id: '2', name: 'Tadpole_Alpha', status: 'idle', tokens_used: 0, model: 'gpt-4', model_config: {}, role: 'Architect', department: 'Engineering', category: 'general' }
             ]
         })
     }
@@ -98,8 +98,8 @@ vi.mock('../stores/settings_store', () => ({
 
 describe('process_command', () => {
     const mock_agents: Agent[] = [
-        { id: '1', name: 'CEO', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' } },
-        { id: '2', name: 'Tadpole_Alpha', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' } }
+        { id: '1', name: 'CEO', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' }, role: 'CEO', department: 'Executive', category: 'general' },
+        { id: '2', name: 'Tadpole_Alpha', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'openai', modelId: 'gpt-4' }, role: 'Architect', department: 'Engineering', category: 'general' }
     ];
 
     beforeEach(() => {

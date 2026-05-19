@@ -378,7 +378,8 @@ impl AgentRunner {
     }
 
     /// Synchronizes remote memory via hybrid search and reranking.
-    async fn synchronize_rag_memory(&self, _ctx: &RunContext, _initial_prompt: &str) {
+    #[allow(unused_variables)]
+    async fn synchronize_rag_memory(&self, ctx: &RunContext, initial_prompt: &str) {
         #[cfg(feature = "vector-memory")]
         {
             let (_, agent_memory_dir, mission_scope_dir) = ctx.resolve_paths();

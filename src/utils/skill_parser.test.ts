@@ -61,7 +61,7 @@ Command: ls -la
         expect(result).not.toBeNull();
         expect(result?.type).toBe('skill');
         expect(result?.data.name).toBe('custom-skill'); // Sanitized
-        expect(result?.data.description).toBe('A manually defined skill.');
+        expect((result?.data as any).description).toBe('A manually defined skill.');
         expect((result?.data as any).execution_command).toBe('ls -la');
     });
 

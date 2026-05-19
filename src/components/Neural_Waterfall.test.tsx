@@ -17,7 +17,7 @@ import { Neural_Waterfall } from './Neural_Waterfall';
 
 // Mock stores
 const mock_trace_state = {
-    active_trace_id: 'trace-1',
+    active_trace_id: 'trace-1' as string | null,
     get_trace_tree: vi.fn()
 };
 

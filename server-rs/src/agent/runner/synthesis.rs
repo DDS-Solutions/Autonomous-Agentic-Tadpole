@@ -1041,6 +1041,9 @@ mod tests {
                     crate::agent::continuity::SSDManager::new(base_dir.clone()),
                 ))),
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
+                obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+                #[cfg(feature = "vector-memory")]
+                vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 swarm_vault: tokio::sync::OnceCell::new(),
             }),

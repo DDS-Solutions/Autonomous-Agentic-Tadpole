@@ -73,7 +73,7 @@ describe('agent_store suites', () => {
         name: 'Test Agent 1',
         role: 'Developer',
         model: 'model-a',
-        model_config: { provider: 'test', model_id: 'test' },
+        model_config: { provider: 'test', modelId: 'test' },
         department: 'Engineering',
         workspace_path: '/test',
         status: 'idle',
@@ -140,13 +140,13 @@ describe('agent_store suites', () => {
             });
 
             it('performs an optimistic update and persists successfully', async () => {
-                await use_agent_registry_store.getState().update_agent('1', { name: 'Updated Name', status: 'working' });
+                await use_agent_registry_store.getState().update_agent('1', { name: 'Updated Name', status: 'active' });
                 
                 const agent = use_agent_registry_store.getState().agents.find(a => a.id === '1');
                 expect(agent?.name).toBe('Updated Name');
-                expect(agent?.status).toBe('working');
+                expect(agent?.status).toBe('active');
                 
-                expect(agent_service.persist_agent_update).toHaveBeenCalledWith('1', { name: 'Updated Name', status: 'working' });
+                expect(agent_service.persist_agent_update).toHaveBeenCalledWith('1', { name: 'Updated Name', status: 'active' });
             });
 
             it('retains optimistic state and logs a warning on persistence failure', async () => {
@@ -227,12 +227,12 @@ describe('agent_store suites', () => {
             update_callback({
                 type: 'agent:update',
                 agent_id: '1',
-                data: { status: 'working', telemetry: { cpu: 50 }, category: 'user' }
+                data: { status: 'active', telemetry: { cpu: 50 }, category: 'user' }
             });
             
             const live = use_agent_telemetry_store.getState().live_status['1'];
             expect(live).toMatchObject({
-                status: 'working',
+                status: 'active',
                 telemetry: { cpu: 50 },
                 category: 'user'
             });

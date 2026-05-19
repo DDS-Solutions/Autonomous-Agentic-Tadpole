@@ -20,8 +20,8 @@ const { mock_state } = vi.hoisted(() => ({
     mock_state: { 
         is_locked: false,
         encrypted_configs: {},
-        models: [],
-        providers: [],
+        models: [] as any[],
+        providers: [] as any[],
         loading: false
     }
 }));

@@ -53,7 +53,7 @@ def resolve_db_path() -> Path:
     if parent_candidate.exists():
         return parent_candidate.absolute()
         
-    return Path(r"D:\TadpoleOS-Dev\tadpole.db")
+    return Path(r"G:\TadpoleOS-Dev\tadpole.db")
 
 # Constants
 DB_PATH = resolve_db_path()

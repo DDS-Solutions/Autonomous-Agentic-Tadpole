@@ -276,7 +276,7 @@ mod tests {
         let adapter = FilesystemAdapter::new(dir.path().to_path_buf());
 
         // Standard Windows-style absolute-ish format
-        let dirty = "D:\\projects\\secret.txt";
+        let dirty = "G:\\projects\\secret.txt";
         let safe = adapter.get_safe_path(dirty).await;
         assert!(safe.is_ok());
         let resolved = safe.unwrap();

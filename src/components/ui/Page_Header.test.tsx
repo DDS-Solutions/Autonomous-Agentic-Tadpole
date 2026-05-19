@@ -13,7 +13,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { Page_Header } from './Page_Header';
 
 import { useEngineStatus } from '../../hooks/use_engine_status';
@@ -30,7 +29,7 @@ vi.mock('./Connection_Banner', () => ({
 
 describe('Page_Header', () => {
     beforeEach(() => {
-        vi.mocked(useEngineStatus).mockReturnValue({ status: 'connected' });
+        vi.mocked(useEngineStatus).mockReturnValue({ status: 'connected' } as any);
     });
 
     it('renders the title and subtitle correctly', () => {
@@ -52,7 +51,7 @@ describe('Page_Header', () => {
     });
 
     it('integrates with engine status to show banner', () => {
-        vi.mocked(useEngineStatus).mockReturnValue({ status: 'disconnected' });
+        vi.mocked(useEngineStatus).mockReturnValue({ status: 'disconnected' } as any);
         
         render(<Page_Header title="Dashboard" />);
         

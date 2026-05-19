@@ -26,8 +26,8 @@ use serde::Deserialize;
 use crate::state::AppState;
 use crate::error::AppError;
 use crate::intelligence::graph::SymbolNode;
-use std::hash::{Hash, Hasher};
 use std::path::Path;
+use sha2::{Sha256, Digest};
 
 #[derive(Deserialize)]
 pub struct BlastRadiusQuery {
@@ -37,7 +37,7 @@ pub struct BlastRadiusQuery {
 
 /// Helper to obfuscate physical file path structures deterministically
 /// while preserving UX force-graph clustering and file basenames.
-fn obfuscate_path(path_str: &str) -> String {
+fn obfuscate_path(path_str: &str, salt: &str) -> String {
     let path = Path::new(path_str);
     let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("unknown");
     let parent = path.parent().unwrap_or(Path::new("")).to_string_lossy();
@@ -45,11 +45,12 @@ fn obfuscate_path(path_str: &str) -> String {
     if parent.is_empty() {
         file_name.to_string()
     } else {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        "tadpole_secure_salt".hash(&mut hasher);
-        parent.hash(&mut hasher);
-        let hash_val = hasher.finish();
-        format!("{:x}/{}", hash_val, file_name)
+        let mut hasher = Sha256::new();
+        hasher.update(salt.as_bytes());
+        hasher.update(parent.as_bytes());
+        let result = hasher.finalize();
+        let hash_val = hex::encode(result);
+        format!("{}/{}", &hash_val[..16], file_name)
     }
 }
 
@@ -79,29 +80,37 @@ pub async fn get_code_graph(
         .map_err(|e| AppError::InternalServerError(format!("Graph build thread panicked: {}", e)))?;
     }
 
-    let guard = graph_lock.read();
-    
-    // Export nodes and edges for the frontend force-graph (Obfuscated)
-    let mut nodes = Vec::new();
-    let mut edges = Vec::new();
+    let salt = state.resources.obfuscation_salt.clone();
+    let lock_clone = Arc::clone(&graph_lock);
 
-    for idx in guard.graph.node_indices() {
-        if let Some(node) = guard.graph.node_weight(idx) {
-            let mut node_clone = node.clone();
-            node_clone.path = obfuscate_path(&node_clone.path);
-            nodes.push(node_clone);
+    let (nodes, edges) = tokio::task::spawn_blocking(move || {
+        let guard = lock_clone.read();
+        
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+
+        for idx in guard.graph.node_indices() {
+            if let Some(node) = guard.graph.node_weight(idx) {
+                let mut node_clone = node.clone();
+                node_clone.path = obfuscate_path(&node_clone.path, &salt);
+                nodes.push(node_clone);
+            }
         }
-    }
 
-    use petgraph::visit::EdgeRef;
-    for edge in guard.graph.edge_references() {
-        let source = &guard.graph[edge.source()];
-        let target = &guard.graph[edge.target()];
-        edges.push(serde_json::json!({
-            "source": format!("{}:{}", obfuscate_path(&source.path), source.name),
-            "target": format!("{}:{}", obfuscate_path(&target.path), target.name),
-        }));
-    }
+        use petgraph::visit::EdgeRef;
+        for edge in guard.graph.edge_references() {
+            let source = &guard.graph[edge.source()];
+            let target = &guard.graph[edge.target()];
+            edges.push(serde_json::json!({
+                "source": format!("{}:{}", obfuscate_path(&source.path, &salt), source.name),
+                "target": format!("{}:{}", obfuscate_path(&target.path, &salt), target.name),
+            }));
+        }
+
+        (nodes, edges)
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(format!("Graph processing thread panicked: {}", e)))?;
 
     Ok(Json(serde_json::json!({
         "nodes": nodes,
@@ -117,13 +126,16 @@ pub async fn get_blast_radius(
 ) -> Result<Json<Vec<SymbolNode>>, AppError> {
     // 🛡️ [Path Traversal Hardening] Verify input resides within workspace boundary
     let workspace_root = &state.resources.base_dir;
-    let combined = workspace_root.join(&query.path);
+    
+    // Convert Windows backward slashes to forward slashes for unified traversal protection
+    let normalized_path = query.path.replace('\\', "/");
+    let combined = workspace_root.join(&normalized_path);
     
     let is_safe = if let Ok(canonical) = combined.canonicalize() {
         canonical.starts_with(workspace_root)
     } else {
         // Fallback boundary validation for raw query values
-        !query.path.contains("..") && !query.path.starts_with('/') && !query.path.contains(':')
+        !normalized_path.contains("..") && !normalized_path.starts_with('/') && !normalized_path.contains(':')
     };
 
     if !is_safe {
@@ -131,26 +143,36 @@ pub async fn get_blast_radius(
     }
 
     let graph_lock = state.resources.get_symbol_graph().await;
-    let guard = graph_lock.read();
-    
-    // Reverse-resolve the physical raw path from the obfuscated path sent by the frontend client
-    let mut raw_path = query.path.clone();
-    for node in guard.graph.node_weights() {
-        if obfuscate_path(&node.path) == query.path {
-            raw_path = node.path.clone();
-            break;
-        }
-    }
+    let salt = state.resources.obfuscation_salt.clone();
+    let lock_clone = Arc::clone(&graph_lock);
+    let query_path = query.path.clone();
+    let query_name = query.name.clone();
 
-    let affected = guard.calculate_blast_radius(&query.name, &raw_path);
-    
-    // Obfuscate target paths returned in the final impact list
-    let mut obfuscated_affected = Vec::new();
-    for node in affected {
-        let mut node_clone = node.clone();
-        node_clone.path = obfuscate_path(&node_clone.path);
-        obfuscated_affected.push(node_clone);
-    }
+    let obfuscated_affected = tokio::task::spawn_blocking(move || {
+        let guard = lock_clone.read();
+        
+        // Reverse-resolve the physical raw path from the obfuscated path sent by the frontend client
+        let mut raw_path = query_path.clone();
+        for node in guard.graph.node_weights() {
+            if obfuscate_path(&node.path, &salt) == query_path {
+                raw_path = node.path.clone();
+                break;
+            }
+        }
+
+        let affected = guard.calculate_blast_radius(&query_name, &raw_path);
+        
+        // Obfuscate target paths returned in the final impact list
+        let mut obfuscated_affected = Vec::new();
+        for node in affected {
+            let mut node_clone = node.clone();
+            node_clone.path = obfuscate_path(&node_clone.path, &salt);
+            obfuscated_affected.push(node_clone);
+        }
+        obfuscated_affected
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(format!("Blast radius processing thread panicked: {}", e)))?;
 
     Ok(Json(obfuscated_affected))
 }

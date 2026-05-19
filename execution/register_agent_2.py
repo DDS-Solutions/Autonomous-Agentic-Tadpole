@@ -14,7 +14,7 @@ import sqlite3
 import json
 from datetime import datetime, timezone
 
-DB_PATH = r"D:\Autonomous-Agentic-Tadpole\data\tadpole.db"
+DB_PATH = r"G:\Autonomous-Agentic-Tadpole\data\tadpole.db"
 
 now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 

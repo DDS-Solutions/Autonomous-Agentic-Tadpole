@@ -23,10 +23,6 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 use crate::state::AppState;
 use futures::{Future, FutureExt};
-use std::pin::Pin;
-
-pub type BoxedFuture = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
-pub type WorkerFn = Box<dyn Fn(Arc<AppState>) -> BoxedFuture + Send + Sync>;
 
 /// The Sovereign Supervisor responsible for keeping background tasks alive.
 pub struct WorkerSupervisor {
