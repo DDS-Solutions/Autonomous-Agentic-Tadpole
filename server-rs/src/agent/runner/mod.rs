@@ -187,6 +187,7 @@ impl RunContext {
         }
     }
 
+    #[allow(dead_code)]
     pub fn resolve_paths(&self) -> (String, String, String) {
         let cluster_name = self
             .workspace_root

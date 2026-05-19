@@ -71,6 +71,11 @@ AUDIT_SUITE = [
         "critical": False
     },
     {
+        "name": "Codebase Topology Integrity (P2)",
+        "cmd": ["cargo", "run", "--manifest-path", "server-rs/Cargo.toml", "--", "--audit-graph"],
+        "critical": False
+    },
+    {
         "name": "API Reference Consistency",
         "cmd": ["python", "execution/generate_api_reference.py"],
         "critical": False

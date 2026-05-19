@@ -17,9 +17,6 @@ Core system module providing specialized functionality for the agent swarm.
 //! (functions, structs, traits) and their interdependencies. 
 //! Enables **Blast Radius Analysis**: helps agents understand the 
 //! impact of changing a specific symbol by tracing outgoing edges. 
-//! Note: Current implementation uses a **Global Namespace Heuristic** 
-//! for cross-file resolution; complex shadowing or macro-heavy 
-//! code may require more advanced scope-aware parsing (GRAPH-02).
 
 use std::collections::HashMap;
 use std::path::{PathBuf};
@@ -29,6 +26,7 @@ use crate::utils::parser::{SymbolExtractor};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use walkdir::WalkDir;
+use rayon::prelude::*;
 
 /// A node in the knowledge graph representing a code symbol.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -48,7 +46,7 @@ pub struct SymbolEdge {
 /// The core Knowledge Graph engine.
 pub struct CodeSymbolGraph {
     pub graph: DiGraph<SymbolNode, SymbolEdge>,
-    pub index: HashMap<String, NodeIndex>, // key: "path::name"
+    pub index: HashMap<(String, String), NodeIndex>, // key: (path, name)
     root: PathBuf,
 }
 
@@ -64,129 +62,114 @@ impl CodeSymbolGraph {
 
     /// Scans the workspace and populates the graph with symbols and references.
     pub fn build(&mut self) {
-        let mut extractor = SymbolExtractor::new();
-        let mut all_symbols = Vec::new();
-        
         tracing::info!("🔍 [Graph] Building symbol-level knowledge graph for {}...", self.root.display());
 
-        // 1. Extract all symbols (Nodes)
-        for entry in WalkDir::new(&self.root)
+        // 1. Gather all target files to scan
+        let files: Vec<PathBuf> = WalkDir::new(&self.root)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
-        {
-            let path = entry.path();
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if ext != "rs" && ext != "ts" && ext != "tsx" {
-                continue;
-            }
-
-            // Skip infrastructure dirs
-            let path_str = path.to_string_lossy();
-            if path_str.contains("target") || path_str.contains("node_modules") || path_str.contains(".git") {
-                continue;
-            }
-
-            // 🛡️ [DoS Protection] Enforce 2MB size limit to avoid scanning massive database/build/artifact dumps
-            if let Ok(metadata) = std::fs::metadata(path) {
-                if metadata.len() > 2 * 1024 * 1024 {
-                    tracing::warn!("⚠️ [Graph] Skipping oversized file ({} bytes): {}", metadata.len(), path.display());
-                    continue;
+            .map(|e| e.path().to_path_buf())
+            .filter(|path| {
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if ext != "rs" && ext != "ts" && ext != "tsx" {
+                    return false;
                 }
-            } else {
-                continue;
-            }
 
-            match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
-                    let symbols = extractor.extract_symbols(path, &content);
-                    for sym in symbols {
-                        all_symbols.push((rel_path.clone(), sym));
+                // Skip infrastructure dirs
+                let path_str = path.to_string_lossy();
+                if path_str.contains("target") || path_str.contains("node_modules") || path_str.contains(".git") {
+                    return false;
+                }
+
+                // 🛡️ [DoS Protection] Enforce 2MB size limit to avoid scanning massive database/build/artifact dumps
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    if metadata.len() > 2 * 1024 * 1024 {
+                        tracing::warn!("⚠️ [Graph] Skipping oversized file ({} bytes): {}", metadata.len(), path.display());
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+                true
+            })
+            .collect();
+
+        // 2. Extract symbols & references in parallel using Rayon (Single-Pass reading)
+        let parsed_files: Vec<(String, Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>)> = files
+            .par_iter()
+            .filter_map(|path| {
+                match std::fs::read_to_string(path) {
+                    Ok(content) => {
+                        let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
+                        let mut extractor = SymbolExtractor::new();
+                        let symbols = extractor.extract_symbols(path, &content);
+                        let refs = extractor.extract_references(path, &content);
+                        Some((rel_path, symbols, refs))
+                    }
+                    Err(e) => {
+                        tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
+                        None
                     }
                 }
-                Err(e) => {
-                    tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
-                }
-            }
-        }
+            })
+            .collect();
 
-        // 2. Add nodes to graph and compile Inverted Name Index
+        // 3. Add nodes to graph and compile Inverted Name Index
         let mut name_to_indices: HashMap<String, Vec<NodeIndex>> = HashMap::new();
-        for (path, sym) in &all_symbols {
-            let key = format!("{}::{}", path, sym.name);
-            let node = SymbolNode {
-                name: sym.name.clone(),
-                path: path.clone(),
-                kind: sym.kind.clone(),
-                signature: sym.signature.clone(),
-            };
-            let idx = self.graph.add_node(node);
-            self.index.insert(key, idx);
-            name_to_indices.entry(sym.name.clone()).or_default().push(idx);
+        for (rel_path, symbols, _) in &parsed_files {
+            for sym in symbols {
+                let key = (rel_path.clone(), sym.name.clone());
+                let node = SymbolNode {
+                    name: sym.name.clone(),
+                    path: rel_path.clone(),
+                    kind: sym.kind.clone(),
+                    signature: sym.signature.clone(),
+                };
+                let idx = self.graph.add_node(node);
+                self.index.insert(key, idx);
+                name_to_indices.entry(sym.name.clone()).or_default().push(idx);
+            }
         }
 
-        tracing::info!("✅ [Graph] Indexed {} symbols.", all_symbols.len());
+        tracing::info!("✅ [Graph] Indexed {} symbols.", self.index.len());
 
-        // 3. Extract references and add edges (Dependencies - Optimized O(N+M) Complexity)
+        // 4. Extract references and add edges (Dependencies)
         let mut added_edges = std::collections::HashSet::new();
-        for entry in WalkDir::new(&self.root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_file())
-        {
-            let path = entry.path();
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if ext != "rs" && ext != "ts" && ext != "tsx" {
-                continue;
-            }
-
-            let path_str = path.to_string_lossy();
-            if path_str.contains("target") || path_str.contains("node_modules") {
-                continue;
-            }
-
-            // 🛡️ [DoS Protection] Enforce 2MB size limit to avoid scanning massive database/build/artifact dumps
-            if let Ok(metadata) = std::fs::metadata(path) {
-                if metadata.len() > 2 * 1024 * 1024 {
-                    continue;
-                }
-            } else {
-                continue;
-            }
-
-            match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
-                    let refs = extractor.extract_references(path, &content);
-                    
-                    let file_symbols: Vec<_> = all_symbols.iter()
-                        .filter(|(p, _)| p == &rel_path)
-                        .collect();
-
-                    for r in refs {
-                        // 🚀 O(1) Lookup of matching target symbol names
-                        if let Some(target_indices) = name_to_indices.get(&r.name) {
-                            for &target_idx in target_indices {
-                                // Find which source symbol in THIS file contains this reference
-                                for (_, src_sym) in &file_symbols {
-                                    if r.range.start_byte >= src_sym.range.start_byte && r.range.end_byte <= src_sym.range.end_byte {
-                                        let src_key = format!("{}::{}", rel_path, src_sym.name);
-                                        if let Some(&src_idx) = self.index.get(&src_key) {
-                                            if src_idx != target_idx {
-                                                if added_edges.insert((src_idx, target_idx)) {
-                                                    self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
-                                                }
-                                            }
+        for (rel_path, symbols, refs) in &parsed_files {
+            for r in refs {
+                // 🚀 O(1) Lookup of matching target symbol names
+                if let Some(target_indices) = name_to_indices.get(&r.name) {
+                    for &target_idx in target_indices {
+                        // Find the tightest (deepest nested) source symbol in THIS file that contains this reference range
+                        let mut tightest_src: Option<(&crate::utils::parser::Symbol, usize)> = None;
+                        for src_sym in symbols {
+                            if r.range.start_byte >= src_sym.range.start_byte && r.range.end_byte <= src_sym.range.end_byte {
+                                let span_size = src_sym.range.end_byte - src_sym.range.start_byte;
+                                match tightest_src {
+                                    None => {
+                                        tightest_src = Some((src_sym, span_size));
+                                    }
+                                    Some((_, current_min_span)) => {
+                                        if span_size < current_min_span {
+                                            tightest_src = Some((src_sym, span_size));
                                         }
                                     }
                                 }
                             }
                         }
+
+                        if let Some((src_sym, _)) = tightest_src {
+                            let src_key = (rel_path.clone(), src_sym.name.clone());
+                            if let Some(&src_idx) = self.index.get(&src_key) {
+                                if src_idx != target_idx {
+                                    if added_edges.insert((src_idx, target_idx)) {
+                                        self.graph.add_edge(src_idx, target_idx, SymbolEdge { kind: "ref".to_string() });
+                                    }
+                                }
+                            }
+                        }
                     }
-                }
-                Err(e) => {
-                    tracing::warn!("⚠️ [Graph] Failed to read file {} for reference extraction: {}", path.display(), e);
                 }
             }
         }
@@ -194,10 +177,40 @@ impl CodeSymbolGraph {
         tracing::info!("✅ [Graph] Knowledge graph build complete (Nodes: {}, Edges: {}).", self.graph.node_count(), self.graph.edge_count());
     }
 
+    /// Audits the graph for structural anomalies (dead code).
+    pub fn find_anomalies(&self) -> Vec<String> {
+        let mut anomalies = Vec::new();
+
+        for idx in self.graph.node_indices() {
+            if let Some(node) = self.graph.node_weight(idx) {
+                // Skip entrypoints, tests, and standard route/event handlers
+                let name_lower = node.name.to_lowercase();
+                if name_lower == "main"
+                    || name_lower.contains("test")
+                    || name_lower.contains("route")
+                    || name_lower.contains("handler")
+                    || name_lower.contains("register")
+                {
+                    continue;
+                }
+
+                let incoming = self.graph.edges_directed(idx, petgraph::Direction::Incoming).count();
+                if incoming == 0 {
+                    anomalies.push(format!(
+                        "Unused symbol (0 incoming references): {} in {}",
+                        node.name, node.path
+                    ));
+                }
+            }
+        }
+
+        anomalies
+    }
+
     /// Calculates the "Blast Radius" for a given symbol.
     /// Returns a list of symbols that directly or indirectly depend on it.
     pub fn calculate_blast_radius(&self, symbol_name: &str, path: &str) -> Vec<SymbolNode> {
-        let key = format!("{}::{}", path, symbol_name);
+        let key = (path.to_string(), symbol_name.to_string());
         let mut affected = Vec::new();
         
         if let Some(&start_idx) = self.index.get(&key) {

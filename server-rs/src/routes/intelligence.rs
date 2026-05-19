@@ -83,7 +83,7 @@ pub async fn get_code_graph(
     let salt = state.resources.obfuscation_salt.clone();
     let lock_clone = Arc::clone(&graph_lock);
 
-    let (nodes, edges) = tokio::task::spawn_blocking(move || {
+    let (nodes, edges, anomalies) = tokio::task::spawn_blocking(move || {
         let guard = lock_clone.read();
         
         let mut nodes = Vec::new();
@@ -107,7 +107,19 @@ pub async fn get_code_graph(
             }));
         }
 
-        (nodes, edges)
+        let mut anomalies = Vec::new();
+        for anomaly in guard.find_anomalies() {
+            if let Some(pos) = anomaly.rfind(" in ") {
+                let prefix = &anomaly[..pos + 4];
+                let raw_path = &anomaly[pos + 4..];
+                let obf = obfuscate_path(raw_path, &salt);
+                anomalies.push(format!("{}{}", prefix, obf));
+            } else {
+                anomalies.push(anomaly);
+            }
+        }
+
+        (nodes, edges, anomalies)
     })
     .await
     .map_err(|e| AppError::InternalServerError(format!("Graph processing thread panicked: {}", e)))?;
@@ -115,6 +127,7 @@ pub async fn get_code_graph(
     Ok(Json(serde_json::json!({
         "nodes": nodes,
         "links": edges,
+        "anomalies": anomalies,
     })))
 }
 

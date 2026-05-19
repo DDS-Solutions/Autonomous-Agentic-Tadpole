@@ -23,6 +23,7 @@ import type { SymbolNode } from '../types/schemas';
 export interface CodeGraphData {
     nodes: SymbolNode[];
     links: { source: string; target: string }[];
+    anomalies?: string[];
 }
 
 class IntelligenceApiService {

@@ -161,6 +161,7 @@ async fn async_main() -> anyhow::Result<()> {
         println!("  -h, --help       Show this help and exit");
         println!("  --status         Show engine status and exit (Fast Path)");
         println!("  --export-types   Export TypeScript schemas and exit");
+        println!("  --audit-graph    Run codebase topology graph integrity audit");
         println!("  --port <PORT>    Set the port to listen on (Default: 8000)");
         return Ok(());
     }
@@ -171,6 +172,27 @@ async fn async_main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
         return Ok(());
+    }
+
+    if args.iter().any(|arg| arg == "--audit-graph") {
+        let root = std::env::var("WORKSPACE_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+
+        let mut graph = crate::intelligence::graph::CodeSymbolGraph::new(root);
+        graph.build();
+        let anomalies = graph.find_anomalies();
+        
+        if anomalies.is_empty() {
+            println!("✅ Codebase Topology Integrity Audit passed with 0 anomalies.");
+            std::process::exit(0);
+        } else {
+            println!("❌ Codebase Topology Integrity Audit failed: {} anomalies found.", anomalies.len());
+            for (idx, anomaly) in anomalies.iter().enumerate() {
+                println!("  {}. {}", idx + 1, anomaly);
+            }
+            std::process::exit(1);
+        }
     }
 
     // 2. Load Env & Initialize Tracing
