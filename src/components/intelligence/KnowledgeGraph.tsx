@@ -55,7 +55,7 @@ export const KnowledgeGraph: React.FC = () => {
     // Transform data for force-graph
     const graph_data = useMemo(() => {
         if (!data) return { nodes: [], links: [] };
-        
+
         const nodes: ExtendedGraphNode[] = data.nodes.map(node => ({
             ...node,
             id: `${node.path}:${node.name}`,
@@ -76,7 +76,7 @@ export const KnowledgeGraph: React.FC = () => {
             const affected = await intelligence_api_service.get_blast_radius(node.name, node.path);
             const affected_ids = new Set(affected.map(n => `${n.path}:${n.name}`));
             set_affected_nodes(affected_ids);
-            
+
             // Center and zoom
             if (fg_ref.current) {
                 fg_ref.current.centerAt(node.x, node.y, 1000);

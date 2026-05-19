@@ -183,6 +183,21 @@ impl CodeSymbolGraph {
 
         for idx in self.graph.node_indices() {
             if let Some(node) = self.graph.node_weight(idx) {
+                // Skip TypeScript/JavaScript files due to AST reference resolution limitations
+                if node.path.ends_with(".ts") || node.path.ends_with(".tsx") {
+                    continue;
+                }
+
+                // Skip backend files since Rust compiler dead-code and public-export patterns are handled natively
+                if node.path.starts_with("server-rs/") {
+                    continue;
+                }
+
+                // Skip scratch/ files since they are temporary development scripts
+                if node.path.contains("scratch/") {
+                    continue;
+                }
+
                 // Skip entrypoints, tests, and standard route/event handlers
                 let name_lower = node.name.to_lowercase();
                 if name_lower == "main"
