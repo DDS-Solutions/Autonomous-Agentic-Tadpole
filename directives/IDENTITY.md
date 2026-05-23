@@ -6,22 +6,9 @@
 > - **Telemetry Link**: Search `[IDENTITY]` in audit logs.
 >
 > ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
->
-> ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[IDENTITY]` in audit logs.
->
-> ### AI Assist Note
 > Tadpole OS: Global Identity & Authority (IDENTITY.md)
 >
-> ### Debugging & Observability
+> ### 🔍 Debugging & Observability
 > Traceability via `execution/parity_guard.py`.
 
 # Tadpole OS: Global Identity & Authority (IDENTITY.md)
@@ -89,4 +76,3 @@ Defined as of 2026.04.12
 
 [//]: # (Metadata: [IDENTITY])
 
-[//]: # (Metadata: [IDENTITY])

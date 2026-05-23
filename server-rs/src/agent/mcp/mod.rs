@@ -629,15 +629,6 @@ pub async fn get_blast_radius(
         .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
 
     let graph_lock = ctx.state.resources.get_symbol_graph().await;
-    
-    // Ensure graph is built (simplified build-on-demand for now)
-    {
-        let mut graph = graph_lock.write();
-        if graph.index.is_empty() {
-            graph.build();
-        }
-    }
-
     let graph = graph_lock.read();
     let affected = graph.calculate_blast_radius(symbol_name, path);
     

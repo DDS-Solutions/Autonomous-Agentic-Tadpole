@@ -227,6 +227,24 @@ export default function Settings(): React.ReactElement {
                             <option value="comfortable">{i18n.t('settings.density_comfortable')}</option>
                         </select>
                     </div>
+                    <div className="space-y-3 z-10 relative">
+                        <Tooltip content={i18n.t('settings.tooltip_backdrop_theme')} position="top">
+                            <label htmlFor="backdrop_theme" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_backdrop_theme')}</label>
+                        </Tooltip>
+                        <select
+                            id="backdrop_theme"
+                            name="backdrop_theme"
+                            value={settings_state.backdrop_theme}
+                            onChange={handle_change}
+                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
+                        >
+                            <option value="cyan">{i18n.t('settings.theme_cyan')}</option>
+                            <option value="emerald">{i18n.t('settings.theme_emerald')}</option>
+                            <option value="purple">{i18n.t('settings.theme_purple')}</option>
+                            <option value="slate">{i18n.t('settings.theme_slate')}</option>
+                            <option value="amber">{i18n.t('settings.theme_amber')}</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 

@@ -60,8 +60,8 @@ export function Sidebar({ nav_item_class }: SidebarProps) {
     ];
 
     return (
-        <aside className="w-16 lg:w-[260px] bg-zinc-950 border-r border-zinc-800 flex flex-col z-20 transition-all duration-300">
-            <div className="p-4 lg:p-6 border-b border-zinc-800 flex items-center gap-3 justify-center lg:justify-start">
+        <aside className="w-16 lg:w-[260px] bg-zinc-950/30 backdrop-blur-md border-r border-zinc-900/50 flex flex-col z-20 transition-all duration-300">
+            <div className="p-4 lg:p-6 border-b border-zinc-900/50 flex items-center gap-3 justify-center lg:justify-start">
                 <Tooltip content={i18n.t('layout.sidebar.root_tooltip')} position="right">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-zinc-900/50 border border-zinc-800 shrink-0 group cursor-pointer">
                         <Zap
@@ -100,7 +100,7 @@ export function Sidebar({ nav_item_class }: SidebarProps) {
             </nav>
 
             {/* Social Proof / Certification Badge */}
-            <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 backdrop-blur-sm hidden lg:block">
+            <div className="p-4 border-t border-zinc-900/50 bg-zinc-950/20 backdrop-blur-sm hidden lg:block">
                 <Tooltip content={i18n.t('layout.sidebar.node_v_tooltip')} position="top">
                     <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:border-emerald-500/30 transition-all group cursor-default">
                         <Shield className="w-5 h-5 text-emerald-500 group-hover:animate-pulse" />

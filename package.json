@@ -67,6 +67,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.14.2",
     "reactflow": "^11.11.4",
+    "shaders": "^2.5.127",
     "tailwind-merge": "^3.5.0",
     "uuid": "^14.0.0",
     "ws": "^8.20.0",

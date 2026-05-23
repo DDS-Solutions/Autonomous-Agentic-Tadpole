@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search for `[Operation_Tab_Header]` or `set_active_tab` in UI tracing.
  */
 
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
     Globe, 
@@ -42,6 +42,38 @@ export const Operation_Tab_Header: React.FC<Operation_Tab_Header_Props> = ({
     on_detach_tab,
     on_detach_grid
 }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [isDown, setIsDown] = useState(false);
+    const [startX, setStartX] = useState(0);
+    const [scrollLeftState, setScrollLeftState] = useState(0);
+    const hasMovedRef = useRef(false);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (!scrollRef.current) return;
+        setIsDown(true);
+        hasMovedRef.current = false;
+        setStartX(e.pageX - scrollRef.current.offsetLeft);
+        setScrollLeftState(scrollRef.current.scrollLeft);
+    };
+
+    const handleMouseLeave = () => {
+        setIsDown(false);
+    };
+
+    const handleMouseUp = () => {
+        setIsDown(false);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDown || !scrollRef.current) return;
+        const x = e.pageX - scrollRef.current.offsetLeft;
+        const walk = (x - startX) * 2; // scroll speed multiplier
+        if (Math.abs(walk) > 3) {
+            hasMovedRef.current = true;
+        }
+        scrollRef.current.scrollLeft = scrollLeftState - walk;
+    };
+
     const render_tab = (id: string, label: string, icon: React.ReactNode, is_cluster = false, is_active_cluster = false) => {
         const is_selected = active_tab_id === id;
 
@@ -51,7 +83,11 @@ export const Operation_Tab_Header: React.FC<Operation_Tab_Header_Props> = ({
                 className={`flex-shrink-0 flex items-center gap-2 px-4 h-12 relative cursor-pointer transition-all duration-300 group
                     ${is_selected ? 'text-green-400' : 'text-zinc-500 hover:text-zinc-300'}
                 `}
-                onClick={() => on_tab_change(id)}
+                onClick={() => {
+                    if (!hasMovedRef.current) {
+                        on_tab_change(id);
+                    }
+                }}
             >
                 {/* Active Indicator Bar */}
                 {is_selected && (
@@ -112,21 +148,30 @@ export const Operation_Tab_Header: React.FC<Operation_Tab_Header_Props> = ({
     };
 
     return (
-        <div className="sticky top-0 bg-zinc-950/80 backdrop-blur-md z-30 border-b border-zinc-800/50 flex items-center justify-between px-6">
-            <div className="flex-1 flex items-center overflow-x-auto no-scrollbar min-w-0">
+        <div className="sticky top-0 bg-zinc-950/80 backdrop-blur-md z-30 border-b border-zinc-800/50 flex items-center justify-between px-6 select-none">
+            <div className="flex-1 flex items-center min-w-0">
                 {/* Global View Tab */}
                 {render_tab('global', i18n.t('dashboard.global_view') || 'Global View', <Globe size={12} className="group-hover:rotate-12 transition-transform" />)}
  
-                <div className="h-4 w-px bg-white/5 mx-2" />
+                <div className="h-4 w-px bg-white/5 mx-2 shrink-0" />
 
-                {/* Dynamic Cluster Tabs */}
-                {(clusters || []).map(cluster => render_tab(
-                    cluster.id, 
-                    cluster.name, 
-                    <Layers size={12} />, 
-                    true, 
-                    cluster.is_active
-                ))}
+                {/* Scrollable Container for Dynamic Cluster Tabs */}
+                <div 
+                    ref={scrollRef}
+                    onMouseDown={handleMouseDown}
+                    onMouseLeave={handleMouseLeave}
+                    onMouseUp={handleMouseUp}
+                    onMouseMove={handleMouseMove}
+                    className="flex-1 flex items-center overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none"
+                >
+                    {(clusters || []).map(cluster => render_tab(
+                        cluster.id, 
+                        cluster.name, 
+                        <Layers size={12} />, 
+                        true, 
+                        cluster.is_active
+                    ))}
+                </div>
             </div>
 
             {/* Actions Sidebar in Header */}

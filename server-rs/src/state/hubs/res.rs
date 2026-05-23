@@ -151,15 +151,31 @@ impl ResourceHub {
 
     /// Lazily initializes and returns the symbol-level knowledge graph.
     pub async fn get_symbol_graph(&self) -> Arc<RwLock<CodeSymbolGraph>> {
-        if self.symbol_graph.get().is_none() {
+        let is_uninitialized = self.symbol_graph.get().is_none();
+        if is_uninitialized {
             self.set_subsystem_status("SymbolGraph", SubsystemStatus::Warming(0.0));
         }
+        let salt = self.obfuscation_salt.clone();
+        let base_dir = self.base_dir.clone();
         let graph = self
             .symbol_graph
             .get_or_init(|| async {
-                Arc::new(RwLock::new(CodeSymbolGraph::new(self.base_dir.clone())))
+                let mut g = CodeSymbolGraph::new(base_dir);
+                let built_g = tokio::task::spawn_blocking(move || {
+                    g.build(&salt);
+                    g
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::error!("🚨 [Graph] Failed to build graph in blocking task: {:?}", e);
+                    CodeSymbolGraph::new(self.base_dir.clone())
+                });
+                Arc::new(RwLock::new(built_g))
             })
             .await;
+        if is_uninitialized {
+            self.set_subsystem_status("SymbolGraph", SubsystemStatus::Ready);
+        }
         graph.clone()
     }
 

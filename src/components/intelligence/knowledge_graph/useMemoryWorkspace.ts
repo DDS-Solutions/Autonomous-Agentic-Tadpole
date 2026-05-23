@@ -12,8 +12,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { use_agent_store } from '../../../stores/agent_store';
-import { use_memory_store } from '../../../stores/memory_store';
-import type { MemoryEntry } from '../../../types/schemas';
+import { use_memory_store, type MemoryEntry } from '../../../stores/memory_store';
 
 /**
  * Gets the simulated user session role.

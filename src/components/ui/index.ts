@@ -22,6 +22,7 @@ export * from './Toast_Center';
 export * from './Header_Ticker';
 export * from './Connection_Banner';
 export * from './LD_Json';
+export * from './GPUBackground';
 
 // Metadata: [index]
 

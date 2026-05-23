@@ -43,10 +43,35 @@ pub struct SymbolEdge {
     pub kind: String,
 }
 
+use sha2::{Sha256, Digest};
+use std::path::Path;
+
+/// Helper to obfuscate physical file path structures deterministically
+/// while preserving UX force-graph clustering and file basenames.
+pub fn obfuscate_path(path_str: &str, salt: &str) -> String {
+    let path = Path::new(path_str);
+    let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("unknown");
+    let parent = path.parent().unwrap_or(Path::new("")).to_string_lossy();
+    
+    let parent_to_hash = if parent.is_empty() {
+        "__root__"
+    } else {
+        &parent
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(salt.as_bytes());
+    hasher.update(parent_to_hash.as_bytes());
+    let result = hasher.finalize();
+    let hash_val = hex::encode(result);
+    format!("{}/{}", &hash_val[..16], file_name)
+}
+
 /// The core Knowledge Graph engine.
 pub struct CodeSymbolGraph {
     pub graph: DiGraph<SymbolNode, SymbolEdge>,
     pub index: HashMap<(String, String), NodeIndex>, // key: (path, name)
+    pub reverse_obfuscation_index: HashMap<String, String>, // key: obfuscated_path, val: physical_path
     root: PathBuf,
 }
 
@@ -56,13 +81,15 @@ impl CodeSymbolGraph {
         Self {
             graph: DiGraph::new(),
             index: HashMap::new(),
+            reverse_obfuscation_index: HashMap::new(),
             root,
         }
     }
 
     /// Scans the workspace and populates the graph with symbols and references.
-    pub fn build(&mut self) {
+    pub fn build(&mut self, salt: &str) {
         tracing::info!("🔍 [Graph] Building symbol-level knowledge graph for {}...", self.root.display());
+        self.reverse_obfuscation_index.clear();
 
         // 1. Gather all target files to scan
         let files: Vec<PathBuf> = WalkDir::new(&self.root)
@@ -118,6 +145,9 @@ impl CodeSymbolGraph {
         // 3. Add nodes to graph and compile Inverted Name Index
         let mut name_to_indices: HashMap<String, Vec<NodeIndex>> = HashMap::new();
         for (rel_path, symbols, _) in &parsed_files {
+            let obf_path = obfuscate_path(rel_path, salt);
+            self.reverse_obfuscation_index.insert(obf_path, rel_path.clone());
+
             for sym in symbols {
                 let key = (rel_path.clone(), sym.name.clone());
                 let node = SymbolNode {
@@ -287,7 +317,7 @@ mod tests {
         writeln!(file, "fn main() {{ helper(); }}").unwrap();
         
         let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
-        graph.build();
+        graph.build("test-salt");
         
         // Check that nodes and edges are populated
         assert!(graph.graph.node_count() >= 2, "Should index at least 2 symbols");
@@ -310,7 +340,7 @@ mod tests {
         writeln!(file, "fn beta() {{ alpha(); }}").unwrap();
         
         let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
-        graph.build();
+        graph.build("test-salt");
         
         // BFS should handle the cycle gracefully and terminate without infinite loop
         let affected_alpha = graph.calculate_blast_radius("alpha", "main.rs");

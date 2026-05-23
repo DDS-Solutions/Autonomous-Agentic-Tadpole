@@ -18,7 +18,7 @@ import clsx from 'clsx';
 import { tadpole_os_socket } from '../services/socket';
 import { use_skill_store } from '../stores/skill_store';
 import { Sidebar } from '../components/layout/Sidebar';
-import { Portal_Window } from '../components/ui';
+import { Portal_Window, GPUBackground } from '../components/ui';
 import { Tab_Bar } from '../components/layout/Tab_Bar';
 import { Ticker_Header } from '../components/layout/Ticker_Header';
 import { use_tab_store } from '../stores/tab_store';
@@ -238,13 +238,14 @@ export default function Dashboard_Layout() {
         </div>
     );
     return (
-        <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-700/30">
+        <div className="flex h-screen bg-transparent text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-700/30 relative">
+            <GPUBackground />
             <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-emerald-600 text-white px-4 py-2 rounded">
                 {i18n.t('layout.skip_to_content') || 'Skip to content'}
             </a>
             <Sidebar nav_item_class={nav_item_class} />
 
-            <main id="main-content" className="flex-1 flex flex-col bg-zinc-950 relative overflow-hidden">
+            <main id="main-content" className="flex-1 flex flex-col bg-zinc-950/40 backdrop-blur-lg relative overflow-hidden">
                 <Ticker_Header />
 
                 <Tab_Bar />

@@ -37,6 +37,7 @@ export interface Tadpole_Settings {
     tadpole_os_api_key: string;
     theme: string;
     density: string;
+    backdrop_theme: string;
     default_model: string;
     default_temperature: number;
     auto_approve_safe_skills: boolean;
@@ -107,6 +108,7 @@ export const use_settings_store = create<Settings_State>()(
                 tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
                 theme: 'zinc',
                 density: 'compact',
+                backdrop_theme: 'cyan',
                 default_model: 'GPT-4o',
                 default_temperature: 0.7,
                 auto_approve_safe_skills: true,

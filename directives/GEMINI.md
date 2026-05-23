@@ -6,22 +6,9 @@
 > - **Telemetry Link**: Search `[GEMINI]` in audit logs.
 >
 > ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
->
-> ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[GEMINI]` in audit logs.
->
-> ### AI Assist Note
 > Operating directive for Tadpole OS agent orchestration.
 >
-> ### Debugging & Observability
+> ### 🔍 Debugging & Observability
 > Traceability via `execution/parity_guard.py`.
 
 ---
@@ -194,4 +181,3 @@ Trigger: "final checks", "son kontrolleri yap", "çalıştır tüm testleri".
 
 [//]: # (Metadata: [GEMINI])
 
-[//]: # (Metadata: [GEMINI])
