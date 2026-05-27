@@ -367,8 +367,8 @@ impl OpenAIProvider {
                                 tracing::warn!("🛠️ [OpenAI] Recovery failed. No calls found in failed generation.");
                             }
                             Err(e) => {
-                                tracing::warn!("🛠️ [OpenAI] Extraction error during recovery: {}. Requiring annealing...", e);
-                                return Err(AppError::AnnealingRequired(e.to_string()));
+                                tracing::warn!("🛠️ [OpenAI] Extraction error during recovery: {}", e);
+                                return Err(AppError::InternalServerError(e.to_string()));
                             }
                         }
                     }
@@ -417,8 +417,8 @@ impl OpenAIProvider {
                                 });
                             }
                             Err(_) => {
-                                tracing::warn!("🛠️ [OpenAI] Native tool arguments JSON parse failed: {}. Requiring annealing...", e);
-                                return Err(AppError::AnnealingRequired(format!("Tool '{}' arguments JSON parse failed: {}", tc.function.name, e)));
+                                tracing::warn!("🛠️ [OpenAI] Native tool arguments JSON parse failed: {}", e);
+                                return Err(AppError::BadRequest(format!("Tool '{}' arguments JSON parse failed: {}", tc.function.name, e)));
                             }
                         }
                     }
@@ -440,8 +440,8 @@ impl OpenAIProvider {
             }
             Err(crate::agent::runner::parser::ParserError::NoCallsFound) => {} // Ignore narrative-only
             Err(e) => {
-                tracing::warn!("🛠️ [Polyglot] Extraction failed: {}. Requiring annealing...", e);
-                return Err(AppError::AnnealingRequired(e.to_string()));
+                tracing::warn!("🛠️ [Polyglot] Extraction failed: {}", e);
+                return Err(AppError::InternalServerError(e.to_string()));
             }
         }
 

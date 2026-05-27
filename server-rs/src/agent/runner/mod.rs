@@ -46,6 +46,7 @@ mod swarm_persistence;
 pub mod synthesis;
 mod visual_tools;
 pub mod tools;
+pub mod error;
 mod workflow;
 
 // ─────────────────────────────────────────────────────────

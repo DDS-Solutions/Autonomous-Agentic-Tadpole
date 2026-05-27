@@ -254,6 +254,45 @@ export const Cluster_Sidebar: React.FC<ClusterSidebarProps> = ({
                             </div>
                         </div>
 
+                        {/* Mini Cluster Graph */}
+                        {(() => {
+                            const alpha = agents.find(a => a.id === cluster.alpha_id);
+                            const collabs = agents.filter(a => (cluster.collaborators || []).includes(a.id) && a.id !== cluster.alpha_id);
+                            if (!alpha && collabs.length === 0) return null;
+                            const total = collabs.length;
+                            const cx = 50, cy = 50, r = 32;
+                            return (
+                                <div className="relative w-full h-16 rounded-lg bg-zinc-950/60 border border-zinc-800/30 overflow-hidden my-1">
+                                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                                        {/* Connection lines */}
+                                        {collabs.map((agent, i) => {
+                                            const angle = total === 1 ? -Math.PI / 2 : (i / total) * Math.PI * 2 - Math.PI / 2;
+                                            const nx = cx + Math.cos(angle) * r;
+                                            const ny = cy + Math.sin(angle) * r;
+                                            return (
+                                                <line key={`line-${agent.id}`} x1={cx} y1={cy} x2={nx} y2={ny}
+                                                    stroke={theme.hex} strokeWidth="0.6" strokeDasharray="2 2" opacity="0.4" />
+                                            );
+                                        })}
+                                        {/* Alpha center dot */}
+                                        {alpha && (
+                                            <circle cx={cx} cy={cy} r="5" fill={`${theme.hex}30`} stroke={theme.hex} strokeWidth="1" />
+                                        )}
+                                        {/* Collaborator dots */}
+                                        {collabs.map((agent, i) => {
+                                            const angle = total === 1 ? -Math.PI / 2 : (i / total) * Math.PI * 2 - Math.PI / 2;
+                                            const nx = cx + Math.cos(angle) * r;
+                                            const ny = cy + Math.sin(angle) * r;
+                                            return (
+                                                <circle key={`dot-${agent.id}`} cx={nx} cy={ny} r="3.5"
+                                                    fill={`${theme.hex}20`} stroke={`${theme.hex}60`} strokeWidth="0.8" />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                            );
+                        })()}
+
                         <div className="flex -space-x-2 overflow-hidden relative z-10 p-1">
                             {(cluster.collaborators || []).slice(0, 5).map(id => {
                                 const agent = agents.find(a => a.id === id);

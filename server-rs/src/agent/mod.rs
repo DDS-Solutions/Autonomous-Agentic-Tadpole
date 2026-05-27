@@ -45,6 +45,7 @@ pub mod runner;
 pub mod sanitizer;
 pub mod script_skills;
 pub mod skill_manifest;
+pub mod skill_error;
 pub mod types;
 pub mod workflows;
 

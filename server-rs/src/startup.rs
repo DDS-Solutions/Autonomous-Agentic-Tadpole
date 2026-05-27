@@ -212,6 +212,9 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
                 module_count
             );
         });
+
+        // 1.5. CodeGraphDbRefresh: Build and Refresh Code Review Graph Database
+        spawn_code_graph_db_refresh(app_state.clone());
     }
 
     // 2. Launch Heartbeat Loop to drive UI presence
@@ -408,6 +411,52 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
     app_state.supervisor().spawn("RecipeAutoIngest", move |state| async move {
         crate::agent::recipes::auto_ingest_recipes(state).await;
         Ok(())
+    });
+}
+
+fn spawn_code_graph_db_refresh(app_state: Arc<AppState>) {
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        app_state.resources.set_subsystem_status(
+            "CodeGraphDbRefresh",
+            crate::types::SubsystemStatus::Warming(0.05),
+        );
+
+        let root = app_state.resources.base_dir.clone();
+        let db_path = root.join(".code-review-graph").join("graph.db");
+        let salt = app_state.resources.obfuscation_salt.clone();
+
+        match crate::intelligence::graph_store::refresh_code_review_graph_db(root, db_path, salt)
+            .await
+        {
+            Ok(summary) => {
+                app_state.resources.set_subsystem_status(
+                    "CodeGraphDbRefresh",
+                    crate::types::SubsystemStatus::Ready,
+                );
+                tracing::info!(
+                    db_path = %summary.db_path.display(),
+                    nodes = summary.node_count,
+                    edges = summary.edge_count,
+                    risks = summary.risk_count,
+                    communities = summary.community_count,
+                    flows = summary.flow_count,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "[CodeGraphDbRefresh] refreshed persistent code-review graph"
+                );
+            }
+            Err(err) => {
+                app_state.resources.set_subsystem_status(
+                    "CodeGraphDbRefresh",
+                    crate::types::SubsystemStatus::Failed(err.to_string()),
+                );
+                tracing::error!(
+                    error = %err,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "[CodeGraphDbRefresh] failed to refresh persistent code-review graph"
+                );
+            }
+        }
     });
 }
 

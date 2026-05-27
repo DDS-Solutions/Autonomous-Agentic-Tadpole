@@ -421,13 +421,29 @@ impl AgentRunner {
 
                     scored_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-                    let top_results: Vec<String> = scored_results.into_iter().take(5).map(|(_, t)| t).collect();
+                    let count_tokens = |text: &str| -> usize {
+                        tiktoken_rs::cl100k_base()
+                            .map(|bpe| bpe.encode_with_special_tokens(text).len())
+                            .unwrap_or_else(|_| text.len() / 4)
+                    };
+
+                    let mut top_results = Vec::new();
+                    let mut accumulated_tokens = 0;
+                    for (_, text) in scored_results {
+                        let tokens = count_tokens(&text);
+                        if accumulated_tokens + tokens <= 1500 {
+                            top_results.push(text);
+                            accumulated_tokens += tokens;
+                        } else {
+                            break;
+                        }
+                    }
                     let count = top_results.len();
 
                     for (i, text) in top_results.into_iter().enumerate() {
                         let _ = mission_mem.add_memory(&format!("mem-{}", i), &text, &ctx.mission_id, vec.clone()).await;
                     }
-                    tracing::info!("🧠 [RAG] Hybrid Search + Rerank: Injected {} refined findings into mission scope", count);
+                    tracing::info!("🧠 [RAG] Hybrid Search + Rerank: Injected {} refined findings ({} tokens) into mission scope", count, accumulated_tokens);
                 }
             }
         }

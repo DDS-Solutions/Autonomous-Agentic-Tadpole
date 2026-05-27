@@ -242,6 +242,7 @@ Operational capabilities include:
 - **Dependent Blast Radius**: Calculate downstream dependency paths for a specific symbol to foresee refactoring scope (`GET /v1/intelligence/blast-radius?name=<Name>&path=<Path>`).
 - **Interactive Swarm HUD**: The **Neural Map** toggle in the Operations Dashboard compiles the codebase structure on the first click (triggering lazy backend evaluation with a `"Synthesizing Symbol Graph..."` overlay) and caches it in memory for instant subsequent loads.
 - **Sovereign Agent Safety**: The `get_blast_radius` MCP agent tool allows autonomous execution agents to map codebase linkages before executing code edits, ensuring zero-regression commits.
+- **Thread-safe Graph Compilation**: Graph compilation executes decoupled background sweeps to scan and parse files outside main read/write guards, preserving high-concurrency read routing.
 
 ## Database Operations
 
@@ -318,6 +319,7 @@ The engine implements several strategies to ensure resilience and zero-panic ope
 - **Self-Annealing Intelligence**: The `PolyglotParser` provides structured feedback on malformed tool calls, allowing the `IntelligenceLoop` to automatically re-prompt models for correction.
 - **Panic Remediation**: Critical paths in the bridge, parser, and security modules use safe error propagation (via `Result` and `AppError`) rather than non-recoverable panics.
 - **Non-Blocking Orchestration**: All filesystem I/O in the MCP execution and Memory Palace rehydration modules is migrated to `tokio::fs` to prevent event-loop stalling.
+- **Non-Blocking Graph Rebuilding**: Decoupling the filesystem walking and AST parsing tasks from the main thread lock prevents Axum router request timeout cascades during compilation sweeps.
 
 [//]: # (Metadata: [OPERATIONS_MANUAL])
 

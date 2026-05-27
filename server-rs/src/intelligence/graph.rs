@@ -35,6 +35,7 @@ pub struct SymbolNode {
     pub path: String,
     pub kind: String,
     pub signature: String,
+    pub tokens: usize,
 }
 
 /// An edge in the knowledge graph representing a dependency.
@@ -64,7 +65,7 @@ pub fn obfuscate_path(path_str: &str, salt: &str) -> String {
     hasher.update(parent_to_hash.as_bytes());
     let result = hasher.finalize();
     let hash_val = hex::encode(result);
-    format!("{}/{}", &hash_val[..16], file_name)
+    format!("{}/{}", hash_val, file_name)
 }
 
 /// The core Knowledge Graph engine.
@@ -74,6 +75,8 @@ pub struct CodeSymbolGraph {
     pub reverse_obfuscation_index: HashMap<String, String>, // key: obfuscated_path, val: physical_path
     root: PathBuf,
 }
+
+pub type ParsedFiles = Vec<(String, Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>)>;
 
 impl CodeSymbolGraph {
     /// Creates a new, empty knowledge graph.
@@ -86,13 +89,10 @@ impl CodeSymbolGraph {
         }
     }
 
-    /// Scans the workspace and populates the graph with symbols and references.
-    pub fn build(&mut self, salt: &str) {
-        tracing::info!("🔍 [Graph] Building symbol-level knowledge graph for {}...", self.root.display());
-        self.reverse_obfuscation_index.clear();
-
+    /// Scans the workspace files and extracts symbols and references.
+    pub fn scan_workspace(root: &std::path::Path) -> ParsedFiles {
         // 1. Gather all target files to scan
-        let files: Vec<PathBuf> = WalkDir::new(&self.root)
+        let files: Vec<PathBuf> = WalkDir::new(root)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
@@ -123,38 +123,93 @@ impl CodeSymbolGraph {
             .collect();
 
         // 2. Extract symbols & references in parallel using Rayon (Single-Pass reading)
-        let parsed_files: Vec<(String, Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>)> = files
-            .par_iter()
-            .filter_map(|path| {
-                match std::fs::read_to_string(path) {
-                    Ok(content) => {
-                        let rel_path = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
-                        let mut extractor = SymbolExtractor::new();
-                        let symbols = extractor.extract_symbols(path, &content);
-                        let refs = extractor.extract_references(path, &content);
-                        Some((rel_path, symbols, refs))
-                    }
-                    Err(e) => {
-                        tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
-                        None
-                    }
-                }
-            })
-            .collect();
+        // Bound compilation compute resources to prevent host thread pool starvation (half of cores, minimum 1)
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get() / 2)
+            .unwrap_or(2)
+            .max(1);
+
+        let pool_res = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build();
+
+        match pool_res {
+            Ok(pool) => pool.install(|| {
+                files
+                    .par_iter()
+                    .filter_map(|path| {
+                        match std::fs::read_to_string(path) {
+                            Ok(content) => {
+                                let rel_path = path.strip_prefix(root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
+                                let mut extractor = SymbolExtractor::new();
+                                let symbols = extractor.extract_symbols(path, &content);
+                                let refs = extractor.extract_references(path, &content);
+                                Some((rel_path, symbols, refs))
+                            }
+                            Err(e) => {
+                                tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
+                                None
+                            }
+                        }
+                    })
+                    .collect()
+            }),
+            Err(e) => {
+                tracing::warn!("⚠️ [Graph] Failed to create custom Rayon pool: {}. Falling back to default pool.", e);
+                files
+                    .par_iter()
+                    .filter_map(|path| {
+                        match std::fs::read_to_string(path) {
+                            Ok(content) => {
+                                let rel_path = path.strip_prefix(root).unwrap_or(path).to_string_lossy().to_string().replace('\\', "/");
+                                let mut extractor = SymbolExtractor::new();
+                                let symbols = extractor.extract_symbols(path, &content);
+                                let refs = extractor.extract_references(path, &content);
+                                Some((rel_path, symbols, refs))
+                            }
+                            Err(e) => {
+                                tracing::warn!("⚠️ [Graph] Failed to read file {}: {}", path.display(), e);
+                                None
+                            }
+                        }
+                    })
+                    .collect()
+            }
+        }
+    }
+
+    /// Rebuilds the symbol-level knowledge graph from pre-parsed workspace files in-memory.
+    pub fn build_from_parsed(&mut self, parsed_files: ParsedFiles, salt: &str) {
+        self.graph.clear();
+        self.index.clear();
+        self.reverse_obfuscation_index.clear();
 
         // 3. Add nodes to graph and compile Inverted Name Index
         let mut name_to_indices: HashMap<String, Vec<NodeIndex>> = HashMap::new();
+        let bpe = tiktoken_rs::cl100k_base().ok();
+        let count_tokens = |bpe_opt: Option<&tiktoken_rs::CoreBPE>, text: &str| -> usize {
+            bpe_opt
+                .map(|bpe| bpe.encode_with_special_tokens(text).len())
+                .unwrap_or_else(|| text.len() / 4)
+        };
+
         for (rel_path, symbols, _) in &parsed_files {
             let obf_path = obfuscate_path(rel_path, salt);
             self.reverse_obfuscation_index.insert(obf_path, rel_path.clone());
 
             for sym in symbols {
                 let key = (rel_path.clone(), sym.name.clone());
+                let token_count = count_tokens(bpe.as_ref(), &sym.signature)
+                    + count_tokens(bpe.as_ref(), &sym.name)
+                    + count_tokens(bpe.as_ref(), rel_path)
+                    + count_tokens(bpe.as_ref(), &sym.kind);
+
                 let node = SymbolNode {
                     name: sym.name.clone(),
                     path: rel_path.clone(),
                     kind: sym.kind.clone(),
                     signature: sym.signature.clone(),
+                    tokens: token_count,
                 };
                 let idx = self.graph.add_node(node);
                 self.index.insert(key, idx);
@@ -207,6 +262,13 @@ impl CodeSymbolGraph {
         tracing::info!("✅ [Graph] Knowledge graph build complete (Nodes: {}, Edges: {}).", self.graph.node_count(), self.graph.edge_count());
     }
 
+    /// Scans the workspace and populates the graph with symbols and references.
+    pub fn build(&mut self, salt: &str) {
+        tracing::info!("🔍 [Graph] Building symbol-level knowledge graph for {}...", self.root.display());
+        let parsed = Self::scan_workspace(&self.root);
+        self.build_from_parsed(parsed, salt);
+    }
+
     /// Audits the graph for structural anomalies (dead code).
     pub fn find_anomalies(&self) -> Vec<String> {
         let mut anomalies = Vec::new();
@@ -252,10 +314,9 @@ impl CodeSymbolGraph {
         anomalies
     }
 
-    /// Calculates the "Blast Radius" for a given symbol.
-    /// Returns a list of symbols that directly or indirectly depend on it.
     pub fn calculate_blast_radius(&self, symbol_name: &str, path: &str) -> Vec<SymbolNode> {
-        let key = (path.to_string(), symbol_name.to_string());
+        let normalized_path = path.replace('\\', "/");
+        let key = (normalized_path, symbol_name.to_string());
         let mut affected = Vec::new();
         
         if let Some(&start_idx) = self.index.get(&key) {
@@ -288,6 +349,71 @@ impl CodeSymbolGraph {
         }
         
         affected
+    }
+
+    /// Resolves dependent symbols for a given target symbol within a specified token budget.
+    /// Prioritizes the target symbol, then walks backwards through the dependency graph (incoming edges)
+    /// to add callers until the token budget is reached.
+    pub fn resolve_context(&self, symbol_name: &str, path: &str, budget: usize) -> Vec<SymbolNode> {
+        let normalized_path = path.replace('\\', "/");
+        let key = (normalized_path, symbol_name.to_string());
+        let mut results = Vec::new();
+        let mut accumulated_tokens = 0;
+
+        if let Some(&start_idx) = self.index.get(&key) {
+            let start_node = &self.graph[start_idx];
+            let start_tokens = start_node.tokens;
+            
+            // Add start node first
+            let mut start_clone = start_node.clone();
+            
+            if start_tokens > budget {
+                // Truncate signature to fit budget
+                let budget_chars = budget * 4;
+                if start_clone.signature.len() > budget_chars {
+                    start_clone.signature = format!("{}...", &start_clone.signature[..budget_chars]);
+                }
+                results.push(start_clone);
+                return results;
+            }
+
+            results.push(start_clone);
+            accumulated_tokens += start_tokens;
+
+            // BFS for callers
+            let mut visited = std::collections::HashSet::new();
+            let mut queue = std::collections::VecDeque::new();
+            queue.push_back((start_idx, 0));
+            visited.insert(start_idx);
+
+            while let Some((current_idx, depth)) = queue.pop_front() {
+                if depth >= 50 {
+                    continue;
+                }
+                let mut budget_exceeded = false;
+                for edge in self.graph.edges_directed(current_idx, petgraph::Direction::Incoming) {
+                    let neighbor_idx = edge.source();
+                    if visited.insert(neighbor_idx) {
+                        let node = &self.graph[neighbor_idx];
+                        let node_tokens = node.tokens;
+                        
+                        if accumulated_tokens + node_tokens <= budget {
+                            results.push(node.clone());
+                            accumulated_tokens += node_tokens;
+                            queue.push_back((neighbor_idx, depth + 1));
+                        } else {
+                            budget_exceeded = true;
+                            break;
+                        }
+                    }
+                }
+                if budget_exceeded {
+                    break;
+                }
+            }
+        }
+
+        results
     }
 }
 
@@ -348,6 +474,53 @@ mod tests {
         
         assert!(!affected_alpha.is_empty());
         assert!(!affected_beta.is_empty());
+    }
+
+    #[test]
+    fn test_token_budgeted_context_resolution() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("main.rs");
+        
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "fn helper() {{ }}").unwrap();
+        writeln!(file, "fn main() {{ helper(); }}").unwrap();
+        
+        let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+        graph.build("test-salt");
+        
+        // Query with large budget - both symbols should fit
+        let resolved_large = graph.resolve_context("helper", "main.rs", 1000);
+        assert_eq!(resolved_large.len(), 2);
+        
+        // Query with small budget - only target should fit and be truncated
+        let resolved_small = graph.resolve_context("helper", "main.rs", 2);
+        assert!(resolved_small[0].signature.ends_with("..."));
+    }
+
+    #[test]
+    fn test_obfuscate_path_hash_length() {
+        let path = "src/routes/intelligence.rs";
+        let salt = "test-salt-string-value";
+        let obfuscated = obfuscate_path(path, salt);
+        
+        // Obfuscated output format: <64-char hex>/<filename>
+        let parts: Vec<&str> = obfuscated.split('/').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].len(), 64, "Obfuscation prefix hash MUST be the full 64-character SHA-256 string");
+        assert_eq!(parts[1], "intelligence.rs");
+    }
+
+    #[test]
+    fn test_scan_workspace_parallel_execution() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("main.rs");
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "fn test() {{ }}").unwrap();
+
+        // Verifies scan_workspace compiles correctly under custom Rayon ThreadPool
+        let parsed = CodeSymbolGraph::scan_workspace(dir.path());
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].0, "main.rs");
     }
 }
 

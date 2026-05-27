@@ -164,7 +164,7 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
     let allowed_binaries = [
         "ls", "cd", "pwd", "cat", "echo", "grep", "find", 
         "cargo", "npm", "git", "python", "node", "rustc",
-        "mkdir", "cp", "mv", "touch", "test", "powershell", "sh"
+        "mkdir", "cp", "mv", "touch", "test"
     ];
 
     if !allowed_binaries.contains(&lower_bin.as_str()) {

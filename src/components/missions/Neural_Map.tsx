@@ -57,7 +57,7 @@ export const Neural_Map: React.FC<Neural_Map_Props> = ({ cluster, agents, theme_
 
             {/* Normalized aspect ratio container to keep the network map circular */}
             <div className="relative mx-auto h-full aspect-square max-w-full">
-                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
                     {mapped_collaborators.map(({ agent, x, y }) => (
                         <motion.path
                             key={agent.id}

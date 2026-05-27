@@ -98,16 +98,13 @@ pub async fn get_blast_radius(
 ) -> Result<Json<Vec<SymbolNode>>, AppError> {
     // 🛡️ [Path Traversal Hardening] Verify input resides within workspace boundary
     let workspace_root = &state.resources.base_dir;
-    
-    if crate::utils::security::validate_path(workspace_root, &query.path).is_err() {
-        return Err(AppError::BadRequest("Invalid path boundary: potential path traversal detected".to_string()));
-    }
 
     let graph_lock = state.resources.get_symbol_graph().await;
     let salt = state.resources.obfuscation_salt.clone();
     let lock_clone = Arc::clone(&graph_lock);
     let query_path = query.path.clone();
     let query_name = query.name.clone();
+    let workspace_root_clone = workspace_root.clone();
 
     let obfuscated_affected = tokio::task::spawn_blocking(move || {
         let guard = lock_clone.read();
@@ -115,6 +112,11 @@ pub async fn get_blast_radius(
         // Reverse-resolve the physical raw path from the obfuscated path using O(1) index
         let raw_path = guard.reverse_obfuscation_index.get(&query_path)
             .ok_or_else(|| AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()))?;
+
+        // 🛡️ [Path Traversal Hardening] Verify resolved path resides within workspace boundary
+        if crate::utils::security::validate_path(&workspace_root_clone, raw_path).is_err() {
+            return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+        }
 
         let affected = guard.calculate_blast_radius(&query_name, raw_path);
         
@@ -133,6 +135,88 @@ pub async fn get_blast_radius(
     Ok(Json(obfuscated_affected))
 }
 
-// Metadata: [intelligence]
+/// [POST] /v1/intelligence/graph/rebuild
+/// Rebuilds the symbol-level knowledge graph from the workspace files.
+pub async fn rebuild_code_graph(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let graph_lock = state.resources.get_symbol_graph().await;
+    let salt = state.resources.obfuscation_salt.clone();
+    let lock_clone = Arc::clone(&graph_lock);
+    let root = state.resources.base_dir.clone();
+
+    // 1. Scan and parse workspace files outside the lock
+    let parsed_files = tokio::task::spawn_blocking(move || {
+        crate::intelligence::graph::CodeSymbolGraph::scan_workspace(&root)
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(format!("Workspace scanning thread panicked: {}", e)))?;
+
+    // 2. Rebuild the graph in-memory under the write lock
+    tokio::task::spawn_blocking(move || {
+        let mut guard = lock_clone.write();
+        guard.build_from_parsed(parsed_files, &salt);
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "message": "Symbol-level knowledge graph rebuilt successfully."
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct ResolveQuery {
+    pub name: String,
+    pub path: String,
+    pub budget: Option<usize>,
+}
+
+/// [GET] /v1/intelligence/resolve
+/// Resolves dependent symbols for a given symbol within a token budget constraint.
+pub async fn resolve_code_context(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ResolveQuery>,
+) -> Result<Json<Vec<SymbolNode>>, AppError> {
+    // 🛡️ [Path Traversal Hardening] Verify input resides within workspace boundary
+    let workspace_root = &state.resources.base_dir;
+
+    let graph_lock = state.resources.get_symbol_graph().await;
+    let salt = state.resources.obfuscation_salt.clone();
+    let lock_clone = Arc::clone(&graph_lock);
+    let query_path = query.path.clone();
+    let query_name = query.name.clone();
+    let budget = query.budget.unwrap_or(4000);
+    let workspace_root_clone = workspace_root.clone();
+
+    let obfuscated_resolved = tokio::task::spawn_blocking(move || {
+        let guard = lock_clone.read();
+        
+        // Reverse-resolve the physical raw path from the obfuscated path using O(1) index
+        let raw_path = guard.reverse_obfuscation_index.get(&query_path)
+            .ok_or_else(|| AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()))?;
+
+        // 🛡️ [Path Traversal Hardening] Verify resolved path resides within workspace boundary
+        if crate::utils::security::validate_path(&workspace_root_clone, raw_path).is_err() {
+            return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+        }
+
+        let resolved = guard.resolve_context(&query_name, raw_path, budget);
+        
+        // Obfuscate target paths returned in the final impact list
+        let mut obfuscated_resolved = Vec::new();
+        for node in resolved {
+            let mut node_clone = node.clone();
+            node_clone.path = obfuscate_path(&node_clone.path, &salt);
+            obfuscated_resolved.push(node_clone);
+        }
+        Ok::<_, AppError>(obfuscated_resolved)
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(format!("Context resolution thread panicked: {}", e)))??;
+
+    Ok(Json(obfuscated_resolved))
+}
 
 // Metadata: [intelligence]

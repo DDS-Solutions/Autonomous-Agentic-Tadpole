@@ -168,24 +168,60 @@ impl AgentRunner {
             .await
             .unwrap_or_default();
 
-        let directives_str = if pending_directives.is_empty() {
-            "No active directives. Proceed with mission objectives.".to_string()
-        } else {
-            pending_directives
-                .iter()
-                .map(|d| format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction))
-                .collect::<Vec<_>>()
-                .join("\n")
+        let count_tokens = |text: &str| -> usize {
+            tiktoken_rs::cl100k_base()
+                .map(|bpe| bpe.encode_with_special_tokens(text).len())
+                .unwrap_or_else(|_| text.len() / 4)
         };
 
-        let reviews_str = if pending_reviews.is_empty() {
+        let mut directives_vec = Vec::new();
+        let mut directives_tokens = 0;
+        let mut directives_truncated = false;
+        
+        for d in pending_directives {
+            let line = format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction);
+            let tokens = count_tokens(&line);
+            if directives_tokens + tokens <= 1000 {
+                directives_vec.push(line);
+                directives_tokens += tokens;
+            } else {
+                directives_truncated = true;
+                break;
+            }
+        }
+        if directives_truncated {
+            directives_vec.push("- ... [Remaining directives truncated due to token budget]".to_string());
+        }
+
+        let directives_str = if directives_vec.is_empty() {
+            "No active directives. Proceed with mission objectives.".to_string()
+        } else {
+            directives_vec.join("\n")
+        };
+
+        let mut reviews_vec = Vec::new();
+        let mut reviews_tokens = 0;
+        let mut reviews_truncated = false;
+
+        for r in pending_reviews {
+            let line = format!("- [Review Task] Target: {}. Requirement: {}", r.requester_id, r.content_to_review);
+            let tokens = count_tokens(&line);
+            if reviews_tokens + tokens <= 1000 {
+                reviews_vec.push(line);
+                reviews_tokens += tokens;
+            } else {
+                reviews_truncated = true;
+                break;
+            }
+        }
+        if reviews_truncated {
+            reviews_vec.push("- ... [Remaining peer reviews truncated due to token budget]".to_string());
+        }
+
+        let reviews_str = if reviews_vec.is_empty() {
             "No peer reviews pending. Maintain standard quality protocols.".to_string()
         } else {
-            pending_reviews
-                .iter()
-                .map(|r| format!("- [Review Task] Target: {}. Requirement: {}", r.requester_id, r.content_to_review))
-                .collect::<Vec<_>>()
-                .join("\n")
+            reviews_vec.join("\n")
         };
 
         (directives_str, reviews_str)
@@ -296,6 +332,24 @@ impl AgentRunner {
             tool_mode_prefix,
         ) = self.generate_structural_components(ctx);
 
+        let working_memory_str = serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string());
+        
+        let count_tokens = |text: &str| -> usize {
+            tiktoken_rs::cl100k_base()
+                .map(|bpe| bpe.encode_with_special_tokens(text).len())
+                .unwrap_or_else(|_| text.len() / 4)
+        };
+
+        let mut final_safe_mode_prefix = safe_mode_prefix.clone();
+        if count_tokens(&working_memory_str) > 1000 {
+            final_safe_mode_prefix.push_str("\n⚠️ SYSTEM WARNING: Your working_memory JSON block is large (>1,000 tokens). Please clean up or summarize old keys in your working memory to avoid prompt bloat.\n");
+        }
+
+        if criticality_score > 0 {
+            let warning = format!("\n\n!!! SYSTEM WARNING: Critical services failed (Score: {}/3) !!!\n- {}\n!!! ACTION: Acknowledge these failures in your internal reasoning and attempt to recover missing context manually if possible. !!!\n", criticality_score, failure_context.join("\n- "));
+            final_safe_mode_prefix.push_str(&warning);
+        }
+
         let mut vars = HashMap::new();
         vars.insert("name", ctx.name.clone());
         vars.insert("agent_id", ctx.agent_id.clone());
@@ -324,18 +378,13 @@ impl AgentRunner {
         vars.insert("identity", identity.to_string());
         vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
-        vars.insert("working_memory", serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string()));
+        vars.insert("working_memory", working_memory_str);
         vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")).to_string());
-        vars.insert("safe_mode_prefix", safe_mode_prefix.clone());
+        vars.insert("safe_mode_prefix", final_safe_mode_prefix);
         vars.insert("tool_mode_prefix", tool_mode_prefix.to_string());
         
         let tool_directory_str = self.generate_tool_directory_display(ctx);
         vars.insert("tool_directory", tool_directory_str);
-
-        if criticality_score > 0 {
-            let warning = format!("\n\n!!! SYSTEM WARNING: Critical services failed (Score: {}/3) !!!\n- {}\n!!! ACTION: Acknowledge these failures in your internal reasoning and attempt to recover missing context manually if possible. !!!\n", criticality_score, failure_context.join("\n- "));
-            vars.insert("safe_mode_prefix", format!("{}{}", safe_mode_prefix, warning));
-        }
 
         vars
     }

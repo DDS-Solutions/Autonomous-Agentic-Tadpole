@@ -172,7 +172,9 @@ fn build_sovereign_routes() -> Router<Arc<AppState>> {
 fn build_intelligence_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/graph", get(routes::intelligence::get_code_graph))
+        .route("/graph/rebuild", post(routes::intelligence::rebuild_code_graph))
         .route("/blast-radius", get(routes::intelligence::get_blast_radius))
+        .route("/resolve", get(routes::intelligence::resolve_code_context))
 }
 
 fn build_governance_routes() -> Router<Arc<AppState>> {

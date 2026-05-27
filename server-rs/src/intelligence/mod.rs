@@ -19,6 +19,7 @@ Core system module providing specialized functionality for the agent swarm.
 //! relevant code context during tool execution (INTEL-01).
 
 pub mod graph;
+pub mod graph_store;
 
 // Metadata: [mod]
 

@@ -181,7 +181,10 @@ impl AgentRunner {
                         }
 
                         // ### 🛠️ [Self-Annealing] Catch parsing failures
-                        if let AppError::AnnealingRequired(detail) = e {
+                        // These errors (BadRequest from malformed tool JSON, InternalServerError
+                        // from extraction failures) are recoverable via re-prompting.
+                        if matches!(e, AppError::BadRequest(_) | AppError::InternalServerError(_)) {
+                            let detail = e.to_string();
                             let mut anneal_attempts = 0;
                             let mut anneal_text = String::new();
                             let mut anneal_calls = Vec::new();
