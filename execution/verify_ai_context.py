@@ -32,7 +32,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 # --- Configuration ---
-SKIP_DIRS = {'.git', 'node_modules', 'dist', 'target', 'build', '__pycache__', '.venv', 'venv', '.tmp', 'tmp', 'coverage'}
+SKIP_DIRS = {'.git', 'node_modules', 'dist', 'target', 'build', '__pycache__', '.venv', 'venv', '.tmp', 'tmp', 'coverage', 'scratch'}
 EXTENSIONS = {'.rs', '.ts', '.tsx', '.js', '.py'}
 ROOT = Path(__file__).resolve().parent.parent
 

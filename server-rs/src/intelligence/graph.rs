@@ -203,7 +203,7 @@ impl FileDiscoverer for FileDiscoveryService {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    tracing::warn!("⚠️ [Graph] Directory traversal warning: {}", e);
+                    tracing::warn!("⚠️ [graph] Directory traversal warning: {}", e);
                     continue;
                 }
             };
@@ -223,7 +223,7 @@ impl FileDiscoverer for FileDiscoveryService {
                 Ok(m) => m,
                 Err(e) => {
                     tracing::warn!(
-                        "⚠️ [Graph] Failed to read metadata for {}: {}",
+                        "⚠️ [graph] Failed to read metadata for {}: {}",
                         sanitize_log_path(path, root),
                         e
                     );
@@ -233,7 +233,7 @@ impl FileDiscoverer for FileDiscoveryService {
 
             if metadata.len() > 2 * 1024 * 1024 {
                 tracing::warn!(
-                    "⚠️ [Graph] Skipping oversized file ({} bytes): {}",
+                    "⚠️ [graph] Skipping oversized file ({} bytes): {}",
                     metadata.len(),
                     sanitize_log_path(path, root)
                 );
@@ -245,7 +245,7 @@ impl FileDiscoverer for FileDiscoveryService {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::warn!(
-                        "⚠️ [Graph] Failed to canonicalize path {}: {}",
+                        "⚠️ [graph] Failed to canonicalize path {}: {}",
                         sanitize_log_path(path, root),
                         e
                     );
@@ -255,7 +255,7 @@ impl FileDiscoverer for FileDiscoveryService {
 
             if !canonical_path.starts_with(&canonical_root) {
                 tracing::warn!(
-                    "⚠️ [Graph] Security Violation: Path {} points outside workspace root {}",
+                    "⚠️ [graph] Security Violation: Path {} points outside workspace root {}",
                     sanitize_log_path(&canonical_path, root),
                     sanitize_log_path(&canonical_root, root)
                 );
@@ -485,7 +485,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
                     entry.push(idx);
                 } else {
                     tracing::warn!(
-                        "⚠️ [Graph] Soft limit (1,000) exceeded for symbol '{}' (path: {}). Disabling indexing for this duplicate to prevent memory exhaustion.",
+                        "⚠️ [graph] Soft limit (1,000) exceeded for symbol '{}' (path: {}). Disabling indexing for this duplicate to prevent memory exhaustion.",
                         sym.name,
                         rel_path
                     );
@@ -493,7 +493,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
             }
         }
 
-        tracing::info!("🔍 [Graph] Indexed {} symbols.", graph.index.len());
+        tracing::info!("🔍 [graph] Indexed {} symbols.", graph.index.len());
 
         // 5. Extract references and add edges
         let mut added_edges = std::collections::HashSet::new();
@@ -564,7 +564,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
         }
 
         tracing::info!(
-            "✅ [Graph] Knowledge graph build complete (Nodes: {}, Edges: {}).",
+            "✅ [graph] Knowledge graph build complete (Nodes: {}, Edges: {}).",
             graph.graph.node_count(),
             graph.graph.edge_count()
         );
@@ -598,7 +598,7 @@ impl CodeSymbolGraph {
     #[allow(clippy::type_complexity)]
     pub fn build(&mut self, salt: &str) -> Result<(), GraphError> {
         tracing::info!(
-            "🔍 [Graph] Building symbol-level knowledge graph for {}...",
+            "🔍 [graph] Building symbol-level knowledge graph for {}...",
             self.root.display()
         );
 
@@ -624,7 +624,7 @@ impl CodeSymbolGraph {
         // Optimization: return early if no updates and graph is populated
         if to_parse.is_empty() && to_delete.is_empty() && !self.index.is_empty() {
             tracing::info!(
-                "✅ [Graph] Knowledge graph is already up-to-date. (Nodes: {}, Edges: {})",
+                "✅ [graph] Knowledge graph is already up-to-date. (Nodes: {}, Edges: {})",
                 self.graph.node_count(),
                 self.graph.edge_count()
             );

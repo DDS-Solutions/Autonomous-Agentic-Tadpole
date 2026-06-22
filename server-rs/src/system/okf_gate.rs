@@ -38,7 +38,7 @@ pub async fn get_mounted_playbooks(
     .bind(cluster_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| AppError::InternalServerError(format!("[OKF Gate] Failed to query playbooks: {}", e)))?;
+    .map_err(|e| AppError::InternalServerError(format!("[okf_gate] Failed to query playbooks: {}", e)))?;
 
     let mut playbooks = Vec::new();
     for row in rows {
@@ -73,7 +73,7 @@ pub async fn validate_environments(
     .bind(cluster_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| AppError::InternalServerError(format!("[OKF Gate] Failed to query playbook text: {}", e)))?;
+    .map_err(|e| AppError::InternalServerError(format!("[okf_gate] Failed to query playbook text: {}", e)))?;
 
     for row in rows {
         use sqlx::Row;
@@ -143,7 +143,7 @@ pub async fn mount_playbooks_to_workspace(
     .bind(cluster_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| AppError::InternalServerError(format!("[OKF Gate] Failed to query playbooks for mounting: {}", e)))?;
+    .map_err(|e| AppError::InternalServerError(format!("[okf_gate] Failed to query playbooks for mounting: {}", e)))?;
 
     let mut playbooks = Vec::new();
     for row in rows {
@@ -159,11 +159,11 @@ pub async fn mount_playbooks_to_workspace(
     if workspace_dir.exists() {
         let json_path = workspace_dir.join("playbooks.json");
         let content = serde_json::to_string_pretty(&playbooks)
-            .map_err(|e| AppError::InternalServerError(format!("[OKF Gate] Failed to serialize playbooks: {}", e)))?;
+            .map_err(|e| AppError::InternalServerError(format!("[okf_gate] Failed to serialize playbooks: {}", e)))?;
         
         tokio::fs::write(&json_path, content).await
-            .map_err(|e| AppError::InternalServerError(format!("[OKF Gate] Failed to write playbooks.json: {}", e)))?;
-        tracing::info!("✅ [OKF Gate] Mounted {} playbooks to {}", playbooks.len(), json_path.display());
+            .map_err(|e| AppError::InternalServerError(format!("[okf_gate] Failed to write playbooks.json: {}", e)))?;
+        tracing::info!("✅ [okf_gate] Mounted {} playbooks to {}", playbooks.len(), json_path.display());
     }
 
     Ok(())

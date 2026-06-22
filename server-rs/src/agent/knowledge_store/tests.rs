@@ -257,3 +257,5 @@ async fn test_decay_is_time_aware() {
         row.0
     );
 }
+
+// Telemetry Tag duplicate reference: [tests]

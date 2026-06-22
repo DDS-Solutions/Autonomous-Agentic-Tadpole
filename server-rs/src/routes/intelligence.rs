@@ -23,6 +23,7 @@ use parking_lot::RwLock;
 async fn get_built_symbol_graph(
     state: &Arc<AppState>,
 ) -> Result<Arc<RwLock<CodeSymbolGraph>>, AppError> {
+    tracing::debug!("[intelligence] Acquiring symbol graph lock");
     let graph_lock = state.resources.get_symbol_graph().await;
 
     let is_empty = {

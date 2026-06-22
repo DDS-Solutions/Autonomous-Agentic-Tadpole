@@ -30,3 +30,5 @@ pub mod tests;
 
 pub use types::*;
 pub use store::KnowledgeStore;
+
+// Telemetry Tag duplicate reference: [IKS]

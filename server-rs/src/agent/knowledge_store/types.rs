@@ -77,3 +77,5 @@ pub struct KnowledgeSearchRequest {
 
 /// Default TTL for agent-written entries (Q3 decision: 90 days).
 pub const DEFAULT_TTL_DAYS: i64 = 90;
+
+// Telemetry Tag duplicate reference: [types]

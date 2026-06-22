@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[store]` in tracing logs.
+//! - **Telemetry Link**: Search `[IKS]` in tracing logs.
 
 use crate::error::AppError;
 use sqlx::{Row, SqlitePool};
