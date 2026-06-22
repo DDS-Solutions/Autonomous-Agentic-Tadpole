@@ -42,6 +42,8 @@
 
 ## Why This Exists
 
+⚠️ **Warning: With great power comes great responsibility. Sandbox Use Only** ⚠️
+
 Most agent frameworks stop at prompt orchestration. Autonomous Agentic Tadpole goes further: it combines a Rust control plane, a production-grade React operations console, SQLite-backed persistence, governance gates, skill execution, MCP tooling, model-provider management, and live telemetry into one local-first system.
 
 The result is a desktop-ready agent operations platform that can run missions, manage agent state, inspect model providers, schedule continuity jobs, surface security posture, and keep a durable audit trail without depending on a hosted control plane.
