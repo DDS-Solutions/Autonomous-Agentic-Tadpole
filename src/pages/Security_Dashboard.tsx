@@ -101,6 +101,7 @@ export default function Security_Dashboard() {
     };
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetch_data();
         
         // Event-driven sync

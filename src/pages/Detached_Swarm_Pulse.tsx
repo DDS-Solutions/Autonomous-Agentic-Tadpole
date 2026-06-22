@@ -15,6 +15,7 @@ import { Suspense } from 'react';
 import { Swarm_Visualizer } from '../components/Swarm_Visualizer';
 import Error_Boundary from '../components/Error_Boundary';
 import { LD_Json } from '../components/ui/LD_Json';
+import { i18n } from '../i18n';
 
 export default function Detached_Swarm_Pulse() {
     return (
@@ -34,17 +35,17 @@ export default function Detached_Swarm_Pulse() {
                 <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse shadow-[0_0_8px_rgba(20,184,166,0.5)]" />
                     <h1 className="text-zinc-400 font-mono text-xs uppercase tracking-[0.2em]">
-                        Sovereign Neural Pulse <span className="text-zinc-600 ml-2">// STANDALONE_NODE</span>
+                        {i18n.t('pulse.title', { defaultValue: 'Sovereign Neural Pulse' })} <span className="text-zinc-600 ml-2">{i18n.t('pulse.standalone_node', { defaultValue: '// STANDALONE_NODE' })}</span>
                     </h1>
                 </div>
                 <div className="flex items-center gap-4 text-[10px] font-mono text-zinc-600 uppercase">
                     <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full border border-zinc-700" />
-                        <span>Sync Status: Nominal</span>
+                        <span>{i18n.t('pulse.sync_status', { defaultValue: 'Sync Status: Nominal' })}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full border border-zinc-700" />
-                        <span>Buffer: O(1) Circular</span>
+                        <span>{i18n.t('pulse.buffer_info', { defaultValue: 'Buffer: O(1) Circular' })}</span>
                     </div>
                 </div>
             </header>
@@ -55,7 +56,7 @@ export default function Detached_Swarm_Pulse() {
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
                             <div className="w-12 h-12 border-2 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
                             <span className="text-zinc-600 font-mono text-[10px] uppercase tracking-widest animate-pulse">
-                                Synchronizing Swarm Heartbeat...
+                                {i18n.t('pulse.sync_heartbeat', { defaultValue: 'Synchronizing Swarm Heartbeat...' })}
                             </span>
                         </div>
                     }>
@@ -65,11 +66,11 @@ export default function Detached_Swarm_Pulse() {
             </main>
 
             <footer className="px-6 py-2 border-t border-zinc-800/30 flex items-center justify-between bg-zinc-900/10 text-[9px] font-mono text-zinc-700 uppercase tracking-tight">
-                <div>Kernel Build: Stable-Sovereign-v1.4.0</div>
+                <div>{i18n.t('pulse.kernel_build', { defaultValue: 'Kernel Build: Stable-Sovereign-v1.4.0' })}</div>
                 <div className="flex items-center gap-4">
-                    <span>Latency: 12ms</span>
-                    <span>Load: Nominal</span>
-                    <span className="text-teal-900/50">Property of Sovereign Engineering</span>
+                    <span>{i18n.t('pulse.latency', { defaultValue: 'Latency: 12ms' })}</span>
+                    <span>{i18n.t('pulse.load', { defaultValue: 'Load: Nominal' })}</span>
+                    <span className="text-teal-900/50">{i18n.t('pulse.property_clause', { defaultValue: 'Property of Sovereign Engineering' })}</span>
                 </div>
             </footer>
         </div>
@@ -77,7 +78,3 @@ export default function Detached_Swarm_Pulse() {
 }
 
 // Metadata: [detached_swarm_pulse]
-
-// Metadata: [Detached_Swarm_Pulse]
-
-// Metadata: [Detached_Swarm_Pulse]

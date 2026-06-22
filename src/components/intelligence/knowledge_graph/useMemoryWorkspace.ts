@@ -66,6 +66,7 @@ export const useMemoryWorkspace = (
     // Auto-select first agent when memory node is loaded
     useEffect(() => {
         if (is_memory_node && agents.length > 0 && !selected_agent_id) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             set_selected_agent_id(agents[0].id);
         }
     }, [is_memory_node, agents, selected_agent_id]);

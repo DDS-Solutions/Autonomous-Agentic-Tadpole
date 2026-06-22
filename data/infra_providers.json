@@ -2,14 +2,14 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "http://127.0.0.1:11434/v1",
+    "baseUrl": "https://api.ollama.com/v1",
     "customHeaders": {},
     "defaultConfig": null,
     "externalId": null,
-    "icon": "🦙",
-    "id": "ollama",
-    "name": "Ollama",
-    "protocol": "ollama",
+    "icon": "⚡",
+    "id": "ollama-cloud",
+    "name": "Ollama-Cloud",
+    "protocol": "openai",
     "supportsSteeringVectors": false
   },
   {
@@ -23,6 +23,19 @@
     "id": "google",
     "name": "Google Vertex",
     "protocol": "google",
+    "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
+    "baseUrl": "http://127.0.0.1:11434/v1",
+    "customHeaders": {},
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "🦙",
+    "id": "ollama",
+    "name": "Ollama",
+    "protocol": "ollama",
     "supportsSteeringVectors": false
   }
 ]

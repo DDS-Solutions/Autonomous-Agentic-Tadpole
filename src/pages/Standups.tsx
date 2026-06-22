@@ -73,7 +73,6 @@ export default function Standups() {
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
         if (is_live) {
-            set_session_time(0);
             interval = setInterval(() => {
                 set_session_time(prev => prev + 1);
             }, 1000);
@@ -268,7 +267,12 @@ export default function Standups() {
                     <div className="flex gap-4">
                         <Tooltip content={is_live ? i18n.t('standups.tooltip_end') : i18n.t('standups.tooltip_start')} position="top">
                             <button
-                                onClick={() => set_is_live(!is_live)}
+                                onClick={() => {
+                                    if (!is_live) {
+                                        set_session_time(0);
+                                    }
+                                    set_is_live(!is_live);
+                                }}
                                 aria-label={is_live ? i18n.t('standups.btn_end') : i18n.t('standups.btn_start')}
                                 className={`px-8 py-3 rounded-full font-bold flex items-center gap-3 transition-all duration-300 transform hover:scale-105 active:scale-95 ${is_live ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20' : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]'}`}>
                                 {is_live ? <><Pause size={18} /> {i18n.t('standups.btn_end')}</> : <><Play size={18} /> {i18n.t('standups.btn_start')}</>}

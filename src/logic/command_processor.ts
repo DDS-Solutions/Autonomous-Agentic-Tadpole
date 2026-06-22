@@ -668,6 +668,7 @@ export async function process_command(
  */
 function sanitize_directive(text: string): string {
     return text
+        // eslint-disable-next-line no-control-regex
         .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
         .replace(/\$\([^)]*\)/g, '[REDACTED_SHELL]') // Shell expansion: $(...)
         .replace(/`[^`]*`/g, '[REDACTED_TICKS]') // Backticks

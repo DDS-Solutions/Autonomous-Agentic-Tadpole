@@ -151,7 +151,7 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                                 e.stopPropagation();
                                 onRevert?.(msg.id);
                             }}
-                            className="hidden group-hover:flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
+                            className="hidden group-hover:flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors"
                         >
                             <GitBranch size={8} />
                             <span>Revert to this tip</span>

@@ -258,7 +258,7 @@ pub async fn get_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         .map(|kv| {
             let mut entry = kv.value().clone();
             // Enrich with capabilities if they are empty/default
-            if entry.capabilities.context_window == 0 {
+            if entry.capabilities.context_window.unwrap_or(0) == 0 {
                 entry.capabilities = CapabilityMatrix::infer_capabilities(&entry.id);
             }
             entry
@@ -288,7 +288,7 @@ pub async fn update_model(
 
     let mut entry = entry;
     // Enrich with baseline capabilities if not provided
-    if entry.capabilities.context_window == 0 {
+    if entry.capabilities.context_window.unwrap_or(0) == 0 {
         entry.capabilities = CapabilityMatrix::infer_capabilities(&id);
     }
 
@@ -412,34 +412,53 @@ pub async fn sync_provider_models(
     let base_url = provider.base_url.as_deref().unwrap_or("");
     let protocol = provider.protocol.to_string().to_lowercase();
 
-    // 1. Resolve URL and Authenticate via Router
-    let router = ProtocolRouter::from_protocol(&protocol);
-    let url = router.build_models_url(&protocol, base_url, true);
+    let discovered_ids = if protocol == "anthropic" {
+        // Anthropic does not support a /v1/models listing endpoint; bypass and return static flagship set
+        vec![
+            "claude-3-5-sonnet-20241022".to_string(),
+            "claude-3-5-haiku-20241022".to_string(),
+            "claude-3-opus-20240229".to_string(),
+            "claude-3-sonnet-20240229".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+        ]
+    } else {
+        // 1. Resolve URL and Authenticate via Router
+        let router = ProtocolRouter::from_protocol(&protocol);
+        let url = router.build_models_url(&protocol, base_url, true);
 
-    let request = state.resources.http_client.get(&url);
-    let request = router.authenticate_request(request, &api_key);
+        let request = state.resources.http_client.get(&url).timeout(std::time::Duration::from_secs(10));
+        let request = router.authenticate_request(request, &api_key);
 
-    let resp = request.send().await.map_err(|e| {
-        AppError::InternalServerError(format!("Handshake failed during discovery: {}", e))
-    })?;
+        let resp = request.send().await.map_err(|e| {
+            AppError::InternalServerError(format!("Handshake failed during discovery: {}", e))
+        })?;
 
-    if !resp.status().is_success() {
-        return Err(AppError::Unauthorized(format!("Discovery failed ({}): Provider rejected credentials or endpoint unreachable.", resp.status())));
-    }
+        if !resp.status().is_success() {
+            return Err(AppError::Unauthorized(format!("Discovery failed ({}): Provider rejected credentials or endpoint unreachable.", resp.status())));
+        }
 
-    let body: serde_json::Value = resp.json().await.map_err(|_| AppError::InternalServerError("Failed to parse discovery response.".to_string()))?;
+        let body: serde_json::Value = resp.json().await.map_err(|_| AppError::InternalServerError("Failed to parse discovery response.".to_string()))?;
 
-    // 2. Parse Model IDs based on protocol
-    let discovered_ids = router.parse_discovery_response(&body, &url);
+        // 2. Parse Model IDs based on protocol
+        router.parse_discovery_response(&body, &url)
+    };
 
     let count = discovered_ids.len();
     let mut added = 0;
+    let mut modified = false;
 
     // 3. Register and Enrich
     for model_id in discovered_ids {
         let entry_id = format!("{}:{}", id, model_id.replace("/", "-"));
-        if !state.registry.models.contains_key(&entry_id) {
-            let capabilities = CapabilityMatrix::infer_capabilities(&model_id);
+        let capabilities = CapabilityMatrix::infer_capabilities(&model_id);
+
+        if let Some(mut existing) = state.registry.models.get_mut(&entry_id) {
+            existing.last_synced_at = Some(chrono::Utc::now());
+            if existing.capabilities.source != "manual" {
+                existing.capabilities = capabilities.clone();
+            }
+            modified = true;
+        } else {
             let entry = ModelEntry {
                 id: model_id.clone(),
                 name: model_id.clone(),
@@ -447,14 +466,16 @@ pub async fn sync_provider_models(
                 provider: Some(provider.protocol),
                 modality: if capabilities.supports_vision { crate::agent::types::Modality::Vision } else { crate::agent::types::Modality::Llm },
                 capabilities,
+                last_synced_at: Some(chrono::Utc::now()),
                 ..ModelEntry::default()
             };
             state.registry.models.insert(entry_id, entry);
             added += 1;
+            modified = true;
         }
     }
 
-    if added > 0 {
+    if modified {
         state.save_models().await;
     }
 

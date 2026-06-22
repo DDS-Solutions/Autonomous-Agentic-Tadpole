@@ -143,7 +143,7 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
     //           2. `modelConfig.modelId` (authoritative config)
     //           3. `modelId` wire field (legacy identity field, can be stale)
     const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
-    const model_config_id = (get_val('modelConfig', 'model_config', undefined) as any)?.modelId as string | undefined;
+    const model_config_id = (get_val('modelConfig', 'model_config', undefined) as { modelId?: string } | undefined)?.modelId;
     const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
     
     // Use the live model name first (most accurate), then resolve from config/identity IDs
@@ -177,12 +177,12 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
         model_2: (() => {
             const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
-            const m2_config_id = (get_val('modelConfig2', 'model_config2', undefined) as any)?.modelId as string | undefined;
+            const m2_config_id = (get_val('modelConfig2', 'model_config2', undefined) as { modelId?: string } | undefined)?.modelId;
             return m2_name || (m2_config_id ? resolve_friendly_model_name(m2_config_id) : undefined) || undefined;
         })(),
         model_3: (() => {
             const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
-            const m3_config_id = (get_val('modelConfig3', 'model_config3', undefined) as any)?.modelId as string | undefined;
+            const m3_config_id = (get_val('modelConfig3', 'model_config3', undefined) as { modelId?: string } | undefined)?.modelId;
             return m3_name || (m3_config_id ? resolve_friendly_model_name(m3_config_id) : undefined) || undefined;
         })(),
         model_config2: get_val('modelConfig2', 'model_config2', undefined),

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/preserve-manual-memoization */
 /**
  * @docs ARCHITECTURE:Interface
  * 
@@ -31,6 +32,7 @@ import { Tw_Empty_State, Tooltip } from '../components/ui';
 import { useEngineStatus } from '../hooks/use_engine_status';
 import { use_workspace_store } from '../stores/workspace_store';
 import { use_agent_store } from '../stores/agent_store';
+import type { Agent } from '../contracts/agent/domain';
 import { tadpole_os_service } from '../services/tadpoleos_service';
 import { MOCK_PENDING, MOCK_LEDGER, type OversightEntry, type LedgerEntry } from '../data/mock_oversight';
 import { Command_Table } from '../components/Command_Table';
@@ -124,13 +126,17 @@ export default function Oversight_Dashboard() {
 
     // Use useMemo for stats to avoid cascading renders
     // Reactive stats that respect the current cluster filter
+    const active_collaborators = useMemo(() => {
+        return new Set(clusters.find(c => c.id === selected_cluster_id)?.collaborators || []);
+    }, [clusters, selected_cluster_id]);
+
     const stats = useMemo(() => {
         const base_ledger = selected_cluster_id === 'all' 
             ? ledger 
             : ledger.filter(l => {
                 const tc = l.tool_call || l;
                 return tc.cluster_id === selected_cluster_id || 
-                       clusters.find(c => c.id === selected_cluster_id)?.collaborators?.includes(tc.agent_id || '');
+                       active_collaborators.has(tc.agent_id || '');
             });
             
         const base_pending = selected_cluster_id === 'all'
@@ -138,7 +144,7 @@ export default function Oversight_Dashboard() {
             : pending.filter(p => {
                 const tc = p.tool_call || p;
                 return tc.cluster_id === selected_cluster_id ||
-                       clusters.find(c => c.id === selected_cluster_id)?.collaborators?.includes(tc.agent_id || '');
+                       active_collaborators.has(tc.agent_id || '');
             });
 
         return {
@@ -146,7 +152,7 @@ export default function Oversight_Dashboard() {
             approved: base_ledger.filter((entry) => entry.decision === 'approved').length,
             rejected: base_ledger.filter((entry) => entry.decision === 'rejected').length
         };
-    }, [pending, ledger, selected_cluster_id, clusters]);
+    }, [pending, ledger, selected_cluster_id, active_collaborators]);
 
     const handle_decide = async (id: string, decision: 'approved' | 'rejected') => {
         if (is_simulated) {
@@ -174,11 +180,11 @@ export default function Oversight_Dashboard() {
 
         // Commit all proposed changes to the live agent registry
         for (const change of (proposal.changes || [])) {
-            const updates: any = {};
+            const updates: Partial<Agent> = {};
             if (change.proposed_role) updates.role = change.proposed_role;
             if (change.proposed_model) {
                 // Assuming primary slot update for swarm optimization
-                updates.primary_model_id = change.proposed_model;
+                updates.model = change.proposed_model;
             }
             if (change.added_skills) {
                 const agent = all_agents.find(a => a.id === change.agent_id);

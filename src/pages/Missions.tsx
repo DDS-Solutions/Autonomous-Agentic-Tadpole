@@ -212,10 +212,10 @@ export default function Missions() {
 
         // Commit all proposed changes to the live agent registry
         for (const change of (proposal.changes || [])) {
-            const updates: any = {};
+            const updates: Partial<Agent> = {};
             if (change.proposed_role) updates.role = change.proposed_role;
             if (change.proposed_model) {
-                updates.primary_model_id = change.proposed_model;
+                updates.model = change.proposed_model;
             }
             if (change.added_skills) {
                 const agent = agents.find(a => a.id === change.agent_id);

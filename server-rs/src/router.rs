@@ -141,6 +141,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/governance", build_governance_routes())
         .nest("/sovereign", build_sovereign_routes())
         .nest("/intelligence", build_intelligence_routes())
+        .nest("/knowledge", build_knowledge_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/env-schema", get(routes::env_schema::get_env_schema))
         .route_layer(axum::middleware::from_fn_with_state(
@@ -454,6 +455,29 @@ fn build_search_memory_route() -> axum::routing::MethodRouter<Arc<AppState>> {
     return get(routes::memory::global_search);
     #[cfg(not(feature = "vector-memory"))]
     return get(|| async {
+        (
+            axum::http::StatusCode::NOT_IMPLEMENTED,
+            "Vector memory feature disabled",
+        )
+    });
+}
+
+fn build_knowledge_routes() -> Router<Arc<AppState>> {
+    #[cfg(feature = "vector-memory")]
+    return Router::new()
+        .route(
+            "/",
+            post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
+        )
+        .route("/search", get(routes::knowledge::search_knowledge))
+        .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
+        .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
+        .route(
+            "/{id}",
+            axum::routing::delete(routes::knowledge::delete_knowledge),
+        );
+    #[cfg(not(feature = "vector-memory"))]
+    return Router::new().fallback(|| async {
         (
             axum::http::StatusCode::NOT_IMPLEMENTED,
             "Vector memory feature disabled",

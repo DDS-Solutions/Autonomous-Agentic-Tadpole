@@ -49,7 +49,7 @@ pub mod skill_error;
 pub mod types;
 pub mod workflows;
 
-// Verification Suite (Swarm Safety)
+pub mod knowledge_store;
 #[cfg(test)]
 mod mcp_tests;
 

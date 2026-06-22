@@ -158,8 +158,10 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
     // Guard ref to prevent stale memory responses from overwriting current state
     const memoryAbortRef = React.useRef<AbortController | null>(null);
 
+    const agentId = agent?.id;
+
     const loadMemories = useCallback(async () => {
-        if (!agent?.id) return;
+        if (!agentId) return;
         
         // Abort any in-flight memory request before starting a new one
         memoryAbortRef.current?.abort();
@@ -168,7 +170,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
         
         setIsLoadingMemories(true);
         try {
-            const response = await tadpole_os_service.get_agent_memory(agent.id) as { entries: Memory_Entry[] };
+            const response = await tadpole_os_service.get_agent_memory(agentId) as { entries: Memory_Entry[] };
             if (controller.signal.aborted) return; // Discard stale response
             setMemories(response.entries || []);
             setMemoryError(null);
@@ -184,10 +186,10 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                 setIsLoadingMemories(false);
             }
         }
-    }, [agent?.id]);
+    }, [agentId]);
 
     useEffect(() => {
-        if (agent?.id && mainTab === 'memory') {
+        if (agentId && mainTab === 'memory') {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             loadMemories();
         }
@@ -195,7 +197,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
             // Cleanup: abort in-flight memory request on tab change or unmount
             memoryAbortRef.current?.abort();
         };
-    }, [agent?.id, mainTab, loadMemories]);
+    }, [agentId, mainTab, loadMemories]);
 
     const handleSaveMemory = async () => {
         if (!memoryInput.trim() || !agent?.id || isMemoryFeatureDisabled) return;

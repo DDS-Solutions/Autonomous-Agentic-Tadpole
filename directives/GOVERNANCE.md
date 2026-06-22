@@ -40,7 +40,8 @@ If the **Kernel** detects a systemic fault that it cannot self-heal after 3 atte
 ## 6. The Proof-of-Work (PoW) Mandate
 To eliminate "hallucinated readiness" and narrative-only confirmations, the following rules apply:
 *   **Demonstration Over Narrative**: Any mission or task asking to "confirm", "verify", or "check readiness" of a tool/skill MUST be answered with a functional execution of that tool (e.g., a dummy call, a version check, or a list operation).
+*   **Execution Limits**: To conserve API rates and financial budgets, PoW validation checks are restricted to **once per tool per session** or when a tool's availability is actively in doubt.
 *   **Evidence Chain**: A textual affirmation of "Yes, I have tool X" is considered a **FAILED** task unless accompanied by the tool's output in the telemetry log.
-*   **Zero Trust**: All agents MUST assume their tools are unavailable until they have successfully triggered them in the current context.
+*   **Zero Trust & Loop Breakers**: All agents MUST assume their tools are unavailable until they have successfully triggered them in the current context. If a tool verification fails due to systemic or environment errors, the agent is capped at a maximum of **3 self-healing retry attempts** before pausing operations and escalating a diagnostic dossier to Entity 0.
 
 [//]: # (Metadata: [GOVERNANCE])

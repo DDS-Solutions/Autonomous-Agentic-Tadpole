@@ -71,9 +71,11 @@ export default function Dashboard_Layout() {
             is_lineage_stream_detached?: unknown;
         }
         : null;
-    const safe_tabs = Array.isArray(tabs)
-        ? tabs
-        : (Array.isArray(tab_snapshot?.tabs) ? tab_snapshot.tabs : []);
+    const safe_tabs = React.useMemo(() => {
+        return Array.isArray(tabs)
+            ? tabs
+            : (Array.isArray(tab_snapshot?.tabs) ? tab_snapshot.tabs : []);
+    }, [tabs, tab_snapshot?.tabs]);
     const safe_active_tab_id = typeof active_tab_id === 'string'
         ? active_tab_id
         : (typeof tab_snapshot?.active_tab_id === 'string' ? tab_snapshot.active_tab_id : null);

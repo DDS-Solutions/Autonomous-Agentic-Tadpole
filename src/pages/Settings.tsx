@@ -95,7 +95,7 @@ export default function Settings(): React.ReactElement {
                 return;
             }
         } else {
-            console.info('[Settings_View] Saved local settings without engine sync because NEURAL_TOKEN is not configured.');
+            console.debug('[Settings_View] Saved local settings without engine sync because NEURAL_TOKEN is not configured.');
         }
 
         // Apply appearance engine preferences immediately
@@ -240,7 +240,7 @@ export default function Settings(): React.ReactElement {
                         >
                             <option value="cyan">{i18n.t('settings.theme_cyan')}</option>
                             <option value="emerald">{i18n.t('settings.theme_emerald')}</option>
-                            <option value="purple">{i18n.t('settings.theme_purple')}</option>
+                            <option value="nebula">{i18n.t('settings.theme_nebula')}</option>
                             <option value="slate">{i18n.t('settings.theme_slate')}</option>
                             <option value="amber">{i18n.t('settings.theme_amber')}</option>
                         </select>

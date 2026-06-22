@@ -71,6 +71,11 @@ pub struct ResourceHub {
     /// @state: Deferred
     #[cfg(feature = "vector-memory")]
     pub swarm_vault: OnceCell<Arc<VectorMemory>>,
+    /// Persistent cross-cluster Institutional Knowledge Store.
+    /// Durable, curated facts that survive restarts and cluster migrations.
+    /// @state: Deferred
+    #[cfg(feature = "vector-memory")]
+    pub knowledge_store: OnceCell<Arc<crate::agent::knowledge_store::KnowledgeStore>>,
     /// Cached rate limiters partitioned by model and provider.
     pub rate_limiters: DashMap<String, Arc<RateLimiter>>,
     /// Tracks the initialization status of all subsystems (Phase 3).
@@ -162,7 +167,7 @@ impl ResourceHub {
             .get_or_init(|| async {
                 let mut g = CodeSymbolGraph::new(base_dir);
                 let built_g = tokio::task::spawn_blocking(move || {
-                    g.build(&salt);
+                    let _ = g.build(&salt);
                     g
                 })
                 .await
@@ -243,6 +248,25 @@ impl ResourceHub {
             .await?;
         self.set_subsystem_status("SwarmVault", SubsystemStatus::Ready);
         Ok(memory.clone())
+    }
+
+    /// Lazily initializes and returns the Institutional Knowledge Store.
+    #[cfg(feature = "vector-memory")]
+    pub async fn get_knowledge_store(
+        &self,
+    ) -> Result<Arc<crate::agent::knowledge_store::KnowledgeStore>, crate::error::AppError> {
+        if self.knowledge_store.get().is_none() {
+            self.set_subsystem_status("KnowledgeStore", SubsystemStatus::Warming(0.0));
+        }
+        let ks = self
+            .knowledge_store
+            .get_or_try_init(|| async {
+                let store = crate::agent::knowledge_store::KnowledgeStore::new(self.pool.clone());
+                Ok::<_, crate::error::AppError>(Arc::new(store))
+            })
+            .await?;
+        self.set_subsystem_status("KnowledgeStore", SubsystemStatus::Ready);
+        Ok(ks.clone())
     }
 }
 

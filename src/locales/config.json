@@ -27,7 +27,7 @@
     "tooltip_backdrop_theme": "Select the WebGPU-accelerated background shader color theme",
     "theme_cyan": "Tadpole Cyan (Default)",
     "theme_emerald": "Deep Emerald",
-    "theme_purple": "Nebula Purple",
+    "theme_nebula": "Nebula",
     "theme_slate": "Deep Space Slate",
     "theme_amber": "Sunset Amber",
     "header_agent_defaults": "Agent Defaults",

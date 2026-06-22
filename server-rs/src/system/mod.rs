@@ -19,5 +19,6 @@ pub mod actors;
 pub mod orchestrator;
 pub mod manifest;
 pub mod supervisor;
+pub mod okf_gate;
 
 // Metadata: [mod]

@@ -1,0 +1,58 @@
+[
+  {
+    "slugs": ["phi-3", "phi3", "stable-code"],
+    "supports_tools": false
+  },
+  {
+    "slugs": ["vision", "-v", "lava", "gpt-4o", "claude-3", "gemini-1.5", "phi-3.5-vision", "pixtral"],
+    "supports_vision": true
+  },
+  {
+    "slugs": ["gpt-4o", "gpt-3.5-turbo", "gemini", "-pro", "-flash"],
+    "supports_structured_output": true
+  },
+  {
+    "slugs": ["reasoning", "-o1", "-o3", "deepseek-r1", "-r1"],
+    "supports_reasoning": true,
+    "supports_tools": false
+  },
+  {
+    "slugs": ["gpt-4o"],
+    "context_window": 128000,
+    "max_output_tokens": 16384,
+    "supports_tools": true,
+    "supports_vision": true,
+    "supports_structured_output": true,
+    "tags": ["flagship"]
+  },
+  {
+    "slugs": ["gemini-1.5"],
+    "context_window": 1000000,
+    "max_output_tokens": 8192,
+    "supports_vision": true,
+    "supports_tools": true
+  },
+  {
+    "slugs": ["claude-3"],
+    "context_window": 200000,
+    "max_output_tokens": 4096,
+    "supports_vision": true,
+    "supports_tools": true
+  },
+  {
+    "slugs": ["deepseek-r1"],
+    "context_window": 64000,
+    "supports_reasoning": true,
+    "supports_vision": false
+  },
+  {
+    "slugs": ["llama-3", "llama3", "mistral"],
+    "context_window": 128000,
+    "supports_tools": true
+  },
+  {
+    "slugs": ["gemma-4", "gemma4"],
+    "supports_tools": true,
+    "context_window": 128000
+  }
+]

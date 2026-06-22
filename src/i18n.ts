@@ -49,6 +49,7 @@ export type LocaleData = typeof en;
 
 interface TOptions {
   returnObjects?: boolean;
+  defaultValue?: string;
 }
 
 /**
@@ -56,7 +57,7 @@ interface TOptions {
  * Core internationalization class for the Tadpole OS ecosystem.
  */
 class I18n {
-  private data: any = en;
+  private data: LocaleData = en;
 
   /**
    * t
@@ -120,12 +121,12 @@ class I18n {
       result = key;
     }
 
-    const return_objects = params && (params as any).returnObjects;
+    const return_objects = params && (params as TOptions).returnObjects;
     if (return_objects) {
       return result;
     }
     
-    let text = found && typeof result === 'string' ? result : (params && (params as any).defaultValue) || key;
+    let text = found && typeof result === 'string' ? result : (params && (params as TOptions).defaultValue) || key;
     
     if (params) {
       Object.entries(params as Record<string, string | number>).forEach(([k, v]) => {

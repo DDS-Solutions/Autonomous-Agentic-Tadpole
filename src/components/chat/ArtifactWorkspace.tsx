@@ -94,7 +94,7 @@ export const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({
                                                 "flex-1",
                                                 line.trim().startsWith('#') && "text-zinc-600 italic",
                                                 line.includes('def ') && "text-blue-400",
-                                                line.includes('import ') && "text-purple-400",
+                                                line.includes('import ') && "text-cyan-400",
                                                 line.includes('"') && "text-emerald-400"
                                             )}>
                                                 {line}

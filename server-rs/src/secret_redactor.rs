@@ -68,8 +68,12 @@ static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
         .map(|p| match Regex::new(p) {
             Ok(re) => re,
             Err(e) => {
-                tracing::error!("❌ [SecretRedactor] Failed to compile pattern '{}': {}", p, e);
-                Regex::new("(?!)").unwrap() // Dummy regex that never matches
+                tracing::error!(
+                    "❌ [SecretRedactor] Failed to compile pattern '{}': {}",
+                    p,
+                    e
+                );
+                Regex::new(r"[^\s\S]").unwrap() // Dummy regex that never matches
             }
         })
         .collect();

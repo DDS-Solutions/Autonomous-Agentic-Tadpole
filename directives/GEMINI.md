@@ -88,8 +88,8 @@ graph TD
 ## 📥 & 🤖 CLASSIFICATION & ROUTING
 
 **Step 1: Classify Request**
-- **Simple** (fix, add, change): Inline Edit.
-- **Complex** (build, create, refactor, design): Requires `{task-slug}.md`.
+- **Simple** (fix, add, change): Inline Edit (Fast Track). Authorized to execute surgical file edits directly, bypassing Aletheia Divergent-Convergent planning and Socratic inquiry gates to minimize latency and token consumption.
+- **Complex** (build, create, refactor, design): Requires `{task-slug}.md` and full Aletheia reasoning.
 - **Slash Cmd** (/create, /debug): Run command flow.
 
 **Step 2: Auto-Select Agent**

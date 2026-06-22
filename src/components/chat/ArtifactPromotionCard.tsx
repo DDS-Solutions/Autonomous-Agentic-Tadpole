@@ -70,11 +70,11 @@ export const ArtifactPromotionCard: React.FC<ArtifactPromotionCardProps> = ({
             animate={{ opacity: 1, y: 0 }}
             className="mt-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-700/50 backdrop-blur-md shadow-2xl overflow-hidden relative group"
         >
-            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-purple-500 to-blue-500" />
+            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-cyan-500 to-blue-500" />
             
             <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-purple-400 shadow-inner">
+                    <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-cyan-400 shadow-inner">
                         <FileCode size={18} />
                     </div>
                     <div>
@@ -113,7 +113,7 @@ export const ArtifactPromotionCard: React.FC<ArtifactPromotionCardProps> = ({
                     disabled={status === 'loading' || status === 'success'}
                     className={clsx(
                         "px-4 py-2 rounded-lg flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all duration-300 shadow-lg",
-                        status === 'idle' && "bg-purple-600 hover:bg-purple-500 text-white shadow-purple-900/20",
+                        status === 'idle' && "bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/20",
                         status === 'loading' && "bg-zinc-800 text-zinc-500 cursor-wait",
                         status === 'success' && "bg-green-600/20 text-green-400 border border-green-500/30 cursor-default",
                         status === 'error' && "bg-red-600/20 text-red-400 border border-red-500/30"

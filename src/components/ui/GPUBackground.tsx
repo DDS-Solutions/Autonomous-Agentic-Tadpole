@@ -18,7 +18,7 @@ import { use_settings_store } from '../../stores/settings_store';
 const BACKDROP_THEMES: Record<string, { colorA: string, colorB: string }> = {
     cyan: { colorA: THEME_COLORS.DARK_BG, colorB: '#022c22' },    // Emerald/cyan tint (default)
     emerald: { colorA: THEME_COLORS.DARK_BG, colorB: '#064e3b' }, // Deep forest emerald
-    purple: { colorA: THEME_COLORS.DARK_BG, colorB: '#1e1b4b' },  // Nebula purple/indigo
+    nebula: { colorA: THEME_COLORS.DARK_BG, colorB: '#1e1b4b' },  // Nebula theme gradient
     slate: { colorA: THEME_COLORS.DARK_BG, colorB: '#0f172a' },   // Deep slate
     amber: { colorA: THEME_COLORS.DARK_BG, colorB: '#2d1500' },   // Sunset amber/copper
 };

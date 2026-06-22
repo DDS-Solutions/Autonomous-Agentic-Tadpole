@@ -30,7 +30,7 @@ import { forceCenter, forceManyBody } from 'd3-force';
 
 // Constants moved to src/constants/theme.ts
 
-export const NodeStatus = {
+const NodeStatus = {
     IDLE: 0,
     BUSY: 1,
     ERROR: 2,
@@ -289,7 +289,6 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">{i18n.t('swarm_visualizer.telemetry_10hz')}</p>
                         <div className="w-px h-2 bg-zinc-800" />
                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
-                            {/* eslint-disable-next-line react-hooks/refs */}
                             {i18n.t('swarm_visualizer.nodes_online', { count: current_node_count })}
                         </p>
                         <div className="w-px h-2 bg-zinc-800" />

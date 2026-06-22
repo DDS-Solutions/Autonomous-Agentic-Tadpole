@@ -215,12 +215,16 @@ export const agent_api_service = {
                         headers: { 'X-Request-Id': final_request_id }
                     });
                     return final_request_id;
-                } catch (err: any) {
+                } catch (err: unknown) {
                     // 🔄 Sovereign Failover: Detect Connection Failure
-                    const is_conn_fail = err.message?.includes('error sending request') || 
-                                       err.message?.includes('Failed to fetch') || 
-                                       err.status === 503 || 
-                                       err.status === 504;
+                    const error_obj = err as Record<string, unknown> | null | undefined;
+                    const error_message = typeof error_obj?.message === 'string' ? error_obj.message : '';
+                    const error_status = typeof error_obj?.status === 'number' ? error_obj.status : undefined;
+
+                    const is_conn_fail = error_message.includes('error sending request') || 
+                                       error_message.includes('Failed to fetch') || 
+                                       error_status === 503 || 
+                                       error_status === 504;
 
                     if (is_conn_fail && attempt_count < 2) {
                         const agent_registry_store = (await import('../stores/agent_store')).use_agent_registry_store.getState();
@@ -272,7 +276,13 @@ export const agent_api_service = {
                 
                 // Fallback: Only check mission history in vector memory if the feature is compiled and active
                 if (has_vector_memory) {
-                    const history = await api_request<{ entries: any[] }>(`/v1/agents/${agent_id}/memories`, { method: 'GET' });
+                    interface HistoryEntry {
+                        text?: string;
+                        metadata?: {
+                            request_id?: string;
+                        };
+                    }
+                    const history = await api_request<{ entries: HistoryEntry[] }>(`/v1/agents/${agent_id}/memories`, { method: 'GET' });
                     const mission_completion = history.entries.find(e => e.metadata?.request_id === request_id && e.text?.toLowerCase().includes('mission completed'));
                     if (mission_completion) return 'success';
                 }

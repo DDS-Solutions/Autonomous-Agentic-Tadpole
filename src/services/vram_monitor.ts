@@ -122,7 +122,7 @@ class VramMonitor {
                 severity
             };
 
-        } catch (error) {
+        } catch {
             // SILENT FAIL: Don't spam console if backend is down
             console.debug('[VramMonitor] Backend unreachable, using local heuristics only.');
             

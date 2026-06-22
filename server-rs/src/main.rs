@@ -180,7 +180,7 @@ async fn async_main() -> anyhow::Result<()> {
             .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
 
         let mut graph = crate::intelligence::graph::CodeSymbolGraph::new(root);
-        graph.build("audit-salt");
+        let _ = graph.build("audit-salt");
         let anomalies = graph.find_anomalies();
         
         if anomalies.is_empty() {

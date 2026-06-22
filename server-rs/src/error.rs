@@ -73,6 +73,9 @@ pub enum AppError {
     #[error(transparent)]
     Skill(#[from] crate::agent::skill_error::SkillError),
 
+    #[error(transparent)]
+    Graph(#[from] crate::intelligence::graph::GraphError),
+
     #[error("Bad Request: {0}")]
     BadRequest(String),
 
@@ -268,6 +271,11 @@ impl AppError {
             AppError::Conflict(_) => {
                 status_code = StatusCode::CONFLICT;
                 type_slug = "conflict".to_string();
+            }
+            AppError::Graph(_) => {
+                status_code = StatusCode::INTERNAL_SERVER_ERROR;
+                type_slug = "graph-error".to_string();
+                severity = "CRITICAL";
             }
             AppError::Anyhow(_) => {
                 status_code = StatusCode::INTERNAL_SERVER_ERROR;

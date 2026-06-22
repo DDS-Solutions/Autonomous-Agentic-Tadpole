@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from 'react';
 import { use_settings_store } from '../stores/settings_store';
 import { browser_inference_service } from '../services/browser_inference';
 import { governance_service } from '../services/governance_service';
+import { i18n } from '../i18n';
 import { 
     Shield, 
     Activity, 
@@ -72,6 +73,7 @@ export default function Governance_View() {
     };
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchGovernance();
         
         // Event-driven sync: Listen for pulses from the service
@@ -102,8 +104,8 @@ export default function Governance_View() {
                         <Scale className="w-6 h-6 text-indigo-400" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Sovereign Governance</h1>
-                        <p className="text-zinc-500 text-sm">Orchestrating the Aletheia Protocol and Resource Boundaries</p>
+                        <h1 className="text-2xl font-bold tracking-tight">{i18n.t('governance.title', { defaultValue: 'Sovereign Governance' })}</h1>
+                        <p className="text-zinc-500 text-sm">{i18n.t('governance.subtitle', { defaultValue: 'Orchestrating the Aletheia Protocol and Resource Boundaries' })}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -210,7 +212,7 @@ export default function Governance_View() {
                     {/* Sentinel Mode Toggle */}
                     <div className="bg-[#0a0a0a] border border-zinc-800/50 rounded-2xl p-6">
                         <div className="flex items-center gap-2 mb-5">
-                            <Brain className="w-4 h-4 text-violet-400" />
+                            <Brain className="w-4 h-4 text-cyan-400" />
                             <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Browser Sentinel</h2>
                         </div>
 
@@ -224,11 +226,11 @@ export default function Governance_View() {
                                 </p>
                                 <div className={`mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
                                     settings.sentinel_mode
-                                        ? 'bg-violet-500/15 border border-violet-500/30 text-violet-300'
+                                        ? 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300'
                                         : 'bg-zinc-800/50 border border-zinc-700/50 text-zinc-500'
                                 }`}>
                                     <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                                        settings.sentinel_mode ? 'bg-violet-400 animate-pulse' : 'bg-zinc-600'
+                                        settings.sentinel_mode ? 'bg-cyan-400 animate-pulse' : 'bg-zinc-600'
                                     }`} />
                                     {settings.sentinel_mode ? 'Sentinel Active' : 'Sentinel Offline'}
                                 </div>
@@ -237,9 +239,9 @@ export default function Governance_View() {
                             <button
                                 id="sentinel-mode-toggle"
                                 onClick={toggle_sentinel}
-                                aria-label="Toggle Sentinel Mode"
-                                className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/50 ${
-                                    settings.sentinel_mode ? 'bg-violet-500' : 'bg-zinc-700'
+                                aria-label={i18n.t('governance.aria_toggle_sentinel', { defaultValue: 'Toggle Sentinel Mode' })}
+                                className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
+                                    settings.sentinel_mode ? 'bg-cyan-500' : 'bg-zinc-700'
                                 }`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${

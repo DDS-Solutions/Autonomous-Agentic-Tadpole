@@ -62,7 +62,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         if (normalized_kind === 'func' || normalized_kind === 'function' || normalized_kind === 'method') kind_color = THEME_COLORS.BUSY;
         if (normalized_kind === 'struct' || normalized_kind === 'class') kind_color = THEME_COLORS.SUCCESS;
         if (normalized_kind === 'trait' || normalized_kind === 'interface') kind_color = THEME_COLORS.DEGRADED;
-        if (normalized_kind === 'enum') kind_color = '#a855f7'; // Purple
+        if (normalized_kind === 'enum') kind_color = '#06b6d4'; // Cyan
 
         // Override if affected
         if (node.is_affected) kind_color = THEME_COLORS.ERROR;

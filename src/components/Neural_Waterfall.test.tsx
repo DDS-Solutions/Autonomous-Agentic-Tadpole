@@ -67,6 +67,16 @@ describe('Neural_Waterfall Verification', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.useFakeTimers();
+        
+        // Mock getBoundingClientRect to provide realistic width in jsdom
+        Element.prototype.getBoundingClientRect = vi.fn().mockReturnValue({
+            width: 1000,
+            height: 500,
+            top: 0,
+            left: 0,
+            bottom: 500,
+            right: 1000
+        });
     });
 
     it('renders empty state when no trace is active', () => {

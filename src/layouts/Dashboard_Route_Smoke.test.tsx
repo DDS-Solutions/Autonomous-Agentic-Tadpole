@@ -34,7 +34,10 @@ const path_to_test_id = (path: string) => `route-${path.replace(/^\//, '').repla
 vi.mock('../components/layout/Sidebar', () => ({ Sidebar: () => <div data-testid="sidebar" /> }));
 vi.mock('../components/layout/Tab_Bar', () => ({ Tab_Bar: () => <div data-testid="tab-bar" /> }));
 vi.mock('../components/layout/Ticker_Header', () => ({ Ticker_Header: () => <div data-testid="ticker-header" /> }));
-vi.mock('../components/ui', () => ({ Portal_Window: ({ children }: any) => <div data-testid="portal-window">{children}</div> }));
+vi.mock('../components/ui', () => ({
+    Portal_Window: ({ children }: any) => <div data-testid="portal-window">{children}</div>,
+    GPUBackground: () => <div data-testid="gpu-background" />
+}));
 vi.mock('../components/SovereignChat', () => ({ SovereignChat: () => <div data-testid="sovereign-chat" /> }));
 vi.mock('../components/Command_Palette', () => ({ Command_Palette: () => <div data-testid="command-palette" /> }));
 vi.mock('../components/layout/Observability_Sidebar', () => ({ Observability_Sidebar: () => <div data-testid="observability-sidebar" /> }));

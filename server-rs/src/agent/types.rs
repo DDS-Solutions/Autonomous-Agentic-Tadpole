@@ -211,89 +211,80 @@ pub struct ModelCapabilities {
     #[serde(default, alias = "supports_halting_tool")]
     pub supports_halting_tool: bool,
     #[serde(default, alias = "context_window")]
-    pub context_window: u32,
+    pub context_window: Option<u32>,
     #[serde(default, alias = "max_output_tokens")]
-    pub max_output_tokens: u32,
+    pub max_output_tokens: Option<u32>,
+    #[serde(default, alias = "is_embedding_model")]
+    pub is_embedding_model: bool,
+    #[serde(default, alias = "is_agentic_recommended")]
+    pub is_agentic_recommended: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default = "default_source")]
+    pub source: String,
 }
 
-#[derive(Debug, Clone)]
-struct CapabilityPattern {
-    slugs: &'static [&'static str],
-    update: fn(&mut ModelCapabilities),
+fn default_source() -> String {
+    "matrix".to_string()
 }
 
-const CAPABILITY_PATTERNS: &[CapabilityPattern] = &[
-    CapabilityPattern {
-        slugs: &["phi-3", "phi3", "stable-code"],
-        update: |c| c.supports_tools = false,
-    },
-    CapabilityPattern {
-        slugs: &["vision", "-v", "lava", "gpt-4o", "claude-3", "gemini-1.5", "phi-3.5-vision", "pixtral"],
-        update: |c| c.supports_vision = true,
-    },
-    CapabilityPattern {
-        slugs: &["gpt-4o", "gpt-3.5-turbo", "gemini", "-pro", "-flash"],
-        update: |c| c.supports_structured_output = true,
-    },
-    CapabilityPattern {
-        slugs: &["reasoning", "-o1", "-o3", "deepseek-r1", "-r1"],
-        update: |c| {
-            c.supports_reasoning = true;
-            c.supports_tools = false;
-        },
-    },
-    // Granular Family Overrides
-    CapabilityPattern {
-        slugs: &["gpt-4o"],
-        update: |c| {
-            c.context_window = 128_000;
-            c.max_output_tokens = 16_384;
-            c.supports_tools = true;
-            c.supports_vision = true;
-            c.supports_structured_output = true;
-        },
-    },
-    CapabilityPattern {
-        slugs: &["gemini-1.5"],
-        update: |c| {
-            c.context_window = 1_000_000;
-            c.max_output_tokens = 8_192;
-            c.supports_vision = true;
-            c.supports_tools = true;
-        },
-    },
-    CapabilityPattern {
-        slugs: &["claude-3"],
-        update: |c| {
-            c.context_window = 200_000;
-            c.max_output_tokens = 4_096;
-            c.supports_vision = true;
-            c.supports_tools = true;
-        },
-    },
-    CapabilityPattern {
-        slugs: &["deepseek-r1"],
-        update: |c| {
-            c.context_window = 64_000;
-            c.supports_reasoning = true;
-            c.supports_vision = false;
-        },
-    },
-    CapabilityPattern {
-        slugs: &["llama-3", "llama3", "mistral"],
-        update: |c| {
-            c.context_window = 128_000;
-            c.supports_tools = true;
-        },
-    },
-    CapabilityPattern {
-        slugs: &["gemma-4", "gemma4"],
-        update: |c| {
-            c.supports_tools = true;
-            c.context_window = 128_000;
-        },
-    },
-];
+#[derive(Debug, Clone, Deserialize)]
+pub struct CapabilityPattern {
+    pub slugs: Vec<String>,
+    pub supports_tools: Option<bool>,
+    pub supports_vision: Option<bool>,
+    pub supports_structured_output: Option<bool>,
+    pub supports_reasoning: Option<bool>,
+    pub supports_halting_tool: Option<bool>,
+    pub context_window: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+    pub is_embedding_model: Option<bool>,
+    pub is_agentic_recommended: Option<bool>,
+    pub tags: Option<Vec<String>>,
+}
+
+impl CapabilityPattern {
+    pub fn update(&self, caps: &mut ModelCapabilities) {
+        if let Some(val) = self.supports_tools {
+            caps.supports_tools = val;
+        }
+        if let Some(val) = self.supports_vision {
+            caps.supports_vision = val;
+        }
+        if let Some(val) = self.supports_structured_output {
+            caps.supports_structured_output = val;
+        }
+        if let Some(val) = self.supports_reasoning {
+            caps.supports_reasoning = val;
+        }
+        if let Some(val) = self.supports_halting_tool {
+            caps.supports_halting_tool = val;
+        }
+        if let Some(val) = self.context_window {
+            caps.context_window = Some(val);
+        }
+        if let Some(val) = self.max_output_tokens {
+            caps.max_output_tokens = Some(val);
+        }
+        if let Some(val) = self.is_embedding_model {
+            caps.is_embedding_model = val;
+        }
+        if let Some(val) = self.is_agentic_recommended {
+            caps.is_agentic_recommended = val;
+        }
+        if let Some(ref val) = self.tags {
+            caps.tags = val.clone();
+        }
+    }
+}
+
+pub static CAPABILITY_PATTERNS: once_cell::sync::Lazy<Vec<CapabilityPattern>> = once_cell::sync::Lazy::new(|| {
+    let raw = include_str!("capability_patterns.json");
+    serde_json::from_str(raw).unwrap_or_else(|e| {
+        tracing::error!("🚨 Failed to parse capability_patterns.json: {}", e);
+        Vec::new()
+    })
+});
 
 impl ModelCapabilities {
     /// ### IMR-01: Intelligent Inference
@@ -301,25 +292,26 @@ impl ModelCapabilities {
     pub fn infer_from_id(model_id: &str) -> Self {
         let id = model_id.to_lowercase();
         let mut caps = Self {
-            context_window: 32_768,
-            max_output_tokens: 4_096,
+            context_window: Some(32_768),
+            max_output_tokens: Some(4_096),
             supports_tools: true,
             supports_halting_tool: true,
+            source: "matrix".to_string(),
             ..Self::default()
         };
 
-        for pattern in CAPABILITY_PATTERNS {
+        for pattern in &*CAPABILITY_PATTERNS {
             if pattern.slugs.iter().any(|s| id.contains(s)) {
-                (pattern.update)(&mut caps);
+                pattern.update(&mut caps);
             }
         }
 
         // Final Edge Case logic not easily captured by slugs
         if id.contains("gemini-1.5-pro") {
-            caps.context_window = 2_000_000;
+            caps.context_window = Some(2_000_000);
         }
         if id.contains("gemma-4") && (id.contains("26b") || id.contains("moe") || id.contains("31b")) {
-            caps.context_window = 256_000;
+            caps.context_window = Some(256_000);
         }
 
         caps
@@ -489,6 +481,8 @@ pub struct ModelEntry {
     pub modality: Modality,
     #[serde(default)]
     pub capabilities: ModelCapabilities,
+    #[serde(default, alias = "last_synced_at")]
+    pub last_synced_at: Option<DateTime<Utc>>,
 }
 
 impl Validatable for ModelEntry {

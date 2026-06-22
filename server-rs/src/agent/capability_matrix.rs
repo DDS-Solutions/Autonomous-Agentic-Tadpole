@@ -41,13 +41,13 @@ mod tests {
         let caps = CapabilityMatrix::infer_capabilities("gpt-4o-2024-05-13");
         assert!(caps.supports_vision);
         assert!(caps.supports_tools);
-        assert_eq!(caps.context_window, 128_000);
+        assert_eq!(caps.context_window.unwrap_or(0), 128_000);
     }
 
     #[test]
     fn test_gemini_pro_inference() {
         let caps = CapabilityMatrix::infer_capabilities("gemini-1.5-pro");
-        assert!(caps.context_window >= 1_000_000);
+        assert!(caps.context_window.unwrap_or(0) >= 1_000_000);
     }
 
     #[test]
@@ -60,14 +60,14 @@ mod tests {
     #[test]
     fn test_gemma_4_moe_inference() {
         let caps = CapabilityMatrix::infer_capabilities("gemma-4-26b-moe");
-        assert_eq!(caps.context_window, 256_000);
+        assert_eq!(caps.context_window.unwrap_or(0), 256_000);
         assert!(caps.supports_tools);
     }
 
     #[test]
     fn test_gemma_4_edge_inference() {
         let caps = CapabilityMatrix::infer_capabilities("gemma-4-e4b");
-        assert_eq!(caps.context_window, 128_000);
+        assert_eq!(caps.context_window.unwrap_or(0), 128_000);
         assert!(caps.supports_tools);
     }
 
@@ -86,14 +86,14 @@ mod tests {
     #[test]
     fn test_claude_3_context_window() {
         let caps = CapabilityMatrix::infer_capabilities("claude-3-5-sonnet");
-        assert_eq!(caps.context_window, 200_000);
+        assert_eq!(caps.context_window.unwrap_or(0), 200_000);
         assert!(caps.supports_vision);
     }
 
     #[test]
     fn test_generic_fallback() {
         let caps = CapabilityMatrix::infer_capabilities("unknown-model-x");
-        assert_eq!(caps.context_window, 32_768);
+        assert_eq!(caps.context_window.unwrap_or(0), 32_768);
         assert!(!caps.supports_vision);
     }
 }

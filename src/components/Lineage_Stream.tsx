@@ -57,7 +57,7 @@ const Trace_Tree_Node = React.memo(({ node, depth }: { node: Trace_Node; depth: 
                                 {node.name}
                             </span>
                             {node.attributes?.parent_node_id && node.attributes.parent_node_id !== 'root' && (
-                                <span className="text-[8px] bg-purple-500/20 text-purple-400 border border-purple-500/30 px-1.5 rounded-full font-bold uppercase tracking-tighter animate-pulse">
+                                <span className="text-[8px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-1.5 rounded-full font-bold uppercase tracking-tighter animate-pulse">
                                     Multiversal Branch
                                 </span>
                             )}

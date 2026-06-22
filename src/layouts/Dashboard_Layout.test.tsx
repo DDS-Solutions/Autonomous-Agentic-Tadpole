@@ -30,7 +30,10 @@ const { mock_fetch_agents, page_render_spies } = vi.hoisted(() => ({
 vi.mock('../components/layout/Sidebar', () => ({ Sidebar: () => <div data-testid="sidebar" /> }));
 vi.mock('../components/layout/Tab_Bar', () => ({ Tab_Bar: () => <div data-testid="tab-bar" /> }));
 vi.mock('../components/layout/Ticker_Header', () => ({ Ticker_Header: () => <div data-testid="ticker-header" /> }));
-vi.mock('../components/ui', () => ({ Portal_Window: ({ children }: any) => <div data-testid="portal-window">{children}</div> }));
+vi.mock('../components/ui', () => ({
+    Portal_Window: ({ children }: any) => <div data-testid="portal-window">{children}</div>,
+    GPUBackground: () => <div data-testid="gpu-background" />
+}));
 
 // Mock lazy components
 vi.mock('../components/SovereignChat', () => ({ SovereignChat: () => <div data-testid="sovereign-chat" /> }));
