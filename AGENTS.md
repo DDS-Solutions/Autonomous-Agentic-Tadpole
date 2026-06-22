@@ -6,7 +6,7 @@
 > - **Telemetry Link**: Search `[AGENTS]` in audit logs.
 >
 > ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
+> Core technical resource for the A-A-Tadpole OS Sovereign infrastructure.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
@@ -37,6 +37,7 @@ Identify all security vulnerabilities, regardless of complexity. Focus on:
 *   **Injection Vectors:** SQL, Command, Template, XSS (if JS/TS/HTML context).
 *   **Sensitive Data:** Improper logging, unsecured default values, or exposure of credentials.
 *   **Privilege Escalation:** Any design flaw that allows a lower-privilege action to perform a higher-privilege one.
+*   **Execution Safety & RCE Mitigation:** When directed to call Python analysis scripts under `execution/`, you must enforce absolute parameter isolation. Never invoke shell processes using unescaped user-supplied arguments, and run code only within secure, local-only sandbox boundaries.
 
 **IV. Testing Rigor (The Testing Expert):**
 For the single most complex or critical function/logic block in the code, you must generate a comprehensive test plan that includes:
@@ -65,3 +66,5 @@ Your final output MUST be structured exactly into the following five sections:
 [//]: # (Metadata: [Codex])
 
 [//]: # (Metadata: [AGENTS])
+
+<!-- Telemetry Tag duplicate reference: [AGENTS] -->

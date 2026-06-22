@@ -99,7 +99,35 @@ def verify_file(file_path):
                 if not doc_file.exists():
                     findings.append(f"Broken @docs link: File '{doc_name}.md' not found")
 
-        # 3. Density Check (Warn only)
+        # 3. Path Reference and File Link Verification (Markdown files only)
+        if str(file_path).endswith('.md'):
+            # Extract markdown file:/// links: e.g. [name](file:///absolute/path)
+            file_links = re.findall(r'file:///([^\s\)]+)', content)
+            for link in file_links:
+                # Clean Windows drive prefix if present (e.g. c%3A or g:)
+                cleaned_link = link.replace('%3A', ':').replace('%3a', ':')
+                # Normalize path slashes
+                cleaned_link = cleaned_link.replace('\\', '/')
+                link_path = Path(cleaned_link)
+                if not link_path.is_absolute():
+                    # If not absolute, resolve relative to ROOT
+                    link_path = ROOT / link_path
+                
+                # Strip line numbers like #L10-L20 from the path
+                clean_str_path = str(link_path).split('#')[0]
+                link_path_clean = Path(clean_str_path)
+                
+                if not link_path_clean.exists():
+                    findings.append(f"Broken file link: '{cleaned_link}' not found")
+                    
+            # Extract plain text paths (e.g. server-rs/src/main.rs, execution/parity_guard.py)
+            plain_paths = re.findall(r'\b((?:server-rs|execution|src|data|docs|directives)/[a-zA-Z0-9_\-\./]+\.(?:rs|py|ts|tsx|json|md|sql))\b', content)
+            for path_str in plain_paths:
+                path_obj = ROOT / path_str
+                if not path_obj.exists():
+                    findings.append(f"Broken path reference: '{path_str}' not found")
+
+        # 4. Density Check (Warn only)
         code_lines = len([l for l in content.split('\n') if l.strip() and not l.strip().startswith('//') and not l.strip().startswith('/*')])
         if code_lines > 100 and not meta["has_note"]:
             findings.append("High-complexity file missing alignment note")

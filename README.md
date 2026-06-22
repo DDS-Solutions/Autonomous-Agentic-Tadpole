@@ -42,7 +42,7 @@
 
 ## Why This Exists
 
-⚠️ **Warning: With great power comes great responsibility. Sandbox Use Only** ⚠️
+                ⚠️ **Warning: With great power comes great responsibility. Sandbox Use Only** ⚠️
 
 Most agent frameworks stop at prompt orchestration. Autonomous Agentic Tadpole goes further: it combines a Rust control plane, a production-grade React operations console, SQLite-backed persistence, governance gates, skill execution, MCP tooling, model-provider management, and live telemetry into one local-first system.
 
