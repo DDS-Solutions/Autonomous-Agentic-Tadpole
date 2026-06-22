@@ -56,6 +56,9 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Streams telemetry live** through WebSocket routes, heartbeat events, system logs, and dashboard health panels.
 - **Enforces governance and security controls** through bearer-token auth, request middleware, shell scanning, audit trails, quotas, oversight queues, and privacy-mode behavior.
 - **Visualizes codebase interdependencies** with an interactive 2D Force-Directed Knowledge Graph and down-stream blast-radius impact analysis.
+- **Institutional Knowledge Store (IKS)**: Provides cross-cluster, persistent semantic memory backed by local SQLite databases and optional LanceDB vectors, complete with TTL evictions and time-aware confidence decay.
+- **Unified Graph Analysis**: Implements off-thread, lock-protected codebase dependency tracking with O(1) reverse-obfuscated path lookup for secure blast-radius calculations.
+- **Modular Sovereign UI Layouts**: Refactored the monolithic chat console into highly cohesive frontend sub-components and specialized React hooks.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
 ## System At A Glance
@@ -362,6 +365,13 @@ Python-side verification utilities:
 | OpenAPI | `docs/openapi.yaml` |
 | Security | `docs/SECURITY.md` |
 | System map | `SYSTEM_MAP.md` |
+
+## Recent Upgrades (v1.1.57)
+
+- **Institutional Knowledge Store (IKS)**: Implemented cross-restart, cross-cluster durable memory storing agent playbooks, decision history, and curated facts. Uses SQLite metadata indexing + LanceDB k-NN semantic search, complete with a time-aware confidence decay rate (0.01 per day) and automatic TTL eviction sweeps.
+- **Path Traversal Hardened Graph Engine**: Re-engineered `/v1/intelligence/blast-radius` and `/v1/intelligence/resolve` to look up paths via an obfuscated-to-real-path registry, enforcing strict directory checks against workspace boundaries to prevent traversal attacks.
+- **Sovereign Chat UI Modularization**: Monolithic chat layouts have been split into standalone, testable React components under `src/components/chat/` and custom hooks (`use_chat_dispatch`, `use_chat_voice`).
+- **Observability Tag Alignment**: Unified telemetry tags (`[okf_gate]`, `[graph]`, `[IKS]`, `[intelligence]`) across comments and tracing logs to ensure 100% synchronization and prevent documentation drift.
 
 ## Engineering Notes
 
