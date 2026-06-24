@@ -26,7 +26,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 use axum::http::StatusCode;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, Query},
     response::IntoResponse,
     Json,
 };
@@ -67,13 +67,25 @@ pub async fn create_benchmark(
     Ok(StatusCode::CREATED)
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct BenchmarkTriggerQuery {
+    pub mission_id: Option<String>,
+    pub node_id: Option<String>,
+}
+
 #[tracing::instrument(skip(state), name = "metrics::trigger_suite")]
 pub async fn trigger_benchmark(
     State(state): State<Arc<AppState>>,
     Path(test_id): Path<String>,
+    Query(query): Query<BenchmarkTriggerQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    let result = benchmarks::run_benchmark_suite(state, &test_id)
-        .await?;
+    let result = benchmarks::run_benchmark_suite(
+        state,
+        &test_id,
+        query.mission_id,
+        query.node_id,
+    )
+    .await?;
     Ok(Json(result))
 }
 

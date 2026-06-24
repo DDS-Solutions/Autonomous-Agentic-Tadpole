@@ -8,7 +8,7 @@
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[visual_tools]` in tracing logs.
 
-/**
+/*
  * @docs ARCHITECTURE:Runner
  * 
  * ### AI Assist Note

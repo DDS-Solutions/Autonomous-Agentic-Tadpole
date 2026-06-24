@@ -191,6 +191,12 @@ pub async fn spawn_background_tasks(app_state: Arc<AppState>, intent: BootstrapI
         }
     });
 
+    // Start Cognitive Memory consolidation worker
+    crate::agent::knowledge_store::cognitive_memory::start_cognitive_memory_pipeline(app_state.clone()).await;
+
+    // Start System Event Bus monitoring
+    crate::system::event_bus::start_event_bus_monitoring(app_state.clone(), app_state.event_bus.clone()).await;
+
     // 1. Hydra-RS: Initial Code Scan (Optional in Fast Path)
     if intent == BootstrapIntent::Full {
         let state_for_graph = app_state.clone();

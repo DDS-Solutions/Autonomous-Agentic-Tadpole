@@ -16,6 +16,7 @@ import { useState, useCallback } from 'react';
 import { use_settings_store } from '../stores/settings_store';
 import { use_sovereign_store, type Sovereign_Scope, type Chat_Message } from '../stores/sovereign_store';
 import { process_command } from '../logic/command_processor';
+import { system_api_service } from '../services/system_api_service';
 import type { Agent } from '../types';
 import { i18n } from '../i18n';
 
@@ -62,6 +63,42 @@ export function useChatDispatch(
 
         add_message(user_msg);
         set_input_text(''); // Clear the box immediately for visual feedback
+
+        if (text.trim().toLowerCase() === '/pre-pr') {
+            add_message({
+                sender_id: 'system',
+                sender_name: i18n.t('chat.system_name'),
+                text: '🔍 Starting Pre-PR Quality Gate verification...',
+                scope: active_scope,
+            });
+            try {
+                const data = await system_api_service.pre_pr_engine();
+                if (data.status === 'success') {
+                    add_message({
+                        sender_id: 'system',
+                        sender_name: i18n.t('chat.system_name'),
+                        text: `✅ Pre-PR Gate succeeded!\n\n${data.output || ''}`,
+                        scope: active_scope,
+                    });
+                } else {
+                    add_message({
+                        sender_id: 'system',
+                        sender_name: i18n.t('chat.system_name'),
+                        text: `❌ Pre-PR Gate failed!\n\nOutput:\n${data.output || ''}\n\nError details:\n${data.error || ''}`,
+                        scope: active_scope,
+                    });
+                }
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : 'Unknown command fault';
+                add_message({
+                    sender_id: 'system',
+                    sender_name: i18n.t('chat.system_name'),
+                    text: `❌ Pre-PR Gate fault: ${message}`,
+                    scope: active_scope,
+                });
+            }
+            return;
+        }
 
         try {
             console.debug(`${TELEMETRY_SOURCE} Intent captured: ${text.substring(0, 50)}...`);

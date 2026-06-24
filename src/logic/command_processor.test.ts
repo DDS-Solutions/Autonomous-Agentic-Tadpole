@@ -37,6 +37,7 @@ vi.mock('../services/system_api_service', () => ({
     system_api_service: {
         execute_local_cmd: vi.fn().mockResolvedValue({ success: true }),
         get_engine_status: vi.fn().mockResolvedValue({ features: [] }),
+        pre_pr_engine: vi.fn().mockResolvedValue({ status: 'success', output: 'Everything looks good' }),
     }
 }));
 
@@ -185,8 +186,17 @@ describe('process_command', () => {
             false,
             undefined,
             undefined,
+            undefined,
             undefined
         );
+    });
+
+    it('should handle /pre-pr command and trigger Pre-PR Gate checks', async () => {
+        const { system_api_service } = await import('../services/system_api_service');
+        const text = '/pre-pr';
+        await process_command(text, mock_agents);
+        
+        expect(system_api_service.pre_pr_engine).toHaveBeenCalled();
     });
 
     describe('Tiered Routing (Sentinel)', () => {

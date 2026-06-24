@@ -23,6 +23,7 @@ pub mod metering;
 pub mod monitoring;
 pub mod permissions;
 pub mod scanner;
+pub mod sandbox;
 
 #[cfg(test)]
 mod permission_tests;

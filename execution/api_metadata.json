@@ -1,0 +1,37 @@
+{
+  "request_body_map": {
+    "POST /v1/agents": "EngineAgent",
+    "PUT /v1/agents/{id}": "AgentConfigUpdate",
+    "POST /v1/agents/{id}/tasks": "TaskPayload",
+    "POST /v1/engine/speak": "SpeechRequest",
+    "POST /v1/skills/register": "RegisterPayload",
+    "POST /v1/skills/proposals/{id}/resolve": "ResolveProposalPayload",
+    "POST /v1/skills/promote": "PromotePayload",
+    "POST /v1/skills/mcp-tools/{name}/execute": "GenericResponse",
+    "PUT /v1/skills/scripts/{name}": "SkillDefinition",
+    "PUT /v1/skills/workflows/{name}": "WorkflowDefinition",
+    "PUT /v1/skills/hooks/{name}": "HookDefinition",
+    "POST /v1/continuity/jobs": "CreateJobRequest",
+    "PUT /v1/continuity/jobs/{id}": "UpdateJobRequest",
+    "POST /v1/continuity/workflows": "CreateWorkflowRequest",
+    "POST /v1/continuity/workflows/{id}/steps": "AddStepRequest",
+    "POST /v1/sovereign/missions/{id}/nodes": "AppendNodeRequest",
+    "POST /v1/oversight/{id}/decide": "OversightDecision"
+  },
+  "success_response_map": {
+    "GET /v1/agents": "AgentResponseList",
+    "GET /v1/agents/{id}": "AgentResponse",
+    "POST /v1/engine/speak": "SpeechResponse",
+    "POST /v1/engine/transcribe": "TranscribeResponse",
+    "POST /v1/engine/deploy": "DeployResponse",
+    "PUT /v1/agents/{id}": "GenericSuccessResponse",
+    "POST /v1/agents/{id}/reset": "GenericSuccessResponse",
+    "POST /v1/agents/{id}/pause": "GenericSuccessResponse",
+    "POST /v1/agents/{id}/resume": "GenericSuccessResponse",
+    "POST /v1/agents/{id}/mission": "GenericSuccessResponse",
+    "POST /v1/agents/{id}/tasks": "TaskAcceptedResponse",
+    "POST /v1/skills/register": "GenericSuccessResponse",
+    "POST /v1/skills/proposals/{id}/resolve": "GenericSuccessResponse",
+    "POST /v1/skills/promote": "GenericSuccessResponse"
+  }
+}

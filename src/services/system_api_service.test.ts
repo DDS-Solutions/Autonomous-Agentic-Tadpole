@@ -319,6 +319,15 @@ describe('system_api_service', () => {
             expect(api_request).toHaveBeenCalledWith('/v1/continuity/workflows/w1', expect.objectContaining({ method: 'DELETE' }));
         });
     });
+
+    describe('Pre-PR Engine', () => {
+        it('pre_pr_engine should call POST /v1/engine/pre-pr', async () => {
+            vi.mocked(api_request).mockResolvedValueOnce({ status: 'success', output: 'ok' });
+            const res = await system_api_service.pre_pr_engine();
+            expect(res).toEqual({ status: 'success', output: 'ok' });
+            expect(api_request).toHaveBeenCalledWith('/v1/engine/pre-pr', { method: 'POST' });
+        });
+    });
 });
 
 

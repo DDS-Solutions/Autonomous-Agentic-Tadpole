@@ -412,47 +412,18 @@ impl McpHost {
     ) -> Result<String, AppError> {
         let args_json = serde_json::to_string(&arguments).unwrap_or_default();
         
-        // SEC: Use a more robust command parser to avoid simple whitespace splitting vulnerabilities
-        let mut parts = skill.execution_command.split_whitespace();
-        let program = parts
-            .next()
-            .ok_or_else(|| AppError::BadRequest("Empty command".to_string()))?;
-            
-        let mut cmd = tokio::process::Command::new(program);
-        
-        // Apply remaining arguments from command string
-        for arg in parts {
-            cmd.arg(arg);
-        }
-        
-        cmd.env("TADPOLE_SKILL_ARGS", &args_json);
-        cmd.current_dir(workspace_root);
-        
-        let output =
-            tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
-            .map_err(|_| AppError::InfrastructureError {
-                provider_id: "legacy_skill".to_string(),
-                detail: "Skill execution timed out after 60s".to_string(),
-                help_link: None,
-            })?
-            .map_err(AppError::Io)?;
+        let config = crate::security::sandbox::SandboxConfig::default();
+        let raw_output = crate::security::sandbox::execute_sandboxed(
+            &skill.execution_command,
+            &args_json,
+            &workspace_root,
+            &config,
+        )
+        .await?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        
-        // SEC-04: Proactively scrub stdout and stderr
-        let scrubbed_stdout = self.redactor.scrub(&stdout);
-        
-        if output.status.success() {
-            Ok(scrubbed_stdout)
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let scrubbed_stderr = self.redactor.scrub(&stderr);
-            Err(AppError::InfrastructureError {
-                provider_id: "legacy_skill".to_string(),
-                detail: format!("Skill failed with status {}: {}", output.status, scrubbed_stderr),
-                help_link: None,
-            })
-        }
+        // SEC-04: Proactively scrub stdout
+        let scrubbed_stdout = self.redactor.scrub(&raw_output);
+        Ok(scrubbed_stdout)
     }
 }
 

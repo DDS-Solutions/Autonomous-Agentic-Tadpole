@@ -193,6 +193,105 @@ pub async fn trigger_deploy(
     }
 }
 
+/// POST /engine/pre-pr — Triggers the Pre-PR Quality Gate checks.
+///
+/// **Security**: Requires a valid `Authorization: Bearer <NEURAL_TOKEN>` header.
+#[tracing::instrument(skip(state, headers), name = "system::pre_pr")]
+pub async fn trigger_pre_pr(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, AppError> {
+    // --- Authentication Gate ---
+    let expected_token = &state.security.deploy_token;
+
+    let provided = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "));
+
+    match provided {
+        Some(token)
+            if crate::middleware::auth::constant_time_eq(
+                token.as_bytes(),
+                expected_token.as_bytes(),
+            ) => {}
+        _ => {
+            tracing::warn!("🚫 Unauthorized pre-pr attempt blocked.");
+            return Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(DeployResponse {
+                    status: "unauthorized".to_string(),
+                    output: None,
+                    error: Some("Missing or invalid Authorization header.".to_string()),
+                }),
+            ));
+        }
+    }
+
+    tracing::info!("🚀 Authenticated pre-pr triggered...");
+
+    let mut cmd = tokio::process::Command::new("python");
+    cmd.arg("execution/pre_pr.py");
+
+    if !std::path::Path::new("execution/pre_pr.py").exists() {
+        if std::path::Path::new("../execution/pre_pr.py").exists() {
+            cmd.current_dir("..");
+        } else {
+            tracing::error!("❌ Pre-PR script not found in . or ..");
+            return Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(DeployResponse {
+                    status: "error".to_string(),
+                    output: None,
+                    error: Some("Pre-PR Quality Gate script not found.".to_string()),
+                }),
+            ));
+        }
+    }
+
+    let result = cmd.output().await;
+
+    match result {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+            if output.status.success() {
+                tracing::info!("✅ Pre-PR Gate succeeded.");
+                Ok((
+                    StatusCode::OK,
+                    Json(DeployResponse {
+                        status: "success".to_string(),
+                        output: Some(stdout),
+                        error: None,
+                    }),
+                ))
+            } else {
+                let combined = format!("{}\n{}", stdout, stderr).trim().to_string();
+                Ok((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(DeployResponse {
+                        status: "error".to_string(),
+                        output: Some(stdout),
+                        error: Some(combined),
+                    }),
+                ))
+            }
+        }
+        Err(e) => {
+            tracing::error!("❌ Failed to spawn Pre-PR process: {}", e);
+            Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(DeployResponse {
+                    status: "error".to_string(),
+                    output: None,
+                    error: Some(e.to_string()),
+                }),
+            ))
+        }
+    }
+}
+
 // Metadata: [deploy]
 
 // Metadata: [deploy]

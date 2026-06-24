@@ -218,6 +218,16 @@ async fn execute_job(state: Arc<AppState>, job: super::types::ScheduledJob) {
     );
 }
 
+pub async fn execute_job_by_id(state: Arc<AppState>, job_id: &str) -> Result<(), AppError> {
+    let job_opt = super::scheduler::get_job_by_id(&state.resources.pool, job_id).await?;
+    if let Some(job) = job_opt {
+        execute_job(state, job).await;
+        Ok(())
+    } else {
+        Err(AppError::NotFound(format!("Continuity job '{}' not found", job_id)))
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

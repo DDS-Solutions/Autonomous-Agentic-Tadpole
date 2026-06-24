@@ -653,11 +653,71 @@ impl AgentRunner {
         }
     }
 
+    /// Dynamic progressive disclosure skill check helper
+    fn should_load_skill(&self, skill_name: &str, ctx: &RunContext) -> bool {
+        // Core skills that are ALWAYS loaded
+        let core_skills = ["systematic-debugging", "plan-writing", "verify-changes", "context-compression"];
+        if core_skills.contains(&skill_name) {
+            return true;
+        }
+
+        // Database/Migration skills trigger rules
+        let db_keywords = ["db", "database", "migration", "rls", "sql", "schema", "prisma", "postgres", "query", "table"];
+        let is_db_skill = skill_name.contains("database") || skill_name.contains("migration") || skill_name.contains("rls") || skill_name.contains("api-patterns");
+
+        // UI/Frontend skills trigger rules
+        let ui_keywords = ["ui", "frontend", "css", "html", "react", "component", "styling", "layout", "page", "button", "view"];
+        let is_ui_skill = skill_name.contains("frontend") || skill_name.contains("web-design") || skill_name.contains("mobile-design") || skill_name.contains("react");
+
+        // Vulnerability/Security skills trigger rules
+        let sec_keywords = ["security", "vulnerability", "audit", "cve", "auth", "permission", "token", "jwt", "hacker", "attack"];
+        let is_sec_skill = skill_name.contains("security") || skill_name.contains("vulnerability") || skill_name.contains("scanner");
+
+        // Inspect Primary Goal / Task prompt
+        let goal_text = ctx.primary_goal.as_deref().unwrap_or("").to_lowercase();
+        
+        // Inspect recently accessed files
+        let accessed_files = ctx.last_accessed_files.lock();
+        let has_db_files = accessed_files.iter().any(|f| {
+            let f_lower = f.to_lowercase();
+            f_lower.ends_with(".sql") || f_lower.ends_with(".prisma") || f_lower.contains("migration") || f_lower.contains("schema") || f_lower.contains("db.rs")
+        });
+        let has_ui_files = accessed_files.iter().any(|f| {
+            let f_lower = f.to_lowercase();
+            f_lower.ends_with(".tsx") || f_lower.ends_with(".jsx") || f_lower.ends_with(".css") || f_lower.ends_with(".html")
+        });
+        let has_sec_files = accessed_files.iter().any(|f| {
+            let f_lower = f.to_lowercase();
+            f_lower.contains("security") || f_lower.contains("policy") || f_lower.contains("auth")
+        });
+
+        if is_db_skill {
+            let matches_goal = db_keywords.iter().any(|kw| goal_text.contains(kw));
+            return matches_goal || has_db_files;
+        }
+
+        if is_ui_skill {
+            let matches_goal = ui_keywords.iter().any(|kw| goal_text.contains(kw));
+            return matches_goal || has_ui_files;
+        }
+
+        if is_sec_skill {
+            let matches_goal = sec_keywords.iter().any(|kw| goal_text.contains(kw));
+            return matches_goal || has_sec_files;
+        }
+
+        true
+    }
+
     /// Generates instructions for skills.
     fn generate_skill_fragments(&self, ctx: &RunContext) -> String {
         let mut skill_fragments = Vec::new();
         let snapshot = self.state.registry.skills.snapshot();
         for skill_name in &ctx.skills {
+            if !self.should_load_skill(skill_name, ctx) {
+                tracing::debug!("🧠 [ContextManager] Skipped loading skill '{}' (progressive disclosure)", skill_name);
+                continue;
+            }
             if let Some(skill) = snapshot.skills.get(skill_name) {
                 if let Some(instructions) = &skill.full_instructions {
                     skill_fragments.push(format!(
@@ -1098,6 +1158,7 @@ mod tests {
             }),
             base_dir,
             actors: tokio::sync::OnceCell::new(),
+            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
         });
 
         let runner = AgentRunner::new(state);

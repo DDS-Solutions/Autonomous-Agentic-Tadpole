@@ -28,23 +28,35 @@ paths:
   /v1/agents:
     get:
       tags: [agents]
-      summary: Get agents
+      summary: "Get agents"
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/AgentResponseList'
         "401":
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [agents]
-      summary: Create agent
+      summary: "Create agent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EngineAgent'
       responses:
         "200":
           description: Success
@@ -52,8 +64,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -61,7 +85,7 @@ paths:
   /v1/agents/graph:
     get:
       tags: [agents]
-      summary: Get swarm graph
+      summary: "Get swarm graph"
       responses:
         "200":
           description: Success
@@ -75,12 +99,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/agents/{agent_id}/memories:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/agents/{id}:
+    put:
+      tags: [agents]
+      summary: "Update agent"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentConfigUpdate'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/agents/{id}/memories:
     get:
       tags: [agents]
-      summary: Get agent memory
+      summary: "Get agent memory"
       parameters:
-        - name: agent_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -101,15 +177,27 @@ paths:
                 type: string
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [agents]
-      summary: Save agent memory
+      summary: "Save agent memory"
       parameters:
-        - name: agent_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -122,6 +210,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "501":
           description: Required feature disabled
           content:
@@ -134,12 +228,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/agents/{agent_id}/memories/{row_id}:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/agents/{id}/memories/{row_id}:
     delete:
       tags: [agents]
-      summary: Delete agent memory
+      summary: "Delete agent memory"
       parameters:
-        - name: agent_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -168,24 +274,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/agents/{id}:
-    put:
-      tags: [agents]
-      summary: Update agent
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -193,7 +289,7 @@ paths:
   /v1/agents/{id}/mission:
     post:
       tags: [agents]
-      summary: Sync mission
+      summary: "Sync mission"
       parameters:
         - name: id
           in: path
@@ -205,9 +301,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -215,7 +329,7 @@ paths:
   /v1/agents/{id}/pause:
     post:
       tags: [agents]
-      summary: Pause agent
+      summary: "Pause agent"
       parameters:
         - name: id
           in: path
@@ -227,9 +341,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -237,7 +369,7 @@ paths:
   /v1/agents/{id}/reset:
     post:
       tags: [agents]
-      summary: Reset agent
+      summary: "Reset agent"
       parameters:
         - name: id
           in: path
@@ -249,9 +381,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -259,7 +409,7 @@ paths:
   /v1/agents/{id}/resume:
     post:
       tags: [agents]
-      summary: Resume agent
+      summary: "Resume agent"
       parameters:
         - name: id
           in: path
@@ -271,9 +421,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -281,21 +449,45 @@ paths:
   /v1/agents/{id}/tasks:
     post:
       tags: [agents]
-      summary: Send task
+      summary: "Send task"
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskPayload'
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/TaskAcceptedResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -303,7 +495,7 @@ paths:
   /v1/api/pull:
     post:
       tags: [model-manager]
-      summary: Ollama proxy pull
+      summary: "Ollama proxy pull"
       responses:
         "200":
           description: Success
@@ -311,8 +503,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -320,7 +524,7 @@ paths:
   /v1/benchmarks:
     get:
       tags: [benchmarks]
-      summary: Get benchmarks
+      summary: "Get benchmarks"
       responses:
         "200":
           description: Success
@@ -334,9 +538,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [benchmarks]
-      summary: Create benchmark
+      summary: "Create benchmark"
       responses:
         "200":
           description: Success
@@ -344,18 +554,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/benchmarks/run/{test_id}:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/benchmarks/run/{id}:
     post:
       tags: [benchmarks]
-      summary: Trigger benchmark
+      summary: "Trigger benchmark"
       parameters:
-        - name: test_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -366,18 +588,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/benchmarks/{test_id}:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/benchmarks/{id}:
     get:
       tags: [benchmarks]
-      summary: Get benchmark history
+      summary: "Get benchmark history"
       parameters:
-        - name: test_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -390,6 +630,18 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -397,7 +649,7 @@ paths:
   /v1/continuity/jobs:
     get:
       tags: [continuity]
-      summary: List jobs
+      summary: "List jobs"
       responses:
         "200":
           description: Success
@@ -411,9 +663,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [continuity]
-      summary: Create job
+      summary: "Create job"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
       responses:
         "200":
           description: Success
@@ -421,8 +685,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -430,7 +706,7 @@ paths:
   /v1/continuity/jobs/{id}:
     delete:
       tags: [continuity]
-      summary: Delete job
+      summary: "Delete job"
       parameters:
         - name: id
           in: path
@@ -445,13 +721,25 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
     get:
       tags: [continuity]
-      summary: Get job
+      summary: "Get job"
       parameters:
         - name: id
           in: path
@@ -470,14 +758,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     put:
       tags: [continuity]
-      summary: Update job
+      summary: "Update job"
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJobRequest'
       responses:
         "200":
           description: Success
@@ -485,8 +791,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -494,7 +818,7 @@ paths:
   /v1/continuity/jobs/{id}/disable:
     post:
       tags: [continuity]
-      summary: Disable job
+      summary: "Disable job"
       parameters:
         - name: id
           in: path
@@ -507,8 +831,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -516,7 +858,7 @@ paths:
   /v1/continuity/jobs/{id}/enable:
     post:
       tags: [continuity]
-      summary: Enable job
+      summary: "Enable job"
       parameters:
         - name: id
           in: path
@@ -529,8 +871,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -538,7 +898,7 @@ paths:
   /v1/continuity/jobs/{id}/runs:
     get:
       tags: [continuity]
-      summary: List job runs
+      summary: "List job runs"
       parameters:
         - name: id
           in: path
@@ -553,6 +913,18 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -560,7 +932,7 @@ paths:
   /v1/continuity/workflows:
     get:
       tags: [continuity]
-      summary: List workflows
+      summary: "List workflows"
       responses:
         "200":
           description: Success
@@ -574,9 +946,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [continuity]
-      summary: Create workflow
+      summary: "Create workflow"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowRequest'
       responses:
         "200":
           description: Success
@@ -584,8 +968,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -593,7 +989,7 @@ paths:
   /v1/continuity/workflows/{id}:
     delete:
       tags: [continuity]
-      summary: Delete workflow
+      summary: "Delete workflow"
       parameters:
         - name: id
           in: path
@@ -608,6 +1004,18 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -615,12 +1023,18 @@ paths:
   /v1/continuity/workflows/{id}/steps:
     post:
       tags: [continuity]
-      summary: Add workflow step
+      summary: "Add workflow step"
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddStepRequest'
       responses:
         "200":
           description: Success
@@ -628,8 +1042,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -637,7 +1069,7 @@ paths:
   /v1/docs/knowledge:
     get:
       tags: [docs]
-      summary: List knowledge docs
+      summary: "List knowledge docs"
       responses:
         "200":
           description: Success
@@ -651,10 +1083,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/docs/knowledge/{category}/{name}:
     get:
       tags: [docs]
-      summary: Get knowledge doc
+      summary: "Get knowledge doc"
       parameters:
         - name: category
           in: path
@@ -677,10 +1115,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/docs/operations-manual:
     get:
       tags: [docs]
-      summary: Get operations manual
+      summary: "Get operations manual"
       responses:
         "200":
           description: Success
@@ -690,6 +1140,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -697,16 +1153,28 @@ paths:
   /v1/engine/deploy:
     post:
       tags: [engine]
-      summary: Trigger deploy
+      summary: "Trigger deploy"
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/DeployResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -714,7 +1182,7 @@ paths:
   /v1/engine/health:
     get:
       tags: [engine]
-      summary: Health check
+      summary: "Health check"
       security: []
       responses:
         "200":
@@ -726,7 +1194,7 @@ paths:
   /v1/engine/kill:
     post:
       tags: [engine]
-      summary: Kill agents
+      summary: "Kill agents"
       responses:
         "200":
           description: Success
@@ -734,8 +1202,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -743,7 +1223,7 @@ paths:
   /v1/engine/live-voice:
     get:
       tags: [engine]
-      summary: Live voice
+      summary: "Live voice"
       security: []
       responses:
         "200":
@@ -752,10 +1232,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
-  /v1/engine/shutdown:
+  /v1/engine/pre-pr:
     post:
       tags: [engine]
-      summary: Shutdown engine
+      summary: "Trigger pre pr"
       responses:
         "200":
           description: Success
@@ -763,8 +1243,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/engine/shutdown:
+    post:
+      tags: [engine]
+      summary: "Shutdown engine"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -772,16 +1293,34 @@ paths:
   /v1/engine/speak:
     post:
       tags: [engine]
-      summary: Text to speech
+      summary: "Text to speech"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeechRequest'
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/SpeechResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -789,7 +1328,7 @@ paths:
   /v1/engine/templates/install:
     post:
       tags: [engine]
-      summary: Install template
+      summary: "Install template"
       responses:
         "200":
           description: Success
@@ -797,8 +1336,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -806,16 +1357,39 @@ paths:
   /v1/engine/transcribe:
     post:
       tags: [engine]
-      summary: Transcribe audio
+      summary: "Transcribe audio"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                $ref: '#/components/schemas/TranscribeResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -823,7 +1397,7 @@ paths:
   /v1/engine/ws:
     get:
       tags: [engine]
-      summary: Ws
+      summary: "Ws"
       security: []
       responses:
         "200":
@@ -835,7 +1409,7 @@ paths:
   /v1/env-schema:
     get:
       tags: [system]
-      summary: Get env schema
+      summary: "Get env schema"
       responses:
         "200":
           description: Success
@@ -845,6 +1419,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -852,7 +1432,7 @@ paths:
   /v1/governance/blueprints:
     get:
       tags: [governance]
-      summary: List blueprints
+      summary: "List blueprints"
       responses:
         "200":
           description: Success
@@ -866,9 +1446,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       tags: [governance]
-      summary: Save blueprint
+      summary: "Save blueprint"
       responses:
         "200":
           description: Success
@@ -876,8 +1462,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -885,7 +1483,7 @@ paths:
   /v1/governance/blueprints/{id}:
     delete:
       tags: [governance]
-      summary: Delete blueprint
+      summary: "Delete blueprint"
       parameters:
         - name: id
           in: path
@@ -900,6 +1498,18 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -907,7 +1517,7 @@ paths:
   /v1/governance/manifest:
     get:
       tags: [governance]
-      summary: Get sovereign manifest
+      summary: "Get sovereign manifest"
       responses:
         "200":
           description: Success
@@ -917,6 +1527,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -924,7 +1540,7 @@ paths:
   /v1/infra/nodes:
     get:
       tags: [infra]
-      summary: Get nodes
+      summary: "Get nodes"
       responses:
         "200":
           description: Success
@@ -934,6 +1550,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -941,7 +1563,7 @@ paths:
   /v1/infra/nodes/discover:
     post:
       tags: [infra]
-      summary: Discover nodes
+      summary: "Discover nodes"
       responses:
         "200":
           description: Success
@@ -949,8 +1571,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -958,7 +1592,7 @@ paths:
   /v1/mcp/message:
     post:
       tags: [mcp]
-      summary: Mcp message
+      summary: "Mcp message"
       responses:
         "200":
           description: Success
@@ -966,8 +1600,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -975,7 +1621,7 @@ paths:
   /v1/mcp/sse:
     get:
       tags: [mcp]
-      summary: Mcp sse
+      summary: "Mcp sse"
       responses:
         "200":
           description: Success
@@ -985,6 +1631,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -992,7 +1644,7 @@ paths:
   /v1/model-manager/model-store/catalog:
     get:
       tags: [model-manager]
-      summary: Get model catalog
+      summary: "Get model catalog"
       responses:
         "200":
           description: Success
@@ -1002,6 +1654,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1009,7 +1667,7 @@ paths:
   /v1/model-manager/model-store/pull:
     post:
       tags: [model-manager]
-      summary: Pull model
+      summary: "Pull model"
       responses:
         "200":
           description: Success
@@ -1017,8 +1675,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1026,7 +1696,7 @@ paths:
   /v1/model-manager/models:
     get:
       tags: [model-manager]
-      summary: Get models
+      summary: "Get models"
       responses:
         "200":
           description: Success
@@ -1036,6 +1706,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1043,7 +1719,7 @@ paths:
   /v1/model-manager/models/{id}:
     delete:
       tags: [model-manager]
-      summary: Delete model
+      summary: "Delete model"
       parameters:
         - name: id
           in: path
@@ -1062,9 +1738,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     put:
       tags: [model-manager]
-      summary: Update model
+      summary: "Update model"
       parameters:
         - name: id
           in: path
@@ -1077,8 +1765,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1086,7 +1792,7 @@ paths:
   /v1/model-manager/providers:
     get:
       tags: [model-manager]
-      summary: Get providers
+      summary: "Get providers"
       responses:
         "200":
           description: Success
@@ -1096,6 +1802,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1103,7 +1815,7 @@ paths:
   /v1/model-manager/providers/{id}:
     delete:
       tags: [model-manager]
-      summary: Delete provider
+      summary: "Delete provider"
       parameters:
         - name: id
           in: path
@@ -1122,9 +1834,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     put:
       tags: [model-manager]
-      summary: Update provider
+      summary: "Update provider"
       parameters:
         - name: id
           in: path
@@ -1137,8 +1861,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1146,7 +1888,7 @@ paths:
   /v1/model-manager/providers/{id}/sync:
     post:
       tags: [model-manager]
-      summary: Sync provider models
+      summary: "Sync provider models"
       parameters:
         - name: id
           in: path
@@ -1159,8 +1901,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1168,7 +1928,7 @@ paths:
   /v1/model-manager/providers/{id}/test:
     post:
       tags: [model-manager]
-      summary: Test provider
+      summary: "Test provider"
       parameters:
         - name: id
           in: path
@@ -1181,8 +1941,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1190,7 +1968,7 @@ paths:
   /v1/oversight/ledger:
     get:
       tags: [oversight]
-      summary: Get ledger
+      summary: "Get ledger"
       responses:
         "200":
           description: Success
@@ -1200,6 +1978,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1207,7 +1991,7 @@ paths:
   /v1/oversight/pending:
     get:
       tags: [oversight]
-      summary: Get pending
+      summary: "Get pending"
       responses:
         "200":
           description: Success
@@ -1217,6 +2001,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1224,7 +2014,7 @@ paths:
   /v1/oversight/security/audit-trail:
     get:
       tags: [oversight]
-      summary: Get audit trail
+      summary: "Get audit trail"
       responses:
         "200":
           description: Success
@@ -1234,6 +2024,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1241,7 +2037,7 @@ paths:
   /v1/oversight/security/health:
     get:
       tags: [oversight]
-      summary: Get agent health
+      summary: "Get agent health"
       responses:
         "200":
           description: Success
@@ -1251,6 +2047,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1258,7 +2060,7 @@ paths:
   /v1/oversight/security/integrity:
     get:
       tags: [oversight]
-      summary: Get integrity status
+      summary: "Get integrity status"
       responses:
         "200":
           description: Success
@@ -1268,6 +2070,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1275,7 +2083,7 @@ paths:
   /v1/oversight/security/missions/quotas:
     get:
       tags: [oversight]
-      summary: Get mission quotas
+      summary: "Get mission quotas"
       responses:
         "200":
           description: Success
@@ -1285,6 +2093,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1292,7 +2106,7 @@ paths:
   /v1/oversight/security/missions/{id}/quota:
     put:
       tags: [oversight]
-      summary: Update mission quota
+      summary: "Update mission quota"
       parameters:
         - name: id
           in: path
@@ -1305,8 +2119,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1314,7 +2146,7 @@ paths:
   /v1/oversight/security/policies:
     get:
       tags: [oversight]
-      summary: Get policies
+      summary: "Get policies"
       responses:
         "200":
           description: Success
@@ -1328,9 +2160,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     put:
       tags: [oversight]
-      summary: Update policy
+      summary: "Update policy"
       responses:
         "200":
           description: Success
@@ -1338,8 +2176,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1347,7 +2197,7 @@ paths:
   /v1/oversight/security/quotas:
     get:
       tags: [oversight]
-      summary: Get security quotas
+      summary: "Get security quotas"
       responses:
         "200":
           description: Success
@@ -1361,49 +2211,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/oversight/security/quotas/{entity_id}:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/oversight/security/quotas/{id}:
     put:
       tags: [oversight]
-      summary: Update agent quota
-      parameters:
-        - name: entity_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/oversight/settings:
-    put:
-      tags: [oversight]
-      summary: Update settings
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/oversight/{id}/decide:
-    post:
-      tags: [oversight]
-      summary: Decide oversight
+      summary: "Update agent quota"
       parameters:
         - name: id
           in: path
@@ -1416,8 +2233,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/oversight/settings:
+    put:
+      tags: [oversight]
+      summary: "Update settings"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/oversight/{id}/decide:
+    post:
+      tags: [oversight]
+      summary: "Decide oversight"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OversightDecision'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1425,7 +2335,7 @@ paths:
   /v1/search/memory:
     get:
       tags: [memory]
-      summary: Global search
+      summary: "Global search"
       description: >
         Requires Cargo feature vector-memory; otherwise returns 501.
       responses:
@@ -1447,10 +2357,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/skills:
     get:
       tags: [skills]
-      summary: List all skills
+      summary: "List all skills"
       responses:
         "200":
           description: Success
@@ -1460,6 +2376,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1467,7 +2389,7 @@ paths:
   /v1/skills/hooks/{name}:
     delete:
       tags: [skills]
-      summary: Delete hook
+      summary: "Delete hook"
       parameters:
         - name: name
           in: path
@@ -1486,14 +2408,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     put:
       tags: [skills]
-      summary: Post hook
+      summary: "Save hook"
       parameters:
         - name: name
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HookDefinition'
       responses:
         "200":
           description: Success
@@ -1501,8 +2441,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1510,7 +2468,18 @@ paths:
   /v1/skills/import:
     post:
       tags: [skills]
-      summary: Import capability
+      summary: "Import capability"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
         "200":
           description: Success
@@ -1518,8 +2487,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1527,7 +2508,7 @@ paths:
   /v1/skills/manifests:
     get:
       tags: [skills]
-      summary: List manifests
+      summary: "List manifests"
       responses:
         "200":
           description: Success
@@ -1537,6 +2518,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1544,7 +2531,7 @@ paths:
   /v1/skills/manifests/{name}:
     get:
       tags: [skills]
-      summary: Get manifest
+      summary: "Get manifest"
       parameters:
         - name: name
           in: path
@@ -1559,6 +2546,18 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1566,7 +2565,7 @@ paths:
   /v1/skills/mcp-tools:
     get:
       tags: [skills]
-      summary: List mcp tools
+      summary: "List mcp tools"
       responses:
         "200":
           description: Success
@@ -1580,10 +2579,230 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/skills/mcp-tools/{name}/execute:
     post:
       tags: [skills]
-      summary: Execute mcp tool
+      summary: "Execute mcp tool"
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericResponse'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/promote:
+    post:
+      tags: [skills]
+      summary: "Promote artifact"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromotePayload'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/proposals:
+    get:
+      tags: [skills]
+      summary: "List capability proposals"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/proposals/{id}/resolve:
+    post:
+      tags: [skills]
+      summary: "Resolve capability proposal"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveProposalPayload'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/register:
+    post:
+      tags: [skills]
+      summary: "Register capability"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPayload'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/scan:
+    post:
+      tags: [skills]
+      summary: "Scan workspace skills"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/scripts/{name}:
+    delete:
+      tags: [skills]
+      summary: "Delete script"
       parameters:
         - name: name
           in: path
@@ -1602,10 +2821,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/promote:
-    post:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
       tags: [skills]
-      summary: Promote artifact
+      summary: "Save script"
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillDefinition'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/skills/workflows/{name}:
+    delete:
+      tags: [skills]
+      summary: "Delete workflow"
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         "200":
           description: Success
@@ -1619,27 +2900,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/proposals:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags: [skills]
+      summary: "Save workflow"
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowDefinition'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/sovereign/missions/{id}/leaves:
     get:
-      tags: [skills]
-      summary: List capability proposals
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/proposals/{id}/resolve:
-    post:
-      tags: [skills]
-      summary: Resolve capability proposal
+      tags: [sovereign]
+      summary: "Get mission leaves"
       parameters:
         - name: id
           in: path
@@ -1658,49 +2979,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/register:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/sovereign/missions/{id}/nodes:
     post:
-      tags: [skills]
-      summary: Register capability
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/scan:
-    post:
-      tags: [skills]
-      summary: Scan workspace skills
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/scripts/{name}:
-    delete:
-      tags: [skills]
-      summary: Delete script
+      tags: [sovereign]
+      summary: "Append session node"
       parameters:
-        - name: name
+        - name: id
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendNodeRequest'
       responses:
         "200":
           description: Success
@@ -1708,126 +3013,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-    put:
-      tags: [skills]
-      summary: Post script
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/skills/workflows/{name}:
-    delete:
-      tags: [skills]
-      summary: Delete workflow
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-    put:
-      tags: [skills]
-      summary: Post workflow
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/sovereign/missions/{mission_id}/leaves:
+  /v1/sovereign/missions/{id}/nodes/{leaf_id}/history:
     get:
       tags: [sovereign]
-      summary: Get mission leaves
+      summary: "Get session history"
       parameters:
-        - name: mission_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/sovereign/missions/{mission_id}/nodes:
-    post:
-      tags: [sovereign]
-      summary: Append session node
-      parameters:
-        - name: mission_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  /v1/sovereign/missions/{mission_id}/nodes/{leaf_id}/history:
-    get:
-      tags: [sovereign]
-      summary: Get session history
-      parameters:
-        - name: mission_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -1848,12 +3063,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-  /v1/sovereign/missions/{mission_id}/nodes/{node_id}/revert:
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/sovereign/missions/{id}/nodes/{node_id}/revert:
     post:
       tags: [sovereign]
-      summary: Revert to node
+      summary: "Revert to node"
       parameters:
-        - name: mission_id
+        - name: id
           in: path
           required: true
           schema: { type: string }
@@ -1868,8 +3095,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -1877,7 +3122,7 @@ paths:
   /v1/system/compute-profile:
     get:
       tags: [system]
-      summary: Get compute profile
+      summary: "Get compute profile"
       responses:
         "200":
           description: Success
@@ -1887,6 +3132,12 @@ paths:
                 $ref: '#/components/schemas/GenericResponse'
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1902,11 +3153,349 @@ components:
       additionalProperties: true
     ProblemDetails:
       type: object
-      additionalProperties: true
+      required: [type, title, status, detail, severity]
       properties:
         type: { type: string }
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+        instance: { type: string, nullable: true }
         error_code: { type: string, nullable: true }
         help_link: { type: string, nullable: true }
+        severity: { type: string }
+    AgentResponse:
+      type: object
+      required: [id, name, role, department, status, model, provider, budgetUsd, costUsd, isHealthy, isBankrupt, skills, version]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        department: { type: string }
+        status: { type: string }
+        model: { type: string }
+        provider: { type: string }
+        budgetUsd: { type: number }
+        costUsd: { type: number }
+        isHealthy: { type: boolean }
+        isBankrupt: { type: boolean }
+        skills:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer }
+    AgentResponseList:
+      type: object
+      required: [data, page, perPage, total, totalPages, _links]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AgentResponse' }
+        page: { type: integer }
+        perPage: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+        _links:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HateoasLink'
+    HateoasLink:
+      type: object
+      required: [href]
+      properties:
+        href: { type: string }
+        method: { type: string, nullable: true }
+    EngineAgent:
+      type: object
+      required: [identity, models, economics, health, capabilities, state]
+      properties:
+        identity: { $ref: '#/components/schemas/AgentIdentity' }
+        models: { $ref: '#/components/schemas/AgentModels' }
+        economics: { $ref: '#/components/schemas/AgentEconomics' }
+        health: { $ref: '#/components/schemas/AgentHealth' }
+        capabilities: { $ref: '#/components/schemas/AgentCapabilities' }
+        state: { $ref: '#/components/schemas/AgentState' }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time, nullable: true }
+        requiresOversight: { type: boolean }
+        voiceId: { type: string, nullable: true }
+        voiceEngine: { type: string, nullable: true }
+        sttEngine: { type: string, nullable: true }
+        connectorConfigs:
+          type: array
+          items: { type: object }
+        version: { type: integer }
+    AgentIdentity:
+      type: object
+      required: [id, name, role, department, description, category]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        department: { type: string }
+        description: { type: string }
+        category: { type: string }
+        themeColor: { type: string, nullable: true }
+    AgentEconomics:
+      type: object
+      required: [budgetUsd, costUsd, tokensUsed, tokenUsage]
+      properties:
+        budgetUsd: { type: number }
+        costUsd: { type: number }
+        tokensUsed: { type: integer }
+        tokenUsage: { $ref: '#/components/schemas/TokenUsage' }
+    TokenUsage:
+      type: object
+      required: [input, output, total]
+      properties:
+        input: { type: integer }
+        output: { type: integer }
+        total: { type: integer }
+    AgentHealth:
+      type: object
+      required: [status, failureCount]
+      properties:
+        status: { type: string }
+        failureCount: { type: integer }
+        lastFailureAt: { type: string, format: date-time, nullable: true }
+        heartbeatAt: { type: string, format: date-time, nullable: true }
+    AgentModels:
+      type: object
+      required: [model]
+      properties:
+        modelId: { type: string, nullable: true }
+        model: { $ref: '#/components/schemas/ModelConfig' }
+        model2: { type: string, nullable: true }
+        model3: { type: string, nullable: true }
+        modelConfig2: { $ref: '#/components/schemas/ModelConfig', nullable: true }
+        modelConfig3: { $ref: '#/components/schemas/ModelConfig', nullable: true }
+        activeModelSlot: { type: integer, nullable: true }
+    ModelConfig:
+      type: object
+      required: [provider, modelId]
+      properties:
+        provider: { type: string }
+        modelId: { type: string }
+        apiKey: { type: string, nullable: true }
+        temperature: { type: number, nullable: true }
+        baseUrl: { type: string, nullable: true }
+        reasoningDepth: { type: integer, nullable: true }
+        actThreshold: { type: number, nullable: true }
+    AgentCapabilities:
+      type: object
+      required: [skills, workflows, mcpTools]
+      properties:
+        skills:
+          type: array
+          items: { type: string }
+        workflows:
+          type: array
+          items: { type: string }
+        mcpTools:
+          type: array
+          items: { type: string }
+        skillManifest: { type: object, nullable: true }
+    AgentState:
+      type: object
+      required: [workingMemory, currentReasoningTurn]
+      properties:
+        activeMission: { type: object, nullable: true }
+        currentTask: { type: string, nullable: true }
+        workingMemory: { type: object }
+        currentReasoningTurn: { type: integer }
+    AgentConfigUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string }
+        department: { type: string }
+        provider: { type: string }
+        modelId: { type: string }
+        modelConfig: { $ref: '#/components/schemas/ModelConfig' }
+        model2: { type: string }
+        model3: { type: string }
+        apiKey: { type: string }
+        systemPrompt: { type: string }
+        temperature: { type: number }
+        baseUrl: { type: string }
+        reasoningDepth: { type: integer }
+        actThreshold: { type: number }
+        themeColor: { type: string }
+        budgetUsd: { type: number }
+        externalId: { type: string }
+        skills:
+          type: array
+          items: { type: string }
+        workflows:
+          type: array
+          items: { type: string }
+        mcpTools:
+          type: array
+          items: { type: string }
+        activeModelSlot: { type: integer }
+        modelConfig2: { $ref: '#/components/schemas/ModelConfig' }
+        modelConfig3: { $ref: '#/components/schemas/ModelConfig' }
+        voiceId: { type: string }
+        voiceEngine: { type: string }
+        sttEngine: { type: string }
+        category: { type: string }
+        requiresOversight: { type: boolean }
+        connectorConfigs:
+          type: array
+          items: { type: object }
+        metadata: { type: object, additionalProperties: true }
+    TaskPayload:
+      type: object
+      required: [task]
+      properties:
+        task: { type: string }
+        traceparent: { type: string, nullable: true }
+    TaskAcceptedResponse:
+      type: object
+      required: [status, agent_id]
+      properties:
+        status: { type: string }
+        agent_id: { type: string }
+    SpeechRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        voice: { type: string, nullable: true }
+        engine: { type: string, nullable: true }
+    SpeechResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string }
+        message: { type: string }
+    TranscribeResponse:
+      type: object
+      required: [status, text]
+      properties:
+        status: { type: string }
+        text: { type: string }
+    RegisterPayload:
+      type: object
+      required: [type, data, category]
+      properties:
+        type: { type: string }
+        data: { type: object }
+        category: { type: string }
+    ResolveProposalPayload:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string }
+        comments: { type: string, nullable: true }
+    PromotePayload:
+      type: object
+      required: [name, description, capType, content, agentId]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        capType: { type: string }
+        content: { type: string }
+        agentId: { type: string }
+        missionId: { type: string, nullable: true }
+    DeployResponse:
+      type: object
+      required: [status, revision]
+      properties:
+        status: { type: string }
+        revision: { type: string }
+    GenericSuccessResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    SkillDefinition:
+      type: object
+      required: [name, description, execution_command, schema, category]
+      properties:
+        id: { type: string, nullable: true }
+        name: { type: string }
+        description: { type: string }
+        execution_command: { type: string }
+        schema: { type: object }
+        oversight_required: { type: boolean }
+        doc_url: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        full_instructions: { type: string, nullable: true }
+        negative_constraints:
+          type: array
+          items: { type: string }
+        verification_script: { type: string, nullable: true }
+        category: { type: string }
+    WorkflowDefinition:
+      type: object
+      required: [name, content, category]
+      properties:
+        id: { type: string, nullable: true }
+        name: { type: string }
+        content: { type: string }
+        doc_url: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        category: { type: string }
+    HookDefinition:
+      type: object
+      required: [name, description, hook_type, content, active, category]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        hook_type: { type: string }
+        content: { type: string }
+        active: { type: boolean }
+        category: { type: string }
+    CreateJobRequest:
+      type: object
+      required: [agent_id, name, prompt, cron_expr]
+      properties:
+        agent_id: { type: string }
+        workflow_id: { type: string, nullable: true }
+        name: { type: string }
+        prompt: { type: string }
+        cron_expr: { type: string }
+        budget_usd: { type: number, nullable: true }
+        max_failures: { type: integer, nullable: true }
+        metadata: { type: object, nullable: true }
+    UpdateJobRequest:
+      type: object
+      properties:
+        name: { type: string, nullable: true }
+        prompt: { type: string, nullable: true }
+        workflow_id: { type: string, nullable: true }
+        cron_expr: { type: string, nullable: true }
+        budget_usd: { type: number, nullable: true }
+        enabled: { type: boolean, nullable: true }
+        max_failures: { type: integer, nullable: true }
+    CreateWorkflowRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+    AddStepRequest:
+      type: object
+      required: [agent_id, name, prompt_template, step_order]
+      properties:
+        agent_id: { type: string }
+        name: { type: string }
+        prompt_template: { type: string }
+        step_order: { type: integer }
+    AppendNodeRequest:
+      type: object
+      required: [role, content]
+      properties:
+        parent_id: { type: string, nullable: true }
+        role: { type: string }
+        content: { type: string }
+        metadata: { type: object, nullable: true }
+    OversightDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string }

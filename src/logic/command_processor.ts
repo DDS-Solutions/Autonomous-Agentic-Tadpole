@@ -89,8 +89,6 @@ export async function process_command(
     const settings = get_settings();
 
     // 1.1 Tactical Interception (Sentinel Tier)
-    // If sentinel_mode is enabled and it's not a slash command, 
-    // let the Browser Specialist decide if it can handle it.
     if (settings.sentinel_mode && !cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#')) {
         const is_tactical = check_if_tactical(command_text);
         if (is_tactical) {
@@ -138,7 +136,6 @@ export async function process_command(
             // If the specialist detects high entropy or suggests escalation
             if (analysis.toLowerCase().includes('escalate') || analysis.toLowerCase().includes('architect')) {
                 event_bus.emit_log({ source: 'System', text: '⚠️ Tactical threshold exceeded. Escalating to Computer Architect...', severity: 'warning' });
-                // Fall through to standard routing
             } else {
                 return { should_clear_logs: false };
             }
@@ -153,10 +150,6 @@ export async function process_command(
         agent_by_id.set(a.id, a);
     }
     
-    /**
-     * Resolves an agent by exact name, partial name, or ID.
-     * Emits an error to the event_bus if unresolvable.
-     */
     const find_agent = (name_or_id: string | undefined): Agent | null => {
         if (!name_or_id) {
             event_bus.emit_log({ source: 'System', text: 'Missing agent name. Usage: /<command> <agent-name>', severity: 'error' });
@@ -164,12 +157,9 @@ export async function process_command(
         }
         const lower = name_or_id.toLowerCase();
         
-        // 1. Exact Match (Name or ID)
         const found = agent_by_name.get(lower)
             || agent_by_id.get(name_or_id)
-            // 2. Inclusion Match (e.g. "@alpha" matches "Alpha (CEO)")
             || safe_agents.find(a => a.name.toLowerCase().includes(lower))
-            // 3. ID Prefix Match (e.g. "@1" matches ID "1")
             || safe_agents.find(a => a.id === name_or_id || a.id.startsWith(name_or_id));
 
         if (!found) {
@@ -183,6 +173,140 @@ export async function process_command(
         return found;
     };
 
+    // 2. Routing based on prefix
+    if (cmd.startsWith('/')) {
+        return handle_slash_command(cmd, args, safe_agents, find_agent, is_safe_mode);
+    }
+
+    if (cmd.startsWith('@')) {
+        return handle_agent_mention(cmd, args, find_agent, is_safe_mode);
+    }
+
+    if (cmd.startsWith('#')) {
+        return handle_cluster_mention(cmd, args, safe_agents, is_safe_mode);
+    }
+
+    // 0. Auto-Routing based on active scope (if no prefix is used)
+    if (active_scope !== 'swarm' && target_node) {
+        console.debug(`${telemetry_source} Auto-routing intent to ${active_scope}:${target_node}`);
+        const prefix = active_scope === 'cluster' ? '#' : '@';
+        return process_command(`${prefix}${target_node} ${command_text}`, safe_agents, is_safe_mode, active_scope, target_node);
+    }
+
+    return handle_swarm_broadcast(parts);
+}
+
+/**
+ * Consolidates directive dispatching logic to eliminate duplication between /send, @agent, and #cluster commands.
+ */
+async function dispatch_directive(
+    agent: Agent,
+    message: string,
+    is_safe_mode: boolean,
+    scope: 'agent' | 'cluster' = 'agent',
+    cluster_id?: string,
+    department?: string,
+    display_name?: string
+) {
+    const settings = get_settings();
+    const { model_id, provider } = resolve_agent_model_config(agent, settings.default_model);
+    const target_display = display_name || agent.name;
+
+    // 1. Log & Echo
+    event_bus.emit_log({ source: 'User', text: `→ ${target_display}: ${message}`, severity: 'info' });
+
+    // 2. Neural Link Acknowledgment (100ms delay)
+    setTimeout(() => {
+        const clean_name = (target_display.startsWith('@') || target_display.startsWith('#'))
+            ? target_display.substring(1)
+            : target_display;
+
+        const reply = scope === 'cluster'
+            ? `Neural Link: Distributing directive to ${clean_name}...`
+            : `Neural Link: Routing directive to ${clean_name}...`;
+        event_bus.emit_log({ source: 'System', text: reply, severity: 'info' });
+        use_sovereign_store.getState().add_message({
+            sender_id: 'system',
+            sender_name: 'Neural System',
+            agent_id: agent.id,
+            text: reply,
+            scope: scope
+        });
+    }, 100);
+
+    // 3. Predictive Skills (Local Gemma filtering)
+    let enabled_skills: string[] | undefined = undefined;
+    if (scope === 'agent' && settings.sentinel_mode) {
+        const skill_store = use_skill_store.getState();
+        const all_skill_names = [
+            ...skill_store.manifests.map(m => m.name),
+            ...skill_store.scripts.map(s => s.name),
+            ...skill_store.mcp_tools.map(t => t.name)
+        ];
+        if (all_skill_names.length > 5) {
+            try {
+                enabled_skills = await browser_inference_service.predict_relevant_skills(message, all_skill_names);
+                if (enabled_skills && enabled_skills.length > 0) {
+                    event_bus.emit_log({ 
+                        source: 'System', 
+                        text: `🧠 Gemma predictive filter: [${enabled_skills.join(', ')}]`, 
+                        severity: 'info' 
+                    });
+                }
+            } catch (e) {
+                console.warn('[CommandProcessor] Predictive filtering failed:', e);
+            }
+        }
+    }
+
+    // 4. Trigger API Call
+    const active_node_id = use_sovereign_store.getState().active_node_id;
+    try {
+        const task_id = await agent_api_service.send_command(
+            agent.id, 
+            message, 
+            model_id, 
+            provider, 
+            cluster_id, 
+            department, 
+            undefined, 
+            undefined, 
+            !!is_safe_mode, 
+            undefined, 
+            undefined, 
+            active_node_id || undefined, 
+            enabled_skills
+        );
+
+        // 5. Audit & Integrity tracking
+        if (scope === 'agent' && (message.toLowerCase().includes('audit') || message.toLowerCase().includes('integrity'))) {
+            const status = await agent_api_service.poll_task_status(agent.id, task_id);
+            if (status === 'success') {
+                event_bus.emit_log({ source: 'System', text: `✅ Task ${task_id.slice(0, 8)} resolved: Mission Objectives Met.`, severity: 'success' });
+            } else if (status === 'error') {
+                event_bus.emit_log({ source: 'System', text: `❌ Task ${task_id.slice(0, 8)} resolved: Failure Detected in Audit Trail.`, severity: 'error' });
+            }
+        }
+    } catch (err) {
+        const error_msg = err instanceof Error ? err.message : String(err);
+        event_bus.emit_log({
+            source: 'System',
+            text: `${scope === 'cluster' ? 'Cluster' : 'Neural'} link failed: ${error_msg}`,
+            severity: 'error'
+        });
+    }
+}
+
+/**
+ * Handles all standard slash commands.
+ */
+async function handle_slash_command(
+    cmd: string,
+    args: string[],
+    safe_agents: Agent[],
+    find_agent: (name_or_id: string | undefined) => Agent | null,
+    is_safe_mode?: boolean
+): Promise<Command_Result> {
     switch (cmd) {
         // ────────────── HELP ──────────────
         case '/help': {
@@ -194,6 +318,7 @@ export async function process_command(
                     '  /clear             — Clear terminal',
                     '  /status            — Agent swarm summary',
                     '  /deploy            — Trigger deploy simulation',
+                    '  /pre-pr            — Trigger Pre-PR Quality Gates',
                     '  /config <name>     — View agent config',
                     '  /switch <name> [1-3] — Switch active model slot',
                     '  /pause <name>      — Pause an agent',
@@ -263,6 +388,40 @@ export async function process_command(
             return { should_clear_logs: false };
         }
 
+        // ────────────── PRE-PR (Quality Gate) ──────────────
+        case '/pre-pr': {
+            event_bus.emit_log({
+                source: 'System',
+                text: '🔍 Starting Pre-PR Quality Gate verification...',
+                severity: 'info'
+            });
+
+            try {
+                const data = await system_api_service.pre_pr_engine();
+                if (data.status === 'success') {
+                    event_bus.emit_log({
+                        source: 'System',
+                        text: `✅ Pre-PR Gate succeeded!\n\n${data.output || ''}`,
+                        severity: 'success'
+                    });
+                } else {
+                    event_bus.emit_log({
+                        source: 'System',
+                        text: `❌ Pre-PR Gate failed!\n\nOutput:\n${data.output || ''}\n\nError details:\n${data.error || ''}`,
+                        severity: 'error'
+                    });
+                }
+            } catch (e: unknown) {
+                const error_msg = e instanceof Error ? e.message : String(e);
+                event_bus.emit_log({
+                    source: 'System',
+                    text: `❌ Pre-PR Gate fault: ${error_msg}`,
+                    severity: 'error'
+                });
+            }
+            return { should_clear_logs: false };
+        }
+
         // ────────────── CONFIG ──────────────
         case '/config': {
             const agent = find_agent(args[0]);
@@ -314,13 +473,12 @@ export async function process_command(
             return { should_clear_logs: false };
         }
 
-        // ────────────── SEND (sanitized) ──────────────
+        // ────────────── SEND ──────────────
         case '/send': {
             const agent = find_agent(args[0]);
             if (!agent) return { should_clear_logs: false };
 
-            const MAX_MSG_LENGTH = 500;
-            let message = args.slice(1).join(' ');
+            const message = sanitize_directive(args.slice(1).join(' '));
             if (!message) {
                 event_bus.emit_log({
                     source: 'System',
@@ -330,94 +488,16 @@ export async function process_command(
                 return { should_clear_logs: false };
             }
 
-            // Sanitize: strip control characters and enforce length limit
-            message = sanitize_directive(message);
-            if (message.length > MAX_MSG_LENGTH) {
+            if (message.length > 500) {
                 event_bus.emit_log({
                     source: 'System',
-                    text: `Message exceeds ${MAX_MSG_LENGTH} character limit (${message.length} chars). Please shorten it.`,
+                    text: `Message exceeds 500 character limit (${message.length} chars). Please shorten it.`,
                     severity: 'error'
                 });
                 return { should_clear_logs: false };
             }
 
-            const settings = get_settings();
-            const { model_id, provider } = resolve_agent_model_config(agent, settings.default_model);
-
-            // 1. Immediate User Echo: Show outgoing directive in the central log.
-            console.debug(`${telemetry_source} Dispatching directive to ${agent.name} (SafeMode: ${!!is_safe_mode})`);
-            event_bus.emit_log({
-                source: 'User',
-                text: `→ ${agent.name}: ${message}`,
-                severity: 'info'
-            });
-
-            // 2. Immediate System Acknowledgment: Confirm the routing attempt.
-            setTimeout(() => {
-                const reply = `Neural Link: Routing directive to ${agent.name}...`;
-                event_bus.emit_log({
-                    source: 'System',
-                    text: reply,
-                    severity: 'info'
-                });
-                // Update persistent sovereign store for the Agent-specific scope
-                use_sovereign_store.getState().add_message({
-                    sender_id: 'system',
-                    sender_name: 'Neural System',
-                    agent_id: agent.id, 
-                    text: reply,
-                    scope: 'agent'
-                });
-            }, 100);
-
-            // 3. Trigger API Call
-            console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: ${agent.name} (ID: ${agent.id}), Safe_Mode: ${!!is_safe_mode}`);
-            
-            const active_node_id = use_sovereign_store.getState().active_node_id;
-            const skill_store = use_skill_store.getState();
-            const all_skill_names = [
-                ...skill_store.manifests.map(m => m.name),
-                ...skill_store.scripts.map(s => s.name),
-                ...skill_store.mcp_tools.map(t => t.name)
-            ];
-
-            // 🧠 Predictive Skill Selection (Local Gemma)
-            let enabled_skills: string[] | undefined = undefined;
-            if (settings.sentinel_mode && all_skill_names.length > 5) {
-                try {
-                    enabled_skills = await browser_inference_service.predict_relevant_skills(message, all_skill_names);
-                    if (enabled_skills && enabled_skills.length > 0) {
-                        event_bus.emit_log({ 
-                            source: 'System', 
-                            text: `🧠 Gemma predictive filter: [${enabled_skills.join(', ')}]`, 
-                            severity: 'info' 
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[CommandProcessor] Predictive filtering failed:', e);
-                }
-            }
-
-            agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
-                .then(async (task_id) => {
-                    // Mission Critical Tracking: If the command is an audit or critical deployment, poll for status.
-                    if (message.toLowerCase().includes('audit') || message.toLowerCase().includes('integrity')) {
-                        const status = await agent_api_service.poll_task_status(agent.id, task_id);
-                        if (status === 'success') {
-                            event_bus.emit_log({ source: 'System', text: `✅ Task ${task_id.slice(0, 8)} resolved: Mission Objectives Met.`, severity: 'success' });
-                        } else if (status === 'error') {
-                            event_bus.emit_log({ source: 'System', text: `❌ Task ${task_id.slice(0, 8)} resolved: Failure Detected in Audit Trail.`, severity: 'error' });
-                        }
-                    }
-                })
-                .catch(err => {
-                    event_bus.emit_log({
-                        source: 'System',
-                        text: `Neural link failed: ${err.message || err}`,
-                        severity: 'error'
-                    });
-                });
-
+            await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, agent.name);
             return { should_clear_logs: false };
         }
 
@@ -476,8 +556,9 @@ export async function process_command(
             const agent = find_agent(args[0]);
             const slot_str = args[1];
             if (agent && slot_str) {
-                const slot = parseInt(slot_str) as 1 | 2 | 3;
-                if (slot >= 1 && slot <= 3) {
+                const slot_val = parseInt(slot_str);
+                if (!isNaN(slot_val) && slot_val >= 1 && slot_val <= 3) {
+                    const slot = slot_val as 1 | 2 | 3;
                     await agent_api_service.update_agent(agent.id, { active_model_slot: slot });
                     event_bus.emit_log({
                         source: 'System',
@@ -493,164 +574,7 @@ export async function process_command(
             return { should_clear_logs: false };
         }
 
-        // ────────────── UNKNOWN / SPECIAL ──────────────
         default: {
-            // 0. Auto-Routing based on active scope (if no prefix is used)
-            if (!cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#') && active_scope !== 'swarm' && target_node) {
-                console.debug(`${telemetry_source} Auto-routing intent to ${active_scope}:${target_node}`);
-                const prefix = active_scope === 'cluster' ? '#' : '@';
-                return process_command(`${prefix}${target_node} ${command_text}`, safe_agents, is_safe_mode, active_scope, target_node);
-            }
-
-            // Check for conversational targeting (@agent)
-            if (cmd.startsWith('@')) {
-                const target_name = cmd.substring(1).replace(/:$/, '');
-                const agent = find_agent(target_name);
-                if (agent) {
-                    const message = args.join(' ');
-                    const settings = get_settings();
-                    const { model_id, provider } = resolve_agent_model_config(agent, settings.default_model);
-
-                    event_bus.emit_log({ source: 'User', text: `→ @${agent.name}: ${message}`, severity: 'info' });
-
-                    setTimeout(() => {
-                        const reply = `Neural Link: Routing directive to ${agent.name}...`;
-                        event_bus.emit_log({
-                            source: 'System',
-                            text: reply,
-                            severity: 'info'
-                        });
-                        use_sovereign_store.getState().add_message({
-                            sender_id: 'system',
-                            sender_name: 'Neural System',
-                            agent_id: agent.id,
-                            text: reply,
-                            scope: 'agent'
-                        });
-                    }, 100);
-
-                    console.debug(`${telemetry_source} [OFFICIAL_DIRECTIVE] Targeting: @${agent.name}, Safe_Mode: ${!!is_safe_mode}`);
-                    
-                    const active_node_id = use_sovereign_store.getState().active_node_id;
-                    const skill_store = use_skill_store.getState();
-                    const all_skill_names = [
-                        ...skill_store.manifests.map(m => m.name),
-                        ...skill_store.scripts.map(s => s.name),
-                        ...skill_store.mcp_tools.map(t => t.name)
-                    ];
-
-                    let enabled_skills: string[] | undefined = undefined;
-                    if (settings.sentinel_mode && all_skill_names.length > 5) {
-                        try {
-                            enabled_skills = await browser_inference_service.predict_relevant_skills(message, all_skill_names);
-                            if (enabled_skills && enabled_skills.length > 0) {
-                                event_bus.emit_log({ 
-                                    source: 'System', 
-                                    text: `🧠 Gemma predictive filter: [${enabled_skills.join(', ')}]`, 
-                                    severity: 'info' 
-                                });
-                            }
-                        } catch (e) {
-                            console.warn('[CommandProcessor] Predictive filtering failed:', e);
-                        }
-                    }
-
-                    agent_api_service.send_command(agent.id, message, model_id, provider, undefined, undefined, undefined, undefined, !!is_safe_mode, undefined, undefined, active_node_id || undefined, enabled_skills)
-                        .then(async (task_id) => {
-                            if (message.toLowerCase().includes('audit') || message.toLowerCase().includes('integrity')) {
-                                const status = await agent_api_service.poll_task_status(agent.id, task_id);
-                                if (status === 'success') {
-                                    event_bus.emit_log({ source: 'System', text: `✅ Task ${task_id.slice(0, 8)} resolved: Mission Objectives Met.`, severity: 'success' });
-                                } else if (status === 'error') {
-                                    event_bus.emit_log({ source: 'System', text: `❌ Task ${task_id.slice(0, 8)} resolved: Failure Detected in Audit Trail.`, severity: 'error' });
-                                }
-                            }
-                        })
-                        .catch(err => {
-                            event_bus.emit_log({
-                                source: 'System',
-                                text: `Neural link failed: ${err.message || err}`,
-                                severity: 'error'
-                            });
-                        });
-                }
-                return { should_clear_logs: false };
-            }
-
-            // Check for cluster targeting (#cluster)
-            if (cmd.startsWith('#')) {
-                const cluster_name = cmd.substring(1).toLowerCase();
-                const workspace_store = use_workspace_store.getState();
-                const cluster = workspace_store.clusters.find(c => (c.name?.toLowerCase() === cluster_name) || c.id === cluster_name);
-
-                if (cluster && cluster.alpha_id) {
-                    const alpha_agent = safe_agents.find(a => a.id === cluster.alpha_id);
-                    if (alpha_agent) {
-                        const message = args.join(' ');
-                        const settings = get_settings();
-                        const { model_id, provider } = resolve_agent_model_config(alpha_agent, settings.default_model);
-
-                        event_bus.emit_log({ source: 'User', text: `→ #${cluster.name}: ${message}`, severity: 'info' });
-
-                        setTimeout(() => {
-                            const reply = `Neural Link: Distributing directive to ${cluster.name}...`;
-                            event_bus.emit_log({
-                                source: 'System',
-                                text: reply,
-                                severity: 'info'
-                            });
-                            use_sovereign_store.getState().add_message({
-                                sender_id: 'system',
-                                sender_name: 'Neural System',
-                                text: reply,
-                                scope: 'cluster'
-                            });
-                        }, 100);
-
-                        const active_node_id = use_sovereign_store.getState().active_node_id;
-
-                        agent_api_service.send_command(alpha_agent.id, message, model_id, provider, cluster.id, cluster.department, undefined, undefined, is_safe_mode, undefined, undefined, active_node_id || undefined)
-                            .catch(err => {
-                                event_bus.emit_log({
-                                    source: 'System',
-                                    text: `Cluster link failed: ${err.message || err}`,
-                                    severity: 'error'
-                                });
-                            });
-                    }
-                } else {
-                    event_bus.emit_log({
-                        source: 'System',
-                        text: `Cluster "${cluster_name}" not found or lacks an Alpha node.`,
-                        severity: 'error'
-                    });
-                }
-                return { should_clear_logs: false };
-            }
-
-            // General swarm directive (no prefix)
-            if (!cmd.startsWith('/')) {
-                const message = parts.join(' ');
-
-                event_bus.emit_log({ source: 'User', text: `Swarm Broadcast: ${message}`, severity: 'info' });
-
-                const reply = `Broadcasting to swarm: ${message.substring(0, 30)}...`;
-                event_bus.emit_log({
-                    source: 'System',
-                    text: reply,
-                    severity: 'info'
-                });
-                use_sovereign_store.getState().add_message({
-                    sender_id: 'system',
-                    sender_name: 'Neural System',
-                    text: reply,
-                    scope: 'swarm'
-                });
-
-                return { should_clear_logs: false };
-            }
-
-            // Fallback for unknown slash commands
             event_bus.emit_log({
                 source: 'System',
                 text: `Unknown command: ${cmd}. Type /help for available commands.`,
@@ -659,6 +583,79 @@ export async function process_command(
             return { should_clear_logs: false };
         }
     }
+}
+
+/**
+ * Handles targeting an individual agent via @mention.
+ */
+async function handle_agent_mention(
+    cmd: string,
+    args: string[],
+    find_agent: (name_or_id: string | undefined) => Agent | null,
+    is_safe_mode?: boolean
+): Promise<Command_Result> {
+    const target_name = cmd.substring(1).replace(/:$/, '');
+    const agent = find_agent(target_name);
+    if (agent) {
+        const message = args.join(' ');
+        await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, `@${agent.name}`);
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles targeting a specific mission cluster via #name.
+ */
+async function handle_cluster_mention(
+    cmd: string,
+    args: string[],
+    safe_agents: Agent[],
+    is_safe_mode?: boolean
+): Promise<Command_Result> {
+    const cluster_name = cmd.substring(1).toLowerCase();
+    const workspace_store = use_workspace_store.getState();
+    const cluster = workspace_store.clusters.find(c => (c.name?.toLowerCase() === cluster_name) || c.id === cluster_name);
+
+    if (cluster && cluster.alpha_id) {
+        const alpha_agent = safe_agents.find(a => a.id === cluster.alpha_id);
+        if (alpha_agent) {
+            const message = args.join(' ');
+            await dispatch_directive(alpha_agent, message, !!is_safe_mode, 'cluster', cluster.id, cluster.department, `#${cluster.name}`);
+        }
+    } else {
+        event_bus.emit_log({
+            source: 'System',
+            text: `Cluster "${cluster_name}" not found or lacks an Alpha node.`,
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles broadcasting to the entire swarm (default prefix-less state).
+ */
+async function handle_swarm_broadcast(
+    parts: string[]
+): Promise<Command_Result> {
+    const message = parts.join(' ');
+
+    event_bus.emit_log({ source: 'User', text: `Swarm Broadcast: ${message}`, severity: 'info' });
+
+    const reply = `Broadcasting to swarm: ${message.substring(0, 30)}...`;
+    event_bus.emit_log({
+        source: 'System',
+        text: reply,
+        severity: 'info'
+    });
+    use_sovereign_store.getState().add_message({
+        sender_id: 'system',
+        sender_name: 'Neural System',
+        text: reply,
+        scope: 'swarm'
+    });
+
+    return { should_clear_logs: false };
 }
 
 

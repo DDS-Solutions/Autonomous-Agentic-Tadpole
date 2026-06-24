@@ -142,6 +142,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/sovereign", build_sovereign_routes())
         .nest("/intelligence", build_intelligence_routes())
         .nest("/knowledge", build_knowledge_routes())
+        .nest("/iacp", build_iacp_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/env-schema", get(routes::env_schema::get_env_schema))
         .route_layer(axum::middleware::from_fn_with_state(
@@ -153,19 +154,19 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
 fn build_sovereign_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route(
-            "/missions/{mission_id}/nodes/{leaf_id}/history",
+            "/missions/{id}/nodes/{leaf_id}/history",
             get(routes::sovereign_state::get_session_history),
         )
         .route(
-            "/missions/{mission_id}/nodes/{node_id}/revert",
+            "/missions/{id}/nodes/{node_id}/revert",
             post(routes::sovereign_state::revert_to_node),
         )
         .route(
-            "/missions/{mission_id}/leaves",
+            "/missions/{id}/leaves",
             get(routes::sovereign_state::get_mission_leaves),
         )
         .route(
-            "/missions/{mission_id}/nodes",
+            "/missions/{id}/nodes",
             post(routes::sovereign_state::append_session_node),
         )
 }
@@ -200,9 +201,9 @@ fn build_agent_routes() -> Router<Arc<AppState>> {
         .route("/{id}/pause", post(routes::agent::pause_agent))
         .route("/{id}/resume", post(routes::agent::resume_agent))
         .route("/{id}/mission", post(routes::agent::sync_mission))
-        .route("/{agent_id}/memories", build_agent_memory_route())
+        .route("/{id}/memories", build_agent_memory_route())
         .route(
-            "/{agent_id}/memories/{row_id}",
+            "/{id}/memories/{row_id}",
             build_agent_memory_delete_route(),
         )
 }
@@ -218,7 +219,7 @@ fn build_oversight_routes() -> Router<Arc<AppState>> {
             get(routes::oversight::get_security_quotas),
         )
         .route(
-            "/security/quotas/{entity_id}",
+            "/security/quotas/{id}",
             put(routes::oversight::update_agent_quota),
         )
         .route(
@@ -326,10 +327,10 @@ fn build_benchmark_routes() -> Router<Arc<AppState>> {
         .route("/", get(routes::benchmarks::get_benchmarks))
         .route("/", post(routes::benchmarks::create_benchmark))
         .route(
-            "/run/{test_id}",
+            "/run/{id}",
             post(routes::benchmarks::trigger_benchmark),
         )
-        .route("/{test_id}", get(routes::benchmarks::get_benchmark_history))
+        .route("/{id}", get(routes::benchmarks::get_benchmark_history))
 }
 
 fn build_continuity_routes() -> Router<Arc<AppState>> {
@@ -395,6 +396,7 @@ fn build_engine_public_routes() -> Router<Arc<AppState>> {
 fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/engine/deploy", post(routes::deploy::trigger_deploy))
+        .route("/engine/pre-pr", post(routes::deploy::trigger_pre_pr))
         .route("/engine/kill", post(routes::engine_control::kill_agents))
         .route(
             "/engine/shutdown",
@@ -421,45 +423,15 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
 // These MethodRouters are conditionally compiled to prevent binary bloat 
 // and runtime panics on low-power nodes without vector-database libraries.
 fn build_agent_memory_route() -> axum::routing::MethodRouter<Arc<AppState>> {
-    #[cfg(feature = "vector-memory")]
-    return get(routes::memory::get_agent_memory).post(routes::memory::save_agent_memory);
-    #[cfg(not(feature = "vector-memory"))]
-    return get(|| async {
-        (
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Vector memory feature disabled",
-        )
-    })
-    .post(|| async {
-        (
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Vector memory feature disabled",
-        )
-    });
+    get(routes::memory::get_agent_memory).post(routes::memory::save_agent_memory)
 }
 
 fn build_agent_memory_delete_route() -> axum::routing::MethodRouter<Arc<AppState>> {
-    #[cfg(feature = "vector-memory")]
-    return axum::routing::delete(routes::memory::delete_agent_memory);
-    #[cfg(not(feature = "vector-memory"))]
-    return axum::routing::delete(|| async {
-        (
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Vector memory feature disabled",
-        )
-    });
+    axum::routing::delete(routes::memory::delete_agent_memory)
 }
 
 fn build_search_memory_route() -> axum::routing::MethodRouter<Arc<AppState>> {
-    #[cfg(feature = "vector-memory")]
-    return get(routes::memory::global_search);
-    #[cfg(not(feature = "vector-memory"))]
-    return get(|| async {
-        (
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Vector memory feature disabled",
-        )
-    });
+    get(routes::memory::global_search)
 }
 
 fn build_knowledge_routes() -> Router<Arc<AppState>> {
@@ -483,6 +455,12 @@ fn build_knowledge_routes() -> Router<Arc<AppState>> {
             "Vector memory feature disabled",
         )
     });
+}
+
+fn build_iacp_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/negotiate", post(routes::iacp::negotiate_hire))
+        .route("/hire", post(routes::iacp::execute_hire))
 }
 
 async fn not_found_handler() -> impl axum::response::IntoResponse {

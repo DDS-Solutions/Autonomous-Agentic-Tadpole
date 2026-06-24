@@ -62,6 +62,8 @@ pub struct AppState {
     pub actors: OnceCell<ActorRegistry>,
     /// Barrier for system boot synchronization.
     pub boot_gate: (tokio::sync::watch::Sender<bool>, tokio::sync::watch::Receiver<bool>),
+    /// Thread-safe pub-sub system event bus.
+    pub event_bus: Arc<crate::system::event_bus::SystemEventBus>,
 }
 
 impl AppState {
@@ -188,6 +190,7 @@ impl AppState {
             base_dir,
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
+            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
         }
     }
 
@@ -318,6 +321,7 @@ impl AppState {
             base_dir,
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
+            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
         };
         state
             .resources
@@ -622,6 +626,7 @@ impl AppState {
             base_dir,
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
+            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
         };
 
         // 🧬 [Evolution] Passive Hot-Reloading Loop
@@ -1239,6 +1244,7 @@ impl Default for AppState {
             base_dir: std::path::PathBuf::from("data"),
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
+            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
         }
     }
 }

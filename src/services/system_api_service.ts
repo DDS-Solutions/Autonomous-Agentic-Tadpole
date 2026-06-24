@@ -634,6 +634,16 @@ export const system_api_service = {
 
             body: JSON.stringify({ repository_url: repository_url, path })
         });
+    },
+
+    /**
+     * pre_pr_engine
+     * Triggers the Pre-PR Quality Gate checks on the backend engine.
+     */
+    pre_pr_engine: async (): Promise<{ status: string, output?: string, error?: string }> => {
+        return api_request<{ status: string, output?: string, error?: string }>('/v1/engine/pre-pr', {
+            method: 'POST'
+        });
     }
 };
 

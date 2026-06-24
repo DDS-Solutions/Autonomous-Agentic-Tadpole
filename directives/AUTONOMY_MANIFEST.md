@@ -32,11 +32,13 @@
     - Potential race conditions in `DashMap` or `Arc` usage.
     - Logic errors in mission state transitions (e.g., missions stuck in `Running`).
 
-2. **[PRIORITY: HIGH] Diagnostic Reporting**: Generate a detailed report file at `G:\Autonomous-Agentic-Tadpole\audit_full_report.md`. 
-    - Each finding must include: **File Path**, **Line Number**, **Failure Mode**, and **Impact Severity**.
-    - Do NOT fix the errors yet; document them for Nexus Engineer review.
+2. **[PRIORITY: HIGH] Hardened Sandbox Verification**: Confirm all dynamic skills execute exclusively inside Docker or Wasm execution environments and verify CPU/memory boundary limits.
 
-3. **[PRIORITY: MED] Codebase Sync**: Verify that the `Hydra-RS` code graph is synchronized with the actual file states in `server-rs/src/system/actors`.
+3. **[PRIORITY: HIGH] Self-Healing Loop Verification**: Validate that benchmark failures autonomously trigger reverts to the last known green state.
+
+4. **[PRIORITY: MED] Cognitive Memory Compressions**: Ensure episodic short-term memories are compiled and compressed by the Cognitive Memory pipeline into long-term knowledge.
+
+5. **[PRIORITY: MED] Proactive Automation Triggers**: Verify system-level file-watchers and compute-profile alerts trigger matching Continuity Jobs.
 
 ## Swarm Constraints
 - **Max Parallel Missions**: 1 (Focused Analysis)

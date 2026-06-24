@@ -20,5 +20,6 @@ pub mod orchestrator;
 pub mod manifest;
 pub mod supervisor;
 pub mod okf_gate;
+pub mod event_bus;
 
 // Metadata: [mod]

@@ -79,13 +79,29 @@ pub async fn get_benchmark_comparison(
 
     Ok(results)
 }
-pub async fn run_benchmark_suite(state: Arc<AppState>, test_id: &str) -> Result<BenchmarkResult, AppError> {
+pub async fn run_benchmark_suite(
+    state: Arc<AppState>,
+    test_id: &str,
+    mission_id: Option<String>,
+    node_id: Option<String>,
+) -> Result<BenchmarkResult, AppError> {
     let pool = &state.resources.pool;
     let mut status = "PASS".to_string();
     let target_value;
     let name;
     let category;
-    let mut metadata = Some("Self-triggered via Dashboard".to_string());
+    
+    let mut meta_obj = serde_json::json!({
+        "trigger": "Self-triggered via Dashboard"
+    });
+    if let Some(ref m_id) = mission_id {
+        meta_obj["mission_id"] = serde_json::json!(m_id);
+    }
+    if let Some(ref n_id) = node_id {
+        meta_obj["node_id"] = serde_json::json!(n_id);
+    }
+    let metadata_str = serde_json::to_string(&meta_obj).unwrap_or_default();
+    let mut metadata = Some(metadata_str);
 
     let start = std::time::Instant::now();
 
@@ -126,7 +142,9 @@ pub async fn run_benchmark_suite(state: Arc<AppState>, test_id: &str) -> Result<
                 limiter.acquire(10).await;
                 limiter.record_usage(10);
             }
-            metadata = Some("100 cycles of acquire/record".to_string());
+            let mut meta_with_cycles = meta_obj.clone();
+            meta_with_cycles["details"] = serde_json::json!("100 cycles of acquire/record");
+            metadata = Some(serde_json::to_string(&meta_with_cycles).unwrap_or_default());
         }
         _ => return Err(AppError::BadRequest(format!("Unknown benchmark test ID: {}", test_id))),
     }
@@ -159,6 +177,47 @@ pub async fn run_benchmark_suite(state: Arc<AppState>, test_id: &str) -> Result<
     };
 
     save_benchmark(pool, result.clone()).await?;
+
+    // Autonomous Self-Healing trigger
+    if result.status == "FAIL" {
+        if let (Some(m_id), Some(n_id)) = (mission_id, node_id) {
+            // Retrieve history to find last known green state
+            if let Ok(history) = state.traverse_session_history_sovereign(&n_id).await {
+                let mut target_node_id = None;
+                for node in history.iter().rev().skip(1) {
+                    if let Some(node_id_str) = node["id"].as_str() {
+                        let has_passed = sqlx::query_scalar::<_, i64>(
+                            "SELECT COUNT(*) FROM benchmarks WHERE status = 'PASS' AND metadata LIKE ?"
+                        )
+                        .bind(format!("%\"node_id\":\"{}\"%", node_id_str))
+                        .fetch_one(&state.resources.pool)
+                        .await
+                        .unwrap_or(0);
+
+                        if has_passed > 0 {
+                            target_node_id = Some(node_id_str.to_string());
+                            break;
+                        }
+                    }
+                }
+
+                if target_node_id.is_none() && history.len() >= 2 {
+                    target_node_id = history[history.len() - 2]["id"].as_str().map(|s| s.to_string());
+                }
+
+                if let Some(target_node) = target_node_id {
+                    tracing::warn!("♻️ [SelfHealing] Autonomously reverting mission {} to last known green node {}", m_id, target_node);
+                    let _ = state.revert_to_node_sovereign(&m_id, &target_node).await;
+                    state.broadcast_sys(
+                        &format!("♻️ [SelfHealing] Autonomously reverted mission to node {}", target_node),
+                        "warning",
+                        Some(m_id.clone()),
+                    );
+                }
+            }
+        }
+    }
+
     Ok(result)
 }
 

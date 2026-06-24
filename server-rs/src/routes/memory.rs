@@ -180,12 +180,32 @@ pub async fn get_agent_memory(
 ) -> Result<impl IntoResponse, AppError> {
     #[cfg(not(feature = "vector-memory"))]
     {
-        let _ = &state;
+        let rows = sqlx::query(
+            "SELECT id, text, mission_id, strftime('%s', created_at) as ts FROM fallback_memories WHERE agent_id = ? ORDER BY created_at DESC"
+        )
+        .bind(&agent_id)
+        .fetch_all(&state.resources.pool)
+        .await
+        .map_err(AppError::Sqlx)?;
+
+        let mut entries = Vec::new();
+        for r in rows {
+            use sqlx::Row;
+            let ts_str: String = r.get("ts");
+            let timestamp = ts_str.parse::<i64>().unwrap_or(0);
+            entries.push(MemoryEntry {
+                id: r.get("id"),
+                text: r.get("text"),
+                mission_id: r.get("mission_id"),
+                timestamp,
+            });
+        }
+
         return Ok((
             StatusCode::OK,
             Json(MemoryResponse {
                 status: "success".to_string(),
-                entries: vec![],
+                entries,
             }),
         ));
     }
@@ -258,7 +278,14 @@ pub async fn delete_agent_memory(
 ) -> Result<impl IntoResponse, AppError> {
     #[cfg(not(feature = "vector-memory"))]
     {
-        let _ = &state;
+        sqlx::query(
+            "DELETE FROM fallback_memories WHERE id = ?"
+        )
+        .bind(&row_id)
+        .execute(&state.resources.pool)
+        .await
+        .map_err(AppError::Sqlx)?;
+
         return Ok((
             StatusCode::OK,
             Json(serde_json::json!({"status": "success"})),
@@ -361,16 +388,26 @@ pub async fn save_agent_memory(
     }
 }
 
-/// POST /v1/agents/:agent_id/memories (Fallback)
 #[cfg(not(feature = "vector-memory"))]
 pub async fn save_agent_memory(
-    Path(_agent_id): Path<String>,
-    State(_state): State<Arc<AppState>>,
-    Json(_payload): Json<SaveMemoryRequest>,
+    Path(agent_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SaveMemoryRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO fallback_memories (id, agent_id, text, mission_id) VALUES (?, ?, ?, 'manual')"
+    )
+    .bind(&id)
+    .bind(&agent_id)
+    .bind(&payload.text)
+    .execute(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
     Ok((
         StatusCode::OK,
-        Json(serde_json::json!({"status": "success", "id": "placeholder"})),
+        Json(serde_json::json!({"status": "success", "id": id})),
     ))
 }
 
@@ -462,18 +499,60 @@ pub async fn global_search(
     ))
 }
 
-/// GET /v1/search/memory (Fallback)
 #[cfg(not(feature = "vector-memory"))]
 pub async fn global_search(
-    State(_state): State<Arc<AppState>>,
-    axum::extract::Query(_params): axum::extract::Query<SearchRequest>,
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<SearchRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    if params.query.is_empty() {
+        return Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "entries": []
+            })),
+        ));
+    }
+
+    let search_pattern = format!("%{}%", params.query);
+    let rows = if let Some(ref m_id) = params.mission_id {
+        sqlx::query(
+            "SELECT id, text, mission_id, strftime('%s', created_at) as ts FROM fallback_memories WHERE (text LIKE ?1) AND (mission_id = ?2) ORDER BY created_at DESC LIMIT 20"
+        )
+        .bind(&search_pattern)
+        .bind(m_id)
+        .fetch_all(&state.resources.pool)
+        .await
+        .map_err(AppError::Sqlx)?
+    } else {
+        sqlx::query(
+            "SELECT id, text, mission_id, strftime('%s', created_at) as ts FROM fallback_memories WHERE text LIKE ? ORDER BY created_at DESC LIMIT 20"
+        )
+        .bind(&search_pattern)
+        .fetch_all(&state.resources.pool)
+        .await
+        .map_err(AppError::Sqlx)?
+    };
+
+    let mut entries = Vec::new();
+    for r in rows {
+        use sqlx::Row;
+        let ts_str: String = r.get("ts");
+        let timestamp = ts_str.parse::<i64>().unwrap_or(0);
+        entries.push(MemoryEntry {
+            id: r.get("id"),
+            text: r.get("text"),
+            mission_id: r.get("mission_id"),
+            timestamp,
+        });
+    }
+
     Ok((
         StatusCode::OK,
-        Json(MemoryResponse {
-            status: "success".to_string(),
-            entries: vec![],
-        }),
+        Json(serde_json::json!({
+            "status": "success",
+            "entries": entries
+        })),
     ))
 }
 

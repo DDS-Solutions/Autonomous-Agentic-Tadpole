@@ -39,10 +39,10 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/agents` | `routes::agent::get_agents` | Protected |
 | `POST` | `/v1/agents` | `routes::agent::create_agent` | Protected |
 | `GET` | `/v1/agents/graph` | `routes::agent::get_swarm_graph_handler` | Protected |
-| `GET` | `/v1/agents/{agent_id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
-| `POST` | `/v1/agents/{agent_id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
-| `DELETE` | `/v1/agents/{agent_id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `PUT` | `/v1/agents/{id}` | `routes::agent::update_agent` | Protected |
+| `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
+| `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
+| `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `POST` | `/v1/agents/{id}/mission` | `routes::agent::sync_mission` | Protected |
 | `POST` | `/v1/agents/{id}/pause` | `routes::agent::pause_agent` | Protected |
 | `POST` | `/v1/agents/{id}/reset` | `routes::agent::reset_agent` | Protected |
@@ -55,8 +55,8 @@ Authorization: Bearer <NEURAL_TOKEN>
 | --- | --- | --- | --- |
 | `GET` | `/v1/benchmarks` | `routes::benchmarks::get_benchmarks` | Protected |
 | `POST` | `/v1/benchmarks` | `routes::benchmarks::create_benchmark` | Protected |
-| `POST` | `/v1/benchmarks/run/{test_id}` | `routes::benchmarks::trigger_benchmark` | Protected |
-| `GET` | `/v1/benchmarks/{test_id}` | `routes::benchmarks::get_benchmark_history` | Protected |
+| `POST` | `/v1/benchmarks/run/{id}` | `routes::benchmarks::trigger_benchmark` | Protected |
+| `GET` | `/v1/benchmarks/{id}` | `routes::benchmarks::get_benchmark_history` | Protected |
 
 ## Continuity
 
@@ -91,6 +91,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/engine/health` | `routes::health::health_check` | Public |
 | `POST` | `/v1/engine/kill` | `routes::engine_control::kill_agents` | Protected |
 | `GET` | `/v1/engine/live-voice` | `routes::ws::live_voice_handler` | Public |
+| `POST` | `/v1/engine/pre-pr` | `routes::deploy::trigger_pre_pr` | Protected |
 | `POST` | `/v1/engine/shutdown` | `routes::engine_control::shutdown_engine` | Protected |
 | `POST` | `/v1/engine/speak` | `routes::audio::text_to_speech` | Protected |
 | `POST` | `/v1/engine/templates/install` | `routes::templates::install_template` | Protected |
@@ -156,7 +157,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/oversight/security/policies` | `routes::oversight::get_policies` | Protected |
 | `PUT` | `/v1/oversight/security/policies` | `routes::oversight::update_policy` | Protected |
 | `GET` | `/v1/oversight/security/quotas` | `routes::oversight::get_security_quotas` | Protected |
-| `PUT` | `/v1/oversight/security/quotas/{entity_id}` | `routes::oversight::update_agent_quota` | Protected |
+| `PUT` | `/v1/oversight/security/quotas/{id}` | `routes::oversight::update_agent_quota` | Protected |
 | `PUT` | `/v1/oversight/settings` | `routes::oversight::update_settings` | Protected |
 | `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected |
 
@@ -186,10 +187,10 @@ Authorization: Bearer <NEURAL_TOKEN>
 
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/v1/sovereign/missions/{mission_id}/leaves` | `routes::sovereign_state::get_mission_leaves` | Protected |
-| `POST` | `/v1/sovereign/missions/{mission_id}/nodes` | `routes::sovereign_state::append_session_node` | Protected |
-| `GET` | `/v1/sovereign/missions/{mission_id}/nodes/{leaf_id}/history` | `routes::sovereign_state::get_session_history` | Protected |
-| `POST` | `/v1/sovereign/missions/{mission_id}/nodes/{node_id}/revert` | `routes::sovereign_state::revert_to_node` | Protected |
+| `GET` | `/v1/sovereign/missions/{id}/leaves` | `routes::sovereign_state::get_mission_leaves` | Protected |
+| `POST` | `/v1/sovereign/missions/{id}/nodes` | `routes::sovereign_state::append_session_node` | Protected |
+| `GET` | `/v1/sovereign/missions/{id}/nodes/{leaf_id}/history` | `routes::sovereign_state::get_session_history` | Protected |
+| `POST` | `/v1/sovereign/missions/{id}/nodes/{node_id}/revert` | `routes::sovereign_state::revert_to_node` | Protected |
 
 ## System
 

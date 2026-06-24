@@ -267,7 +267,7 @@ export const agent_api_service = {
         while (Date.now() - start_time < timeout_ms) {
             try {
                 const trail = await system_api_service.get_audit_trail(1, 10);
-                const entry = trail.data.find(e => e.id === request_id || (e as any).request_id === request_id);
+                const entry = trail.data.find(e => e.id === request_id || (e as { request_id?: string }).request_id === request_id);
                 
                 if (entry) {
                     if (entry.status === 'success' || entry.status === 'completed') return 'success';

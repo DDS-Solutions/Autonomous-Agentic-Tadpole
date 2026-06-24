@@ -29,9 +29,9 @@ pub mod env_schema;
 pub mod health;
 pub mod intelligence;
 pub mod mcp;
-#[cfg(feature = "vector-memory")]
 pub mod memory;
 pub mod model_manager;
+pub mod iacp;
 pub mod nodes;
 pub mod oversight;
 pub mod pagination;

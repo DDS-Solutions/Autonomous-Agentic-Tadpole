@@ -66,6 +66,47 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
 
     tracing::info!("✅ Database migrations applied successfully");
 
+    // Create fallback_memories table if not exists for non-vector-memory builds
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS fallback_memories (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            text TEXT NOT NULL,
+            mission_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+         )"
+    )
+    .execute(&pool)
+    .await?;
+
+    // Create agent_hires table for Inter-Agent Communication Protocol (IACP)
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agent_hires (
+            id TEXT PRIMARY KEY,
+            hiring_agent_id TEXT NOT NULL,
+            target_agent_id TEXT NOT NULL,
+            budget REAL NOT NULL,
+            task_description TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+         )"
+    )
+    .execute(&pool)
+    .await?;
+
+    // Create event_triggers table for Event-Driven Proactive Automation
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS event_triggers (
+            id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            event_filter TEXT,
+            continuity_job_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+         )"
+    )
+    .execute(&pool)
+    .await?;
+
     // Seed baseline entities if the DB is fresh and NOT explicitly skipping
     // skip_seed is handled by checking a thread-local or environment variable for flexibility
     let skip_seed = std::env::var("SKIP_DB_SEED").map(|v| v == "true").unwrap_or(false);

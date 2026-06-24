@@ -20,8 +20,9 @@
 > [!IMPORTANT]
 > **AI Assist Note (Memory Logic)**:
 > This document governs the "Split-Brain" architecture of Tadpole OS.
-> - **Primary Core**: SQLite handles relational metadata and logs.
-> - **Neural Core**: LanceDB handles vector embeddings (Semantic Recall).
+> - **Primary Core**: SQLite handles relational metadata, logs, and fallback memories for non-vector builds.
+> - **Neural Core**: LanceDB handles vector embeddings (Semantic Recall) when enabled.
+> - **Cognitive Core**: The Tiered Memory Controller runs background compression, summarizing episodic memories into semantic knowledge.
 > - **Sync Policy**: All writes are debounced (10s) via `memory.rs`.
 
 ---
@@ -32,12 +33,14 @@
 graph LR
     Event["New Insight (Event)"]
     Embed["Vectorize (Embedding)"]
-    Store["LanceDB (Storage)"]
-    Search["Cosine Search (Retrieval)"]
+    Store["LanceDB/SQLite (Storage)"]
+    Compress["Cognitive Compression (summarization/clustering)"]
+    Search["Cosine/Text Search (Retrieval)"]
     Rerank["Heuristic Rerank (Context)"]
 
     Event --> Embed
     Embed --> Store
+    Store --> Compress
     Store -- "Query" --> Search
     Search --> Rerank
 ```
@@ -46,23 +49,12 @@ graph LR
 
 # Long-Term Memory (Persistent Ledger)
 
-Last Updated: 2026.02.27
+Last Updated: 2026.06.24
 
 ## Key Learnings
-- **Sovereign Execution Capabilities**: The agent is now fully authorized and capable of executing builds, running audit scripts, and performing architectural hardening directly within the Tadpole OS environment (Verification: Successful execution of `parity_guard.py`, `awaken.py`, and `sovereign_audit.py`).
-- **High-Fidelity Context Retention**: Through the AI Awakening protocol, all core files now provide explicit architectural metadata to maintain consistent agent reasoning over long-term missions.
-- **Master Release Gate**: The `sovereign_audit.py` script is now the source of truth for repository integrity.
+- **Tiered Cognitive Memory pipeline**: Memory is no longer just a plugin, but the spine of the OS. Short-term episodic memories are monitored and compressed into long-term knowledge using background summarization and clustering, triggered automatically based on configurable thresholds.
+- **SQLite Fallback Memories**: If the `vector-memory` feature is disabled, the OS falls back to a relational SQLite-based memory table (`fallback_memories`), enabling query and search capabilities without LanceDB.
 - **Optimized Symbol Graph Engine**: The Code Graph `/v1/intelligence/graph` and `/v1/intelligence/blast-radius` REST APIs are fully optimized, secure, and ready at start. Edge compilation features an $O(N + M)$ HashMap name lookup index, traversals utilize zero-copy BFS logic to remove heap allocator pressure, and queries incorporate salted folder-path obfuscation to prevent structural exposure (Verification: 100% passing test parity suite and sovereign audit compliance).
-
-* **API Integration**: Leverage existing weather APIs for efficient data retrieval (Verification: Successful mission completion using API data)
-* **Geolocation Handling**: Validate and standardize zipcode inputs for accurate location-based queries (Verification: Correct weather report for zipcode 19702)
-* **Data Parsing**: Implement robust parsing mechanisms to extract relevant weather data from API responses (Verification: Accurate extraction of current condition and temperature)
-* **Error Handling**: Implement comprehensive error handling to ensure mission success despite potential API or data inconsistencies (Verification: No errors reported during mission execution)
-* **Response Formatting**: Utilize standardized output formats for clear and concise mission summaries (Verification: Successful generation of **FINAL SUMMARY** section)
-
-- **Bunker Deployment**: Filesystem access is preferred over external DBs for air-gapped stability.
-- **Agent Handoffs**: CEO-to-Alpha handoffs require explicit reasoning protocol injection.
-- **Hook Registry**: Pre-tool hooks are mandatory for security auditing.
 
 ## Session Markers
 - Initializing high-security agentOS enhancements.

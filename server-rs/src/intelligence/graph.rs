@@ -140,7 +140,7 @@ pub struct DefaultKeyNormalizer;
 
 impl KeyNormalizer for DefaultKeyNormalizer {
     fn normalize_key(&self, path: &str, name: &str) -> String {
-        let clean_path = path.replace('\0', "_");
+        let clean_path = path.replace('\\', "/").replace('\0', "_");
         let clean_name = name.replace('\0', "_");
         format!("{clean_path}\0{clean_name}")
     }
@@ -573,12 +573,52 @@ impl GraphSynthesizer for GraphSynthesisEngine {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct GraphConfig {
+    pub excluded_symbols: Vec<String>,
+    pub excluded_paths: Vec<String>,
+}
+
+impl Default for GraphConfig {
+    fn default() -> Self {
+        Self {
+            excluded_symbols: vec![
+                "get".to_string(), "set".to_string(), "has".to_string(),
+                "deleteProperty".to_string(), "ownKeys".to_string(),
+                "getOwnPropertyDescriptor".to_string(), "defineProperty".to_string(),
+                "preventExtensions".to_string(), "isExtensible".to_string(),
+                "getPrototypeOf".to_string(), "setPrototypeOf".to_string(),
+                "apply".to_string(), "construct".to_string(),
+                "constructor".to_string(), "toString".to_string(),
+                "valueOf".to_string(), "toJSON".to_string(),
+                "render".to_string(), "componentDidMount".to_string(),
+                "componentDidUpdate".to_string(), "componentWillUnmount".to_string(),
+                "shouldComponentUpdate".to_string(), "getDerivedStateFromProps".to_string(),
+                "getDerivedStateFromError".to_string(), "componentDidCatch".to_string(),
+                "Workspace_Status".to_string()
+            ],
+            excluded_paths: vec![
+                "server-rs".to_string(),
+                "src-tauri".to_string(),
+                "wasm-codec".to_string(),
+                "scratch".to_string(),
+                "generated".to_string(),
+                "contracts".to_string(),
+                "test".to_string(),
+                "tests".to_string(),
+                "__tests__".to_string(),
+            ],
+        }
+    }
+}
+
 /// The core Knowledge Graph engine.
 pub struct CodeSymbolGraph {
     pub graph: DiGraph<SymbolNode, SymbolEdge>,
     pub index: HashMap<String, NodeIndex>, // key: path + "\0" + name
     pub obfuscated_to_real_path: HashMap<String, String>,
     pub repository: GraphStateRepository,
+    pub config: GraphConfig,
     root: PathBuf,
 }
 
@@ -590,6 +630,7 @@ impl CodeSymbolGraph {
             index: HashMap::new(),
             obfuscated_to_real_path: HashMap::new(),
             repository: GraphStateRepository::default(),
+            config: GraphConfig::default(),
             root,
         }
     }
@@ -644,22 +685,6 @@ impl CodeSymbolGraph {
     pub fn find_anomalies(&self) -> Vec<String> {
         let mut anomalies = Vec::new();
 
-        // Skip Proxy traps and standard built-ins/lifecycles
-        static IGNORED_SYMBOL_NAMES: &[&str] = &[
-            // Proxy traps
-            "get", "set", "has", "deleteProperty", "ownKeys",
-            "getOwnPropertyDescriptor", "defineProperty", "preventExtensions",
-            "isExtensible", "getPrototypeOf", "setPrototypeOf", "apply", "construct",
-            // Standard built-ins / overrides
-            "constructor", "toString", "valueOf", "toJSON",
-            // React Component Lifecycle / standard methods
-            "render", "componentDidMount", "componentDidUpdate", "componentWillUnmount",
-            "shouldComponentUpdate", "getDerivedStateFromProps", "getDerivedStateFromError",
-            "componentDidCatch",
-            // Workspace / Oversight
-            "Workspace_Status"
-        ];
-
         for idx in self.graph.node_indices() {
             if let Some(node) = self.graph.node_weight(idx) {
                 let real_path = self
@@ -684,15 +709,7 @@ impl CodeSymbolGraph {
                 let path_obj = Path::new(real_path);
                 let has_excluded_component = path_obj.components().any(|c| {
                     let name = c.as_os_str().to_string_lossy();
-                    name == "server-rs"
-                        || name == "src-tauri"
-                        || name == "wasm-codec"
-                        || name == "scratch"
-                        || name == "generated"
-                        || name == "contracts"
-                        || name == "test"
-                        || name == "tests"
-                        || name == "__tests__"
+                    self.config.excluded_paths.iter().any(|p| name == *p)
                 });
                 if has_excluded_component {
                     continue;
@@ -706,7 +723,7 @@ impl CodeSymbolGraph {
                     continue;
                 }
 
-                if IGNORED_SYMBOL_NAMES.contains(&node.name.as_str())
+                if self.config.excluded_symbols.contains(&node.name)
                     || node.kind == "module"
                     || node.name == "__module__"
                 {
@@ -745,15 +762,20 @@ impl CodeSymbolGraph {
         anomalies
     }
 
+    /// Helper to resolve a path that could be real (raw) or obfuscated, with normalisation.
+    fn resolve_path(&self, path: &str) -> String {
+        let normalized = path.replace('\\', "/");
+        self.obfuscated_to_real_path
+            .get(&normalized)
+            .cloned()
+            .unwrap_or(normalized)
+    }
+
     /// Calculates the "Blast Radius" for a given symbol.
     /// Returns a list of symbols that directly or indirectly depend on it.
     pub fn calculate_blast_radius(&self, symbol_name: &str, path: &str) -> Vec<SymbolNode> {
-        let real_path = self
-            .obfuscated_to_real_path
-            .get(path)
-            .map(|p| p.as_str())
-            .unwrap_or(path);
-        let key = index_key(real_path, symbol_name);
+        let real_path = self.resolve_path(path);
+        let key = index_key(&real_path, symbol_name);
         let mut affected = Vec::new();
 
         if let Some(&start_idx) = self.index.get(&key) {
@@ -795,10 +817,11 @@ impl CodeSymbolGraph {
     /// Prioritizes the target symbol, then walks backwards through the dependency graph (incoming edges)
     /// to add callers until the token budget is reached.
     pub fn resolve_context(&self, symbol_name: &str, path: &str, budget: usize) -> Vec<SymbolNode> {
-        let normalized_path = path.replace('\\', "/");
-        let key = index_key(&normalized_path, symbol_name);
+        let real_path = self.resolve_path(path);
+        let key = index_key(&real_path, symbol_name);
         let mut results = Vec::new();
         let mut accumulated_tokens = 0;
+        let bpe = tiktoken_rs::cl100k_base().ok();
 
         if let Some(&start_idx) = self.index.get(&key) {
             let start_node = &self.graph[start_idx];
@@ -808,10 +831,19 @@ impl CodeSymbolGraph {
             let mut start_clone = start_node.clone();
             
             if start_tokens > budget {
-                // Truncate signature to fit budget
-                let budget_chars = budget * 4;
-                if start_clone.signature.len() > budget_chars {
-                    start_clone.signature = format!("{}...", &start_clone.signature[..budget_chars]);
+                // Truncate signature to fit budget using BPE tokenizer if available
+                if let Some(ref tokenizer) = bpe {
+                    let tokens = tokenizer.encode_with_special_tokens(&start_clone.signature);
+                    if tokens.len() > budget {
+                        if let Ok(truncated_text) = tokenizer.decode(&tokens[..budget]) {
+                            start_clone.signature = format!("{}...", truncated_text);
+                        }
+                    }
+                } else {
+                    let budget_chars = budget * 4;
+                    if start_clone.signature.len() > budget_chars {
+                        start_clone.signature = format!("{}...", &start_clone.signature[..budget_chars]);
+                    }
                 }
                 results.push(start_clone);
                 return results;
@@ -819,7 +851,7 @@ impl CodeSymbolGraph {
 
             results.push(start_clone);
             accumulated_tokens += start_tokens;
-
+            
             // BFS for callers
             let mut visited = std::collections::HashSet::new();
             let mut queue = std::collections::VecDeque::new();

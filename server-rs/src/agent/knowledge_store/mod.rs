@@ -24,6 +24,7 @@
 pub mod types;
 pub mod store;
 pub mod search;
+pub mod cognitive_memory;
 
 #[cfg(test)]
 pub mod tests;

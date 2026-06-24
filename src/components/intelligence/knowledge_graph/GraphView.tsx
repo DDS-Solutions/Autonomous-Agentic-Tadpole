@@ -102,7 +102,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
     return (
         <ForceGraph2D
-            ref={fg_ref as any}
+            ref={fg_ref as unknown as React.RefObject<ForceGraphMethods<ExtendedGraphNode, ForceGraphLink>>}
             graphData={graph_data}
             nodeCanvasObject={node_canvas_object}
             nodePointerAreaPaint={(node: ExtendedGraphNode, color, ctx) => {

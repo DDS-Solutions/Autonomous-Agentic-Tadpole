@@ -132,7 +132,7 @@ export const KnowledgeGraph: React.FC = () => {
         if (!data) return { nodes: [], links: [] };
 
         const nodes: ExtendedGraphNode[] = data.nodes.map(node => {
-            const id = view_mode === 'okf' ? (node as any).id : `${node.path}:${node.name}`;
+            const id = view_mode === 'okf' ? (node as { id?: string }).id || '' : `${node.path}:${node.name}`;
             return {
                 ...node,
                 id,

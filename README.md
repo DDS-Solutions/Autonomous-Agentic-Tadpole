@@ -61,6 +61,11 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Institutional Knowledge Store (IKS)**: Provides cross-cluster, persistent semantic memory backed by local SQLite databases and optional LanceDB vectors, complete with TTL evictions and time-aware confidence decay.
 - **Unified Graph Analysis**: Implements off-thread, lock-protected codebase dependency tracking with O(1) reverse-obfuscated path lookup for secure blast-radius calculations.
 - **Modular Sovereign UI Layouts**: Refactored the monolithic chat console into highly cohesive frontend sub-components and specialized React hooks.
+- **Automated Self-Healing State Reversion**: Integrates benchmark telemetry with sovereign time-travel state rollbacks, autonomously reverting missions to the last known green state on regression.
+- **Hardened Sandboxed Execution**: Spawns dynamic agent-generated skills inside secure WebAssembly (Wasmtime) or Docker micro-containers with strict CPU/memory limits and filesystem token isolation.
+- **Tiered Cognitive Memory consolidation**: Consolidates episodic short-term memories into semantic long-term knowledge via a background summarization loop, with a fully database-backed SQLite fallback when vector features are disabled.
+- **Inter-Agent Communication Protocol (IACP)**: Enables agents to negotiate tasks, delegate sub-tasks, peer-review skills, and transfer operational micro-budgets.
+- **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
 ## System At A Glance
