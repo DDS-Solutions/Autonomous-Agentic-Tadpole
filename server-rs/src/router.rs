@@ -207,7 +207,24 @@ fn build_agent_routes() -> Router<Arc<AppState>> {
             "/{id}/memories/{row_id}",
             build_agent_memory_delete_route(),
         )
+        // ── Open Engine P0: Status Ledger ─────────────────────────────────
+        .route(
+            "/{id}/status-ledger",
+            get(routes::open_engine::get_status_ledger)
+                .put(routes::open_engine::update_status_ledger),
+        )
+        // ── Open Engine P0: Task Claim Lock ───────────────────────────────
+        .route(
+            "/{id}/tasks/{task_id}/claim",
+            post(routes::open_engine::claim_task),
+        )
+        // ── Open Engine P0: Receipt Vocabulary ────────────────────────────
+        .route(
+            "/{id}/tasks/{task_id}/receipts",
+            post(routes::open_engine::post_receipt),
+        )
 }
+
 
 fn build_oversight_routes() -> Router<Arc<AppState>> {
     Router::new()

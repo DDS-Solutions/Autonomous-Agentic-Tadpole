@@ -58,6 +58,10 @@
 | `GET` | `/v1/agents/:id/memory` | Get agent memories |
 | `DELETE` | `/v1/agents/:id/memory` | Clear agent memories |
 | `GET` | `/v1/agents/graph` | Agent relationship graph |
+| `GET` | `/v1/agents/:id/status-ledger` | Get agent living status document |
+| `PUT` | `/v1/agents/:id/status-ledger` | Update status ledger / heartbeat |
+| `POST` | `/v1/agents/:id/tasks/:task_id/claim` | Atomically claim a task for this agent |
+| `POST` | `/v1/agents/:id/tasks/:task_id/receipts` | Post state transition receipt |
 
 ---
 

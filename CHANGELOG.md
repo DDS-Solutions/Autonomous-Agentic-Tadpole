@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.59] - 2026-06-26
+
+### Added — Agentic Engine P0: Agent Coordination Primitives
+
+Inspired by a deep-dive analysis of [unlock-ai.natebjones.com/open-engine](https://unlock-ai.natebjones.com/open-engine). Three foundational P0 improvements that bring production-grade multi-agent coordination semantics to A-A Tadpole:
+
+- **Task Claim Lock** (`POST /v1/agents/:id/tasks/:task_id/claim`): Atomic `claimed_by` compare-and-swap prevents two agents from double-claiming the same task. Returns `409 Conflict` if already claimed. New `claimed_by`, `claimed_at` columns on `agent_tasks`.
+- **Receipt Vocabulary System** (`POST /v1/agents/:id/tasks/:task_id/receipts`): Standardized machine-readable state tokens — `CLAIMED`, `DONE`, `BLOCKED`, `HUMAN_HOLD`, `UNBLOCKED`, `RESUMED`, `FAILED`, `REVIEW`, `SKILL_SUBSCRIBED`, `SKILL_UPDATED`, `FOLLOW_UP` — with automatic status transitions, `receipt_history` JSON trail, and real-time WebSocket events on each receipt.
+- **Status Ledger** (`GET/PUT /v1/agents/:id/status-ledger`): Per-agent living operational status document. Updated in-place on every task claim, receipt, and heartbeat. Surfaces: `last_queue_result`, `last_task_id`, `automation_state`, `context_version`, `subscribed_skills`, and `last_heartbeat`. Upserted on first access.
+- **`agent_status_ledger` table**: Durable per-agent ledger persisted in SQLite — `automation_state`, `last_heartbeat`, `context_packet`, `subscribed_skills`, `notes`.
+- **`skill_subscriptions` table**: Foundation for P1 skill approval lifecycle — `agent_id`, `skill_id`, `scope_hash` (SHA-256 of approved capability surface), `subscription_status` (`pending` / `approved` / `pending_reapproval` / `declined`).
+- **Blocked vs Human-Hold Distinction**: `block_type` column on `agent_tasks` differentiates inline blockers (answer on task thread) from `human_hold` blockers (out-of-band operator decision).
+- **Token Accounting columns** (P2 schema pre-provision): `tokens_in`, `tokens_out`, `cost_usd`, `provider_id` on `agent_tasks` for future burn-rate analysis.
+
+### Added
+- `server-rs/src/routes/open_engine.rs` — new route module with 5 handlers + helpers
+- `server-rs/migrations/20260627000100_open_engine_p0.sql` — migration for all new tables/columns
+
+### Changed
+- `server-rs/src/router.rs` — `build_agent_routes()` extended with 3 new route groups
+- `server-rs/src/routes/mod.rs` — registered `pub mod open_engine`
+
+---
+
 ## [1.1.58] - 2026-06-26
 
 ### Added

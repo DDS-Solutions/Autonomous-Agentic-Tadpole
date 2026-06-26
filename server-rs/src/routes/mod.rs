@@ -43,6 +43,7 @@ pub mod governance;
 #[cfg(feature = "vector-memory")]
 pub mod knowledge;
 pub mod sovereign_state;
+pub mod open_engine;
 
 #[cfg(test)]
 mod agent_tests;
@@ -60,6 +61,8 @@ mod token_rotation_tests;
 mod health_endpoint_tests;
 #[cfg(test)]
 mod shutdown_orchestrator_tests;
+#[cfg(test)]
+mod open_engine_tests;
 
 // Metadata: [mod]
 
