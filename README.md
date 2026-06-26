@@ -23,7 +23,7 @@
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
 [![SQLite](https://img.shields.io/badge/SQLite-SQLx-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
-[Quick Start](#quick-start) • [Architecture](#architecture) • [API](#api) • [Configuration](#configuration) • [Verification](#verification)
+[Quick Start](#quick-start) • [Architecture](#architecture) • [API](#api) • [Configuration](#configuration) • [Verification](#verification) • [📚 Wiki](wiki/Home.md)
 
 </div>
 
@@ -360,6 +360,23 @@ Python-side verification utilities:
 | OpenAPI | `docs/openapi.yaml` |
 | Security | `docs/SECURITY.md` |
 | System map | `SYSTEM_MAP.md` |
+
+## 📚 Wiki
+
+The `wiki/` directory contains a comprehensive knowledge base designed for developers and operators:
+
+| Page | Description |
+|------|-------------|
+| [🏠 Home](wiki/Home.md) | Overview, system diagram, quick-start TL;DR |
+| [🚀 Getting Started](wiki/Getting-Started.md) | Prerequisites, install, first run, Windows shortcuts |
+| [🏗️ Architecture](wiki/Architecture.md) | Engine boot, AppState hubs, router stack, agent pipeline, repo map |
+| [📡 API Reference](wiki/API-Reference.md) | All 50+ REST/WebSocket endpoints with schemas |
+| [⚙️ Configuration](wiki/Configuration.md) | Every env var, Cargo feature flag, and provider key |
+| [🔐 Security Model](wiki/Security-Model.md) | Auth, token rotation, MCP sandboxing, audit trail, budget guard |
+| [🏥 Operations Manual](wiki/Operations-Manual.md) | Backup/restore, token rotation runbook, Grafana, GDPR, shutdown |
+| [🧪 Testing Guide](wiki/Testing-Guide.md) | Rust/Python/React test suites, CI, common pitfalls |
+| [💻 Development Guide](wiki/Development-Guide.md) | Local dev setup, conventions, adding endpoints, migrations |
+| [🔧 Troubleshooting](wiki/Troubleshooting.md) | 12 common issues with exact step-by-step fixes |
 
 ## Recent Upgrades (v1.1.58) — Operational Hardening
 
