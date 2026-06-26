@@ -1,9 +1,9 @@
-//! Open Engine P0: Status Ledger, Receipt System, Task Claim Lock
+//! Agentic Engine P0: Status Ledger, Receipt System, Task Claim Lock
 //!
-//! @docs ARCHITECTURE:OpenEngine
+//! @docs ARCHITECTURE:AgenticEngine
 //!
 //! ### AI Assist Note
-//! Implements the three P0 improvements from the Open Engine framework:
+//! Implements the three P0 improvements from the Agentic Engine framework:
 //!
 //! 1. **Status Ledger** — per-agent living operational status (GET/PUT)
 //! 2. **Receipt System** — standardized task state tokens (POST /receipts)
@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 // ─── Receipt Types ────────────────────────────────────────────────────────────
 
-/// Standardized receipt vocabulary from the Open Engine coordination framework.
+/// Standardized receipt vocabulary from the Agentic Engine coordination framework.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReceiptType {

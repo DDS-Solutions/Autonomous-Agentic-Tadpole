@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — Agentic Engine P0: Agent Coordination Primitives
 
-Inspired by a deep-dive analysis of [unlock-ai.natebjones.com/open-engine](https://unlock-ai.natebjones.com/open-engine). Three foundational P0 improvements that bring production-grade multi-agent coordination semantics to A-A Tadpole:
+ Three foundational P0 improvements that bring production-grade multi-agent coordination semantics to A-A Tadpole:
 
 - **Task Claim Lock** (`POST /v1/agents/:id/tasks/:task_id/claim`): Atomic `claimed_by` compare-and-swap prevents two agents from double-claiming the same task. Returns `409 Conflict` if already claimed. New `claimed_by`, `claimed_at` columns on `agent_tasks`.
 - **Receipt Vocabulary System** (`POST /v1/agents/:id/tasks/:task_id/receipts`): Standardized machine-readable state tokens — `CLAIMED`, `DONE`, `BLOCKED`, `HUMAN_HOLD`, `UNBLOCKED`, `RESUMED`, `FAILED`, `REVIEW`, `SKILL_SUBSCRIBED`, `SKILL_UPDATED`, `FOLLOW_UP` — with automatic status transitions, `receipt_history` JSON trail, and real-time WebSocket events on each receipt.
@@ -22,12 +22,12 @@ Inspired by a deep-dive analysis of [unlock-ai.natebjones.com/open-engine](https
 - **Token Accounting columns** (P2 schema pre-provision): `tokens_in`, `tokens_out`, `cost_usd`, `provider_id` on `agent_tasks` for future burn-rate analysis.
 
 ### Added
-- `server-rs/src/routes/open_engine.rs` — new route module with 5 handlers + helpers
-- `server-rs/migrations/20260627000100_open_engine_p0.sql` — migration for all new tables/columns
+- `server-rs/src/routes/agentic_engine.rs` — new route module with 5 handlers + helpers
+- `server-rs/migrations/20260627000100_agentic_engine_p0.sql` — migration for all new tables/columns
 
 ### Changed
 - `server-rs/src/router.rs` — `build_agent_routes()` extended with 3 new route groups
-- `server-rs/src/routes/mod.rs` — registered `pub mod open_engine`
+- `server-rs/src/routes/mod.rs` — registered `pub mod agentic_engine`
 
 ---
 

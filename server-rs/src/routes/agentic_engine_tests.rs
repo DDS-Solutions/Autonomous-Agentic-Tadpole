@@ -1,8 +1,8 @@
-//! Open Engine Primitives - Integration Verification Suite
+//! Agentic Engine Primitives - Integration Verification Suite
 //!
 //! Integration tests for Status Ledger, Receipt system, and Task Claim Lock.
 //!
-//! @docs ARCHITECTURE:OpenEngine
+//! @docs ARCHITECTURE:AgenticEngine
 //!
 //! ### AI Assist Note
 //! **Verification Strategy**: Uses `tower::ServiceExt` for in-memory request
@@ -22,7 +22,7 @@ use tower::ServiceExt;
 use crate::{
     routes::{
         agent::create_agent,
-        open_engine::{claim_task, get_status_ledger, post_receipt, update_status_ledger},
+        agentic_engine::{claim_task, get_status_ledger, post_receipt, update_status_ledger},
     },
     state::AppState,
 };
@@ -31,7 +31,7 @@ async fn test_app() -> (Router, Arc<AppState>) {
     let app_state = Arc::new(
         AppState::new()
             .await
-            .expect("Failed to initialize state for open engine tests"),
+            .expect("Failed to initialize state for agentic engine tests"),
     );
 
     let app = Router::new()
@@ -67,10 +67,10 @@ async fn test_status_ledger_lifecycle() {
     let (app, state) = test_app().await;
 
     // 1. Create an agent first (so references check out)
-    let agent_id = "agent-open-123";
+    let agent_id = "agent-agentic-123";
     let payload = json!({
         "id": agent_id,
-        "name": "Open Engine Agent",
+        "name": "Agentic Engine Agent",
         "role": "Coordinator",
         "department": "Orchestration",
         "description": "Test Agent for status ledger",
@@ -125,7 +125,7 @@ async fn test_status_ledger_lifecycle() {
     let update_payload = json!({
         "automationState": "installed",
         "lastQueueResult": "checking",
-        "notes": "Running open engine verify"
+        "notes": "Running agentic engine verify"
     });
 
     let req = Request::builder()
@@ -154,7 +154,7 @@ async fn test_status_ledger_lifecycle() {
     let ledger: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(ledger["automationState"], "installed");
     assert_eq!(ledger["lastQueueResult"], "checking");
-    assert_eq!(ledger["notes"], "Running open engine verify");
+    assert_eq!(ledger["notes"], "Running agentic engine verify");
 }
 
 #[tokio::test]

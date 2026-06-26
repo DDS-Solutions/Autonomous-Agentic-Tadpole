@@ -1,7 +1,7 @@
--- Migration: Open Engine P0 — Status Ledger, Receipt System, Task Claim Lock
--- @docs ARCHITECTURE:OpenEngine
+-- Migration: Agentic Engine P0 — Status Ledger, Receipt System, Task Claim Lock
+-- @docs ARCHITECTURE:AgenticEngine
 --
--- Adds three P0 improvements inspired by the Open Engine coordination framework:
+-- Adds three P0 improvements inspired by the Agentic Engine coordination framework:
 --
 -- 1. TASK CLAIM LOCK: claimed_by / claimed_at prevent double-claim by concurrent agents
 -- 2. RECEIPT SYSTEM: standardized state tokens (CLAIMED, DONE, BLOCKED, HUMAN_HOLD, etc.)
