@@ -42,7 +42,9 @@
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs",
     "docs:preview": "vitepress preview docs",
-    "version:sync": "python execution/sync_version.py"
+    "version:sync": "python execution/sync_version.py",
+    "db:backup": "python execution/backup_sqlite.py",
+    "db:restore": "python execution/restore_sqlite.py"
   },
   "dependencies": {
     "@emnapi/core": "^1.10.0",

@@ -187,6 +187,66 @@ impl<'a> tracing::field::Visit for FieldVisitor<'a> {
     }
 }
 
-// Metadata: [mod]
+pub static TOOL_LATENCY_P50: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tool_latency_p50", "The p50 tool execution latency in milliseconds")
+        .expect("metric can be created")
+});
+
+pub static TOOL_LATENCY_P95: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tool_latency_p95", "The p95 tool execution latency in milliseconds")
+        .expect("metric can be created")
+});
+
+pub static TOOL_LATENCY_P99: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tool_latency_p99", "The p99 tool execution latency in milliseconds")
+        .expect("metric can be created")
+});
+
+pub static TOOL_LATENCY_SAMPLE_COUNT: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!(
+        "tool_latency_sample_count",
+        "The number of tool execution latency samples in the sliding window"
+    )
+    .expect("metric can be created")
+});
+
+pub static TADPOLE_ACTIVE_AGENTS: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tadpole_active_agents", "The number of active agent nodes in the registry")
+        .expect("metric can be created")
+});
+
+pub static TADPOLE_HEALTH_STATE: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tadpole_health_state", "The current health state of the engine (0=Degraded, 1=Warming, 2=Ready)")
+        .expect("metric can be created")
+});
+
+pub static TADPOLE_MAX_SWARM_DEPTH: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tadpole_max_swarm_depth", "The maximum recursion depth of the swarm")
+        .expect("metric can be created")
+});
+
+pub static TADPOLE_TPM_ACCUMULATOR: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tadpole_tpm_accumulator", "The accumulated tokens per minute of the swarm")
+        .expect("metric can be created")
+});
+
+pub static TADPOLE_RECRUIT_COUNT: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("tadpole_recruit_count", "The total count of recruited agents")
+        .expect("metric can be created")
+});
+
+/// Forces evaluation and registration of all Prometheus metrics.
+pub fn init_prometheus_metrics() {
+    Lazy::force(&TOOL_LATENCY_P50);
+    Lazy::force(&TOOL_LATENCY_P95);
+    Lazy::force(&TOOL_LATENCY_P99);
+    Lazy::force(&TOOL_LATENCY_SAMPLE_COUNT);
+    Lazy::force(&TADPOLE_ACTIVE_AGENTS);
+    Lazy::force(&TADPOLE_HEALTH_STATE);
+    Lazy::force(&TADPOLE_MAX_SWARM_DEPTH);
+    Lazy::force(&TADPOLE_TPM_ACCUMULATOR);
+    Lazy::force(&TADPOLE_RECRUIT_COUNT);
+}
 
 // Metadata: [mod]
+

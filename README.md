@@ -258,6 +258,8 @@ Common environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NEURAL_TOKEN` | Required | Bearer token for protected API routes |
+| `NEURAL_TOKEN_OLD` | Optional | Previous token kept valid during zero-downtime rotation |
+| `NEURAL_TOKEN_NEW` | Optional | Replacement token staged during rotation grace window |
 | `NEURAL_ENGINE_ACCESS_TOKEN` | Required alternative | Alternate auth token accepted by the engine |
 | `ALLOWED_ORIGINS` | Local dev origins | Comma-separated origin allow-list; use `*` only for wildcard troubleshooting with credentials disabled |
 | `PORT` | `8000` | Engine port |
@@ -272,7 +274,6 @@ Common environment variables:
 | `TADPOLE_ALLOW_LOCAL_HTTP` | unset | Allows insecure local HTTP model-provider calls when set |
 | `TADPOLE_NULL_PROVIDERS` | unset | Forces null providers for tests and integration runs |
 | `DISABLE_TELEMETRY` | `false` | Disables OpenTelemetry stdout exporter when `true` |
-| `OLLAMA_HOST` | `http://localhost:11434` in `.env.example` | Ollama provider endpoint |
 
 Provider keys supported by `.env.example`:
 
@@ -373,7 +374,41 @@ Python-side verification utilities:
 | Security | `docs/SECURITY.md` |
 | System map | `SYSTEM_MAP.md` |
 
-## Recent Upgrades (v1.1.57)
+## Recent Upgrades (v1.1.58) — Operational Hardening
+
+### 🔒 Security & Credential Management
+- **Zero-Downtime Token Rotation**: Auth middleware now supports dual-token validation via `NEURAL_TOKEN_OLD` / `NEURAL_TOKEN_NEW` env vars, enabling safe production token rotation with a configurable grace window. Documented in `docs/SECURITY.md`.
+- **MCP Subprocess Sandboxing**: Hardened `execution/tadpole_mcp_server.py` with `asyncio.create_subprocess_exec` (no `shell=True`), `shlex`-based command splitting, a skill allowlist, JSON Schema input validation, hard 30-second execution timeout, and `resource.setrlimit` CPU/memory constraints on Linux/Docker.
+
+### 🗄️ Database Reliability
+- **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-mode-safe `VACUUM INTO` hot backups, SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
+- **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db.rs` for programmatic backup orchestration.
+
+### 📊 Observability & Health
+- **Extended Health Endpoint**: `GET /v1/engine/health` now returns structured `database` (WAL size, pool stats), `budget` (spend, limit), `swarm` (agent count, status), and `uptime_seconds` fields.
+- **Monitoring Dashboards**: Added `monitoring/alerts.yml` (Prometheus alert rules) and `monitoring/grafana/dashboards/tadpole_dashboard.json` (pre-built Grafana dashboard).
+
+### 🧪 Test Coverage Expansion
+- **Rust Integration Tests** (`server-rs/src/routes/`):
+  - `backup_restore_tests.rs` — hot backup + `PRAGMA integrity_check`
+  - `token_rotation_tests.rs` — dual-token grace window auth
+  - `health_endpoint_tests.rs` — extended health schema validation
+  - `shutdown_orchestrator_tests.rs` — graceful shutdown + emergency kill switch
+- **Python Unit Tests** (`tests/unit/`):
+  - `test_backup_integrity.py`, `test_token_rotation.py`, `test_mcp_sandbox.py`
+  - `test_snapshot_state.py`, `test_verify_ai_context_fix.py`
+
+### 📖 Documentation
+- **`docs/OPERATIONS_MANUAL.md`**: Added Token Rotation Runbook, Database Backup/Restore procedure, Sandbox Snapshotting guide, MCP Security Hardening details, Prometheus/Grafana alerting setup, and GDPR cascading deletion runbook.
+- **`docs/SECURITY.md`**: Updated with dual-token rotation mechanism, MCP subprocess boundary hardening, and RCE mitigation details.
+
+### 🔧 Infrastructure
+- **CI Pipeline Fix**: Corrected missing `uses:` keyword in `.github/workflows/ci.yml` that caused workflow parse failures.
+- **Compiler Warning Cleanup**: Eliminated all 70 Rust compiler warnings — unused imports (feature-gated re-exports, test fixtures), unused variables prefixed with `_`, and dead code in scaffolded actor subsystems suppressed with targeted `#[allow(...)]` attributes.
+
+---
+
+## Previous Upgrades (v1.1.57)
 
 - **Institutional Knowledge Store (IKS)**: Implemented cross-restart, cross-cluster durable memory storing agent playbooks, decision history, and curated facts. Uses SQLite metadata indexing + LanceDB k-NN semantic search, complete with a time-aware confidence decay rate (0.01 per day) and automatic TTL eviction sweeps.
 - **Path Traversal Hardened Graph Engine**: Re-engineered `/v1/intelligence/blast-radius` and `/v1/intelligence/resolve` to look up paths via an obfuscated-to-real-path registry, enforcing strict directory checks against workspace boundaries to prevent traversal attacks.
@@ -387,6 +422,8 @@ Python-side verification utilities:
 - Vite runs on port `5173`; the Rust engine runs on port `8000`.
 - The Rust engine can serve the built dashboard directly from `dist/`, so production mode does not require a separate Vite server.
 - `vector-memory` and `neural-audio` are opt-in Cargo features because they can introduce heavier native dependencies.
+- SQLite backups use `VACUUM INTO` and must target a file path (not in-memory). Run `execution/backup_sqlite.py` before any major migration or deployment.
+- Token rotation uses a two-token grace window: set `NEURAL_TOKEN_OLD` to the current token and `NEURAL_TOKEN_NEW` to the replacement before restarting the engine.
 
 [//]: # (Metadata: [README])
 

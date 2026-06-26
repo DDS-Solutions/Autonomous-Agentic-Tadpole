@@ -1,0 +1,58 @@
+name: Release build and SBOM
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-type: '18'
+
+      - name: Compile Backend Release
+        run: |
+          cd server-rs
+          cargo build --release
+
+      - name: Generate Rust SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: server-rs/
+          format: 'spdx-json'
+          output-file: 'sbom-rust.json'
+
+      - name: Build Frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Generate Frontend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./
+          format: 'spdx-json'
+          output-file: 'sbom-node.json'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            server-rs/target/release/server-rs
+            sbom-rust.json
+            sbom-node.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,38 @@
+groups:
+- name: tadpole-engine
+  rules:
+  - alert: EngineDown
+    expr: up{job="tadpole-engine"} == 0
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: "Tadpole Engine is offline"
+      description: "The Tadpole OS engine has been unresponsive for more than 30 seconds."
+
+  - alert: HighLatency
+    expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API Latency"
+      description: "p99 API latency is greater than 500ms for more than 2 minutes."
+
+  - alert: BudgetExhausted
+    expr: tadpole_budget_percent_used > 80
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Daily budget limit warning"
+      description: "Tadpole swarm daily LLM budget usage has exceeded 80%."
+
+  - alert: SQLiteLocked
+    expr: tadpole_sqlite_busy_duration_seconds > 10
+    for: 30s
+    labels:
+      severity: warning
+    annotations:
+      summary: "SQLite database locking issue"
+      description: "SQLite database is locked (busy) for more than 10 seconds, indicating thread pool or locking contention."

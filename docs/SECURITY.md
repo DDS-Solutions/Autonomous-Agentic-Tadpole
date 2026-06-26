@@ -45,6 +45,12 @@ Authorization: Bearer <token>
 
 The auth middleware is implemented in `server-rs/src/middleware/auth.rs` and uses constant-time token comparison via the `subtle` crate.
 
+### Token Rotation Grace Window
+During active token rotation runbooks, the engine supports a dual-token validation window:
+*   `NEURAL_TOKEN_OLD`: Accepts the deprecated token to prevent service disruption of legacy clients.
+*   `NEURAL_TOKEN_NEW`: Accepts the newly rotated token to allow phased rolling upgrades.
+*   `NEURAL_TOKEN`: Matches the primary system token.
+
 Browser WebSocket upgrades may pass auth through:
 
 ```http
@@ -104,7 +110,7 @@ Sensitive environment keys include:
 
 Logs and telemetry should never intentionally include raw token values.
 
-## Shell Scanner
+## Shell Scanner & MCP Sandboxing
 
 `server-rs/src/security/scanner.rs` implements command/script risk detection. It checks:
 
@@ -117,6 +123,12 @@ Logs and telemetry should never intentionally include raw token values.
 - optional aggressive checks when `AGGRESSIVE_SECURITY=true`
 
 The scanner is intentionally conservative and can flag valid complex shell commands. Risky results should be treated as requiring review rather than automatically safe execution.
+
+### MCP Subprocess Sandbox Boundary
+For legacy and external execution tools, `execution/tadpole_mcp_server.py` enforces additional sandboxing boundaries to mitigate Remote Code Execution (RCE):
+*   **Argument-Split Spawning**: Spawns processes using `asyncio.create_subprocess_exec` and `shlex.split`, completely avoiding shell interpretation (`shell=False` equivalent).
+*   **Resource Boundaries**: Implements Unix limits via `setrlimit` on CPU runtime (30s maximum execution time) and virtual memory address space (256MB bounds), preventing resource exhaustion.
+*   **Input Schema Enforcements**: Directs all inputs through strict type-safe schema checks before command assembly.
 
 ## Audit, Budget, And Permissions
 

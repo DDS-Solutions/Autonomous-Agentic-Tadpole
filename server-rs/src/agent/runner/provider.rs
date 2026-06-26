@@ -690,6 +690,8 @@ mod tests {
             system_monitor: Arc::new(mock_monitor),
             permission_policy: app_state.security.permission_policy.clone(),
             deploy_token: app_state.security.deploy_token.clone(),
+            deploy_token_old: None,
+            deploy_token_new: None,
         };
         app_state.security = Arc::new(new_security_hub);
 

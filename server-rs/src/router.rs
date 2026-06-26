@@ -196,6 +196,7 @@ fn build_agent_routes() -> Router<Arc<AppState>> {
         .route("/", get(routes::agent::get_agents))
         .route("/", post(routes::agent::create_agent))
         .route("/{id}", put(routes::agent::update_agent))
+        .route("/{id}", axum::routing::delete(routes::agent::delete_agent))
         .route("/{id}/tasks", post(routes::agent::send_task))
         .route("/{id}/reset", post(routes::agent::reset_agent))
         .route("/{id}/pause", post(routes::agent::pause_agent))
@@ -320,6 +321,8 @@ fn build_skills_routes() -> Router<Arc<AppState>> {
 fn build_system_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/compute-profile", get(routes::system::get_compute_profile))
+        .route("/debug/services", get(routes::system::debug_services))
+        .route("/debug/queues", get(routes::system::debug_queues))
 }
 
 fn build_benchmark_routes() -> Router<Arc<AppState>> {

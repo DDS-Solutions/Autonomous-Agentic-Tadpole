@@ -14,6 +14,10 @@
 //! Defines the core communication channels for the decoupled kernel.
 //! All mutating or I/O-heavy operations must pass through these channels.
 
+// These message fields are part of the actor protocol surface and will be
+// consumed by actor handlers as the subsystem is wired into the kernel.
+#![allow(dead_code)]
+
 use crate::security::audit::AuditEntry;
 use crate::error::AppError;
 use tokio::sync::oneshot;

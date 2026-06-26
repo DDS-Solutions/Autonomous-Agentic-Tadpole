@@ -23,6 +23,8 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 use crate::state::AppState;
 use futures::{Future, FutureExt};
+// Scaffolded supervisor: will be integrated into the kernel startup in a subsequent phase.
+#[allow(dead_code)]
 
 /// The Sovereign Supervisor responsible for keeping background tasks alive.
 pub struct WorkerSupervisor {

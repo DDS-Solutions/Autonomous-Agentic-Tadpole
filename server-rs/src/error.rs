@@ -18,6 +18,39 @@ use axum::Json;
 use serde::Serialize;
 use thiserror::Error;
 
+/// Helper function to safely truncate a string to a maximum number of bytes
+/// without breaking UTF-8 char boundaries.
+fn safe_truncate_bytes(s: &str, max_bytes: usize) -> String {
+    if s.len() > max_bytes {
+        let mut end = max_bytes - 3;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        let mut truncated = s[..end].to_string();
+        truncated.push_str("...");
+        truncated
+    } else {
+        s.to_string()
+    }
+}
+
+/// Helper function to sanitize HTML characters to prevent XSS payloads.
+fn sanitize_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
+/// Helper function to validate if a help_link is public and safe.
+#[allow(dead_code)]
+fn is_public_and_safe_link(url: &str) -> bool {
+    url.starts_with("https://tadpole.os/")
+        || url.starts_with("https://docs.tadpole.os/")
+        || url.starts_with("https://console.cloud.google.com/")
+}
+
 /// RFC 9457 (Problem Details for HTTP APIs) compliant error structure.
 #[derive(Debug, Serialize)]
 pub struct ProblemDetails {
@@ -36,7 +69,10 @@ impl ProblemDetails {
     /// Creates a new ProblemDetails response compatible with axum.
     pub fn new(status: StatusCode, title: &str, detail: String) -> (StatusCode, Json<Self>) {
         let slug = title.to_lowercase().replace(' ', "-");
-        let scrubbed_detail = crate::utils::security::redact_secrets(&detail);
+        let encoded_slug = urlencoding::encode(&slug).into_owned();
+        let truncated_detail = safe_truncate_bytes(&detail, 2048);
+        let sanitized_detail = sanitize_html(&truncated_detail);
+        let scrubbed_detail = crate::utils::security::redact_secrets(&sanitized_detail);
         let severity = if status.is_server_error()
             || status == StatusCode::FORBIDDEN
             || status == StatusCode::UNAUTHORIZED
@@ -49,7 +85,7 @@ impl ProblemDetails {
         (
             status,
             Json(Self {
-                type_uri: format!("https://tadpole.os/errors/{}", slug),
+                type_uri: format!("https://tadpole.os/errors/{}", encoded_slug),
                 title: title.to_string(),
                 status: status.as_u16(),
                 detail: scrubbed_detail,

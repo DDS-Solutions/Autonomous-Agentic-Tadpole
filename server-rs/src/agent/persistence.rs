@@ -633,6 +633,45 @@ pub async fn complete_sync(
     Ok(())
 }
 
+/// Transactionally deletes an agent and cascades deletions to all associated metadata tables.
+pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("DELETE FROM agents WHERE id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM agent_quotas WHERE entity_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM sync_manifest WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM fallback_memories WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM agent_hires WHERE hiring_agent_id = ? OR target_agent_id = ?")
+        .bind(agent_id)
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM audit_trail WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

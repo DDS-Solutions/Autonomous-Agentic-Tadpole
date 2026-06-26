@@ -1082,6 +1082,7 @@ mod tests {
 
         // Manual assembly of AppState to ensure no files exist
         let state = Arc::new(AppState {
+            start_time: chrono::Utc::now(),
             boot_gate: (boot_tx, boot_rx),
             comms: Arc::new(crate::state::hubs::comm::CommunicationHub {
                 tx, event_tx: etx, telemetry_tx: ttx, audio_stream_tx: atx, pulse_tx: ptx,
@@ -1129,6 +1130,8 @@ mod tests {
                 system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
                 permission_policy,
                 deploy_token: "test".to_string(),
+                deploy_token_old: None,
+                deploy_token_new: None,
             }),
             resources: Arc::new(crate::state::hubs::res::ResourceHub {
                 pool,

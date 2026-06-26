@@ -113,7 +113,7 @@ When `STATIC_DIR` exists, defaulting to `dist`, the router serves the dashboard 
 
 ## Background Workers
 
-`server-rs/src/startup.rs` starts runtime workers:
+`server-rs/src/startup/mod.rs` starts runtime workers:
 
 - CodeGraph warmup for source indexing in full boot mode.
 - Heartbeat event loop that emits `engine:health`.

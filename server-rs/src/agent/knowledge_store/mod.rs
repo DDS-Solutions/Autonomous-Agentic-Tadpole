@@ -29,7 +29,9 @@ pub mod cognitive_memory;
 #[cfg(test)]
 pub mod tests;
 
+#[allow(unused_imports)]
 pub use types::*;
+#[allow(unused_imports)]
 pub use store::KnowledgeStore;
 
 // Telemetry Tag duplicate reference: [IKS]

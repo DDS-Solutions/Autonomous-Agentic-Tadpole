@@ -52,6 +52,14 @@ mod auth_tests;
 mod mcp_test;
 #[cfg(test)]
 mod ws_tests;
+#[cfg(test)]
+mod backup_restore_tests;
+#[cfg(test)]
+mod token_rotation_tests;
+#[cfg(test)]
+mod health_endpoint_tests;
+#[cfg(test)]
+mod shutdown_orchestrator_tests;
 
 // Metadata: [mod]
 

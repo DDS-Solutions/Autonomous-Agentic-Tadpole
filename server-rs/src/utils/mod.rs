@@ -25,6 +25,11 @@ pub mod data_weighting;
 pub mod normalization;
 pub mod schema_gen;
 
+/// Returns true if the process is running inside a Docker container.
+pub fn is_docker() -> bool {
+    std::path::Path::new("/.dockerenv").exists()
+}
+
 // Metadata: [mod]
 
 // Metadata: [mod]

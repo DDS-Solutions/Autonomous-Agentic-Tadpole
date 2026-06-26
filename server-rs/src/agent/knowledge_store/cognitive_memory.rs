@@ -11,6 +11,9 @@
 //! - **Failure Path**: database query error, LLM api communication failure, or worker loop panic.
 //! - **Telemetry Link**: Search `[CognitiveMemory]` in logs.
 
+// Background cognitive pipeline: scaffolded, wired in a subsequent phase.
+#![allow(dead_code)]
+
 use crate::state::AppState;
 use crate::agent::runner::AgentRunner;
 use crate::error::AppError;

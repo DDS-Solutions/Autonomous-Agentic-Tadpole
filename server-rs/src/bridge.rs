@@ -63,6 +63,7 @@ pub fn export_bindings() {
     export_type!(Permission);
     export_type!(SkillParameter);
     export_type!(SkillHooks);
+    export_type!(crate::intelligence::graph::SymbolNode);
 
     output.push_str("export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];\n");
 

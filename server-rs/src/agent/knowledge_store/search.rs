@@ -9,6 +9,7 @@
 //! - **Telemetry Link**: Search `[search]` in tracing logs.
 
 use crate::error::AppError;
+#[cfg(feature = "vector-memory")]
 use sqlx::Row;
 use super::types::{KnowledgeEntry, KnowledgeSearchRequest};
 use super::store::KnowledgeStore;

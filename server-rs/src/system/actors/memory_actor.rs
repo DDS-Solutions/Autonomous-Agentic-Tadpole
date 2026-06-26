@@ -15,6 +15,9 @@
 //! Centralizes LanceDB/Arrow operations to prevent lock contention
 //! and ensure consistency across the swarm.
 
+// Scaffolded actor: will be wired into the kernel in a subsequent phase.
+#![allow(dead_code)]
+
 use crate::system::actors::SystemMessage;
 use crate::agent::memory::VectorMemory;
 use crate::error::AppError;

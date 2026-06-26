@@ -373,6 +373,152 @@ pub async fn get_swarm_graph_handler(
     Ok(Json(graph))
 }
 
-// Metadata: [agent]
+/// Scans the database on startup and resumes runners for agents found in an active ("busy") state.
+pub async fn recover_active_agents(state: Arc<AppState>) {
+    use futures::StreamExt;
+
+    let agents: Vec<EngineAgent> = state
+        .registry
+        .agents
+        .iter()
+        .map(|kv| kv.value().clone())
+        .collect();
+
+    let busy_agents: Vec<_> = agents
+        .into_iter()
+        .filter(|a| a.health.status == "busy")
+        .collect();
+
+    if busy_agents.is_empty() {
+        return;
+    }
+
+    futures::stream::iter(busy_agents)
+        .for_each_concurrent(8, |agent| {
+            let state = state.clone();
+            async move {
+                if let Some(task) = agent.state.current_task.clone() {
+                    if !task.is_empty() {
+                        let agent_id = agent.identity.id.clone();
+                        let cluster_id = agent
+                            .state
+                            .active_mission
+                            .as_ref()
+                            .and_then(|m| m.get("id"))
+                            .and_then(|id| id.as_str())
+                            .map(|s| s.to_string());
+
+                        tracing::info!(
+                            "🔄 [State Recovery] Recovering active agent {} for task: {}",
+                            agent_id,
+                            task
+                        );
+
+                        let payload = TaskPayload {
+                            message: task,
+                            cluster_id,
+                            ..Default::default()
+                        };
+
+                        let state_clone = state.clone();
+                        let agent_id_for_spawn = agent_id.clone();
+                        let join_handle = tokio::spawn(async move {
+                            let runner = AgentRunner::new(state_clone.clone());
+                            if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
+                                tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
+                                
+                                // Async Failure Feedback with structured RFC 9457 support
+                                let error_data = serde_json::json!({
+                                    "type": e.type_slug(),
+                                    "title": e.type_slug().replace(['-', ':'], " ").to_uppercase(),
+                                    "status": e.status_code().as_u16(),
+                                    "detail": e.to_string(),
+                                    "error_code": e.type_slug().to_uppercase()
+                                });
+
+                                state_clone.emit_event(serde_json::json!({
+                                    "type": "agent:task_failed",
+                                    "agent_id": agent_id_for_spawn.clone(),
+                                    "error": error_data
+                                }));
+                            }
+                            
+                            // Auto-cleanup handle
+                            state_clone.comms.active_runners.remove(&agent_id_for_spawn);
+                        });
+
+                        state.comms.active_runners.insert(agent_id.clone(), join_handle.abort_handle());
+
+                        let _ = join_handle.await;
+                    } else {
+                        // Reset to idle since task is empty or missing.
+                        let aid = agent.identity.id.clone();
+                        let mut clone = state.registry.agents.get(&aid).map(|e| e.value().clone());
+
+                        if let Some(ref mut a) = clone {
+                            a.health.status = "idle".to_string();
+                            match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
+                                Ok(()) => {
+                                    if let Some(mut entry) = state.registry.agents.get_mut(&aid) {
+                                        *entry = a.clone();
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "❌ [State Recovery] Failed to reset agent {} to idle: {}. Memory NOT modified.",
+                                        aid, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let aid = agent.identity.id.clone();
+                    let mut clone = state.registry.agents.get(&aid).map(|e| e.value().clone());
+
+                    if let Some(ref mut a) = clone {
+                        a.health.status = "idle".to_string();
+                        match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
+                            Ok(()) => {
+                                if let Some(mut entry) = state.registry.agents.get_mut(&aid) {
+                                    *entry = a.clone();
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "❌ [State Recovery] Failed to reset agent {} to idle: {}. Memory NOT modified.",
+                                    aid, e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+}
+
+/// DELETE /v1/agents/:id — Transactionally deletes an agent and cascades all metadata.
+#[tracing::instrument(skip(state), name = "agent::delete_agent")]
+pub async fn delete_agent(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    // 1. Remove from SQLite (cascading deletes)
+    crate::agent::persistence::delete_agent_cascade(&state.resources.pool, &id).await?;
+
+    // 2. Remove from the in-memory registry
+    state.registry.agents.remove(&id);
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "success",
+            "message": format!("Agent {} and all associated data deleted successfully.", id)
+        })),
+    ))
+}
+
 
 // Metadata: [agent]
+

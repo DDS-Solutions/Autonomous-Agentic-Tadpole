@@ -23,6 +23,7 @@ use crate::telemetry::pulse_types::{PulseNode, PulseConnection, SwarmPulse};
 
 /// Exports core engine types to TypeScript.
 /// Path: `src/types/schemas.ts` (relative to WORKSPACE_ROOT)
+#[allow(dead_code)]
 pub fn export_types() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = std::env::var("WORKSPACE_ROOT").unwrap_or_else(|_| ".".to_string());
     let ts_path = std::path::PathBuf::from(workspace_root).join("src").join("types").join("schemas.ts");

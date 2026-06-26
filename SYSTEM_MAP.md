@@ -40,7 +40,7 @@ This map reflects the current code layout and should be used as the first orient
 | Engine boot | `server-rs/src/main.rs` | Rust | Loads env, initializes tracing, builds `AppState`, starts workers, actors, orchestrator, and Axum. |
 | API router | `server-rs/src/router.rs` | Rust | Nests routes under `/v1`, applies middleware, serves `dist/` when present. |
 | Global state | `server-rs/src/state/mod.rs` | Rust | Owns AppState hubs, registries, DB pool, actor registry, and boot gate. |
-| Startup workers | `server-rs/src/startup.rs` | Rust | Starts CodeGraph warmup, heartbeat, scheduler, reaper, ingestion, discovery, privacy guard, telemetry aggregation, and pulse loop. |
+| Startup workers | `server-rs/src/startup/mod.rs` | Rust | Starts CodeGraph warmup, heartbeat, scheduler, reaper, ingestion, discovery, privacy guard, telemetry aggregation, and pulse loop. |
 | Python MCP host | `execution/tadpole_mcp_server.py` | Python | Runs JSON-defined tools and modular skill execution. |
 | CodeGraph API | `server-rs/src/routes/intelligence.rs` | Rust | Exposes codebase-wide symbol graph synthesis and dependent blast-radius calculations. |
 

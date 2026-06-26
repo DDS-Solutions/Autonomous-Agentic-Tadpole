@@ -18,6 +18,7 @@
 //!   embedding dimension mismatches on provider switching.
 //! - **Trace Scope**: `server-rs::routes::memory`
 
+#[cfg(feature = "vector-memory")]
 use crate::agent::memory::VectorMemory;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -27,7 +28,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use futures::StreamExt;
 #[cfg(feature = "vector-memory")]
 use lancedb::query::{ExecutableQuery, QueryBase};
 use serde::Serialize;
@@ -273,7 +273,7 @@ pub async fn get_agent_memory(
 
 /// DELETE /v1/agents/:agent_id/memories/:row_id
 pub async fn delete_agent_memory(
-    Path((agent_id, row_id)): Path<(String, String)>,
+    Path((_agent_id, row_id)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     #[cfg(not(feature = "vector-memory"))]

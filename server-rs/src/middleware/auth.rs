@@ -68,7 +68,18 @@ pub async fn validate_token(
 
     if let Some(auth_str) = auth_header {
         if let Some(token) = auth_str.strip_prefix("Bearer ") {
-            if constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes()) {
+            let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
+                || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+                || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
+
+            if is_valid {
+                if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_NEW");
+                } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_OLD");
+                } else {
+                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN");
+                }
                 return Ok(next.run(req).await);
             } else {
                 tracing::warn!("🚫 Invalid token provided in Authorization header");
@@ -99,7 +110,18 @@ pub async fn validate_token(
         for protocol in proto_header.split(',') {
             let protocol = protocol.trim();
             if let Some(token) = protocol.strip_prefix("bearer.") {
-                if constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes()) {
+                let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
+                    || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+                    || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
+
+                if is_valid {
+                    if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN_NEW");
+                    } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN_OLD");
+                    } else {
+                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN");
+                    }
                     return Ok(next.run(req).await);
                 }
             }

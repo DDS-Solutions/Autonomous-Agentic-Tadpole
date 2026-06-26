@@ -218,6 +218,7 @@ async fn execute_job(state: Arc<AppState>, job: super::types::ScheduledJob) {
     );
 }
 
+#[allow(dead_code)]
 pub async fn execute_job_by_id(state: Arc<AppState>, job_id: &str) -> Result<(), AppError> {
     let job_opt = super::scheduler::get_job_by_id(&state.resources.pool, job_id).await?;
     if let Some(job) = job_opt {

@@ -1,3 +1,12 @@
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::enum_variant_names,
+    clippy::collapsible_match,
+    clippy::unnecessary_map_or,
+    clippy::derivable_impls,
+    clippy::redundant_closure
+)]
 //! @docs ARCHITECTURE:Networking
 //! @docs OPERATIONS_MANUAL:Lifecycle
 //!
@@ -25,12 +34,14 @@ mod adapter;
 mod agent;
 mod bridge;
 mod db;
-pub mod error;
 #[cfg(test)]
 mod db_tests;
+mod config;
 mod env_schema;
+pub mod error;
 mod intelligence;
 mod middleware;
+mod networking;
 mod router;
 mod routes;
 mod secret_redactor;
@@ -44,10 +55,22 @@ mod types;
 mod utils;
 
 fn main() -> anyhow::Result<()> {
+    // 1. Load configuration and validate environment variables early
+    let config = crate::config::Config::load()?;
+
+    // 2. Set current working directory to WORKSPACE_ROOT if set and valid
+    if let Some(ref canonical_path) = config.workspace_root {
+        if let Err(e) = std::env::set_current_dir(canonical_path) {
+            eprintln!("⚠️ [Sidecar] Failed to change directory to canonicalized WORKSPACE_ROOT ({:?}): {:?}", canonical_path, e);
+        } else {
+            println!("🏠 [Sidecar] Workspace Root Set and Canonicalized: {:?}", canonical_path);
+        }
+    }
+
     // ### 🛠️ Resiliency: Emergency Panic Hook
-    // Captures accidental runtime panics (e.g., index-out-of-bounds or failed 
+    // Captures accidental runtime panics (e.g., index-out-of-bounds or failed
     // unwrap) and writes a high-fidelity diagnostic log to the workspace root.
-    // This bypasses the normal `tracing` facade to ensure the failure context 
+    // This bypasses the normal `tracing` facade to ensure the failure context
     // is persisted even if the telemetry stack is what triggered the crash.
     std::panic::set_hook(Box::new(|panic_info| {
         let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
@@ -57,22 +80,19 @@ fn main() -> anyhow::Result<()> {
         } else {
             "Unknown panic".to_string()
         };
-
-        // ### 🔐 Security: Neural Shield Redaction
-        // Scrub secrets (API keys, tokens) from the panic message before it 
-        // hits the disk in sidecar_panic.log (SEC-04).
-        let redactor = crate::secret_redactor::SecretRedactor::from_env();
-        let message = redactor.redact(&message);
-
         let location = panic_info
             .location()
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "unknown location".to_string());
 
-        let log_msg = format!(
+        let raw_log_msg = format!(
             "\n--- PANIC DETECTED ---\nMessage: {}\nLocation: {}\n----------------------\n",
             message, location
         );
+
+        // SEC-04: Clean panic messages of secrets before writing to disk
+        let redactor = crate::secret_redactor::SecretRedactor::from_env();
+        let log_msg = redactor.scrub(&raw_log_msg);
 
         // Try to find a writable path for the log
         let log_path = if let Ok(root) = std::env::var("WORKSPACE_ROOT") {
@@ -81,133 +101,51 @@ fn main() -> anyhow::Result<()> {
             std::path::PathBuf::from("sidecar_panic.log")
         };
 
-        // Direct filesystem write (bypass tracing/logging stack)
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .and_then(|mut f| {
-                use std::io::Write;
-                writeln!(f, "{}", log_msg)
-            });
+        // Direct filesystem write (bypass tracing/logging stack) with restrictive permissions on Unix
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+
+        if let Err(e) = options.open(&log_path).and_then(|mut f| {
+            use std::io::Write;
+            writeln!(f, "{}", log_msg)
+        }) {
+            eprintln!("CRITICAL: Failed to write emergency panic log: {}", e);
+        }
 
         eprintln!("{}", log_msg);
     }));
 
-    // 1. Capture Workspace Context (Critical for sidecar portability)
-    if let Ok(root) = std::env::var("WORKSPACE_ROOT") {
-        let root_path = std::path::Path::new(&root);
-        if root_path.exists() {
-            let _ = std::env::set_current_dir(root_path);
-            // Manual println since tracing isn't up yet
-            println!("🏠 [Sidecar] Workspace Root Set: {:?}", root_path);
-        }
-    }
-
     println!("🚀 [Sidecar] Initializing Tokio Runtime...");
 
     // ### 🧵 Resource Calibration: Custom Tokio Runtime
-    // We utilize a multi-threaded runtime with specialized thread pool scaling. 
-    // The high stack size (4MB) is critical for recursive swarm intelligence 
-    // calls which may traverse deep call-stacks during complex mission graphs.
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(
-            std::thread::available_parallelism()
-                .map(|n| n.get().max(4))
-                .unwrap_or(4),
-        )
-        .max_blocking_threads(32)
-        .thread_name("tadpole-worker")
-        .thread_stack_size(4 * 1024 * 1024) // 4 MB — accommodates deep agent call chains
-        .enable_all()
-        .build();
+    let rt = startup::build_custom_runtime()?;
 
-    let rt = match rt {
-        Ok(r) => r,
-        Err(e) => {
-            let err_msg = format!("❌ FATAL: Failed to initialize Tokio runtime: {:?}", e);
-            eprintln!("{}", err_msg);
-            // Try to log it
-            if let Ok(root) = std::env::var("WORKSPACE_ROOT") {
-                let _ = std::fs::write(
-                    std::path::Path::new(&root).join("sidecar_boot_error.log"),
-                    &err_msg,
-                );
-            }
-            return Err(anyhow::anyhow!(err_msg));
-        }
-    };
-
-    rt.block_on(async_main())
+    rt.block_on(async_main(config))
 }
 
-async fn async_main() -> anyhow::Result<()> {
+async fn async_main(config: crate::config::Config) -> anyhow::Result<()> {
     // --- [STAGE: INTENT DETECTION] ---
     // Detect flags that don't require the full engine (Code Graph, mDNS, etc.)
     // Optimized for sub-100ms response for administrative queries.
     let args: Vec<String> = std::env::args().collect();
 
     // Hyper-Fast Path: Handle version/help before ANY initialization.
-    // This bypasses Tokio runtime setup, environment validation, and resource allocation.
-    if args.iter().any(|arg| arg == "--version" || arg == "-v") {
-        println!("Tadpole OS Engine v{}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        println!("Tadpole OS - Sovereign AI Swarm Engine\n");
-        println!("Usage: server-rs [OPTIONS]\n");
-        println!("Options:");
-        println!("  -v, --version    Show version and exit");
-        println!("  -h, --help       Show this help and exit");
-        println!("  --status         Show engine status and exit (Fast Path)");
-        println!("  --export-types   Export TypeScript schemas and exit");
-        println!("  --audit-graph    Run codebase topology graph integrity audit");
-        println!("  --port <PORT>    Set the port to listen on (Default: 8000)");
+    if let Some(()) = startup::handle_admin_cli(&args)? {
         return Ok(());
     }
 
-    if args.iter().any(|arg| arg == "--export-types") {
-        if let Err(e) = crate::utils::schema_gen::export_types() {
-            eprintln!("❌ FATAL: Failed to export types: {:?}", e);
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
-    if args.iter().any(|arg| arg == "--audit-graph") {
-        let root = std::env::var("WORKSPACE_ROOT")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-
-        let mut graph = crate::intelligence::graph::CodeSymbolGraph::new(root);
-        let _ = graph.build("audit-salt");
-        let anomalies = graph.find_anomalies();
-        
-        if anomalies.is_empty() {
-            println!("✅ Codebase Topology Integrity Audit passed with 0 anomalies.");
-            std::process::exit(0);
-        } else {
-            println!("❌ Codebase Topology Integrity Audit failed: {} anomalies found.", anomalies.len());
-            for (idx, anomaly) in anomalies.iter().enumerate() {
-                println!("  {}. {}", idx + 1, anomaly);
-            }
-            std::process::exit(1);
-        }
-    }
-
-    // 2. Load Env & Initialize Tracing
+    // 2. Initialize Tracing & Load Env
+    startup::init_tracing(config.disable_telemetry);
     startup::load_environment();
-    startup::init_tracing();
 
-    let is_fast_path = args.iter().any(|arg| arg == "--status");
+    let intent = startup::detect_bootstrap_intent(&args);
 
-    let intent = if is_fast_path {
-        startup::BootstrapIntent::Fast
-    } else {
-        startup::BootstrapIntent::Full
-    };
-
-    if is_fast_path {
+    if intent == startup::BootstrapIntent::Fast {
         tracing::debug!("🏃 [Main] Entering Fast-Path (Intent: {:?})", intent);
     }
 
@@ -215,44 +153,43 @@ async fn async_main() -> anyhow::Result<()> {
     let app_state: Arc<AppState> = match AppState::new().await {
         Ok(state) => Arc::new(state),
         Err(e) => {
-            tracing::error!("🚨 FATAL: Failed to initialize AppState: {:?}", e);
-            eprintln!("🚨 FATAL: Failed to initialize AppState: {:?}", e);
+            tracing::error!("🚨 [Main] FATAL: Failed to initialize AppState: {:?}", e);
+            eprintln!("🚨 [Main] FATAL: Failed to initialize AppState: {:?}", e);
             return Err(anyhow::anyhow!(e));
         }
     };
 
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    let service_config = startup::ServiceConfiguration {
+        heartbeat_secs: config.heartbeat_interval_secs,
+        ..Default::default()
+    };
+
     // 3. Launch Background Tasks: Telemetry, budget tracking, and swarm health checks.
-    startup::spawn_background_tasks(app_state.clone(), intent).await;
-
-    // ### 🚀 [Kernel] Actor Initialization
-    // Spawns the background actors and attaches the registry to the AppState.
-    // This enables the Hybrid Concurrency model for Audit and Memory operations.
-    let actor_registry = crate::system::actors::manager::spawn_system_actors(&app_state).await;
-    let _ = app_state.actors.set(actor_registry);
-
-    // ### 👁️ [Kernel] Orchestrator Initialization
-    // Launches the autonomous monitoring and mission dispatch loop.
-    let orchestrator = crate::system::orchestrator::Orchestrator::new(app_state.clone());
-    tokio::spawn(orchestrator.run());
+    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx).await;
 
     // 4. Build Router
     let app = router::create_router(app_state.clone());
 
     // 5. Start the Server
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
-    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let addr: SocketAddr = format!("{}:{}", bind_addr, port).parse()?;
+    tracing::info!(
+        "🚀 Tadpole OS Engine v{} listening on {}",
+        env!("CARGO_PKG_VERSION"),
+        config.socket_addr
+    );
 
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => {
-            tracing::info!("🚀 Tadpole OS Engine v{} listening on {}", env!("CARGO_PKG_VERSION"), addr);
-            l
-        },
+    // ### 📡 Networking: Endpoint Initialization (TCP Bind)
+    // Dispatches the engine to the specified loopback port.
+    // Includes specific fault-handling for port-binding failures (e.g.,
+    // zombie sidecar instances using Port 8000).
+    let listener = match tokio::net::TcpListener::bind(config.socket_addr).await {
+        Ok(l) => l,
         Err(e) => {
             let msg = if e.kind() == std::io::ErrorKind::AddrInUse {
-                format!("❌ FATAL ERROR: Port {} is already in use. Please run 'taskkill /F /IM server-rs.exe' and try again.", port)
+                format!("❌ FATAL ERROR: Port {} is already in use (os error 10048). Please ensure no other instances of 'server-rs' are running.", config.port)
             } else {
-                format!("❌ FATAL ERROR: Failed to bind to {}: {:?}", addr, e)
+                format!("❌ FATAL ERROR: Failed to bind to {}: {:?}", config.socket_addr, e)
             };
             tracing::error!("{}", msg);
             eprintln!("{}", msg);
@@ -261,9 +198,6 @@ async fn async_main() -> anyhow::Result<()> {
     };
 
     // --- [STAGE: RUN] ---
-    // OPEN THE BOOT GATE: Signal all waiting tasks that the engine is now MISSION-READY.
-    app_state.notify_boot_complete();
-
     // Start the Axum server and listen for incoming connections.
     axum::serve(
         listener,
@@ -271,6 +205,9 @@ async fn async_main() -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
+
+    // Signal all background tasks to shut down gracefully
+    let _ = shutdown_tx.send(true);
 
     // --- [STAGE: SHUTDOWN] ---
 
@@ -312,7 +249,5 @@ async fn shutdown_signal() {
     }
     tracing::info!("🛑 Shutdown signal received, draining connections...");
 }
-
-// Metadata: [main]
 
 // Metadata: [main]

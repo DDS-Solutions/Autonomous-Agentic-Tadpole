@@ -34,6 +34,36 @@ _TOOL_MANIFESTS = {}
 _SKILL_REGISTRY = SkillRegistry()
 
 
+def validate_arguments(args: dict, schema: dict):
+    if not schema or not isinstance(schema, dict):
+        return
+    properties = schema.get("properties", {})
+    required = schema.get("required", [])
+    
+    # Check required fields
+    for req in required:
+        if req not in args:
+            raise ValueError(f"Missing required parameter: {req}")
+            
+    # Check types
+    for key, val in args.items():
+        if key in properties:
+            prop_type = properties[key].get("type")
+            if prop_type == "string" and not isinstance(val, str):
+                raise TypeError(f"Parameter '{key}' must be a string")
+            elif prop_type == "integer" and not isinstance(val, int):
+                raise TypeError(f"Parameter '{key}' must be an integer")
+            elif prop_type == "number" and not isinstance(val, (int, float)):
+                raise TypeError(f"Parameter '{key}' must be a number")
+            elif prop_type == "boolean" and not isinstance(val, bool):
+                raise TypeError(f"Parameter '{key}' must be a boolean")
+            elif prop_type == "array" and not isinstance(val, list):
+                raise TypeError(f"Parameter '{key}' must be an array")
+            elif prop_type == "object" and not isinstance(val, dict):
+                raise TypeError(f"Parameter '{key}' must be an object")
+
+
+
 def load_skills():
     """Scans the execution directory for JSON manifests and loads them."""
     global _TOOLS_CACHE, _TOOL_MANIFESTS
@@ -114,10 +144,17 @@ async def handle_call_tool(
     if command == "(Native Execution Mode)":
         return [types.TextContent(type="text", text=f"Tool {name} is a native Rust tool. Please execute via TadpoleOS internal host.")]
 
-    # Shell Scanner Compliance (SEC-05)
+    # Shell Scanner Compliance (SEC-05) - Extra safety guard
     dangerous_chars = ['|', '>', '<', '&', ';', '`', '$(']
     if any(char in command for char in dangerous_chars):
         return [types.TextContent(type="text", text=f"Execution Failed: Command failed Shell Scanner compliance (contains forbidden shell operators).")]
+
+    # Validate arguments against manifest schema
+    schema = manifest.get("schema", {})
+    try:
+        validate_arguments(arguments or {}, schema)
+    except Exception as err:
+        return [types.TextContent(type="text", text=f"Argument Validation Failed: {str(err)}")]
 
     args_json = json.dumps(arguments or {})
     env = os.environ.copy()
@@ -125,16 +162,35 @@ async def handle_call_tool(
 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
 
+    # Split command safely (shlex) and run directly without shell
+    import shlex
+    cmd_parts = shlex.split(command)
+    if cmd_parts and cmd_parts[0] == "python":
+        cmd_parts[0] = sys.executable
+
+    def set_limits():
+        # Set Linux/Unix limits
+        if os.name != 'nt':
+            try:
+                import resource
+                # 30 CPU seconds limit
+                resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+                # 256MB Address Space memory limit
+                resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+            except Exception:
+                pass
+
     try:
-        process = await asyncio.create_subprocess_shell(
-            command,
+        process = await asyncio.create_subprocess_exec(
+            *cmd_parts,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
-            cwd=workspace_root
+            cwd=workspace_root,
+            preexec_fn=set_limits if os.name != 'nt' else None
         )
 
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
 
         stdout_str = stdout.decode('utf-8', errors='replace')
         stderr_str = stderr.decode('utf-8', errors='replace')
@@ -148,7 +204,7 @@ async def handle_call_tool(
             return [types.TextContent(type="text", text=f"Execution Failed (Code {process.returncode}):\n{stdout_str}\n{stderr_str}")]
 
     except asyncio.TimeoutError:
-        return [types.TextContent(type="text", text="Execution timed out after 60 seconds.")]
+        return [types.TextContent(type="text", text="Execution timed out after 30 seconds.")]
     except Exception as e:
         return [types.TextContent(type="text", text=f"Execution Error: {str(e)}")]
 

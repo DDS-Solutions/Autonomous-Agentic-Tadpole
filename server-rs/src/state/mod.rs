@@ -63,7 +63,10 @@ pub struct AppState {
     /// Barrier for system boot synchronization.
     pub boot_gate: (tokio::sync::watch::Sender<bool>, tokio::sync::watch::Receiver<bool>),
     /// Thread-safe pub-sub system event bus.
+    #[allow(dead_code)]
     pub event_bus: Arc<crate::system::event_bus::SystemEventBus>,
+    /// Server startup timestamp for uptime calculations.
+    pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
 impl AppState {
@@ -152,6 +155,8 @@ impl AppState {
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
+            deploy_token_old: None,
+            deploy_token_new: None,
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
@@ -191,6 +196,7 @@ impl AppState {
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
             event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
+            start_time: chrono::Utc::now(),
         }
     }
 
@@ -283,6 +289,8 @@ impl AppState {
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token: "test-token".to_string(),
+            deploy_token_old: None,
+            deploy_token_new: None,
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
@@ -322,6 +330,7 @@ impl AppState {
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
             event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
+            start_time: chrono::Utc::now(),
         };
         state
             .resources
@@ -382,6 +391,9 @@ impl AppState {
                 "🚨 FATAL: NEURAL_TOKEN or NEURAL_ENGINE_ACCESS_TOKEN environment variable MUST be set for the engine to start.".to_string()
             )),
         };
+
+        let deploy_token_old = std::env::var("NEURAL_TOKEN_OLD").ok().map(|s| s.trim().to_string());
+        let deploy_token_new = std::env::var("NEURAL_TOKEN_NEW").ok().map(|s| s.trim().to_string());
 
         // Initialize DB
         let database_url = if cfg!(test) {
@@ -585,6 +597,8 @@ impl AppState {
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
             deploy_token,
+            deploy_token_old,
+            deploy_token_new,
         });
 
         let state = Self {
@@ -627,6 +641,7 @@ impl AppState {
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
             event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
+            start_time: chrono::Utc::now(),
         };
 
         // 🧬 [Evolution] Passive Hot-Reloading Loop
@@ -1009,6 +1024,7 @@ impl AppState {
 
     /// ### 🏁 Boot: Notify Boot Complete (notify_boot_complete)
     /// Signals all waiting tasks that the engine is now MISSION-READY.
+    #[allow(dead_code)]
     pub fn notify_boot_complete(&self) {
         let _ = self.boot_gate.0.send(true);
         tracing::info!("🏁 [Engine] Boot sequence complete. System is MISSION-READY.");
@@ -1204,6 +1220,8 @@ impl Default for AppState {
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
             permission_policy,
             deploy_token: "test".into(),
+            deploy_token_old: None,
+            deploy_token_new: None,
         });
 
         let resources = Arc::new(ResourceHub {
@@ -1245,6 +1263,7 @@ impl Default for AppState {
             actors: OnceCell::new(),
             boot_gate: (boot_tx, boot_rx),
             event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
+            start_time: chrono::Utc::now(),
         }
     }
 }

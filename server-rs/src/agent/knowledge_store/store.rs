@@ -10,6 +10,7 @@
 
 use crate::error::AppError;
 use sqlx::{Row, SqlitePool};
+#[cfg(feature = "vector-memory")]
 use std::sync::Arc;
 use super::types::{KnowledgeEntry, AddKnowledgeRequest, DEFAULT_TTL_DAYS};
 
@@ -204,6 +205,9 @@ impl KnowledgeStore {
                     AppError::InternalServerError(format!("[IKS] LanceDB insert failed: {}", e))
                 })?;
         }
+        // Suppress "unused variable" warning when building without vector-memory feature.
+        #[cfg(not(feature = "vector-memory"))]
+        let _ = http_client;
 
         tracing::info!(
             id = %id,

@@ -15,6 +15,9 @@
 //! Periodically scans the environment, evaluates system health, 
 //! and dispatches agents to fulfill the Sovereign Charter.
 
+// Scaffolded orchestrator: will be integrated into the kernel startup in a subsequent phase.
+#![allow(dead_code)]
+
 use crate::state::AppState;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};

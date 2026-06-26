@@ -37,7 +37,12 @@ pub struct SecurityHub {
     pub permission_policy: Arc<PermissionPolicy>,
     /// Authentication token for administrative/deploy requests.
     pub deploy_token: String,
+    /// Old token kept valid during grace period.
+    pub deploy_token_old: Option<String>,
+    /// New token generated during grace period.
+    pub deploy_token_new: Option<String>,
 }
+
 
 // Metadata: [sec]
 

@@ -13,6 +13,8 @@
 //! ### Audit Actor (Sequential Sink)
 //! Orchestrates the background recording of audit entries. 
 //! By isolating the MerkleAuditTrail logic in a single task, we eliminate 
+// Scaffolded actor: will be wired into the kernel in a subsequent phase.
+#![allow(dead_code)] 
 //! lock contention and ensure the hash chain is never forked.
 
 use crate::security::audit::MerkleAuditTrail;

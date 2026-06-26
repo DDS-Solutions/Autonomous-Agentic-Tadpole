@@ -13,6 +13,8 @@
 //! ### SkillScanner Actor
 //! Autonomously crawls the local workspace to ingest and catalog README-based skills.
 //! Implements a safe, non-recursive (or depth-limited) scan to prevent I/O saturation.
+// Scaffolded actor: will be wired into the kernel in a subsequent phase.
+#![allow(dead_code)]
 
 use crate::error::AppError;
 use crate::system::actors::SystemMessage;

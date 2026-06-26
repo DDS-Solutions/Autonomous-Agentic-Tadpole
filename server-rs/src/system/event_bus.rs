@@ -12,6 +12,9 @@
 //!   or invalid trigger mappings.
 //! - **Telemetry Link**: Search `[EventBus]` in server logs.
 
+// Event bus is scaffolded infrastructure for reactive automation — wired in a subsequent phase.
+#![allow(dead_code)]
+
 use crate::error::AppError;
 use crate::state::AppState;
 use std::sync::Arc;
@@ -61,7 +64,7 @@ pub async fn start_event_bus_monitoring(app_state: Arc<AppState>, bus: Arc<Syste
 
 async fn process_event(state: &Arc<AppState>, event: SystemEvent) -> Result<(), AppError> {
     match event {
-        SystemEvent::FileChanged { ref path, ref change_type } => {
+        SystemEvent::FileChanged { ref path, change_type: _ } => {
             // Find triggers matching FileChanged for this path/extension
             let rows = sqlx::query(
                 "SELECT id, continuity_job_id FROM event_triggers WHERE event_type = 'FileChanged' AND (event_filter IS NULL OR ?1 LIKE '%' || event_filter || '%')"
@@ -110,7 +113,7 @@ async fn process_event(state: &Arc<AppState>, event: SystemEvent) -> Result<(), 
                 });
             }
         }
-        SystemEvent::WebhookTriggered { ref payload } => {
+        SystemEvent::WebhookTriggered { payload: _ } => {
             let rows = sqlx::query(
                 "SELECT id, continuity_job_id FROM event_triggers WHERE event_type = 'WebhookTriggered'"
             )

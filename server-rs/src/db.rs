@@ -338,6 +338,25 @@ fn find_bundled_file(resource_root: &str, relative_path: &str) -> Option<std::pa
     None
 }
 
+/// Performs an online SQLite backup using the PRAGMA VACUUM INTO command.
+/// This command creates a safe, transactional copy of the database.
+pub async fn run_backup(pool: &SqlitePool, backup_path: &str) -> Result<()> {
+    sqlx::query("VACUUM INTO ?")
+        .bind(backup_path)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Executes PRAGMA integrity_check on the database pool to check for corruption.
+pub async fn check_integrity(pool: &SqlitePool) -> Result<String> {
+    let row: (String,) = sqlx::query_as("PRAGMA integrity_check")
+        .fetch_one(pool)
+        .await?;
+    Ok(row.0)
+}
+
+
 
 
 // Metadata: [db]
