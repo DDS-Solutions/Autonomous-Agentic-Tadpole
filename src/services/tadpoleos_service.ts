@@ -51,6 +51,15 @@ export const tadpole_os_service = {
     get delete_agent_memory() { return agent_api_service.delete_agent_memory; },
     get save_agent_memory() { return agent_api_service.save_agent_memory; },
     get save_role_blueprint() { return agent_api_service.save_role_blueprint; },
+    get get_context_packet() { return agent_api_service.get_context_packet; },
+    get update_context_packet() { return agent_api_service.update_context_packet; },
+    get get_subscribed_skills() { return agent_api_service.get_subscribed_skills; },
+    get subscribe_skill() { return agent_api_service.subscribe_skill; },
+    get approve_skill() { return agent_api_service.approve_skill; },
+    get get_status_ledger() { return agent_api_service.get_status_ledger; },
+    get update_status_ledger() { return agent_api_service.update_status_ledger; },
+    get get_agent_maintenance_report() { return agent_api_service.get_agent_maintenance_report; },
+    get get_token_burn_report() { return agent_api_service.get_token_burn_report; },
 
     // Mission / Skill Domain
     get sync_mission() { return mission_api_service.sync_mission; },

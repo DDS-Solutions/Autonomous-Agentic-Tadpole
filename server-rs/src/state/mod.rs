@@ -525,7 +525,11 @@ impl AppState {
             active_agents: AtomicU32::new(0),
             recruit_count: AtomicU32::new(0),
             tpm_accumulator: AtomicUsize::new(0),
-            privacy_mode: AtomicBool::new(false),
+            privacy_mode: AtomicBool::new(
+                std::env::var("PRIVACY_MODE")
+                    .map(|v| v.to_lowercase() == "true")
+                    .unwrap_or(false),
+            ),
             observed_max_depth: AtomicU32::new(0),
         });
 

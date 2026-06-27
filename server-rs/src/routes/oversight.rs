@@ -34,6 +34,7 @@ use axum::{
 use serde::Serialize;
 use serde_json::json;
 use std::sync::Arc;
+use specta::Type;
 
 #[derive(Serialize)]
 pub struct OversightAuditEntry {
@@ -226,7 +227,7 @@ pub async fn update_settings(
         state
             .governance
             .privacy_mode
-            .store(val, std::sync::atomic::Ordering::Relaxed);
+            .store(val, std::sync::atomic::Ordering::SeqCst);
         
         if val {
             tracing::info!("🛡️ Privacy Shield ENABLED: Hard-blocking external API requests (OpenAI/Anthropic/Google).");
@@ -327,12 +328,45 @@ pub async fn decide_oversight(
         .map(|(_, entry)| entry);
 
     if let Some(entry) = removed_entry {
-        // 2. Resolve the waiting promise
+        // 2. Update audit trail & Persistent Log (Synchronous)
+        let params = serde_json::to_string(&json!({
+            "entry_id": entry.id,
+            "approved": approved
+        }))
+        .unwrap_or_default();
+        
+        if let Err(e) = state.security.audit_trail
+            .record(
+                "oversight",
+                entry.mission_id.as_deref(),
+                None,
+                "oversight_decision",
+                &params,
+            )
+            .await
+        {
+            tracing::error!("❌ [Oversight] Failed to record in audit trail: {}", e);
+        }
+
+        let now = chrono::Utc::now();
+        if let Err(e) = sqlx::query(
+            "UPDATE oversight_log SET status = 'resolved', decision = ?, decided_at = ?, decided_by = 'human' WHERE id = ?"
+        )
+        .bind(&payload.decision)
+        .bind(now)
+        .bind(&entry.id)
+        .execute(&state.resources.pool)
+        .await
+        {
+            tracing::error!("❌ [Oversight] Failed to update persistent oversight_log: {}", e);
+        }
+
+        // 3. Resolve the waiting promise to unblock the agent
         if let Some((_, shooter)) = state.comms.oversight_resolvers.remove(&entry_id) {
             let _ = shooter.send(approved);
         }
 
-        // 3. Log the decision
+        // 4. Log the decision in system broadcasts
         let decision_label = if approved { "APPROVED" } else { "REJECTED" };
         state.broadcast_sys(
             &format!(
@@ -342,43 +376,6 @@ pub async fn decide_oversight(
             if approved { "success" } else { "warning" },
             entry.mission_id.clone(),
         );
-
-        // 4. Update audit trail & Persistent Log
-        let audit = state.security.audit_trail.clone();
-        let eid = entry.id.clone();
-        let mission_id = entry.mission_id.clone();
-        let decision_str = payload.decision.clone();
-        let state_c = state.clone();
-        
-        tokio::spawn(async move {
-            let params = serde_json::to_string(&json!({
-                "entry_id": eid,
-                "approved": approved
-            }))
-            .unwrap_or_default();
-            
-            // Record in audit trail
-            let _ = audit
-                .record(
-                    "oversight",
-                    mission_id.as_deref(),
-                    None,
-                    "oversight_decision",
-                    &params,
-                )
-                .await;
-
-            // Update persistent oversight_log
-            let now = chrono::Utc::now();
-            let _ = sqlx::query(
-                "UPDATE oversight_log SET status = 'resolved', decision = ?, decided_at = ?, decided_by = 'human' WHERE id = ?"
-            )
-            .bind(&decision_str)
-            .bind(now)
-            .bind(&eid)
-            .execute(&state_c.resources.pool)
-            .await;
-        });
 
         // 5. Emit event for UI
         state.emit_event(json!({
@@ -725,11 +722,7 @@ pub async fn update_policy(
             AppError::InternalServerError(format!("Failed to refresh permission cache: {}", e))
         })?;
 
-    let mode_str = match payload.mode {
-        PolicyMode::Allow => "allow",
-        PolicyMode::Deny => "deny",
-        PolicyMode::Prompt => "prompt",
-    };
+
 
     state.broadcast_sys(
         &format!(
@@ -741,6 +734,184 @@ pub async fn update_policy(
     );
 
     Ok((StatusCode::OK, Json(json!({ "status": "ok" }))))
+}
+
+#[derive(Serialize, Type, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenBurnReport {
+    #[specta(type = u32)]
+    pub total_tokens_in: i64,
+    #[specta(type = u32)]
+    pub total_tokens_out: i64,
+    pub total_cost_usd: f64,
+    pub providers: Vec<ProviderTokenBurn>,
+    pub agents: Vec<AgentTokenBurn>,
+    pub recent_burns: Vec<RecentTokenBurn>,
+}
+
+#[derive(Serialize, Type, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderTokenBurn {
+    pub provider_id: String,
+    #[specta(type = u32)]
+    pub tokens_in: i64,
+    #[specta(type = u32)]
+    pub tokens_out: i64,
+    pub cost_usd: f64,
+}
+
+#[derive(Serialize, Type, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTokenBurn {
+    pub agent_id: String,
+    pub agent_name: String,
+    #[specta(type = u32)]
+    pub tokens_in: i64,
+    #[specta(type = u32)]
+    pub tokens_out: i64,
+    pub cost_usd: f64,
+}
+
+#[derive(Serialize, Type, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentTokenBurn {
+    pub task_id: String,
+    pub title: String,
+    pub agent_id: String,
+    pub agent_name: String,
+    #[specta(type = u32)]
+    pub tokens_in: i64,
+    #[specta(type = u32)]
+    pub tokens_out: i64,
+    pub cost_usd: f64,
+    #[specta(type = f64)]
+    pub updated_at: i64,
+}
+
+/// GET /v1/oversight/token-burn
+///
+/// Returns an aggregated report of token usage and costs across the swarm.
+/// Also updates the Prometheus gauges `oversight_tokens_in`, `oversight_tokens_out`, and `oversight_cost_usd`.
+///
+/// @docs API_REFERENCE:GetTokenBurn
+#[tracing::instrument(skip(state), name = "governance::get_token_burn")]
+pub async fn get_token_burn(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    use sqlx::Row;
+
+    // 1. Query overall consumption sums
+    let totals_row = sqlx::query(
+        "SELECT 
+            COALESCE(SUM(tokens_in), 0) as total_tokens_in,
+            COALESCE(SUM(tokens_out), 0) as total_tokens_out,
+            COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
+         FROM agent_tasks"
+    )
+    .fetch_one(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    let total_tokens_in: i64 = totals_row.get("total_tokens_in");
+    let total_tokens_out: i64 = totals_row.get("total_tokens_out");
+    let total_cost_usd: f64 = totals_row.get("total_cost_usd");
+
+    // Update Prometheus gauges
+    crate::telemetry::OVERSIGHT_TOKENS_IN.set(total_tokens_in as f64);
+    crate::telemetry::OVERSIGHT_TOKENS_OUT.set(total_tokens_out as f64);
+    crate::telemetry::OVERSIGHT_COST_USD.set(total_cost_usd);
+
+    // 2. Query provider breakdown
+    let provider_rows = sqlx::query(
+        "SELECT 
+            COALESCE(provider_id, 'unknown') as provider_id,
+            COALESCE(SUM(tokens_in), 0) as tokens_in,
+            COALESCE(SUM(tokens_out), 0) as tokens_out,
+            COALESCE(SUM(cost_usd), 0.0) as cost_usd
+         FROM agent_tasks
+         GROUP BY provider_id"
+    )
+    .fetch_all(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    let providers = provider_rows.into_iter().map(|row| {
+        ProviderTokenBurn {
+            provider_id: row.get("provider_id"),
+            tokens_in: row.get("tokens_in"),
+            tokens_out: row.get("tokens_out"),
+            cost_usd: row.get("cost_usd"),
+        }
+    }).collect();
+
+    // 3. Query agent breakdown (joining with agents table for the name)
+    let agent_rows = sqlx::query(
+        "SELECT 
+            t.agent_id,
+            COALESCE(a.name, 'Unknown Agent') as agent_name,
+            COALESCE(SUM(t.tokens_in), 0) as tokens_in,
+            COALESCE(SUM(t.tokens_out), 0) as tokens_out,
+            COALESCE(SUM(t.cost_usd), 0.0) as cost_usd
+         FROM agent_tasks t
+         LEFT JOIN agents a ON t.agent_id = a.id
+         GROUP BY t.agent_id, a.name"
+    )
+    .fetch_all(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    let agents = agent_rows.into_iter().map(|row| {
+        AgentTokenBurn {
+            agent_id: row.get("agent_id"),
+            agent_name: row.get("agent_name"),
+            tokens_in: row.get("tokens_in"),
+            tokens_out: row.get("tokens_out"),
+            cost_usd: row.get("cost_usd"),
+        }
+    }).collect();
+
+    // 4. Query recent burns (last 20 tasks with non-zero usage)
+    let recent_rows = sqlx::query(
+        "SELECT 
+            t.id as task_id,
+            t.title,
+            t.agent_id,
+            COALESCE(a.name, 'Unknown Agent') as agent_name,
+            COALESCE(t.tokens_in, 0) as tokens_in,
+            COALESCE(t.tokens_out, 0) as tokens_out,
+            COALESCE(t.cost_usd, 0.0) as cost_usd,
+            t.updated_at
+         FROM agent_tasks t
+         LEFT JOIN agents a ON t.agent_id = a.id
+         WHERE COALESCE(t.tokens_in, 0) > 0 OR COALESCE(t.tokens_out, 0) > 0 OR COALESCE(t.cost_usd, 0.0) > 0.0
+         ORDER BY t.updated_at DESC
+         LIMIT 20"
+    )
+    .fetch_all(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    let recent_burns = recent_rows.into_iter().map(|row| {
+        RecentTokenBurn {
+            task_id: row.get("task_id"),
+            title: row.get("title"),
+            agent_id: row.get("agent_id"),
+            agent_name: row.get("agent_name"),
+            tokens_in: row.get("tokens_in"),
+            tokens_out: row.get("tokens_out"),
+            cost_usd: row.get("cost_usd"),
+            updated_at: row.get("updated_at"),
+        }
+    }).collect();
+
+    Ok(Json(TokenBurnReport {
+        total_tokens_in,
+        total_tokens_out,
+        total_cost_usd,
+        providers,
+        agents,
+        recent_burns,
+    }))
 }
 
 // Metadata: [oversight]

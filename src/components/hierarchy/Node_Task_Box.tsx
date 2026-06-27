@@ -44,7 +44,18 @@ export const Node_Task_Box = React.memo(({ agent }: Node_Task_Box_Props) => {
                 >
                     {agent.current_task ? (
                         <div className="flex flex-col gap-1">
-                            <span className="text-zinc-300">{agent.current_task}</span>
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-zinc-300 truncate flex-1">{agent.current_task}</span>
+                                <span className={`shrink-0 px-1 py-0.25 rounded text-[7px] font-black uppercase tracking-widest ${
+                                    agent.status === 'active' || agent.status === 'thinking' || agent.status === 'coding' || agent.status === 'speaking'
+                                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                        : agent.status === 'suspended'
+                                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                            : 'bg-zinc-800 text-zinc-400'
+                                }`}>
+                                    {agent.status === 'active' || agent.status === 'thinking' || agent.status === 'coding' || agent.status === 'speaking' ? 'claimed' : agent.status === 'suspended' ? 'blocked' : 'idle'}
+                                </span>
+                            </div>
                             {agent.current_reasoning_turn !== undefined && agent.reasoning_depth && agent.current_reasoning_turn > 0 ? (
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-[8px] font-bold text-zinc-500 uppercase tracking-tighter">

@@ -30,7 +30,7 @@ export interface Agent_Model_Slot_State {
 }
 
 export interface AgentFormState {
-    main_tab: 'cognition' | 'memory' | 'governance';
+    main_tab: 'cognition' | 'memory' | 'governance' | 'ledger' | 'maintenance';
     active_tab: Agent_Model_Slot_Key;
     active_model_slot: 1 | 2 | 3;
     identity: {

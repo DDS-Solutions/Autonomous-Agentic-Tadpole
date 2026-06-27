@@ -153,9 +153,36 @@ impl AgentRunner {
             .load(std::sync::atomic::Ordering::Relaxed)
             && ctx.model_config.provider != ModelProvider::Ollama
         {
-            return ProviderVariant::Null(NullProvider::new(
-                &ctx.agent_id,
-                NullReason::PrivacyModeEnforced,
+            tracing::warn!("🛡️ [Privacy Shield] Redirecting agent {} to local model (Ollama) due to Privacy Mode", ctx.agent_id);
+            let mut local_config = ctx.model_config.clone();
+            local_config.provider = ModelProvider::Ollama;
+            local_config.model_id = std::env::var("OLLAMA_MODEL")
+                .unwrap_or_else(|_| "gemma4:e4b".to_string())
+                .trim()
+                .to_string(); // Default local model ID or OLLAMA_MODEL override
+            
+            let api_key = local_config.api_key.clone().unwrap_or_else(|| "ollama".to_string());
+            if local_config.base_url.as_deref().unwrap_or("").trim().is_empty() {
+                let mut host = std::env::var("OLLAMA_HOST")
+                    .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
+                    .trim()
+                    .to_string();
+                if !host.starts_with("http://") && !host.starts_with("https://") {
+                    host = format!("http://{}", host);
+                }
+                if host.contains("0.0.0.0") {
+                    host = host.replace("0.0.0.0", "127.0.0.1");
+                }
+                if !host.ends_with("/v1") && !host.ends_with("/v1/") {
+                    if host.ends_with('/') { host.pop(); }
+                    host.push_str("/v1");
+                }
+                local_config.base_url = Some(host);
+            }
+            return ProviderVariant::OpenAI(crate::agent::openai::OpenAIProvider::new(
+                client,
+                api_key,
+                local_config,
             ));
         }
 
@@ -274,6 +301,12 @@ impl AgentRunner {
                         .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
                         .trim()
                         .to_string();
+                    if !host.starts_with("http://") && !host.starts_with("https://") {
+                        host = format!("http://{}", host);
+                    }
+                    if host.contains("0.0.0.0") {
+                        host = host.replace("0.0.0.0", "127.0.0.1");
+                    }
                     if !host.ends_with("/v1") && !host.ends_with("/v1/") {
                         if host.ends_with('/') { host.pop(); }
                         host.push_str("/v1");
@@ -535,6 +568,22 @@ impl AgentRunner {
         };
 
         let failover = failover_config?;
+
+        // SEC-04: Privacy Mode Enforcement during failover
+        let privacy_mode_active = self
+            .state
+            .governance
+            .privacy_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if privacy_mode_active && failover.provider != ModelProvider::Ollama {
+            tracing::warn!(
+                "🛡️ [Privacy Shield] Blocking failover to non-local provider {} for agent {} in Privacy Mode",
+                failover.provider.to_string(),
+                ctx.agent_id
+            );
+            return None;
+        }
 
         // Build a new RunContext with the failover model configuration
         let mut new_ctx = ctx.clone();

@@ -16,68 +16,13 @@
       "supportsReasoning": false,
       "supportsHaltingTool": true,
       "contextWindow": 32768,
-      "maxOutputTokens": 4096
-    }
-  },
-  {
-    "id": "gemma4:26b",
-    "name": "gemma4:26b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 128000,
-      "maxOutputTokens": 4096
-    }
-  },
-  {
-    "id": "qwen3.5:9b",
-    "name": "qwen3.5:9b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096
-    }
-  },
-  {
-    "id": "gemma4:e4b",
-    "name": "gemma4:e4b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 128000,
-      "maxOutputTokens": 4096
-    }
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
   },
   {
     "id": "da821b7c-8857-488d-ac61-07c9de6bfb20",
@@ -96,8 +41,38 @@
       "supportsReasoning": false,
       "supportsHaltingTool": true,
       "contextWindow": 32768,
-      "maxOutputTokens": 4096
-    }
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "gemma4:e4b",
+    "name": "gemma4:e4b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
   },
   {
     "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
@@ -116,7 +91,87 @@
       "supportsReasoning": false,
       "supportsHaltingTool": true,
       "contextWindow": 32768,
-      "maxOutputTokens": 4096
-    }
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "qwen3.5:9b",
+    "name": "qwen3.5:9b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
+    "name": "gemma4:12b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": 100,
+    "tpm": 100000,
+    "rpd": 10000,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "gemma4:26b",
+    "name": "gemma4:26b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
   }
 ]

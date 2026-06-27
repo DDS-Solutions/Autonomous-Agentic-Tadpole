@@ -39,6 +39,7 @@ export default function Settings(): React.ReactElement {
 
     const [is_saved, set_is_saved] = useState(false);
     const [validation_error, set_validation_error] = useState<string | null>(null);
+    const [sync_error, set_sync_error] = useState<string | null>(null);
     const [is_swarm_scanning] = useState(false); // Default state for Swarm Discovery indicator
 
     const handle_change = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
@@ -51,6 +52,7 @@ export default function Settings(): React.ReactElement {
         });
         set_is_saved(false);
         set_validation_error(null);
+        set_sync_error(null);
     };
 
     /** Typed handler for numeric inputs (range, number) that coerces values before updating state. */
@@ -58,58 +60,65 @@ export default function Settings(): React.ReactElement {
         set_settings_state({ ...settings_state, [name]: value });
         set_is_saved(false);
         set_validation_error(null);
+        set_sync_error(null);
     };
 
     /**
-     /// Persists settings to local storage and synchronizes with the engine.
-     /// 
-     /// ### 🔄 Governance Sync
-     /// Updates the the backend's `GovernanceHub` with updated operational
-     /// limits (Max Agents, Budget Caps) to ensure full system alignment.
+     * Persists settings to local storage and synchronizes with the engine.
+     *
+     * ### 🔄 Governance Sync
+     * Local persistence always succeeds first (guaranteed success flash).
+     * Backend governance sync is fire-and-forget — failures surface as a
+     * non-blocking warning near the Save button, but do NOT block the save.
+     * This prevents the token-change self-referential 401 loop where saving
+     * a new token caused the sync to fail with the new (yet-to-be-accepted)
+     * token, silently preventing the success state from being shown.
      */
     const handle_save = async (): Promise<void> => {
+        // Step 1: Validate & persist locally — this is always the source of truth.
         const error = save_settings(settings_state);
         if (error) {
             set_validation_error(error);
             return;
         }
 
-        const has_api_token = settings_state.tadpole_os_api_key.trim().length > 0;
-
-        if (has_api_token) {
-            // Synchronize governance settings with the backend when credentials exist.
-            try {
-                await system_api_service.update_governance_settings({
-                    auto_approve_safe_skills: settings_state.auto_approve_safe_skills,
-                    privacy_mode: settings_state.privacy_mode,
-                    max_agents: settings_state.max_agents,
-                    max_clusters: settings_state.max_clusters,
-                    max_swarm_depth: settings_state.max_swarm_depth,
-                    max_task_length: settings_state.max_task_length,
-                    default_budget_usd: settings_state.default_budget_usd,
-                    default_model: settings_state.default_model
-                });
-            } catch (e) {
-                console.error("Failed to sync governance settings with engine", e);
-                set_validation_error(i18n.t('settings.error_sync_failed', { defaultValue: 'System synchronization failed. Local changes saved.' }));
-                return;
-            }
-        } else {
-            console.debug('[Settings_View] Saved local settings without engine sync because NEURAL_TOKEN is not configured.');
-        }
-
-        // Apply appearance engine preferences immediately
+        // Step 2: Apply appearance preferences immediately (local, no network).
         document.documentElement.setAttribute('data-theme', settings_state.theme);
         document.documentElement.setAttribute('data-density', settings_state.density);
 
+        // Step 3: Always show the local save success — this must not be gated on backend sync.
+        set_is_saved(true);
+        set_validation_error(null);
+        set_sync_error(null);
+        setTimeout(() => set_is_saved(false), 2000);
+
+        // Step 4: Pre-warm sentinel if enabled (local, async side-effect).
         if (settings_state.sentinel_mode) {
             const { browser_inference_service } = await import('../services/browser_inference');
             browser_inference_service.pre_warm();
         }
 
-        set_is_saved(true);
-        set_validation_error(null);
-        setTimeout(() => set_is_saved(false), 2000);
+        // Step 5: Fire-and-forget backend governance sync.
+        // Uses the already-saved token from the store (which is the newly entered token).
+        // A 401 here means the new token does not match the engine's NEURAL_ENGINE_ACCESS_TOKEN.
+        const has_api_token = settings_state.tadpole_os_api_key.trim().length > 0;
+        if (has_api_token) {
+            system_api_service.update_governance_settings({
+                auto_approve_safe_skills: settings_state.auto_approve_safe_skills,
+                privacy_mode: settings_state.privacy_mode,
+                max_agents: settings_state.max_agents,
+                max_clusters: settings_state.max_clusters,
+                max_swarm_depth: settings_state.max_swarm_depth,
+                max_task_length: settings_state.max_task_length,
+                default_budget_usd: settings_state.default_budget_usd,
+            }).catch((e: unknown) => {
+                const msg = e instanceof Error ? e.message : 'Engine sync failed. Verify the Neural Token matches the backend.';
+                console.warn('[Settings_View] Non-blocking backend sync error:', msg);
+                set_sync_error(i18n.t('settings.error_sync_failed', { defaultValue: 'Local settings saved. Engine sync failed — verify token matches the backend.' }));
+            });
+        } else {
+            console.debug('[Settings_View] Saved local settings without engine sync because NEURAL_TOKEN is not configured.');
+        }
     };
 
     return (
@@ -127,7 +136,7 @@ export default function Settings(): React.ReactElement {
             })}
             </script>
             <h1 className="sr-only">Tadpole OS System Configuration & Environmental Governance</h1>
-            <div className="flex justify-end pr-2">
+            <div className="flex flex-col items-end gap-2 pr-2">
                 <Tooltip content={i18n.t('settings.tooltip_save')} position="left">
                     <button
                         onClick={handle_save}
@@ -137,6 +146,11 @@ export default function Settings(): React.ReactElement {
                         {is_saved ? i18n.t('settings.saved') : validation_error ? i18n.t('settings.fix_errors') : i18n.t('settings.save_changes')}
                     </button>
                 </Tooltip>
+                {sync_error && (
+                    <p className="text-xs text-amber-400 font-medium text-right max-w-xs leading-snug">
+                        ⚠️ {sync_error}
+                    </p>
+                )}
             </div>
 
             {/* Connection Settings */}

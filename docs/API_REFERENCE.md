@@ -39,7 +39,10 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/agents` | `routes::agent::get_agents` | Protected |
 | `POST` | `/v1/agents` | `routes::agent::create_agent` | Protected |
 | `GET` | `/v1/agents/graph` | `routes::agent::get_swarm_graph_handler` | Protected |
+| `DELETE` | `/v1/agents/{id}` | `routes::agent::delete_agent` | Protected |
 | `PUT` | `/v1/agents/{id}` | `routes::agent::update_agent` | Protected |
+| `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet) .put(routes::agentic_engine::update_context_packet` | Protected |
+| `GET` | `/v1/agents/{id}/maintenance-report` | `routes::agentic_engine::get_maintenance_report` | Protected |
 | `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
@@ -47,7 +50,13 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `POST` | `/v1/agents/{id}/pause` | `routes::agent::pause_agent` | Protected |
 | `POST` | `/v1/agents/{id}/reset` | `routes::agent::reset_agent` | Protected |
 | `POST` | `/v1/agents/{id}/resume` | `routes::agent::resume_agent` | Protected |
+| `GET` | `/v1/agents/{id}/skills/subscribed` | `routes::agentic_engine::get_subscribed_skills` | Protected |
+| `POST` | `/v1/agents/{id}/skills/{skill_id}/approve` | `routes::agentic_engine::approve_skill` | Protected |
+| `POST` | `/v1/agents/{id}/skills/{skill_id}/subscribe` | `routes::agentic_engine::subscribe_skill` | Protected |
+| `GET` | `/v1/agents/{id}/status-ledger` | `routes::agentic_engine::get_status_ledger) .put(routes::agentic_engine::update_status_ledger` | Protected |
 | `POST` | `/v1/agents/{id}/tasks` | `routes::agent::send_task` | Protected |
+| `POST` | `/v1/agents/{id}/tasks/{task_id}/claim` | `routes::agentic_engine::claim_task` | Protected |
+| `POST` | `/v1/agents/{id}/tasks/{task_id}/receipts` | `routes::agentic_engine::post_receipt` | Protected |
 
 ## Benchmarks
 
@@ -159,6 +168,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/oversight/security/quotas` | `routes::oversight::get_security_quotas` | Protected |
 | `PUT` | `/v1/oversight/security/quotas/{id}` | `routes::oversight::update_agent_quota` | Protected |
 | `PUT` | `/v1/oversight/settings` | `routes::oversight::update_settings` | Protected |
+| `GET` | `/v1/oversight/token-burn` | `routes::oversight::get_token_burn` | Protected |
 | `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected |
 
 ## Skills
@@ -198,5 +208,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 | --- | --- | --- | --- |
 | `GET` | `/v1/env-schema` | `routes::env_schema::get_env_schema` | Protected |
 | `GET` | `/v1/system/compute-profile` | `routes::system::get_compute_profile` | Protected |
+| `GET` | `/v1/system/debug/queues` | `routes::system::debug_queues` | Protected |
+| `GET` | `/v1/system/debug/services` | `routes::system::debug_services` | Protected |
 
 [//]: # (Metadata: [API_REFERENCE])

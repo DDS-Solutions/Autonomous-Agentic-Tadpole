@@ -167,7 +167,16 @@ impl AgentRunner {
                     }
                 }
             } else {
-                Err(ToolExecutionError::ExecutionFailed(format!("Unknown tool '{}'", fc.name)))
+                let snapshot = self.state.registry.skills.snapshot();
+                if let Some(skill) = snapshot.skills.get(&fc.name).map(|r| r.value().clone()) {
+                    let mut out = String::new();
+                    match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage).await {
+                        Ok(()) => Ok(out),
+                        Err(e) => Err(ToolExecutionError::AppError(e)),
+                    }
+                } else {
+                    Err(ToolExecutionError::ExecutionFailed(format!("Unknown tool '{}'", fc.name)))
+                }
             };
 
             match result {

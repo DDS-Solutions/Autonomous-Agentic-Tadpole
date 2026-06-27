@@ -378,6 +378,103 @@ export const agent_api_service = {
             ...result,
             entries: (result.entries ?? []).map(normalize_agent_memory_entry),
         };
+    },
+
+    /**
+     * Fetches the context packet for a given agent.
+     */
+    get_context_packet: async (agent_id: string): Promise<{ contextVersion: number; contextPacket: Record<string, unknown> }> => {
+        return api_request(`/v1/agents/${agent_id}/context-packet`, { method: 'GET' });
+    },
+
+    /**
+     * Updates the context packet for a given agent.
+     */
+    update_context_packet: async (agent_id: string, context_version: number, context_packet: Record<string, unknown>): Promise<boolean> => {
+        await api_request(`/v1/agents/${agent_id}/context-packet`, {
+            method: 'PUT',
+            body: JSON.stringify({ contextVersion: context_version, contextPacket: context_packet })
+        });
+        return true;
+    },
+
+    /**
+     * Fetches skill subscriptions for a given agent.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get_subscribed_skills: async (agent_id: string): Promise<any[]> => {
+        return api_request(`/v1/agents/${agent_id}/skills/subscribed`, { method: 'GET' });
+    },
+
+    /**
+     * Subscribes an agent to a skill.
+     */
+    subscribe_skill: async (agent_id: string, skill_id: string, notes?: string): Promise<{ subscriptionId: string; subscriptionStatus: string }> => {
+        return api_request(`/v1/agents/${agent_id}/skills/${skill_id}/subscribe`, {
+            method: 'POST',
+            body: JSON.stringify({ notes })
+        });
+    },
+
+    /**
+     * Approves a skill subscription.
+     */
+    approve_skill: async (agent_id: string, skill_id: string): Promise<{ status: string; approvedAt: number }> => {
+        return api_request(`/v1/agents/${agent_id}/skills/${skill_id}/approve`, { method: 'POST' });
+    },
+
+    /**
+     * Fetches the status ledger for a given agent.
+     */
+    get_status_ledger: async (agent_id: string): Promise<{
+        agentId: string;
+        agentCode: string;
+        runtime?: string;
+        automationState: string;
+        lastHeartbeat?: number;
+        lastQueueResult: string;
+        lastTaskId?: string;
+        lastSuccessfulRun?: number;
+        contextVersion: number;
+        contextPacket: Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        subscribedSkills: any;
+        notes?: string;
+    }> => {
+        return api_request(`/v1/agents/${agent_id}/status-ledger`, { method: 'GET' });
+    },
+
+    /**
+     * Updates the status ledger for a given agent.
+     */
+    update_status_ledger: async (agent_id: string, updates: {
+        lastQueueResult?: string;
+        lastTaskId?: string;
+        automationState?: string;
+        notes?: string;
+        contextVersion?: number;
+    }): Promise<boolean> => {
+        await api_request(`/v1/agents/${agent_id}/status-ledger`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+        return true;
+    },
+
+    /**
+     * Fetches the maintenance report for a given agent.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get_agent_maintenance_report: async (agent_id: string): Promise<any> => {
+        return api_request(`/v1/agents/${agent_id}/maintenance-report`, { method: 'GET' });
+    },
+
+    /**
+     * Fetches the overall token burn and cost report.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get_token_burn_report: async (): Promise<any> => {
+        return api_request(`/v1/oversight/token-burn`, { method: 'GET' });
     }
 };
 

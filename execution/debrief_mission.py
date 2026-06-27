@@ -122,22 +122,30 @@ If no faults are found, return an empty list for "faults".
 Do not include conversational filler or markdown code blocks outside the JSON.
 """
 
-    # Use Groq as the fallback/primary because Gemini key is invalid
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-    GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    # Use Gemini 2.5 Flash because we have a valid Google API Key
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    if not GOOGLE_API_KEY:
+        print("ERROR: GOOGLE_API_KEY not set in environment.")
+        return None
 
-    url = f"{GROQ_BASE_URL}/chat/completions"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}"
     headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {GROQ_API_KEY}"
+        "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": "You are a mission analyst for Tadpole OS. Analyze logs and extract technical wisdom."},
-            {"role": "user", "content": prompt}
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": f"SYSTEM: You are a mission analyst for Tadpole OS. Analyze logs and extract technical wisdom.\n\nUSER: {prompt}"
+                    }
+                ]
+            }
         ],
-        "temperature": 0.1
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json"
+        }
     }
 
     try:
@@ -147,7 +155,7 @@ Do not include conversational filler or markdown code blocks outside the JSON.
             return None
             
         data = response.json()
-        raw_content = data['choices'][0]['message']['content'].strip()
+        raw_content = data['candidates'][0]['content']['parts'][0]['text'].strip()
         
         # Strip markdown code blocks if present
         if raw_content.startswith("```json"):

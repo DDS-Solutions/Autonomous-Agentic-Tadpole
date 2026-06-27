@@ -58,6 +58,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "dist".to_string());
 
     let mut app = Router::new()
+        .route("/metrics", get(routes::health::metrics_handler))
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
         .layer(axum::middleware::from_fn_with_state(
@@ -223,6 +224,30 @@ fn build_agent_routes() -> Router<Arc<AppState>> {
             "/{id}/tasks/{task_id}/receipts",
             post(routes::agentic_engine::post_receipt),
         )
+        // ── Agentic Engine P1: Context Packet ─────────────────────────────
+        .route(
+            "/{id}/context-packet",
+            get(routes::agentic_engine::get_context_packet)
+                .put(routes::agentic_engine::update_context_packet),
+        )
+        // ── Agentic Engine P1: Skill Subscriptions ───────────────────────
+        .route(
+            "/{id}/skills/subscribed",
+            get(routes::agentic_engine::get_subscribed_skills),
+        )
+        .route(
+            "/{id}/skills/{skill_id}/subscribe",
+            post(routes::agentic_engine::subscribe_skill),
+        )
+        .route(
+            "/{id}/skills/{skill_id}/approve",
+            post(routes::agentic_engine::approve_skill),
+        )
+        // ── Agentic Engine Phase 3: Agent Maintenance Report ─────────────
+        .route(
+            "/{id}/maintenance-report",
+            get(routes::agentic_engine::get_maintenance_report),
+        )
 }
 
 
@@ -232,6 +257,8 @@ fn build_oversight_routes() -> Router<Arc<AppState>> {
         .route("/pending", get(routes::oversight::get_pending))
         .route("/ledger", get(routes::oversight::get_ledger))
         .route("/settings", put(routes::oversight::update_settings))
+        // ── Agentic Engine Phase 3: Swarm Token Burn Aggregation ─────────
+        .route("/token-burn", get(routes::oversight::get_token_burn))
         .route(
             "/security/quotas",
             get(routes::oversight::get_security_quotas),

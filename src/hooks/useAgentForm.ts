@@ -26,7 +26,7 @@ import type {
 export type Agent_Config_State = AgentFormState;
 
 export type Agent_Config_Action =
-    | { type: 'SET_MAIN_TAB'; payload: 'cognition' | 'memory' | 'governance' }
+    | { type: 'SET_MAIN_TAB'; payload: 'cognition' | 'memory' | 'governance' | 'ledger' | 'maintenance' }
     | { type: 'SET_TAB'; payload: Agent_Model_Slot_Key }
     | { type: 'UPDATE_IDENTITY'; field: 'name' | 'role' | 'department'; value: string }
     | { type: 'UPDATE_SLOT'; slot: Agent_Model_Slot_Key; field: 'model' | 'provider' | 'system_prompt'; value: string }

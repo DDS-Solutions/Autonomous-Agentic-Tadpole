@@ -183,7 +183,18 @@ export default function Workspaces() {
                                                         <ArrowUpRight size={14} className={task.status === 'pending' ? 'text-amber-500' : 'text-zinc-600'} />
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs text-zinc-200 font-medium">{task.description}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-xs text-zinc-200 font-medium">{task.description}</p>
+                                                            <span className={`shrink-0 px-1 py-0.25 rounded text-[7px] font-black uppercase tracking-widest ${
+                                                                task.status === 'pending'
+                                                                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                                                    : task.status === 'completed'
+                                                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                            }`}>
+                                                                {task.status === 'pending' ? 'claimed' : task.status === 'completed' ? 'done' : 'failed'}
+                                                            </span>
+                                                        </div>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             <span className="text-[9px] font-mono text-zinc-500 uppercase">{i18n.t('workspaces.label_from_agent', { id: task.agent_id })}</span>
                                                             <span className="text-zinc-800">•</span>

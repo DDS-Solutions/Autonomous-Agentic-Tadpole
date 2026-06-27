@@ -18,6 +18,7 @@ pub struct SymbolNode {
     pub signature: String,
     pub start_line: u32,
     pub end_line: u32,
+    #[specta(type = u32)]
     pub tokens: usize,
 }
 

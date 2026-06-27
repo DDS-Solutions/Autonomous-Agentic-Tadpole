@@ -342,7 +342,12 @@ export default function Missions() {
                                             {(active_cluster.pending_tasks || []).filter((t: Task_Branch) => (t.id || '').startsWith('ho-') && t.status === 'pending').map((task: Task_Branch) => (
                                                 <div key={task.id} className="p-3 bg-black/40 border border-amber-500/20 rounded-lg flex items-center justify-between gap-4">
                                                     <div className="flex flex-col gap-1">
-                                                        <p className="text-xs text-zinc-100">{task.description}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-xs text-zinc-100">{task.description}</p>
+                                                            <span className="shrink-0 px-1 py-0.25 rounded text-[7px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                                                claimed
+                                                            </span>
+                                                        </div>
                                                         <span className="text-[8px] text-amber-500/60 uppercase font-mono">{i18n.t('missions.label_delegation_request')}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">

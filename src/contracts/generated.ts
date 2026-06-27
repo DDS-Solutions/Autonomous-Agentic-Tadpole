@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Not tracked (Static generated types).
  */
 
-export type EngineAgent = { identity: AgentIdentity; models: AgentModels; economics: AgentEconomics; health: AgentHealth; capabilities: AgentCapabilities; state: AgentState; metadata: Partial<{ [key in string]: JsonValue }>; created_at: string | null; requires_oversight: boolean; voice_id: string | null; voice_engine: string | null; stt_engine: string | null; connector_configs: ConnectorConfig[]; version: number }
+export type EngineAgent = { identity: AgentIdentity; models: AgentModels; economics: AgentEconomics; health: AgentHealth; capabilities: AgentCapabilities; state: AgentState; metadata: Partial<{ [key in string]: JsonValue }>; created_at: string | null; requires_oversight: boolean; voice_id: string | null; voice_engine: string | null; stt_engine: string | null; connector_configs: ConnectorConfig[]; version: number; runner_policy: RunnerPolicy }
 
 export type AgentIdentity = { id: string; name: string; role: string; department: string; description: string; category: string; themeColor: string | null }
 
@@ -49,5 +49,25 @@ export type Permission = "network:outbound" | "filesystem:read" | "filesystem:wr
 export type SkillParameter = { type: string; required: boolean | null; default: JsonValue | null }
 
 export type SkillHooks = { before_execute: string | null; after_execute: string | null }
+
+/**
+ * A node in the knowledge graph representing a code symbol
+ * (function, struct, trait, interface, etc.).
+ */
+export type SymbolNode = { name: string; path: string; kind: string; signature: string; start_line: number; end_line: number; tokens: number }
+
+export type TokenBurnReport = { totalTokensIn: number; totalTokensOut: number; totalCostUsd: number; providers: ProviderTokenBurn[]; agents: AgentTokenBurn[]; recentBurns: RecentTokenBurn[] }
+
+export type ProviderTokenBurn = { providerId: string; tokensIn: number; tokensOut: number; costUsd: number }
+
+export type AgentTokenBurn = { agentId: string; agentName: string; tokensIn: number; tokensOut: number; costUsd: number }
+
+export type RecentTokenBurn = { taskId: string; title: string; agentId: string; agentName: string; tokensIn: number; tokensOut: number; costUsd: number; updatedAt: number }
+
+export type AgentMaintenanceReport = { agentId: string; overallScore: number; status: string; capabilityDrift: MaintenanceDimension; memoryHealth: MaintenanceDimension; rateLimits: MaintenanceDimension; latency: MaintenanceDimension; errorRate: MaintenanceDimension; budgetHeadroom: MaintenanceDimension; dependencyHealth: MaintenanceDimension; evaluatedAt: number }
+
+export type MaintenanceDimension = { score: number; status: string; details: string }
+
+export type ClaimResponse = { status: string; agentId: string; taskId: string; claimedAt: number; receipt: string }
 
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];

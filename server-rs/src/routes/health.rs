@@ -175,3 +175,35 @@ pub async fn health_check(
         }),
     ))
 }
+
+/// GET /metrics
+///
+/// Serves Prometheus metrics registered in the global registry.
+///
+/// @docs OPERATIONS_MANUAL:Metrics
+#[tracing::instrument(name = "system::metrics")]
+pub async fn metrics_handler() -> Result<impl IntoResponse, AppError> {
+    use prometheus::Encoder;
+    let encoder = prometheus::TextEncoder::new();
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    
+    if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+        tracing::error!("❌ [Telemetry] Failed to encode prometheus metrics: {}", e);
+        return Err(AppError::InternalServerError(format!("Metrics encode failed: {}", e)));
+    }
+    
+    let response = match String::from_utf8(buffer) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("❌ [Telemetry] Metrics encoding returned invalid UTF-8: {}", e);
+            return Err(AppError::InternalServerError(format!("Invalid UTF-8 in metrics: {}", e)));
+        }
+    };
+
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        response
+    ))
+}
+

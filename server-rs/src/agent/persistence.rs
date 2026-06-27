@@ -115,7 +115,8 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
             requires_oversight,
             working_memory,
             stt_engine,
-            version
+            version,
+            runner_policy
          FROM agents",
     )
     .fetch_all(pool)
@@ -218,6 +219,12 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                 .unwrap_or(false),
             stt_engine: row.try_get("stt_engine").ok(),
             version: row.get::<i64, _>("version") as u32,
+            runner_policy: row
+                .try_get::<Option<String>, _>("runner_policy")
+                .ok()
+                .flatten()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default(),
         };
         agents.push(agent);
     }
@@ -240,8 +247,8 @@ where
                 .cloned()
         });
 
-    sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version, runner_policy)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             role = excluded.role,
@@ -282,7 +289,8 @@ where
             requires_oversight = excluded.requires_oversight,
             working_memory = excluded.working_memory,
             stt_engine = excluded.stt_engine,
-            version = agents.version + 1
+            version = agents.version + 1,
+            runner_policy = excluded.runner_policy
             WHERE agents.id = excluded.id AND agents.version = ?")
     .bind(&agent.identity.id)
     .bind(&agent.identity.name)
@@ -325,6 +333,7 @@ where
     .bind(sqlx::types::Json(&agent.state.working_memory))
     .bind(&agent.stt_engine)
     .bind(agent.version as i64)
+    .bind(sqlx::types::Json(&agent.runner_policy))
     .bind(agent.version as i64)
     .execute(executor)
     .await?;
@@ -332,10 +341,34 @@ where
     Ok(())
 }
 
+async fn auto_subscribe_agent_skills(
+    conn: &mut sqlx::SqliteConnection,
+    agent: &EngineAgent,
+) -> Result<(), AppError> {
+    let now = chrono::Utc::now().timestamp();
+    for skill_id in &agent.capabilities.skills {
+        let sub_id = format!("sub-{}-{}", skill_id, agent.identity.id);
+        sqlx::query(
+            "INSERT OR IGNORE INTO skill_subscriptions
+             (id, agent_id, skill_id, scope_hash, subscription_status, installed_at, last_updated_at, notes)
+             VALUES (?, ?, ?, 'dummy', 'approved', ?, ?, 'Pre-approved system skill')"
+        )
+        .bind(&sub_id)
+        .bind(&agent.identity.id)
+        .bind(skill_id)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 pub async fn save_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<(), AppError> {
     let mut conn = pool.acquire().await?;
     execute_save_agent(&mut *conn, agent).await?;
     sync_manifests_for_agent(&mut conn, agent).await?;
+    auto_subscribe_agent_skills(&mut conn, agent).await?;
     Ok(())
 }
 
@@ -346,6 +379,7 @@ pub async fn save_agent_db_in_tx(
 ) -> Result<(), AppError> {
     execute_save_agent(&mut *conn, agent).await?;
     sync_manifests_for_agent(&mut *conn, agent).await?;
+    auto_subscribe_agent_skills(&mut *conn, agent).await?;
     Ok(())
 }
 
@@ -683,7 +717,7 @@ mod tests {
 
         // 1. Setup Schema (Matching exactly the final state after migrations)
         sqlx::query(
-            "CREATE TABLE agents (
+            r#"CREATE TABLE agents (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             role TEXT NOT NULL,
@@ -724,8 +758,9 @@ mod tests {
             working_memory TEXT DEFAULT '{}',
             stt_engine TEXT,
             version INTEGER DEFAULT 1,
-            created_at DATETIME
-        )",
+            created_at DATETIME,
+            runner_policy TEXT DEFAULT '{"max_concurrent":1,"resume_blocked_first":true,"preflight_checks":["context_version","skill_updates"]}'
+        )"#,
         )
         .execute(&pool)
         .await?;
@@ -738,6 +773,23 @@ mod tests {
                 source_uri TEXT NOT NULL,
                 status TEXT NOT NULL,
                 last_sync_at DATETIME
+            )",
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE skill_subscriptions (
+                id TEXT PRIMARY KEY NOT NULL,
+                agent_id TEXT NOT NULL,
+                skill_id TEXT NOT NULL,
+                approved_at INTEGER,
+                scope_hash TEXT NOT NULL,
+                subscription_status TEXT NOT NULL DEFAULT 'pending',
+                installed_at INTEGER,
+                last_updated_at INTEGER,
+                notes TEXT,
+                UNIQUE(agent_id, skill_id)
             )",
         )
         .execute(&pool)

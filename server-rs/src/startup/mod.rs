@@ -160,11 +160,11 @@ impl<E: opentelemetry_sdk::trace::SpanExporter> opentelemetry_sdk::trace::SpanEx
         self.inner.export(batch)
     }
 
-    fn shutdown(&mut self) -> Result<(), opentelemetry_sdk::error::OTelSdkError> {
+    fn shutdown(&self) -> Result<(), opentelemetry_sdk::error::OTelSdkError> {
         self.inner.shutdown()
     }
 
-    fn force_flush(&mut self) -> Result<(), opentelemetry_sdk::error::OTelSdkError> {
+    fn force_flush(&self) -> Result<(), opentelemetry_sdk::error::OTelSdkError> {
         self.inner.force_flush()
     }
 }

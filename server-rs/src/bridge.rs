@@ -65,6 +65,16 @@ pub fn export_bindings() {
     export_type!(SkillHooks);
     export_type!(crate::intelligence::graph::SymbolNode);
 
+    // ── Phase 3: Token Burn & Agent Maintenance Reports ──────────────
+    export_type!(crate::routes::oversight::TokenBurnReport);
+    export_type!(crate::routes::oversight::ProviderTokenBurn);
+    export_type!(crate::routes::oversight::AgentTokenBurn);
+    export_type!(crate::routes::oversight::RecentTokenBurn);
+    export_type!(crate::routes::agentic_engine::AgentMaintenanceReport);
+    export_type!(crate::routes::agentic_engine::MaintenanceDimension);
+    export_type!(crate::routes::agentic_engine::ClaimResponse);
+
+
     output.push_str("export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];\n");
 
     let export_path = "../src/contracts/generated.ts";

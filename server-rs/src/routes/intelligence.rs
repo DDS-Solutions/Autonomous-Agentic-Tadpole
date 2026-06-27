@@ -23,31 +23,7 @@ use parking_lot::RwLock;
 async fn get_built_symbol_graph(
     state: &Arc<AppState>,
 ) -> Result<Arc<RwLock<CodeSymbolGraph>>, AppError> {
-    tracing::debug!("[intelligence] Acquiring symbol graph lock");
-    let graph_lock = state.resources.get_symbol_graph().await;
-
-    let is_empty = {
-        let guard = graph_lock.read();
-        guard.index.is_empty()
-    };
-
-    if is_empty {
-        let lock_clone = Arc::clone(&graph_lock);
-        let salt = state.resources.obfuscation_salt.clone();
-        tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-            let mut graph = lock_clone.write();
-            if graph.index.is_empty() {
-                graph.build(&salt)?;
-            }
-            Ok(())
-        })
-        .await
-        .map_err(|e| {
-            AppError::InternalServerError(format!("Graph build thread panicked: {}", e))
-        })??;
-    }
-
-    Ok(graph_lock)
+    Ok(state.resources.get_symbol_graph().await)
 }
 
 #[derive(Deserialize)]

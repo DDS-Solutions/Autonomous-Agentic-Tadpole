@@ -393,6 +393,28 @@ impl AgentRunner {
             .map(|a| a.value().clone())
             .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?;
 
+        // Phase 2: Resume blocked first check (swapping payload message if a blocked task exists)
+        if agent_data.runner_policy.resume_blocked_first {
+            use sqlx::Row;
+            let blocked_row = sqlx::query(
+                "SELECT id, title, description FROM agent_tasks WHERE agent_id = ?1 AND status = 'needs_input' ORDER BY updated_at ASC LIMIT 1"
+            )
+            .bind(&agent_id)
+            .fetch_optional(&self.state.resources.pool)
+            .await
+            .unwrap_or(None);
+
+            if let Some(row) = blocked_row {
+                let task_id: String = row.try_get("id").unwrap_or_default();
+                let title: String = row.try_get("title").unwrap_or_default();
+                let desc: String = row.try_get::<Option<String>, _>("description").unwrap_or(None).unwrap_or_default();
+
+                tracing::info!("🔄 [Preflight] Resuming blocked task {} first: {}", task_id, title);
+                payload.message = format!("Resuming task {}: {}\n{}", task_id, title, desc);
+                payload.primary_goal = Some(title);
+            }
+        }
+
         if let Some(workflow_name) = agent_data.capabilities.workflows.first() {
             let msg_lower = payload.message.to_lowercase();
             let workflow_requested = msg_lower
@@ -432,6 +454,13 @@ impl AgentRunner {
             .await?;
         cleanup_guard.ctx = Some(ctx.clone());
 
+        // Phase 2: Preflight Checks validation
+        if let Err(preflight_err) = self.execute_preflight_checks(&agent_id, &agent_data).await {
+            cleanup_guard.completed = true;
+            let _ = self.fail_mission(&ctx, &preflight_err, &None).await;
+            return Err(preflight_err);
+        }
+
         self.state
             .yield_phase_transition(&agent_id, "IntelligenceLoop")
             .await;
@@ -465,6 +494,155 @@ impl AgentRunner {
             end -= 1;
         }
         format!("{}... [TRUNCATED]", &s[..end])
+    }
+
+    /// Executes preflight checks (concurrency, context version, and skill subscriptions)
+    /// based on the agent's runner policy.
+    pub(crate) async fn execute_preflight_checks(
+        &self,
+        agent_id: &str,
+        agent_data: &crate::agent::types::EngineAgent,
+    ) -> Result<(), AppError> {
+        use sqlx::Row;
+        let policy = &agent_data.runner_policy;
+
+        // 1. Update status ledger to 'checking'
+        let _ = sqlx::query(
+            "UPDATE agent_status_ledger
+             SET last_queue_result = 'checking', last_heartbeat = ?
+             WHERE agent_id = ?"
+        )
+        .bind(chrono::Utc::now().timestamp())
+        .bind(agent_id)
+        .execute(&self.state.resources.pool)
+        .await;
+
+        // 2. Concurrency check
+        if policy.max_concurrent > 0 {
+            let active_claims: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM agent_tasks WHERE claimed_by = ? AND status = 'working'"
+            )
+            .bind(agent_id)
+            .fetch_one(&self.state.resources.pool)
+            .await
+            .unwrap_or(0);
+
+            if active_claims >= policy.max_concurrent as i64 {
+                let _ = sqlx::query(
+                    "UPDATE agent_status_ledger
+                     SET last_queue_result = 'blocked concurrent', last_heartbeat = ?
+                     WHERE agent_id = ?"
+                )
+                .bind(chrono::Utc::now().timestamp())
+                .bind(agent_id)
+                .execute(&self.state.resources.pool)
+                .await;
+
+                return Err(AppError::Conflict(format!(
+                    "Concurrency limit reached: agent '{}' has {} active claimed tasks (limit is {})",
+                    agent_id, active_claims, policy.max_concurrent
+                )));
+            }
+        }
+
+        // 3. Context version check
+        if policy.preflight_checks.iter().any(|c| c == "context_version") {
+            let ledger_version: i64 = sqlx::query_scalar(
+                "SELECT context_version FROM agent_status_ledger WHERE agent_id = ?"
+            )
+            .bind(agent_id)
+            .fetch_optional(&self.state.resources.pool)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(1);
+
+            if ledger_version > agent_data.version as i64 {
+                let _ = sqlx::query(
+                    "UPDATE agent_status_ledger
+                     SET last_queue_result = 'blocked context_version', last_heartbeat = ?
+                     WHERE agent_id = ?"
+                )
+                .bind(chrono::Utc::now().timestamp())
+                .bind(agent_id)
+                .execute(&self.state.resources.pool)
+                .await;
+
+                return Err(AppError::BadRequest(format!(
+                    "Preflight validation failed: Agent context version ({}) is behind ledger version ({})",
+                    agent_data.version, ledger_version
+                )));
+            }
+        }
+
+        // 4. Skill subscriptions check
+        if policy.preflight_checks.iter().any(|c| c == "skill_updates") {
+            let subs = sqlx::query(
+                "SELECT skill_id, scope_hash, subscription_status FROM skill_subscriptions WHERE agent_id = ?"
+            )
+            .bind(agent_id)
+            .fetch_all(&self.state.resources.pool)
+            .await
+            .unwrap_or_default();
+
+            for skill_id in &agent_data.capabilities.skills {
+                let sub = subs.iter().find(|row| {
+                    row.try_get::<String, _>("skill_id").ok().as_ref() == Some(skill_id)
+                });
+
+                match sub {
+                    None => {
+                        return Err(AppError::BadRequest(format!(
+                            "Preflight verification failed: Skill '{}' is not subscribed by agent '{}'",
+                            skill_id, agent_id
+                        )));
+                    }
+                    Some(row) => {
+                        let status: String = row.try_get("subscription_status").unwrap_or_default();
+                        if status != "approved" {
+                            return Err(AppError::BadRequest(format!(
+                                "Preflight verification failed: Skill '{}' subscription status is '{}' (requires 'approved')",
+                                skill_id, status
+                            )));
+                        }
+
+                        if let Some(manifest) = self.state.registry.skill_registry.get(skill_id) {
+                            let current_hash = crate::routes::agentic_engine::compute_skill_scope_hash(&manifest);
+                            let approved_hash: String = row.try_get("scope_hash").unwrap_or_default();
+
+                            if current_hash != approved_hash {
+                                let _ = sqlx::query(
+                                    "UPDATE skill_subscriptions
+                                     SET subscription_status = 'pending_reapproval', last_updated_at = ?
+                                     WHERE agent_id = ? AND skill_id = ?"
+                                )
+                                .bind(chrono::Utc::now().timestamp())
+                                .bind(agent_id)
+                                .bind(skill_id)
+                                .execute(&self.state.resources.pool)
+                                .await;
+
+                                return Err(AppError::BadRequest(format!(
+                                    "Preflight verification failed: Skill '{}' scope has changed and requires reapproval",
+                                    skill_id
+                                )));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let _ = sqlx::query(
+            "UPDATE agent_status_ledger
+             SET last_queue_result = 'executing', last_heartbeat = ?
+             WHERE agent_id = ?"
+        )
+        .bind(chrono::Utc::now().timestamp())
+        .bind(agent_id)
+        .execute(&self.state.resources.pool)
+        .await;
+
+        Ok(())
     }
 }
 

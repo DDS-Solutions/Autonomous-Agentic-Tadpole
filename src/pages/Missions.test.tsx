@@ -278,11 +278,11 @@ describe('Missions Page', () => {
         expect(screen.getByText('Incoming handoff')).toBeInTheDocument();
 
         // approve_branch
-        fireEvent.click(screen.getByText('Incoming handoff').closest('div')?.nextSibling?.firstChild as Element);
+        fireEvent.click(screen.getByText('Incoming handoff').closest('div')?.parentElement?.nextSibling?.firstChild as Element);
         expect(mock_workspace_state.approve_branch).toHaveBeenCalled();
 
         // reject_branch
-        fireEvent.click(screen.getByText('Incoming handoff').closest('div')?.nextSibling?.lastChild as Element);
+        fireEvent.click(screen.getByText('Incoming handoff').closest('div')?.parentElement?.nextSibling?.lastChild as Element);
         expect(mock_workspace_state.reject_branch).toHaveBeenCalled();
     });
 

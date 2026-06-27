@@ -61,6 +61,8 @@ import {
     VoiceSection,
     GovernanceSection,
     MemorySection,
+    LedgerSection,
+    MaintenanceSection,
     DirectMessageConsole,
     useAgentConfig
 } from './agent-config';
@@ -278,6 +280,20 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                     {i18n.t('agent_config.tab_governance')}
                     {mainTab === 'governance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-amber-500" />}
                 </button>
+                <button
+                    onClick={() => dispatch({ type: 'SET_MAIN_TAB', payload: 'ledger' })}
+                    className={`px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${mainTab === 'ledger' ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    {i18n.t('agent_config.tab_ledger')}
+                    {mainTab === 'ledger' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500" />}
+                </button>
+                <button
+                    onClick={() => dispatch({ type: 'SET_MAIN_TAB', payload: 'maintenance' })}
+                    className={`px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${mainTab === 'maintenance' ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    {i18n.t('agent_config.tab_maintenance')}
+                    {mainTab === 'maintenance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-500" />}
+                </button>
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col relative min-h-0">
@@ -335,7 +351,20 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                                 } else if (field === 'requires_oversight') {
                                     dispatch({ type: 'UPDATE_GOVERNANCE', field, value: value as boolean });
                                 }
-                            }}
+                             }}
+                        />
+                    )}
+                    {mainTab === 'ledger' && agent?.id && (
+                        <LedgerSection
+                            agentId={agent.id}
+                            allSkills={allSkills}
+                            themeColor={ui.theme_color}
+                        />
+                    )}
+                    {mainTab === 'maintenance' && agent?.id && (
+                        <MaintenanceSection
+                            agentId={agent.id}
+                            themeColor={ui.theme_color}
                         />
                     )}
 

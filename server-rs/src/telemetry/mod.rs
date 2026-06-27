@@ -235,6 +235,21 @@ pub static TADPOLE_RECRUIT_COUNT: Lazy<prometheus::Gauge> = Lazy::new(|| {
         .expect("metric can be created")
 });
 
+pub static OVERSIGHT_TOKENS_IN: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("oversight_tokens_in", "Total input tokens consumed by the swarm")
+        .expect("metric can be created")
+});
+
+pub static OVERSIGHT_TOKENS_OUT: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("oversight_tokens_out", "Total output tokens consumed by the swarm")
+        .expect("metric can be created")
+});
+
+pub static OVERSIGHT_COST_USD: Lazy<prometheus::Gauge> = Lazy::new(|| {
+    prometheus::register_gauge!("oversight_cost_usd", "Total cost in USD consumed by the swarm")
+        .expect("metric can be created")
+});
+
 /// Forces evaluation and registration of all Prometheus metrics.
 pub fn init_prometheus_metrics() {
     Lazy::force(&TOOL_LATENCY_P50);
@@ -246,6 +261,9 @@ pub fn init_prometheus_metrics() {
     Lazy::force(&TADPOLE_MAX_SWARM_DEPTH);
     Lazy::force(&TADPOLE_TPM_ACCUMULATOR);
     Lazy::force(&TADPOLE_RECRUIT_COUNT);
+    Lazy::force(&OVERSIGHT_TOKENS_IN);
+    Lazy::force(&OVERSIGHT_TOKENS_OUT);
+    Lazy::force(&OVERSIGHT_COST_USD);
 }
 
 // Metadata: [mod]

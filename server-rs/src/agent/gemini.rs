@@ -138,7 +138,9 @@ impl GeminiProvider {
         let base_url = self
             .config
             .base_url
-            .clone()
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
             .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string());
         let url = format!("{}/cachedContents", base_url);
 
@@ -183,12 +185,23 @@ impl GeminiProvider {
         let base_url = self
             .config
             .base_url
-            .clone()
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
             .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string());
         let url = format!(
             "{}/models/{}:generateContent",
             base_url, self.config.model_id
         );
+
+        let mut tools = tools;
+        if let Some(ref mut tool_defs) = tools {
+            for tool_def in tool_defs {
+                for decl in &mut tool_def.function_declarations {
+                    remove_additional_properties(&mut decl.parameters);
+                }
+            }
+        }
 
         let combined_prompt = format!("{}\n\nUSER MESSAGE:\n{}", system_prompt, user_message);
 
@@ -214,6 +227,7 @@ impl GeminiProvider {
         let mut attempts = 0;
         let max_attempts = 5;
 
+        tracing::info!("🚨 [GEMINI DEBUG] URL: '{}', API Key length: {}", url, self.api_key.len());
         loop {
             let res = self
                 .client
@@ -329,7 +343,9 @@ impl crate::agent::provider_trait::LlmProvider for GeminiProvider {
         let base_url = self
             .config
             .base_url
-            .clone()
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
             .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string());
 
         let embed_model = "gemini-embedding-001";
@@ -389,6 +405,24 @@ impl crate::agent::provider_trait::LlmProvider for GeminiProvider {
     }
 }
 
+fn remove_additional_properties(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(map) => {
+            map.remove("additionalProperties");
+            for value in map.values_mut() {
+                remove_additional_properties(value);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for value in arr {
+                remove_additional_properties(value);
+            }
+        }
+        _ => {}
+    }
+}
+
 // Metadata: [gemini]
 
 // Metadata: [gemini]
+

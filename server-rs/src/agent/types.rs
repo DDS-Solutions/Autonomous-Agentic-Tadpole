@@ -627,6 +627,28 @@ pub struct ToolContext {
     pub active_node_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RunnerPolicy {
+    pub max_concurrent: u32,
+    pub resume_blocked_first: bool,
+    pub preflight_checks: Vec<String>,
+}
+
+impl Default for RunnerPolicy {
+    fn default() -> Self {
+        Self {
+            max_concurrent: 1,
+            resume_blocked_first: true,
+            preflight_checks: vec!["context_version".to_string(), "skill_updates".to_string()],
+        }
+    }
+}
+
+fn default_runner_policy() -> RunnerPolicy {
+    RunnerPolicy::default()
+}
+
 #[derive(Debug, Clone, Default, specta::Type)]
 pub struct EngineAgent {
     pub identity: AgentIdentity,
@@ -643,6 +665,7 @@ pub struct EngineAgent {
     pub stt_engine: Option<String>,
     pub connector_configs: Vec<ConnectorConfig>,
     pub version: u32,
+    pub runner_policy: RunnerPolicy,
 }
 
 #[derive(Serialize)]
@@ -668,6 +691,7 @@ struct AgentResponse<'a> {
     stt_engine: &'a Option<String>,
     connector_configs: &'a [ConnectorConfig],
     version: u32,
+    runner_policy: &'a RunnerPolicy,
 }
 
 #[derive(Serialize)]
@@ -733,6 +757,7 @@ impl Serialize for EngineAgent {
             stt_engine: &self.stt_engine,
             connector_configs: &self.connector_configs,
             version: self.version,
+            runner_policy: &self.runner_policy,
         };
         response.serialize(serializer)
     }
@@ -823,6 +848,8 @@ struct EngineAgentWire {
     current_reasoning_turn: u32,
     #[serde(default = "default_version")]
     version: u32,
+    #[serde(default = "default_runner_policy", alias = "runnerPolicy")]
+    runner_policy: RunnerPolicy,
 }
 
 impl<'de> Deserialize<'de> for EngineAgent {
@@ -909,6 +936,7 @@ impl<'de> Deserialize<'de> for EngineAgent {
             stt_engine: wire.stt_engine,
             connector_configs: wire.connector_configs,
             version: wire.version,
+            runner_policy: wire.runner_policy,
         })
     }
 }

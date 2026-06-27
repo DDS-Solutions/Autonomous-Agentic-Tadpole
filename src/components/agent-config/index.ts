@@ -15,6 +15,8 @@ export * from './CognitionSection';
 export * from './VoiceSection';
 export * from './GovernanceSection';
 export * from './MemorySection';
+export * from './LedgerSection';
+export * from './MaintenanceSection';
 export * from './DirectMessageConsole';
 export * from './useAgentConfig';
 

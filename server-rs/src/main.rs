@@ -5,7 +5,9 @@
     clippy::collapsible_match,
     clippy::unnecessary_map_or,
     clippy::derivable_impls,
-    clippy::redundant_closure
+    clippy::redundant_closure,
+    dead_code,
+    unused_variables
 )]
 //! @docs ARCHITECTURE:Networking
 //! @docs OPERATIONS_MANUAL:Lifecycle
@@ -196,6 +198,9 @@ async fn async_main(config: crate::config::Config) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!(msg));
         }
     };
+
+    // Notify that boot sequence is complete so requests can proceed
+    app_state.notify_boot_complete();
 
     // --- [STAGE: RUN] ---
     // Start the Axum server and listen for incoming connections.

@@ -542,6 +542,59 @@
       ],
       "title": "Process Threads & File Descriptors",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "oversight_tokens_in",
+          "legendFormat": "Input Tokens (Swarm)",
+          "refId": "A"
+        },
+        {
+          "expr": "oversight_tokens_out",
+          "legendFormat": "Output Tokens (Swarm)",
+          "refId": "B"
+        },
+        {
+          "expr": "oversight_cost_usd",
+          "legendFormat": "Total Cost USD (Swarm)",
+          "refId": "C"
+        }
+      ],
+      "title": "Swarm Token Consumption & Financial Cost",
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 38,

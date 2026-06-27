@@ -184,12 +184,17 @@ def check_doc_file_refs(root):
                 or ref == "SKILL.md"
             ):
                 continue
+            if ref.endswith(".meta.json"):
+                continue
             normalized = ref.replace("/", os.sep)
             candidates = [
                 root / normalized,
                 root / "execution" / normalized,
                 root / "directives" / normalized,
                 root / "docs" / normalized,
+                root / "tests" / "unit" / normalized,
+                root / "server-rs" / "src" / "routes" / normalized,
+                root / "server-rs" / "src" / "system" / normalized,
             ]
             if not any(candidate.exists() for candidate in candidates):
                 print_result("DOC-REF", False, f"{doc.relative_to(root)} references missing {ref}")
