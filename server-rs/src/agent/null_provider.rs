@@ -83,7 +83,7 @@ impl LlmProvider for NullProvider {
         );
 
         let mut tool_calls = Vec::new();
-        let mut text_response = String::new();
+        let text_response;
 
         if self.agent_id == "1" {
             // Agent of Nine (CEO)
