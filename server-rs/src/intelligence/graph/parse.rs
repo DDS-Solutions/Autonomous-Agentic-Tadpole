@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **parse**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[parse]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::parse`
+
 //! Parallel file parsing service for the `CodeSymbolGraph`.
 //!
 //! Uses `rayon` for parallel I/O + AST extraction while applying TOCTOU
@@ -89,3 +99,5 @@ impl CodeParser for CodeParsingService {
         updates
     }
 }
+
+// Metadata: [parse]

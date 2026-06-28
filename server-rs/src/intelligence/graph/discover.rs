@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **discover**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[discover]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::discover`
+
 //! File discovery service for the `CodeSymbolGraph`.
 //!
 //! Walks the workspace root, applies exclusion rules, enforces a 2 MB
@@ -131,3 +141,5 @@ impl FileDiscoverer for FileDiscoveryService {
         Ok(files)
     }
 }
+
+// Metadata: [discover]

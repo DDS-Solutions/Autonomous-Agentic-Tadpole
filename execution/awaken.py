@@ -14,18 +14,7 @@ if sys.platform == "win32":
 
 # --- Configuration ---
 TARGET_DIRS = [
-    '.',
-    'server-rs',
-    'src',
-    'src-tauri',
-    'wasm-codec',
-    'docs',
-    '.agent',
-    'execution',
-    'scripts',
-    'legacy',
-    'data',
-    'tests'
+    '.'
 ]
 
 FILE_EXTENSIONS = {
@@ -269,7 +258,7 @@ def main():
             continue
             
         for r, _, files in os.walk(target_path):
-            if any(part in r for part in ['.git', 'node_modules', 'target', 'dist', '.tmp', 'reports', 'coverage']):
+            if any(part in r for part in ['.git', 'node_modules', 'target', 'dist', '.tmp', 'reports', 'coverage', 'scratch']):
                 continue
                 
             for f in files:

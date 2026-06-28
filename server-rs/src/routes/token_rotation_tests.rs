@@ -124,3 +124,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 }
+
+// Metadata: [token_rotation_tests]
+
+// Metadata: [token_rotation_tests]

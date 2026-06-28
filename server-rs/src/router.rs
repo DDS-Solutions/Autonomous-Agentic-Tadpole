@@ -79,15 +79,27 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         ))
         // TRAC-03: TraceLayer should be at the base to ensure all subsequent 
         // middleware have access to the request span.
+        // Resiliency: Bypass span creation for high-frequency polling/telemetry routes
+        // to prevent tracing-subscriber sharded slab registry desync/panic under concurrency load.
         .layer(tower_http::trace::TraceLayer::new_for_http().make_span_with(
             |request: &axum::http::Request<axum::body::Body>| {
-                tracing::info_span!(
-                    "http_request",
-                    method = %request.method(),
-                    uri = %request.uri(),
-                    request_id = tracing::field::Empty,
-                    trace_id = tracing::field::Empty,
-                )
+                let path = request.uri().path();
+                if path.starts_with("/v1/oversight/pending")
+                    || path.starts_with("/v1/oversight/ledger")
+                    || path.starts_with("/v1/oversight/security/")
+                    || path.starts_with("/v1/telemetry/")
+                    || path.starts_with("/v1/system/debug/")
+                {
+                    tracing::Span::none()
+                } else {
+                    tracing::info_span!(
+                        "http_request",
+                        method = %request.method(),
+                        uri = %request.uri(),
+                        request_id = tracing::field::Empty,
+                        trace_id = tracing::field::Empty,
+                    )
+                }
             },
         ))
         .layer(axum::middleware::from_fn(

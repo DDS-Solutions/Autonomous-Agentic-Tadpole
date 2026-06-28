@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Development_Guide]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Development-Guide]` in audit logs.
+
 # 💻 Development Guide
 
 ## Local Dev Setup
@@ -209,3 +229,5 @@ RUST_BACKTRACE=1 cargo test --bin server-rs -- routes::my_test --nocapture
 curl http://127.0.0.1:8000/v1/oversight/audit-trail \
   -H "Authorization: Bearer $NEURAL_TOKEN" | jq .data[-5:]
 ```
+
+[//]: # (Metadata: [Development_Guide])

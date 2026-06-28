@@ -226,3 +226,5 @@ export const Chat_Header = React.memo<Chat_Header_Props>(({
 });
 
 Chat_Header.displayName = 'Chat_Header';
+
+// Metadata: [Chat_Header]

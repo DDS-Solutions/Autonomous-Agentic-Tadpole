@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Operations_Manual]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Operations-Manual]` in audit logs.
+
 # 🏥 Operations Manual
 
 Runbooks for day-2 production operations. See also `docs/OPERATIONS_MANUAL.md` for the full version.
@@ -217,3 +237,5 @@ curl http://127.0.0.1:8000/v1/oversight/audit-trail/verify \
 - [ ] Check audit trail chain integrity
 - [ ] Review budget spend levels
 - [ ] Confirm all Prometheus alerts are green
+
+[//]: # (Metadata: [Operations_Manual])

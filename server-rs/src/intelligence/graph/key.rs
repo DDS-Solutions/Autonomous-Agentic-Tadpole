@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **key**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[key]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::key`
+
 //! Key normalization for the symbol index.
 //!
 //! The symbol index (`HashMap<String, NodeIndex>`) uses composite keys of the
@@ -25,3 +35,5 @@ impl KeyNormalizer for DefaultKeyNormalizer {
 pub fn index_key(path: &str, name: &str) -> String {
     DefaultKeyNormalizer.normalize_key(path, name)
 }
+
+// Metadata: [key]

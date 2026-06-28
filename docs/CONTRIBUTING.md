@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[CONTRIBUTING]` in audit logs.
+>
+> ### AI Assist Note
+> Contributing to Tadpole OS
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
 # Contributing to Tadpole OS
 
 Welcome, Sovereign Engineers and AI Agents. This manual defines the operational guidelines, codebase extension patterns, and validation protocols required to maintain the architectural integrity of Tadpole OS.
@@ -156,3 +169,5 @@ Before submitting a Pull Request, you must run the verification scripts located 
    ```
 
 ---
+
+[//]: # (Metadata: [CONTRIBUTING])

@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Architecture]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Architecture]` in audit logs.
+
 # 🏗️ Architecture
 
 ## Overview
@@ -89,7 +109,7 @@ Request
   ├── /v1/engine/ws       ← Public (WebSocket)
   │
   └── /v1/** ──── validate_token middleware ────► Protected routes
-                  (Bearer NEURAL_TOKEN check)
+                  (Bearer <token> check)
 ```
 
 ---
@@ -211,3 +231,5 @@ Autonomous-Agentic-Tadpole/
 ├── tests/unit/                   Python unit tests
 └── .github/workflows/            CI pipeline (ci.yml, release.yml)
 ```
+
+[//]: # (Metadata: [Architecture])

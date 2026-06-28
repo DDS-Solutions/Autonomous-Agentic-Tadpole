@@ -1,7 +1,7 @@
 [
   {
-    "id": "phi3.5:latest",
-    "name": "phi3.5:latest",
+    "id": "qwen3.5:9b",
+    "name": "qwen3.5:9b",
     "providerId": "ollama",
     "provider": "ollama",
     "rpm": null,
@@ -10,7 +10,32 @@
     "tpd": null,
     "modality": "llm",
     "capabilities": {
-      "supportsTools": false,
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
+    "name": "gemma4:e2b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": 100,
+    "tpm": 100000,
+    "rpd": 1000,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
       "supportsVision": false,
       "supportsStructuredOutput": false,
       "supportsReasoning": false,
@@ -32,6 +57,31 @@
     "rpm": 5,
     "tpm": 250,
     "rpd": 20,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": null
+  },
+  {
+    "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
+    "name": "gemma4:12b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": 100,
+    "tpm": 100000,
+    "rpd": 10000,
     "tpd": 10000000,
     "modality": "llm",
     "capabilities": {
@@ -75,15 +125,15 @@
     "lastSyncedAt": null
   },
   {
-    "id": "f1a3fd5b-9d27-4da1-91d4-40d902c86dc5",
-    "name": "gemma4:e2b",
+    "id": "88ed1ca0-850b-4b30-bc0d-b50fa4dbd8ea",
+    "name": "ornith:9b",
     "providerId": "ollama",
     "provider": "ollama",
     "rpm": 100,
     "tpm": 100000,
-    "rpd": 1000,
+    "rpd": 1000000,
     "tpd": 10000000,
-    "modality": "llm",
+    "modality": "reasoning",
     "capabilities": {
       "supportsTools": true,
       "supportsVision": false,
@@ -100,8 +150,8 @@
     "lastSyncedAt": null
   },
   {
-    "id": "qwen3.5:9b",
-    "name": "qwen3.5:9b",
+    "id": "phi3.5:latest",
+    "name": "phi3.5:latest",
     "providerId": "ollama",
     "provider": "ollama",
     "rpm": null,
@@ -110,32 +160,7 @@
     "tpd": null,
     "modality": "llm",
     "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [],
-      "source": "matrix"
-    },
-    "lastSyncedAt": null
-  },
-  {
-    "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
-    "name": "gemma4:12b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": 100,
-    "tpm": 100000,
-    "rpd": 10000,
-    "tpd": 10000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
+      "supportsTools": false,
       "supportsVision": false,
       "supportsStructuredOutput": false,
       "supportsReasoning": false,

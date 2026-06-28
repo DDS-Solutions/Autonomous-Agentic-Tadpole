@@ -5,14 +5,18 @@
     "role": "CEO",
     "department": "Executive",
     "description": "The primary strategic intelligence and sovereign kernel authority.",
-    "model": "Gemma 4 (Local)",
+    "model": "Gemini 2.5 Pro",
     "model_config": {
-      "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "provider": "google",
+      "modelId": "gemini-2.5-pro"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["deep_research", "system_audit", "issue_alpha_directive"],
-    "workflows": ["deploy_to_prod", "emergency_shutdown", "neural_handoff", "Deep Analysis"]
+    "skills": [
+      "deep_research",
+      "system_audit",
+      "issue_alpha_directive"
+    ],
+    "workflows": []
   },
   {
     "id": "2",
@@ -27,13 +31,25 @@
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "complete_mission", "recruit", "spawn_subagent",
-      "fetch_url", "read_file", "write_file", "list_files",
-      "get_file_contents", "grep_search", "get_agent_metrics",
-      "query_financial_logs", "search_mission_knowledge", "update_working_memory",
-      "parity_guard", "verify_ai_context", "security_scan", "get_current_time"
+      "complete_mission",
+      "recruit",
+      "spawn_subagent",
+      "fetch_url",
+      "read_file",
+      "write_file",
+      "list_files",
+      "get_file_contents",
+      "grep_search",
+      "get_agent_metrics",
+      "query_financial_logs",
+      "search_mission_knowledge",
+      "update_working_memory",
+      "parity_guard",
+      "verify_ai_context",
+      "security_scan",
+      "get_current_time"
     ],
-    "workflows": ["resource_allocation"]
+    "workflows": []
   },
   {
     "id": "3",
@@ -47,8 +63,15 @@
       "modelId": "gemma4:e4b"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["code_review", "debug", "git_push"],
-    "workflows": ["system_architecture_review", "incident_response"]
+    "skills": [
+      "code_review",
+      "debug",
+      "git_push"
+    ],
+    "workflows": [
+      "system_architecture_review",
+      "incident_response"
+    ]
   },
   {
     "id": "4",
@@ -62,8 +85,14 @@
       "modelId": "gemma4:e4b"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["copywriting", "seo_analysis"],
-    "workflows": ["campaign_launch", "market_trend_analysis"]
+    "skills": [
+      "copywriting",
+      "seo_analysis"
+    ],
+    "workflows": [
+      "campaign_launch",
+      "market_trend_analysis"
+    ]
   },
   {
     "id": "5",
@@ -77,8 +106,14 @@
       "modelId": "gemma4:e4b"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["lead_qualification", "update_crm"],
-    "workflows": ["quarterly_forecasting", "client_onboarding"]
+    "skills": [
+      "lead_qualification",
+      "update_crm"
+    ],
+    "workflows": [
+      "quarterly_forecasting",
+      "client_onboarding"
+    ]
   },
   {
     "id": "6",
@@ -92,8 +127,14 @@
       "modelId": "claude-3-opus-20240229"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["user_interview", "write_spec"],
-    "workflows": ["sprint_planning", "feature_roadmap"]
+    "skills": [
+      "user_interview",
+      "write_spec"
+    ],
+    "workflows": [
+      "sprint_planning",
+      "feature_roadmap"
+    ]
   },
   {
     "id": "7",
@@ -107,8 +148,14 @@
       "modelId": "gemini-1.5-flash"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["check_server_health", "view_logs"],
-    "workflows": ["pipeline_optimization", "database_migration"]
+    "skills": [
+      "check_server_health",
+      "view_logs"
+    ],
+    "workflows": [
+      "pipeline_optimization",
+      "database_migration"
+    ]
   },
   {
     "id": "8",
@@ -122,8 +169,17 @@
       "modelId": "deepseek-v3"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["api_test", "database_query"],
-    "workflows": ["refactor_microservice", "api_documentation"]
+    "skills": [
+      "api_test",
+      "database_query",
+      "list_file_symbols",
+      "get_symbol_body",
+      "get_blast_radius"
+    ],
+    "workflows": [
+      "refactor_microservice",
+      "api_documentation"
+    ]
   },
   {
     "id": "9",
@@ -137,8 +193,14 @@
       "modelId": "gemini-1.5-pro"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["generate_image", "ui_audit"],
-    "workflows": ["design_system_update", "usability_testing"]
+    "skills": [
+      "generate_image",
+      "ui_audit"
+    ],
+    "workflows": [
+      "design_system_update",
+      "usability_testing"
+    ]
   },
   {
     "id": "10",
@@ -152,8 +214,14 @@
       "modelId": "gpt-4o-mini"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["ticket_triage", "knowledge_base_search"],
-    "workflows": ["customer_incident_review", "support_training"]
+    "skills": [
+      "ticket_triage",
+      "knowledge_base_search"
+    ],
+    "workflows": [
+      "customer_incident_review",
+      "support_training"
+    ]
   },
   {
     "id": "11",
@@ -167,8 +235,12 @@
       "modelId": "gpt-4o"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["database_query"],
-    "workflows": ["refactor_microservice"]
+    "skills": [
+      "database_query"
+    ],
+    "workflows": [
+      "refactor_microservice"
+    ]
   },
   {
     "id": "12",
@@ -182,8 +254,12 @@
       "modelId": "claude-3-5-sonnet-20240620"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["scan_vulnerabilities"],
-    "workflows": ["security_audit"]
+    "skills": [
+      "scan_vulnerabilities"
+    ],
+    "workflows": [
+      "security_audit"
+    ]
   },
   {
     "id": "13",
@@ -197,8 +273,12 @@
       "modelId": "gemini-1.5-flash"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["check_server_health"],
-    "workflows": ["scale_cluster"]
+    "skills": [
+      "check_server_health"
+    ],
+    "workflows": [
+      "scale_cluster"
+    ]
   },
   {
     "id": "14",
@@ -212,8 +292,12 @@
       "modelId": "gpt-4o"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["write_spec"],
-    "workflows": ["sprint_planning"]
+    "skills": [
+      "write_spec"
+    ],
+    "workflows": [
+      "sprint_planning"
+    ]
   },
   {
     "id": "15",
@@ -227,8 +311,12 @@
       "modelId": "gemini-1.5-pro"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["generate_image"],
-    "workflows": ["design_system_update"]
+    "skills": [
+      "generate_image"
+    ],
+    "workflows": [
+      "design_system_update"
+    ]
   },
   {
     "id": "16",
@@ -242,8 +330,12 @@
       "modelId": "deepseek-reasoner"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["market_research"],
-    "workflows": ["User Feedback Analysis"]
+    "skills": [
+      "market_research"
+    ],
+    "workflows": [
+      "User Feedback Analysis"
+    ]
   },
   {
     "id": "17",
@@ -257,8 +349,12 @@
       "modelId": "claude-3-5-sonnet-20240620"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["copywriting"],
-    "workflows": ["campaign_launch"]
+    "skills": [
+      "copywriting"
+    ],
+    "workflows": [
+      "campaign_launch"
+    ]
   },
   {
     "id": "18",
@@ -272,8 +368,12 @@
       "modelId": "grok-1"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["post_update"],
-    "workflows": ["social_strategy"]
+    "skills": [
+      "post_update"
+    ],
+    "workflows": [
+      "social_strategy"
+    ]
   },
   {
     "id": "19",
@@ -287,8 +387,12 @@
       "modelId": "gpt-4o"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["seo_analysis"],
-    "workflows": ["market_trend_analysis"]
+    "skills": [
+      "seo_analysis"
+    ],
+    "workflows": [
+      "market_trend_analysis"
+    ]
   },
   {
     "id": "20",
@@ -302,8 +406,12 @@
       "modelId": "gpt-4o-mini"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["lead_qualification"],
-    "workflows": ["quarterly_forecasting"]
+    "skills": [
+      "lead_qualification"
+    ],
+    "workflows": [
+      "quarterly_forecasting"
+    ]
   },
   {
     "id": "21",
@@ -317,8 +425,12 @@
       "modelId": "gpt-4o-mini"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["lead_qualification"],
-    "workflows": ["quarterly_forecasting"]
+    "skills": [
+      "lead_qualification"
+    ],
+    "workflows": [
+      "quarterly_forecasting"
+    ]
   },
   {
     "id": "22",
@@ -332,8 +444,12 @@
       "modelId": "claude-3-5-sonnet-20240620"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["employee_onboarding"],
-    "workflows": ["policy_review"]
+    "skills": [
+      "employee_onboarding"
+    ],
+    "workflows": [
+      "policy_review"
+    ]
   },
   {
     "id": "23",
@@ -347,8 +463,12 @@
       "modelId": "gpt-4o"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["analyze_budget"],
-    "workflows": ["finance_review"]
+    "skills": [
+      "analyze_budget"
+    ],
+    "workflows": [
+      "finance_review"
+    ]
   },
   {
     "id": "24",
@@ -362,8 +482,12 @@
       "modelId": "claude-3-opus-20240229"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["contract_review"],
-    "workflows": ["risk_assessment"]
+    "skills": [
+      "contract_review"
+    ],
+    "workflows": [
+      "risk_assessment"
+    ]
   },
   {
     "id": "25",
@@ -377,8 +501,12 @@
       "modelId": "qwen-max"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["ticket_triage"],
-    "workflows": ["customer_incident_review"]
+    "skills": [
+      "ticket_triage"
+    ],
+    "workflows": [
+      "customer_incident_review"
+    ]
   },
   {
     "id": "26",
@@ -392,8 +520,13 @@
       "modelId": "claude-3-5-sonnet-20240620"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["code_audit", "system_audit"],
-    "workflows": ["compliance_check"]
+    "skills": [
+      "code_audit",
+      "system_audit"
+    ],
+    "workflows": [
+      "compliance_check"
+    ]
   },
   {
     "id": "99",
@@ -408,7 +541,13 @@
       "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
-    "skills": ["code_audit", "system_audit", "verify_telemetry"],
-    "workflows": ["Mission Analysis"]
+    "skills": [
+      "code_audit",
+      "system_audit",
+      "verify_telemetry"
+    ],
+    "workflows": [
+      "Mission Analysis"
+    ]
   }
 ]

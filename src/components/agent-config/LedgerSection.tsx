@@ -1,4 +1,15 @@
 /**
+ * @docs ARCHITECTURE:Core
+ *
+ * ### AI Assist Note
+ * **LedgerSection**: Core technical resource for the Tadpole OS infrastructure.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI errors or callback stack traces.
+ * - **Telemetry Link**: Search `[LedgerSection]` in console logs.
+ */
+
+/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
@@ -398,3 +409,5 @@ export function LedgerSection({ agentId, allSkills, themeColor }: LedgerSectionP
         </div>
     );
 }
+
+// Metadata: [LedgerSection]

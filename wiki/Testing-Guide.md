@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Testing_Guide]` in audit logs.
+>
+> ### AI Assist Note
+> /*_tests.rs` |
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Testing-Guide]` in audit logs.
+
 # 🧪 Testing Guide
 
 ## Test Stack
@@ -180,3 +200,5 @@ jobs:
 **Symptom:** Requests return 401 in integration tests.  
 **Cause:** `NEURAL_TOKEN` env var not set; `AppState::new_minimal_mock()` uses `"test-token"`.  
 **Fix:** Use `"Bearer test-token"` in test request headers.
+
+[//]: # (Metadata: [Testing_Guide])

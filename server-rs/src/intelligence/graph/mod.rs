@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **mod**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::mod`
+
 //! Public API surface for the `graph` module.
 //!
 //! All types and traits needed by consumers of the intelligence layer
@@ -51,3 +61,5 @@ pub use constants::{MAX_DISCOVERED_FILES, MAX_EDGES, MAX_NODES};
 
 // ── Path utilities ───────────────────────────────────────────────────────────
 pub use path::obfuscate_path;
+
+// Metadata: [mod]

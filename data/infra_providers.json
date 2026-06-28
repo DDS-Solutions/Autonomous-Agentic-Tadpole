@@ -2,6 +2,19 @@
   {
     "api_key": null,
     "audioModel": null,
+    "baseUrl": "http://127.0.0.1:11434/v1",
+    "customHeaders": {},
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "🦙",
+    "id": "ollama",
+    "name": "Ollama",
+    "protocol": "ollama",
+    "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
     "baseUrl": "https://api.ollama.com/v1",
     "customHeaders": {},
     "defaultConfig": null,
@@ -23,19 +36,6 @@
     "id": "google",
     "name": "Google Vertex",
     "protocol": "google",
-    "supportsSteeringVectors": false
-  },
-  {
-    "api_key": null,
-    "audioModel": null,
-    "baseUrl": "http://127.0.0.1:11434/v1",
-    "customHeaders": {},
-    "defaultConfig": null,
-    "externalId": null,
-    "icon": "🦙",
-    "id": "ollama",
-    "name": "Ollama",
-    "protocol": "ollama",
     "supportsSteeringVectors": false
   }
 ]

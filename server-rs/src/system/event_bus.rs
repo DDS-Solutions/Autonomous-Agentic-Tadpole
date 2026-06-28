@@ -139,3 +139,7 @@ async fn process_event(state: &Arc<AppState>, event: SystemEvent) -> Result<(), 
     }
     Ok(())
 }
+
+// Metadata: [event_bus]
+
+// Metadata: [event_bus]

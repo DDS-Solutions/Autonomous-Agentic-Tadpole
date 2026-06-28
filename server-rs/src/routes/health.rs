@@ -207,3 +207,7 @@ pub async fn metrics_handler() -> Result<impl IntoResponse, AppError> {
     ))
 }
 
+
+// Metadata: [health]
+
+// Metadata: [health]

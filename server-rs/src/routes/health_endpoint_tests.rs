@@ -86,3 +86,7 @@ mod tests {
         assert!(json["uptime_seconds"].as_u64().is_some());
     }
 }
+
+// Metadata: [health_endpoint_tests]
+
+// Metadata: [health_endpoint_tests]

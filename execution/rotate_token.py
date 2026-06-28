@@ -103,3 +103,5 @@ if __name__ == "__main__":
         confirm_rotation()
     else:
         rotate_token(args.grace_secs)
+
+# Metadata: [rotate_token]

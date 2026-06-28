@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[0004_wal_mode_sqlite]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[0004-wal-mode-sqlite]` in audit logs.
+
 # ADR 0004: Write-Ahead Logging (WAL) Mode SQLite
 
 ## Status: Accepted
@@ -18,3 +38,5 @@ Configure the SQLite connection pool to use **WAL (Write-Ahead Logging)** mode. 
 - **+** 10-15x write throughput improvement.
 - **+** Eliminates read locking stalls during heavy agent writes.
 - **-** Slightly higher complexity due to the presence of `.db-wal` and `.db-shm` temporary files.
+
+[//]: # (Metadata: [0004_wal_mode_sqlite])

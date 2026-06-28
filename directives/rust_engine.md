@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[rust_engine]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[rust_engine]` in audit logs.
+
 # Rust Engine Development Guidelines
 
 This directive defines the code patterns, compiler constraints, and architectural invariants for modifying the `server-rs` Rust engine.
@@ -75,3 +95,5 @@ The engine is optimized for conditional compilation. Always test changes across 
 3. **Neural Audio**: `cargo check --features neural-audio` (compiles hardware-accelerated TTS/STT pipelines)
 
 ---
+
+[//]: # (Metadata: [rust_engine])

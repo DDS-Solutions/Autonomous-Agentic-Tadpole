@@ -113,3 +113,7 @@ mod tests {
         assert!(json["message"].as_str().unwrap().contains("Shutdown initiated"));
     }
 }
+
+// Metadata: [shutdown_orchestrator_tests]
+
+// Metadata: [shutdown_orchestrator_tests]

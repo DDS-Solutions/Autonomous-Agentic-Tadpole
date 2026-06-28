@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[release_checklist]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[release_checklist]` in audit logs.
+
 # Release Checklist
 
 This guide ensures release builds are clean, verified, and complete.
@@ -35,3 +55,5 @@ This guide ensures release builds are clean, verified, and complete.
   ```powershell
   powershell -ExecutionPolicy Bypass -File scripts/deploy-linuxlite.ps1
   ```
+
+[//]: # (Metadata: [release_checklist])

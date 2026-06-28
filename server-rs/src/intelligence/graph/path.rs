@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **path**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[path]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::path`
+
 //! Path utilities: Unix-style conversion, log sanitization, and obfuscation.
 //!
 //! ### 🔍 Debugging & Observability
@@ -63,3 +73,5 @@ pub fn obfuscate_path(path_str: &str, salt: &str) -> Result<String, GraphError> 
         Ok(format!("{}/{}", obf_prefix, file_name))
     }
 }
+
+// Metadata: [path]

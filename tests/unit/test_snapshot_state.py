@@ -1,3 +1,14 @@
+"""
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**test_snapshot_state**: Core technical resource for the Tadpole OS infrastructure.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script crash or unexpected exception.
+- **Telemetry Link**: Search `[test_snapshot_state]` in system logs.
+"""
+
 import unittest
 import shutil
 import tempfile
@@ -71,3 +82,5 @@ class TestSnapshotState(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# Metadata: [test_snapshot_state]

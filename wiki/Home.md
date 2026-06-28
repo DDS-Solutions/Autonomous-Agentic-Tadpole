@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Home]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Home]` in audit logs.
+
 # 🐸 Autonomous Agentic Tadpole — Wiki
 
 > **Version:** v1.1.59 &nbsp;|&nbsp; **Engine:** Rust 2021 + Axum &nbsp;|&nbsp; **Dashboard:** React 19 + TypeScript &nbsp;|&nbsp; **DB:** SQLite / SQLx
@@ -64,3 +84,5 @@ Open `http://localhost:5173` · Health: `http://127.0.0.1:8000/v1/engine/health`
 
 ---
 *Last updated: 2026-06-26 · v1.1.59 Agentic Engine P0 Release*
+
+[//]: # (Metadata: [Home])

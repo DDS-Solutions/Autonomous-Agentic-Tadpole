@@ -252,11 +252,25 @@ impl SystemService for RecoverActiveAgentsService {
         &self,
         context: SystemContext,
     ) -> Result<(), anyhow::Error> {
-        let app_state = context.app_state;
-        app_state.resources.set_subsystem_status("RecoverActiveAgents", crate::types::SubsystemStatus::Ready);
+        let app_state = context.app_state.clone();
+        let pool = app_state.resources.pool.clone();
+        
         tokio::spawn(async move {
+            match sqlx::query("UPDATE agent_status_ledger SET last_queue_result = 'none' WHERE last_queue_result = 'executing'")
+                .execute(&pool)
+                .await 
+            {
+                Ok(res) => {
+                    tracing::info!("🔄 [State Recovery] Cleared {} orphaned executing locks in agent_status_ledger.", res.rows_affected());
+                }
+                Err(e) => {
+                    tracing::error!("❌ [State Recovery] Failed to clear orphaned executing locks: {:?}", e);
+                }
+            }
             crate::routes::agent::recover_active_agents(app_state).await;
         });
+        
+        context.app_state.resources.set_subsystem_status("RecoverActiveAgents", crate::types::SubsystemStatus::Ready);
         Ok(())
     }
 }

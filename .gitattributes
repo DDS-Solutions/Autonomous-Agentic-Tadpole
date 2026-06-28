@@ -1,0 +1,2 @@
+# Force LF line endings for migration SQL files to ensure SQLx checksum parity on Windows
+server-rs/migrations/*.sql text eol=lf

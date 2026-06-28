@@ -32,14 +32,21 @@ pub struct BlastRadiusQuery {
     pub path: String,
 }
 
+#[derive(Deserialize)]
+pub struct CodeGraphQuery {
+    pub path_prefix: Option<String>,
+}
+
 /// GET /v1/intelligence/graph
 ///
 /// Returns the full high-fidelity symbol graph for visualization.
 pub async fn get_code_graph(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<CodeGraphQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let graph_lock = get_built_symbol_graph(&state).await?;
     let lock_clone = Arc::clone(&graph_lock);
+    let path_prefix = query.path_prefix.clone();
 
     let (nodes, edges, anomalies) = tokio::task::spawn_blocking(move || {
         let guard = lock_clone.read();
@@ -47,25 +54,56 @@ pub async fn get_code_graph(
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
 
+        // 1. Filter nodes based on optional path prefix
         for idx in guard.graph.node_indices() {
             if let Some(node) = guard.graph.node_weight(idx) {
-                nodes.push(node.clone());
+                let matches = if let Some(ref prefix) = path_prefix {
+                    let real_path = guard.obfuscated_to_real_path.get(&node.path)
+                        .map(|p| p.as_str())
+                        .unwrap_or(&node.path);
+                    real_path.starts_with(prefix) || node.path.starts_with(prefix)
+                } else {
+                    true
+                };
+
+                if matches {
+                    nodes.push(node.clone());
+                }
             }
         }
+
+        // 2. Filter edges: only include if both source and target nodes exist in the filtered node set
+        let filtered_keys: std::collections::HashSet<String> = nodes
+            .iter()
+            .map(|n| format!("{}:{}", n.path, n.name))
+            .collect();
 
         use petgraph::visit::EdgeRef;
         for edge in guard.graph.edge_references() {
             let source = &guard.graph[edge.source()];
             let target = &guard.graph[edge.target()];
-            edges.push(serde_json::json!({
-                "source": format!("{}:{}", source.path, source.name),
-                "target": format!("{}:{}", target.path, target.name),
-            }));
+            let src_key = format!("{}:{}", source.path, source.name);
+            let tgt_key = format!("{}:{}", target.path, target.name);
+
+            if filtered_keys.contains(&src_key) && filtered_keys.contains(&tgt_key) {
+                edges.push(serde_json::json!({
+                    "source": src_key,
+                    "target": tgt_key,
+                }));
+            }
         }
 
         let anomalies = guard.find_anomalies();
+        let filtered_anomalies = if let Some(ref prefix) = path_prefix {
+            anomalies
+                .into_iter()
+                .filter(|a| a.contains(prefix))
+                .collect()
+        } else {
+            anomalies
+        };
 
-        (nodes, edges, anomalies)
+        (nodes, edges, filtered_anomalies)
     })
     .await
     .map_err(|e| {
@@ -128,9 +166,30 @@ pub async fn rebuild_code_graph(
     let salt = state.resources.obfuscation_salt.clone();
     let lock_clone = Arc::clone(&graph_lock);
 
+    // 1. Copy config, repository, and root inside a brief read lock
+    let (root, config, repository) = {
+        let guard = lock_clone.read();
+        (guard.root.clone(), guard.config.clone(), guard.repository.clone())
+    };
+
+    // 2. Perform the CPU-intensive rebuild on a temporary new graph instance
+    // (no reader locks are held during this step!)
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let mut guard = lock_clone.write();
-        guard.build(&salt)?;
+        let mut temp_graph = CodeSymbolGraph {
+            graph: petgraph::graph::DiGraph::new(),
+            index: std::collections::HashMap::new(),
+            obfuscated_to_real_path: std::collections::HashMap::new(),
+            repository,
+            config,
+            root,
+        };
+        temp_graph.build(&salt)?;
+
+        // 3. Swap the built graph into the live lock using a brief write lock
+        {
+            let mut guard = lock_clone.write();
+            *guard = temp_graph;
+        }
         Ok(())
     })
     .await
@@ -186,3 +245,5 @@ pub async fn resolve_code_context(
 
     Ok(Json(resolved))
 }
+
+// Metadata: [intelligence]

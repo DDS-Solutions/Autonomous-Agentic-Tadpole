@@ -452,7 +452,7 @@ impl AppState {
                 .pool_max_idle_per_host(10)
                 .pool_idle_timeout(std::time::Duration::from_secs(60))
                 .connect_timeout(std::time::Duration::from_secs(10))
-                .timeout(std::time::Duration::from_secs(120))
+                .timeout(std::time::Duration::from_secs(600))
                 .tcp_nodelay(true)
                 .build()
                 .context("Failed to build HTTP client")?,

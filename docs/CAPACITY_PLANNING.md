@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[CAPACITY_PLANNING]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[CAPACITY_PLANNING]` in audit logs.
+
 # Tadpole OS Capacity Planning
 
 This document details the hardware profiling, sizing formulas, and memory limits for running the Tadpole OS agent engine.
@@ -39,3 +59,5 @@ resources:
     cpu: "500m"
     memory: "1Gi"
 ```
+
+[//]: # (Metadata: [CAPACITY_PLANNING])

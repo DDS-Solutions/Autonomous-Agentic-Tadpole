@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **agentic_engine_tests**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[agentic_engine_tests]` in tracing logs.
+//! - **Trace Scope**: `server-rs::routes::agentic_engine_tests`
+
 //! Agentic Engine Primitives - Integration Verification Suite
 //!
 //! Integration tests for Status Ledger, Receipt system, and Task Claim Lock.
@@ -583,3 +593,5 @@ async fn test_token_burn_and_maintenance_report() {
     assert!(metrics_text.contains("oversight_cost_usd"));
 }
 
+
+// Metadata: [agentic_engine_tests]

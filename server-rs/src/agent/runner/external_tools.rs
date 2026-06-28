@@ -102,7 +102,22 @@ impl AgentRunner {
         } else {
             self.broadcast_agent(ctx, &format!("🌐 Surface: researching {}...", url), "info");
 
-            match self.state.resources.http_client.get(url).send().await {
+            let is_local = url.starts_with("http://127.0.0.1")
+                || url.starts_with("http://localhost")
+                || url.starts_with("http://0.0.0.0")
+                || url.starts_with("https://127.0.0.1")
+                || url.starts_with("https://localhost")
+                || url.starts_with("https://0.0.0.0");
+
+            let mut request = self.state.resources.http_client.get(url);
+            if is_local {
+                request = request.header(
+                    reqwest::header::AUTHORIZATION,
+                    format!("Bearer {}", self.state.security.deploy_token),
+                );
+            }
+
+            match request.send().await {
                 Ok(r) => {
                     let text = r
                         .text()

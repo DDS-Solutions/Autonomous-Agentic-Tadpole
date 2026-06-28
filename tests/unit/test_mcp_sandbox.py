@@ -1,3 +1,14 @@
+"""
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**test_mcp_sandbox**: Core technical resource for the Tadpole OS infrastructure.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script crash or unexpected exception.
+- **Telemetry Link**: Search `[test_mcp_sandbox]` in system logs.
+"""
+
 import unittest
 import sys
 from pathlib import Path
@@ -71,3 +82,5 @@ class TestMcpSandbox(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# Metadata: [test_mcp_sandbox]

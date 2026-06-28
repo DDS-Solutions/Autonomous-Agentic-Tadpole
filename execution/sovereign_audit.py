@@ -72,7 +72,7 @@ AUDIT_SUITE = [
     },
     {
         "name": "Codebase Topology Integrity (P2)",
-        "cmd": ["cargo", "run", "--manifest-path", "server-rs/Cargo.toml", "--", "--audit-graph"],
+        "cmd": ["cargo", "test", "--manifest-path", "server-rs/Cargo.toml", "intelligence::graph::tests"],
         "critical": False
     },
     {

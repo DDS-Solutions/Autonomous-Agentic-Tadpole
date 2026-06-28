@@ -71,3 +71,7 @@ export type MaintenanceDimension = { score: number; status: string; details: str
 export type ClaimResponse = { status: string; agentId: string; taskId: string; claimedAt: number; receipt: string }
 
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
+
+// Metadata: [generated]
+
+// Metadata: [generated]

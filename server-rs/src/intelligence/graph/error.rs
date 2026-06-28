@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **error**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[error]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::error`
+
 //! Error types for the `CodeSymbolGraph` module.
 //!
 //! ### 🔍 Debugging & Observability
@@ -22,3 +32,5 @@ pub enum GraphError {
 /// Convenience `Result` alias for graph operations.
 #[allow(dead_code)]
 pub type GraphResult<T> = Result<T, GraphError>;
+
+// Metadata: [error]

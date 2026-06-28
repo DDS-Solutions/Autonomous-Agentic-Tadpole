@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[CODEBASE_HEALTH_REPORT_20260506]` in audit logs.
+
 # 🛡️ Codebase Health Report: Tadpole OS
 **Mission**: `mission_codebase_review_2026`
 **Date**: 2026-05-06

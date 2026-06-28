@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **types**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[types]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::types`
+
 //! Core domain types for the `CodeSymbolGraph`.
 //!
 //! Defines the node/edge payload types used by the petgraph `DiGraph`,
@@ -31,6 +41,7 @@ pub struct SymbolEdge {
 /// Repository containing the cached AST parse structures and file metadata.
 /// Acts as the incremental-rebuild cache: only files whose mtime or size has
 /// changed since the last `build()` call are re-parsed.
+#[derive(Clone)]
 pub struct GraphStateRepository {
     /// Maps absolute `PathBuf` → `(mtime, size)` for each tracked file.
     pub file_metadata: HashMap<PathBuf, (std::time::SystemTime, u64)>,
@@ -52,3 +63,5 @@ impl Default for GraphStateRepository {
         }
     }
 }
+
+// Metadata: [types]

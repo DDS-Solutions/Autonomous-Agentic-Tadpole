@@ -160,3 +160,5 @@ export function useChatWindow() {
 }
 
 // Metadata: [use_chat_window]
+
+// Metadata: [use_chat_window]

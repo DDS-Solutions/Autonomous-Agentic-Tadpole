@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Security_Model]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Security-Model]` in audit logs.
+
 # 🔐 Security Model
 
 ## Overview
@@ -194,3 +214,5 @@ Set `PRIVACY_MODE=true` in `.env` to restrict all execution to local-only provid
 - [ ] Review `/v1/oversight/audit-trail` periodically
 - [ ] Run `python execution/parity_guard.py` after every deployment
 - [ ] Monitor `/v1/engine/health` `budget.total_spent_usd` for anomalies
+
+[//]: # (Metadata: [Security_Model])

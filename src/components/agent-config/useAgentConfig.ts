@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search for `[useAgentConfig]` or `AGENT_UPDATE_TRANSACTION` in tracing.
  */
 
-import { useReducer, useMemo, useCallback, useEffect } from 'react';
+import { useReducer, useMemo, useCallback, useEffect, useRef } from 'react';
 import { config_reducer } from '../../hooks/useAgentForm';
 import { tadpole_os_service } from '../../services/tadpoleos_service';
 import { event_bus } from '../../services/event_bus';
@@ -47,25 +47,31 @@ export function useAgentConfig(
     }, [agent]);
 
     const [state, dispatch] = useReducer(config_reducer, initial_state);
-    // Background Sync: Rehydrate form if authoritative store state changes (e.g., via Agent Card updates)
-    // Hardened: Skip rehydration during active save or if the incoming agent matches current identity (Sync-Fix-01)
+    
+    // Store the last seen authoritative agent prop
+    const last_seen_agent_ref = useRef<Agent | undefined>(agent);
+
+    // Background Sync: Rehydrate form only if the authoritative agent prop itself has changed externally
     useEffect(() => {
         if (!agent || state.ui.saving) return;
 
-        // Semantic Check: Only reset if structural fields have drifted
-        const current_form_model = state.slots.primary.model;
-        const normalized_agent_role = (agent.role || '').toLowerCase().replace(/\s+/g, '-');
-        
-        if (agent.name === state.identity.name && 
-            normalized_agent_role === state.identity.role && 
-            agent.model === current_form_model &&
-            agent.active_model_slot === state.active_model_slot) {
+        const last_seen = last_seen_agent_ref.current;
+        last_seen_agent_ref.current = agent;
+
+        // Skip rehydration if the parent/external store didn't update the agent structurally
+        if (last_seen &&
+            last_seen.id === agent.id &&
+            last_seen.name === agent.name &&
+            last_seen.role === agent.role &&
+            last_seen.model === agent.model &&
+            last_seen.active_model_slot === agent.active_model_slot
+        ) {
             return;
         }
         
         console.debug(`[useAgentConfig] Authoritative Drift Detected for ${agent.id}. Rehydrating form state.`);
         dispatch({ type: 'RESET_FROM_STATE', payload: buildAgentFormState(agent) });
-    }, [agent, state.ui.saving, state.identity.name, state.identity.role, state.slots.primary.model, state.active_model_slot]);
+    }, [agent, state.ui.saving]);
 
     const add_role = use_role_store((s) => s.add_role);
 

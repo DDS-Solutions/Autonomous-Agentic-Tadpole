@@ -60,6 +60,8 @@ pub async fn validate_token(
         return Ok(next.run(req).await);
     }
 
+    let mut token_opt = None;
+
     // Check for standard Authorization header first
     let auth_header = req
         .headers()
@@ -68,23 +70,42 @@ pub async fn validate_token(
 
     if let Some(auth_str) = auth_header {
         if let Some(token) = auth_str.strip_prefix("Bearer ") {
-            let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
-                || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
-                || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
+            token_opt = Some(token.to_string());
+        }
+    }
 
-            if is_valid {
-                if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_NEW");
-                } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_OLD");
-                } else {
-                    tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN");
+    // Fallback: check query parameter ?Authorization=Bearer%20<token>
+    if token_opt.is_none() {
+        if let Some(query) = req.uri().query() {
+            for pair in query.split('&') {
+                if let Some(val) = pair.strip_prefix("Authorization=") {
+                    if let Ok(decoded) = urlencoding::decode(val) {
+                        let token = decoded.strip_prefix("Bearer ").unwrap_or(&decoded).to_string();
+                        token_opt = Some(token);
+                        break;
+                    }
                 }
-                return Ok(next.run(req).await);
-            } else {
-                tracing::warn!("🚫 Invalid token provided in Authorization header");
-                return Err(StatusCode::UNAUTHORIZED);
             }
+        }
+    }
+
+    if let Some(ref token) = token_opt {
+        let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
+            || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+            || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
+
+        if is_valid {
+            if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_NEW");
+            } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_OLD");
+            } else {
+                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN");
+            }
+            return Ok(next.run(req).await);
+        } else {
+            tracing::warn!("🚫 Invalid token provided");
+            return Err(StatusCode::UNAUTHORIZED);
         }
     }
 

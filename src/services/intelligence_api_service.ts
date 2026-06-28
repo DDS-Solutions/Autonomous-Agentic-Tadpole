@@ -97,3 +97,5 @@ class IntelligenceApiService {
 export const intelligence_api_service = new IntelligenceApiService();
 
 // Metadata: [intelligence_api_service]
+
+// Metadata: [intelligence_api_service]

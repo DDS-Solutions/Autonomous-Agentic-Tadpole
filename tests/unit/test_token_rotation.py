@@ -1,3 +1,14 @@
+"""
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**test_token_rotation**: Core technical resource for the Tadpole OS infrastructure.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script crash or unexpected exception.
+- **Telemetry Link**: Search `[test_token_rotation]` in system logs.
+"""
+
 import unittest
 import os
 import shutil
@@ -70,3 +81,5 @@ class TestTokenRotation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# Metadata: [test_token_rotation]

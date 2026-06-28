@@ -1,4 +1,15 @@
 /**
+ * @docs ARCHITECTURE:Core
+ *
+ * ### AI Assist Note
+ * **MaintenanceSection**: Core technical resource for the Tadpole OS infrastructure.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI errors or callback stack traces.
+ * - **Telemetry Link**: Search `[MaintenanceSection]` in console logs.
+ */
+
+/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
@@ -285,3 +296,5 @@ export function MaintenanceSection({ agentId, themeColor }: MaintenanceSectionPr
         </div>
     );
 }
+
+// Metadata: [MaintenanceSection]

@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[index]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[index]` in audit logs.
+
 # Architectural Decision Records (ADR)
 
 This folder contains formal records of architectural design decisions made for Tadpole OS.
@@ -9,3 +29,5 @@ This folder contains formal records of architectural design decisions made for T
 - **[ADR 0003: Host Docker Internal Rewrite](file:///g:/Autonomous-Agentic-Tadpole/docs/adr/0003-host-docker-internal-rewrite.md)** — Translates connection URLs dynamically to support Docker vs. native configurations.
 - **[ADR 0004: Write-Ahead Logging (WAL) Mode SQLite](file:///g:/Autonomous-Agentic-Tadpole/docs/adr/0004-wal-mode-sqlite.md)** — Configures SQLite persistence for high concurrency agent write flows.
 - **[ADR 0005: Runtime Secret Redaction Pattern](file:///g:/Autonomous-Agentic-Tadpole/docs/adr/0005-secret-redaction-patterns.md)** — Implements automatic filtering to prevent API key leaks in telemetry and logs.
+
+[//]: # (Metadata: [index])

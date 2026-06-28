@@ -438,7 +438,11 @@ impl AgentRunner {
         let tpm_limit = ctx.model_config.tpm.unwrap_or(100_000);
         let safe_limit = (tpm_limit as f32 * 0.85) as usize;
 
-        let mut pruned_repo_map = repo_map.to_string();
+        let mut pruned_repo_map = if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama {
+            "⚠️ Repo Map pruned to optimize local model performance. Use 'list_files' for discovery.".to_string()
+        } else {
+            repo_map.to_string()
+        };
         let mut pruned_swarm_context = swarm_context_str.to_string();
 
         let get_total_tokens = |repo: &str, swarm: &str| {

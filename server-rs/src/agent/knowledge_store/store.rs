@@ -559,3 +559,7 @@ impl KnowledgeStore {
         Ok(())
     }
 }
+
+// Metadata: [store]
+
+// Metadata: [store]

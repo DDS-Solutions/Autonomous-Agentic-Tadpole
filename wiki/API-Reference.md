@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[API_Reference]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[API-Reference]` in audit logs.
+
 # 📡 API Reference
 
 > **Base URL:** `http://127.0.0.1:8000`  
@@ -236,3 +256,5 @@ All errors use Problem Details format:
 | `429` | Too Many Requests — brute-force protection |
 | `500` | Internal Server Error |
 | `501` | Not Implemented — feature requires Cargo feature flag |
+
+[//]: # (Metadata: [API_Reference])

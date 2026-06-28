@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[Configuration]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[Configuration]` in audit logs.
+
 # ⚙️ Configuration
 
 All configuration is loaded from `.env` in the workspace root. Schema is validated at startup against `.env.schema`.
@@ -135,3 +155,5 @@ PRIVACY_MODE  bool     default=false          required=false
 ```
 
 If a required key is missing or has the wrong type, the engine refuses to start with a descriptive error.
+
+[//]: # (Metadata: [Configuration])

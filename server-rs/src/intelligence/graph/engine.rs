@@ -655,3 +655,7 @@ mod tests {
         assert!(resolved_small[0].signature.ends_with("..."));
     }
 }
+
+// Metadata: [engine]
+
+// Metadata: [engine]

@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **cache**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[cache]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::cache`
+
 //! Incremental cache management for the `CodeSymbolGraph`.
 //!
 //! Compares the current filesystem state against stored metadata to
@@ -64,3 +74,5 @@ impl CacheManager for CacheManagementService {
 // Unused import guard – GraphError is referenced by the trait bounds in engine.rs
 #[allow(unused_imports)]
 use GraphError as _;
+
+// Metadata: [cache]

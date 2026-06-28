@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **constants**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[constants]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::constants`
+
 //! Hard upper-bound constants for the `CodeSymbolGraph`.
 //!
 //! These values guard against resource exhaustion (DoS) caused by
@@ -11,3 +21,5 @@ pub const MAX_NODES: usize = 20_000;
 
 /// Maximum number of edges allowed in the `CodeSymbolGraph`.
 pub const MAX_EDGES: usize = 100_000;
+
+// Metadata: [constants]

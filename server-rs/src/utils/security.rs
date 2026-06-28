@@ -91,9 +91,40 @@ pub fn validate_path(base: &Path, user_path: &str) -> Result<SafePath, AppError>
         components.iter().collect()
     }
 
-    let base_abs = normalize(&base_raw);
-    let joined = base_abs.join(user_path);
-    let result = normalize(&joined);
+    fn strip_unc(p: PathBuf) -> PathBuf {
+        let p_str = p.to_string_lossy();
+        if p_str.starts_with(r"\\?\") {
+            PathBuf::from(&p_str[4..])
+        } else {
+            p
+        }
+    }
+
+    // 🛡️ [Traversal Hardening] Canonicalize the base directory (which must exist)
+    let base_abs = strip_unc(base_raw.canonicalize().unwrap_or_else(|_| normalize(&base_raw)));
+
+    let joined = normalize(&base_abs.join(user_path));
+
+    // Find the closest existing ancestor for the joined path to resolve potential symlinks
+    let mut ancestor = joined.as_path();
+    let mut suffix = PathBuf::new();
+    while !ancestor.exists() {
+        if let Some(parent) = ancestor.parent() {
+            if let Some(name) = ancestor.file_name() {
+                let mut new_suffix = PathBuf::from(name);
+                new_suffix.push(&suffix);
+                suffix = new_suffix;
+            }
+            ancestor = parent;
+        } else {
+            break;
+        }
+    }
+
+    // Canonicalize the closest existing ancestor to resolve physical symlink destinations
+    let canonical_ancestor = strip_unc(ancestor.canonicalize().unwrap_or_else(|_| normalize(ancestor)));
+    let resolved_path = canonical_ancestor.join(suffix);
+    let result = normalize(&resolved_path);
 
     if !result.starts_with(&base_abs) {
         return Err(AppError::Forbidden("Path traversal detected: outside authorized base".to_string()));

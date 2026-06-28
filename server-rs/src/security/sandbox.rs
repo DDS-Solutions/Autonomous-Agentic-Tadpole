@@ -174,3 +174,7 @@ pub async fn execute_sandboxed(
         }
     }
 }
+
+// Metadata: [sandbox]
+
+// Metadata: [sandbox]

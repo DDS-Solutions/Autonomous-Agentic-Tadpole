@@ -17,6 +17,7 @@ import type { Model_Entry, Provider_Config } from '../../stores/provider_store';
 import type { Skill_Manifest } from '../../services/tadpoleos_service';
 import type { Skill_Definition, Mcp_Tool_Hub_Definition } from '../../stores/skill_store';
 import type { Agent_Model_Slot_Key, Agent_Model_Slot_State } from '../../types';
+import { resolve_technical_model_id } from '../../utils/model_utils';
 
 interface ModelSlotConfigProps {
     slotKey: Agent_Model_Slot_Key;
@@ -81,7 +82,7 @@ export function ModelSlotConfig({
                         ))}
                     </select>
                 </div>
-
+ 
                 <div className="space-y-1.5">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-1.5">
                         {i18n.t('agent_config.label_model')}
@@ -97,7 +98,7 @@ export function ModelSlotConfig({
                     >
                         {filteredModels.length > 0 ? (
                             filteredModels.map(m => (
-                                <option key={m.id} value={m.name} className="bg-zinc-950">
+                                <option key={m.id} value={resolve_technical_model_id(m.name)} className="bg-zinc-950">
                                     [{m.modality?.toUpperCase() || 'LLM'}] {m.name}
                                 </option>
                             ))

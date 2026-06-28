@@ -17,6 +17,7 @@ import { resolve_technical_model_id } from '../../utils/model_utils';
 import type { Agent, AgentFormState, AgentPatch, Department } from '../../contracts/agent';
 import { resolve_provider } from '../../utils/model_utils';
 import { slugify_role } from '../../utils/agent_uiutils';
+import { use_settings_store } from '../../stores/settings_store';
 
 /** Shape of legacy/mixed model_config objects that may have either camelCase or snake_case keys. */
 type LegacyModelConfig = {
@@ -31,8 +32,14 @@ type LegacyModelConfig = {
  * Converts a Domain Agent into a ready-to-use Form State for the configuration UI.
  */
 export const buildAgentFormState = (agent: Agent): AgentFormState => {
+    // Retrieve system level default model
+    const settings = use_settings_store.getState().settings;
+    const system_default_model = settings?.default_model || 'Gemini 3 Pro';
+
+    const active_model = agent.model || system_default_model;
+
     // Phase 4: Ensure provider/model consistency on hydration
-    const primary_provider = agent.model_config?.provider || resolve_provider(agent.model);
+    const primary_provider = agent.model_config?.provider || resolve_provider(active_model);
     const secondary_provider = agent.model_config2?.provider || resolve_provider(agent.model_2 || 'claude');
     const tertiary_provider = agent.model_config3?.provider || resolve_provider(agent.model_3 || 'llama');
 
@@ -53,7 +60,7 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
         slots: {
             primary: {
                 provider: primary_provider,
-                model: agent.model,
+                model: active_model,
                 temperature: agent.model_config?.temperature ?? 0.7,
                 system_prompt: (agent.model_config as LegacyModelConfig)?.systemPrompt ?? (agent.model_config as LegacyModelConfig)?.system_prompt ?? '',
                 reasoning_depth: (agent.model_config as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config as LegacyModelConfig)?.reasoning_depth ?? 1,

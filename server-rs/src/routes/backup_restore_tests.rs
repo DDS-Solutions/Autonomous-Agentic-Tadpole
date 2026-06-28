@@ -67,3 +67,7 @@ mod tests {
         assert_eq!(name, "BackupAgent");
     }
 }
+
+// Metadata: [backup_restore_tests]
+
+// Metadata: [backup_restore_tests]

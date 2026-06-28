@@ -171,3 +171,7 @@ pub async fn get_knowledge_peers(
         .await?;
     Ok(Json(peers))
 }
+
+// Metadata: [knowledge]
+
+// Metadata: [knowledge]

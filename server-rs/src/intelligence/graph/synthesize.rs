@@ -1,3 +1,13 @@
+//! @docs ARCHITECTURE:Core
+//!
+//! ### AI Assist Note
+//! **synthesize**: Core technical resource for the Tadpole OS infrastructure.
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Telemetry Link**: Search `[synthesize]` in tracing logs.
+//! - **Trace Scope**: `server-rs::intelligence::graph::synthesize`
+
 //! Graph synthesis service for the `CodeSymbolGraph`.
 //!
 //! Takes parsed AST data and integrates it into the live petgraph `DiGraph`,
@@ -191,3 +201,5 @@ impl GraphSynthesizer for GraphSynthesisEngine {
         Ok(())
     }
 }
+
+// Metadata: [synthesize]

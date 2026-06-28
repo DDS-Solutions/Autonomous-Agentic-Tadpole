@@ -6,6 +6,26 @@
 > - **Telemetry Link**: Search `[README]` in audit logs.
 >
 > ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[README]` in audit logs.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[README]` in audit logs.
+>
+> ### AI Assist Note
 > Core technical resource for the Autonomous Agentic Tadpole OS runtime, dashboard, Rust engine, and Python execution layer.
 >
 > ### Debugging & Observability
@@ -428,6 +448,8 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - `vector-memory` and `neural-audio` are opt-in Cargo features because they can introduce heavier native dependencies.
 - SQLite backups use `VACUUM INTO` and must target a file path (not in-memory). Run `execution/backup_sqlite.py` before any major migration or deployment.
 - Token rotation uses a two-token grace window: set `NEURAL_TOKEN_OLD` to the current token and `NEURAL_TOKEN_NEW` to the replacement before restarting the engine.
+
+[//]: # (Metadata: [README])
 
 [//]: # (Metadata: [README])
 

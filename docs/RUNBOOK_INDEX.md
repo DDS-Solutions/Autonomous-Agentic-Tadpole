@@ -1,3 +1,23 @@
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Documentation**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[RUNBOOK_INDEX]` in audit logs.
+>
+> ### AI Assist Note
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
+>
+> ### 🔍 Debugging & Observability
+> Traceability via `parity_guard.py`.
+
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift or legacy terminology.
+> - **Telemetry Link**: Search `[RUNBOOK_INDEX]` in audit logs.
+
 # Runbook Index — Symptom ➔ Script Mapping
 
 This runbook directory guides engineers and automated agents in resolving common operational failure modes of Tadpole OS using the appropriate diagnostic and repair scripts.
@@ -37,3 +57,5 @@ This runbook directory guides engineers and automated agents in resolving common
 | **Suspect MCP tool** | `python execution/mcp_audit.py --skill=<name>` | Scans the manifest parameter types and permissions. |
 | **AI Context Drift** | `python execution/verify_ai_context.py` | Validates file assist notes and trace scopes. |
 | **Broken File Links** | `python execution/verify_ai_context.py --fix` | Auto-heals broken references and missing docs blocks. |
+
+[//]: # (Metadata: [RUNBOOK_INDEX])
