@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Type mismatch if Rust structs drift without triggering a re-generation.
- * - **Telemetry Link**: Not tracked (Static generated types).
+ * - **Telemetry Link**: Not tracked (Static generated types). Search `[generated]` in observability traces.
  */
 
 export type EngineAgent = { identity: AgentIdentity; models: AgentModels; economics: AgentEconomics; health: AgentHealth; capabilities: AgentCapabilities; state: AgentState; metadata: Partial<{ [key in string]: JsonValue }>; created_at: string | null; requires_oversight: boolean; voice_id: string | null; voice_engine: string | null; stt_engine: string | null; connector_configs: ConnectorConfig[]; version: number; runner_policy: RunnerPolicy }
@@ -35,6 +35,8 @@ export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTok
  * Defines the set of supported LLM backend protocols for the Tadpole OS engine.
  */
 export type ModelProvider = "openai" | "anthropic" | "google" | "gemini" | "ollama" | "groq" | "mistral" | "perplexity" | "fireworks" | "together" | "deepseek" | "xai" | "inception" | "openrouter" | "cerebras" | "sambanova" | "meta" | "alibaba" | "local"
+
+export type RunnerPolicy = { maxConcurrent: number; resumeBlockedFirst: boolean; preflightChecks: string[] }
 
 export type RoleBlueprint = { id: string; name: string; department: string; description: string; skills?: string; workflows?: string; mcpTools?: string; requiresOversight?: boolean; modelId?: string | null; createdAt?: string | null }
 
@@ -71,7 +73,5 @@ export type MaintenanceDimension = { score: number; status: string; details: str
 export type ClaimResponse = { status: string; agentId: string; taskId: string; claimedAt: number; receipt: string }
 
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
-
-// Metadata: [generated]
 
 // Metadata: [generated]

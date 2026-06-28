@@ -10,8 +10,8 @@
  * - **Telemetry Link**: Search `[factory]` in observability traces.
  */
 
-import { get_settings } from '@/stores/settings_store';
-import { use_trace_store } from '@/stores/trace_store';
+import { get_settings } from '../stores/settings_store';
+import { use_trace_store } from '../stores/trace_store';
 import type { ApiServiceConfig } from './types';
 import { BaseApiService } from './service';
 import { api_error_listeners, request_interceptors } from './channels';

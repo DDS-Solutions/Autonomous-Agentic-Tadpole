@@ -10,8 +10,8 @@
  * - **Telemetry Link**: Search `[legacy]` in observability traces.
  */
 
-import { get_settings } from '@/stores/settings_store';
-import { use_trace_store } from '@/stores/trace_store';
+import { get_settings } from '../stores/settings_store';
+import { use_trace_store } from '../stores/trace_store';
 import { BaseApiService } from './service';
 import { api_error_listeners, request_interceptors } from './channels';
 import type { RequestOptions } from './types';

@@ -139,7 +139,7 @@ describe('Settings Page', () => {
     });
 
     it('logs error when sync fails in handle_save', async () => {
-        const console_spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const console_spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         (system_api_service.update_governance_settings as Mock).mockRejectedValue(new Error('Network error'));
         
         render(<MemoryRouter><Settings /></MemoryRouter>);
@@ -147,7 +147,10 @@ describe('Settings Page', () => {
         fireEvent.click(save_button);
 
         await waitFor(() => {
-            expect(console_spy).toHaveBeenCalledWith(expect.stringContaining('Failed to sync'), expect.any(Error));
+            expect(console_spy).toHaveBeenCalledWith(
+                expect.stringContaining('[Settings_View] Non-blocking backend sync error:'),
+                expect.stringContaining('Network error')
+            );
         });
         console_spy.mockRestore();
     });

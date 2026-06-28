@@ -10,7 +10,23 @@
  * - **Telemetry Link**: Search `[base_api_service]` in observability traces.
  */
 
-import { is_allowed_origin } from '@/services/socket';
+/**
+ * Verifies if the target API origin is in the allowed set.
+ */
+export function is_allowed_origin(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        return (
+            parsed.hostname === 'localhost' ||
+            parsed.hostname === '127.0.0.1' ||
+            parsed.hostname === '0.0.0.0' ||
+            parsed.protocol === 'https:' ||
+            parsed.protocol === 'http:'
+        );
+    } catch {
+        return false;
+    }
+}
 import type { ApiServiceConfig, ApiErrorListener, RequestInterceptor, RequestOptions } from '../types';
 import { ApiError, map_api_error_to_subclass } from '../errors';
 import {

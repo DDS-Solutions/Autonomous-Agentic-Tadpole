@@ -29,7 +29,7 @@ pub fn export_bindings() {
     output.push_str(" * \n");
     output.push_str(" * ### 🔍 Debugging & Observability\n");
     output.push_str(" * - **Failure Path**: Type mismatch if Rust structs drift without triggering a re-generation.\n");
-    output.push_str(" * - **Telemetry Link**: Not tracked (Static generated types).\n");
+    output.push_str(" * - **Telemetry Link**: Not tracked (Static generated types). Search `[generated]` in observability traces.\n");
     output.push_str(" */\n\n");
     
     macro_rules! export_type {
@@ -56,6 +56,7 @@ pub fn export_bindings() {
     export_type!(ConnectorConfig);
     export_type!(TokenUsage);
     export_type!(ModelProvider);
+    export_type!(RunnerPolicy);
     export_type!(RoleBlueprint);
     export_type!(AgentConfigUpdate);
     export_type!(SkillManifest);
@@ -75,7 +76,8 @@ pub fn export_bindings() {
     export_type!(crate::routes::agentic_engine::ClaimResponse);
 
 
-    output.push_str("export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];\n");
+    output.push_str("export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];\n\n");
+    output.push_str("// Metadata: [generated]\n");
 
     let export_path = "../src/contracts/generated.ts";
     if let Err(e) = std::fs::write(export_path, output) {
