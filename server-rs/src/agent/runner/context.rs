@@ -39,7 +39,7 @@ impl AgentRunner {
 
         // 1. Resolve Target Model ID
         let target_model_id = payload.model_id.as_ref()
-            .or_else(|| match a.models.active_model_slot {
+            .or(match a.models.active_model_slot {
                 Some(2) => a.models.model_2.as_ref(),
                 Some(3) => a.models.model_3.as_ref(),
                 _ => a.models.model_id.as_ref(),
@@ -184,11 +184,11 @@ impl AgentRunner {
         slot_cfg: &ModelConfig,
     ) -> Result<ModelConfig, AppError> {
         if let Some(model_entry) = self.state.registry.models.get(target_model_id) {
-            self.construct_registry_config(&a, &model_entry, slot_cfg)
+            self.construct_registry_config(a, &model_entry, slot_cfg)
         } else if let Some(found_entry) = self.state.registry.models.iter().find(|kv| {
             kv.value().name.to_lowercase() == target_model_id.to_lowercase()
         }) {
-            self.construct_registry_config(&a, found_entry.value(), slot_cfg)
+            self.construct_registry_config(a, found_entry.value(), slot_cfg)
         } else {
             // FALLBACK: Use agent's internal model config for the active slot
             let mut cfg = slot_cfg.clone();
@@ -352,12 +352,12 @@ impl AgentRunner {
             tokio::spawn(async move {
                 let blocks = crate::agent::continuity::partition_context(&agent_id, &mission_id_str, &history_clone);
                 for block in &blocks {
-                    let _ = arbiter.ssd.flush_block(&block).await;
+                    let _ = arbiter.ssd.flush_block(block).await;
                 }
                 tracing::debug!("❄️ [SSCP] Flushed {} context blocks to SSD for agent {}", blocks.len(), agent_id);
             });
 
-            match ContextManager::summarize_history(self, &ctx, &history_text).await {
+            match ContextManager::summarize_history(self, ctx, &history_text).await {
                 Ok(summary) => {
                     ctx.summarized_history = Some(summary);
                     tracing::info!("✅ [Runner] Context summarized for {}.", mission_id);

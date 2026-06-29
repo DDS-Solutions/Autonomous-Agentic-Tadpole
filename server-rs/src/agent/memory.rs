@@ -502,9 +502,8 @@ impl VectorMemory {
                         let scope_path = mission_entry.path().join("scope.lance");
                         if scope_path.exists() {
                             let status = mission_statuses.get(&mission_id).map(|s| s.as_str());
-                            if matches!(status, Some("completed") | Some("failed") | None) {
-                                if tokio::fs::remove_dir_all(&scope_path).await.is_ok() { deleted_count += 1; }
-                            }
+                            if matches!(status, Some("completed") | Some("failed") | None)
+                                && tokio::fs::remove_dir_all(&scope_path).await.is_ok() { deleted_count += 1; }
                         }
                     }
                 }

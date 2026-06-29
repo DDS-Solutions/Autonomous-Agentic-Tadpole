@@ -307,13 +307,13 @@ impl KnowledgeStore {
         .await
         .map_err(|e| AppError::InternalServerError(format!("[IKS] list failed: {}", e)))?;
 
-        Ok(rows
+        rows
             .into_iter()
             .map(Self::entry_from_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 AppError::InternalServerError(format!("[IKS] list row decode failed: {}", e))
-            })?)
+            })
     }
 
     /// P2P sync: return all entries written since `since` (unix timestamp).
@@ -334,13 +334,13 @@ impl KnowledgeStore {
             AppError::InternalServerError(format!("[IKS] get_entries_since failed: {}", e))
         })?;
 
-        Ok(rows
+        rows
             .into_iter()
             .map(Self::entry_from_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 AppError::InternalServerError(format!("[IKS] sync row decode failed: {}", e))
-            })?)
+            })
     }
 
     /// Delete an entry by ID. Removes from both SQLite and LanceDB.

@@ -232,7 +232,7 @@ impl SSDManager {
             let Ok(mut agent_files) = tokio::fs::read_dir(agent_entry.path()).await else { continue };
             while let Ok(Some(file)) = agent_files.next_entry().await {
                 let path = file.path();
-                if !path.extension().is_some_and(|ext| ext == "mpk") { continue; }
+                if path.extension().is_none_or(|ext| ext != "mpk") { continue; }
                 let modified = file.metadata().await
                     .and_then(|m| m.modified())
                     .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())

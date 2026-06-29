@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[parser]` in tracing logs.
-
+//! 
 //! Sovereign Parser Service - High-Fidelity Symbol Extraction
 //! 
 //! Replaces brittle regex-based parsing with tree-sitter for mission-critical

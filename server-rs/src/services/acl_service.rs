@@ -38,10 +38,7 @@ impl AclServiceTrait for AclService {
             }
         } else {
             // Specialists
-            match tool_name {
-                "issue_alpha_directive" => false,
-                _ => true,
-            }
+            tool_name != "issue_alpha_directive"
         }
     }
 

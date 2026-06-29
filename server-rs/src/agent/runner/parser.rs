@@ -166,7 +166,7 @@ impl PolyglotParser {
                 }
             }
 
-            if let Some(args) = Self::repair_and_parse_json(json_str).ok() {
+            if let Ok(args) = Self::repair_and_parse_json(json_str) {
                 calls.push(ToolCall {
                     name: name_raw.to_string(),
                     args,

@@ -131,7 +131,7 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
 
         // Periodically log activity for diagnostics (every 100 pulses ~ 10s)
         static PULSE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        if PULSE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 100 == 0 {
+        if PULSE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed).is_multiple_of(100) {
             tracing::debug!("💓 [Telemetry] Pulse broadcast: {} nodes, {} edges active.", node_count, edge_count);
         }
     }

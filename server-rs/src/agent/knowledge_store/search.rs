@@ -208,7 +208,7 @@ impl KnowledgeStore {
                 .map_err(|e| {
                     AppError::InternalServerError(format!("[IKS] search row decode failed: {}", e))
                 })?;
-            return Ok(results);
+            Ok(results)
         }
     }
 }

@@ -6,6 +6,7 @@
     clippy::unnecessary_map_or,
     clippy::derivable_impls,
     clippy::redundant_closure,
+    clippy::field_reassign_with_default,
     dead_code,
     unused_variables
 )]

@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[rag_scoring.rs]` in tracing logs.
-
+//! 
 //!   @docs ARCHITECTURE:Retrieval
 //!
 //! ### AI Assist Note

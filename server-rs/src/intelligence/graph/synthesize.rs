@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[synthesize]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::synthesize`
-
+//! 
 //! Graph synthesis service for the `CodeSymbolGraph`.
 //!
 //! Takes parsed AST data and integrates it into the live petgraph `DiGraph`,

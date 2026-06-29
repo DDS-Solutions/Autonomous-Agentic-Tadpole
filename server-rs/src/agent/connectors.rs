@@ -456,7 +456,7 @@ mod tests {
         
         // Third sync with changes
         let items = connector.fetch_new_items(Some(last_sync)).await?;
-        assert!(items.len() >= 1, "Updated file should be picked up");
+        assert!(!items.is_empty(), "Updated file should be picked up");
         
         Ok(())
     }

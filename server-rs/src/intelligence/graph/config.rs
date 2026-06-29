@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[config]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::config`
-
+//! 
 //! Build-time configuration for the `CodeSymbolGraph`.
 //!
 //! `GraphConfig` controls which symbols and path components are excluded

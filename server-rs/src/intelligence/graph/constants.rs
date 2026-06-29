@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[constants]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::constants`
-
+//! 
 //! Hard upper-bound constants for the `CodeSymbolGraph`.
 //!
 //! These values guard against resource exhaustion (DoS) caused by

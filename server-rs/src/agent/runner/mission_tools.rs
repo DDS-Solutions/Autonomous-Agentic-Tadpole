@@ -160,16 +160,16 @@ impl AgentRunner {
             );
             // 🛡️ [Harden Phase 4: Clean Delivery]
             // We strip previous turn noise to provide a clear, professional final report.
-            return Ok(format!(
+            Ok(format!(
                 "🏁 **MISSION ARCHIVE REPORT**\n\
                  Mission ID: {}\n\
                  Status: SUCCESS\n\n\
                  The mission has been successfully summarized and archived into long-term vector memory.\n\n\
                  **Summary Highlights**:\n{}",
                 ctx.mission_id, report
-            ));
+            ))
         } else {
-            return Ok(format!("(Mission completion REJECTED)"));
+            Ok("(Mission completion REJECTED)".to_string())
         }
     }
  
@@ -197,7 +197,7 @@ impl AgentRunner {
             "success",
         );
  
-        Ok(format!("(MISSION PINNED: This mission will now bypass the 48h Swarm Reaper cycle.)"))
+        Ok("(MISSION PINNED: This mission will now bypass the 48h Swarm Reaper cycle.)".to_string())
     }
  
     /// Handles `search_mission_knowledge`: vector search across LanceDB memory scope.
@@ -263,15 +263,15 @@ impl AgentRunner {
                 "This query might be reference a physical file or keyword in the workspace. Since you have technical tools, you should now use 'list_files' or 'grep_search' to locate the target and then 'read_file' or 'read_codebase_file' to inspect it directly."
             };
 
-            return Ok(format!(
+            Ok(format!(
                 "(RESOURCE NOT FOUND: No relevant shared findings found for '{}'. {})",
                 query, hint
-            ));
+            ))
         } else {
-            return Ok(format!(
+            Ok(format!(
                 "(SEARCH RESULTS FOR '{}'):\n{}",
                 query, results_text
-            ));
+            ))
         }
     }
 
@@ -338,7 +338,7 @@ impl AgentRunner {
             .await?;
 
         if !approved {
-            return Ok(format!("(Codebase read REJECTED by Oversight)"));
+            return Ok("(Codebase read REJECTED by Oversight)".to_string());
         }
 
         // Resolve path relative to project root (CWD of the server)
@@ -399,10 +399,10 @@ impl AgentRunner {
                 }
 
                 let truncated = self.safe_truncate(&content, 10000);
-                return Ok(format!("(FILE CONTENT OF {}):\n\n{}", path_str, truncated));
+                Ok(format!("(FILE CONTENT OF {}):\n\n{}", path_str, truncated))
             }
             Err(e) => {
-                return Ok(format!("(CODEBASE READ FAILED for {}: {})", path_str, e));
+                Ok(format!("(CODEBASE READ FAILED for {}: {})", path_str, e))
             }
         }
     }
@@ -489,10 +489,10 @@ impl AgentRunner {
         );
 
         // Non-blocking response: The agent can proceed with other tasks while approval is pending.
-        return Ok(format!(
+        Ok(format!(
             "(CAPABILITY PROPOSAL SUBMITTED): The proposed {} '{}' has been queued for human oversight (Proposal ID: {}). You may continue your mission while the Governance Hub reviews this capability expansion.",
             cap_type_str, name, proposal_id
-        ));
+        ))
     }
 
     /// Executes a verification script for a skill.
@@ -548,14 +548,14 @@ impl AgentRunner {
             Ok(content) => {
                 let symbols = self.extract_symbols(&content, path_str);
                 if symbols.is_empty() {
-                    return Ok(format!("(No recognizable symbols found in {})", path_str));
+                    Ok(format!("(No recognizable symbols found in {})", path_str))
                 } else {
                     let symbol_list = symbols.join("\n");
-                    return Ok(format!("(SYMBOLS IN {}):\n\n{}", path_str, symbol_list));
+                    Ok(format!("(SYMBOLS IN {}):\n\n{}", path_str, symbol_list))
                 }
             }
             Err(e) => {
-                return Ok(format!("(LIST SYMBOLS FAILED for {}: {})", path_str, e));
+                Ok(format!("(LIST SYMBOLS FAILED for {}: {})", path_str, e))
             }
         }
     }
@@ -579,13 +579,13 @@ impl AgentRunner {
         match adapter.read_file(path_str).await {
             Ok(content) => {
                 if let Some(body) = self.extract_symbol_body(&content, symbol_name, path_str) {
-                    return Ok(format!("(BODY OF SYMBOL '{}' IN {}):\n\n{}", symbol_name, path_str, body));
+                    Ok(format!("(BODY OF SYMBOL '{}' IN {}):\n\n{}", symbol_name, path_str, body))
                 } else {
-                    return Ok(format!("(SYMBOL '{}' NOT FOUND in {})", symbol_name, path_str));
+                    Ok(format!("(SYMBOL '{}' NOT FOUND in {})", symbol_name, path_str))
                 }
             }
             Err(e) => {
-                return Ok(format!("(GET SYMBOL FAILED for {}: {})", path_str, e));
+                Ok(format!("(GET SYMBOL FAILED for {}: {})", path_str, e))
             }
         }
     }

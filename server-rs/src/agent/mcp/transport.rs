@@ -55,10 +55,7 @@ pub async fn mcp_sse_handler(
     let _ = tx.send(Event::default().event("endpoint").data(endpoint_url)).await;
 
     let stream = futures::stream::unfold(rx, |mut rx| async move {
-        match rx.recv().await {
-            Some(event) => Some((Ok::<_, Infallible>(event), rx)),
-            None => None,
-        }
+        rx.recv().await.map(|event| (Ok::<_, Infallible>(event), rx))
     });
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new())
 }

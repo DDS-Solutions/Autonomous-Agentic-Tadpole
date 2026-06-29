@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[security]` in tracing logs.
-
+//! 
 //! Security Foundation & Hardening Utilities
 //!
 //! Provides the core primitives for path validation, sensitive-ID
@@ -93,8 +93,8 @@ pub fn validate_path(base: &Path, user_path: &str) -> Result<SafePath, AppError>
 
     fn strip_unc(p: PathBuf) -> PathBuf {
         let p_str = p.to_string_lossy();
-        if p_str.starts_with(r"\\?\") {
-            PathBuf::from(&p_str[4..])
+        if let Some(stripped) = p_str.strip_prefix(r"\\?\") {
+            PathBuf::from(stripped)
         } else {
             p
         }

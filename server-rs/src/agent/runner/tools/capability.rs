@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[capability]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:Security
 //! 
 //! ### AI Assist Note

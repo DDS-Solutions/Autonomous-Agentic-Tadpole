@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[sovereign_state]` in tracing logs.
-
+//! 
 //! Sovereign State API — Multiversal Session Tree
 //!
 //! Provides high-fidelity access to branched session history and 

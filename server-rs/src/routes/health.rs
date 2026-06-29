@@ -88,7 +88,7 @@ pub async fn health_check(
         "failed".to_string()
     };
 
-    let pool_size = state.resources.pool.size() as u32;
+    let pool_size = state.resources.pool.size();
     let pool_idle = state.resources.pool.num_idle() as u32;
     
     // Resolve WAL file size

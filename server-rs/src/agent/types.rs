@@ -146,9 +146,7 @@ impl RoleAuthorityLevel {
         let r = role.to_lowercase();
         if r.contains("ceo") || r.contains("overlord") || r.contains("executive") {
             Self::Executive
-        } else if r.contains("coo") || r.contains("orchestrator") || r.contains("commander") {
-            Self::Management
-        } else if r.contains("alpha") {
+        } else if r.contains("coo") || r.contains("orchestrator") || r.contains("commander") || r.contains("alpha") {
             Self::Management
         } else if r.contains("observer") || r.contains("auditor") {
             Self::Observer

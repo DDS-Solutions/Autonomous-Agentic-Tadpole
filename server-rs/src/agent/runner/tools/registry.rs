@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[registry]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:Registry
 //! 
 //! ### AI Assist Note

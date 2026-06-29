@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[manifest]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:Runner
 //!
 //! ### Tool Manifest

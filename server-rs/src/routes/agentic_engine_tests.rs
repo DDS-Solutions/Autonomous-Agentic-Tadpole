@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[agentic_engine_tests]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::agentic_engine_tests`
-
+//! 
 //! Agentic Engine Primitives - Integration Verification Suite
 //!
 //! Integration tests for Status Ledger, Receipt system, and Task Claim Lock.

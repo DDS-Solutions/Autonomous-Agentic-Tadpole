@@ -85,7 +85,7 @@ def get_headers(file_path, pillar, purpose=None):
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[{tag}]` in tracing logs.
-
+//! 
 """
     elif ext in ['.ts', '.tsx', '.js']:
         return f"""/**

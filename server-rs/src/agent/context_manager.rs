@@ -45,7 +45,7 @@ impl ContextManager {
                 block_buffer.push(line);
                 if !in_code_block {
                     // Just finished an atomic block, flush the buffer
-                    result.extend(block_buffer.drain(..));
+                    result.append(&mut block_buffer);
                 }
                 continue;
             }

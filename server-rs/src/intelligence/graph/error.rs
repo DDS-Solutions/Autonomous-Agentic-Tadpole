@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[error]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::error`
-
+//! 
 //! Error types for the `CodeSymbolGraph` module.
 //!
 //! ### 🔍 Debugging & Observability

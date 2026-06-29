@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[mod]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### Actor Message Protocol

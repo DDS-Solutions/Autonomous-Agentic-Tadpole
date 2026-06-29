@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[cache]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::cache`
-
+//! 
 //! Incremental cache management for the `CodeSymbolGraph`.
 //!
 //! Compares the current filesystem state against stored metadata to

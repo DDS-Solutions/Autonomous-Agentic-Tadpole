@@ -8,7 +8,7 @@
 //!
 //! ### Architecture
 //! Dual-store: SQLite metadata index (topic, cluster, TTL, dedup, **text**)
-//! + LanceDB vector store for k-NN similarity search. Text content is stored
+//! and LanceDB vector store for k-NN similarity search. Text content is stored
 //! in SQLite alongside metadata so point-lookups (`get_by_id`) need no
 //! LanceDB round-trip. Content is deduplicated by SHA-256 hash at write time.
 //!

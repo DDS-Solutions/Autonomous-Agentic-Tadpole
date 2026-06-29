@@ -201,13 +201,13 @@ pub async fn get_agent_memory(
             });
         }
 
-        return Ok((
+        Ok((
             StatusCode::OK,
             Json(MemoryResponse {
                 status: "success".to_string(),
                 entries,
             }),
-        ));
+        ))
     }
 
     #[cfg(feature = "vector-memory")]
@@ -286,10 +286,10 @@ pub async fn delete_agent_memory(
         .await
         .map_err(AppError::Sqlx)?;
 
-        return Ok((
+        Ok((
             StatusCode::OK,
             Json(serde_json::json!({"status": "success"})),
-        ));
+        ))
     }
 
     #[cfg(feature = "vector-memory")]

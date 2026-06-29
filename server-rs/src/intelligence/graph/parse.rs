@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[parse]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::parse`
-
+//! 
 //! Parallel file parsing service for the `CodeSymbolGraph`.
 //!
 //! Uses `rayon` for parallel I/O + AST extraction while applying TOCTOU

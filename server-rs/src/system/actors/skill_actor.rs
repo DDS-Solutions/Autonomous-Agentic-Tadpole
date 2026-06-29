@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[skill_actor]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:SovereignKernel
 //!
 //! ### SkillScanner Actor

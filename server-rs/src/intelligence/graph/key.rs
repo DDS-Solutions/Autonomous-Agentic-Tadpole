@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[key]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::key`
-
+//! 
 //! Key normalization for the symbol index.
 //!
 //! The symbol index (`HashMap<String, NodeIndex>`) uses composite keys of the

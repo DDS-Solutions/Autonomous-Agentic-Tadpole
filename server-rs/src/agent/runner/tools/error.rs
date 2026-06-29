@@ -7,7 +7,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[error]` in tracing logs.
-
+//! 
 //! @docs ARCHITECTURE:Registry
 //! Standardized Error System for the Tadpole OS Tooling Layer.
 //! Features RecoveryAction metadata to guide autonomous agent self-annealing.

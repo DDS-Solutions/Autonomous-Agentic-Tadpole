@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[types]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::types`
-
+//! 
 //! Core domain types for the `CodeSymbolGraph`.
 //!
 //! Defines the node/edge payload types used by the petgraph `DiGraph`,

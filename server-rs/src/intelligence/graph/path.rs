@@ -7,7 +7,7 @@
 //! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
 //! - **Telemetry Link**: Search `[path]` in tracing logs.
 //! - **Trace Scope**: `server-rs::intelligence::graph::path`
-
+//! 
 //! Path utilities: Unix-style conversion, log sanitization, and obfuscation.
 //!
 //! ### 🔍 Debugging & Observability

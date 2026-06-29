@@ -198,7 +198,7 @@ impl AgentRunner {
             .await?;
 
         self.accumulate_usage(usage, final_usage);
-        return Ok(final_text);
+        Ok(final_text)
     }
 
     /// ### 🧠 Orchestration: Tiered Recruitment (ensure_sub_agent_exists)
