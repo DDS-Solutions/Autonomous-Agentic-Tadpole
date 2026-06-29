@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Reducer update collisions, validation rejection for base URLs, or UI hang during `test_provider` RPC calls.
- * - **Telemetry Link**: Check `panel_reducer` logs or search `[useProviderForm]` in tracing.
+ * - **Telemetry Link**: Check `panel_reducer` logs or search `[use_provider_form]` in tracing.
  */
 
 import { type Provider_Config } from '../stores/provider_store';
@@ -51,6 +51,6 @@ export function panel_reducer(state: Panel_State, action: Action): Panel_State {
 }
 
 
-// Metadata: [use_provider_form]
+
 
 // Metadata: [use_provider_form]

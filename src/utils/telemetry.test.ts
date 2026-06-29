@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Improper redaction of nested metadata or failure to emit 'Audit' logs on caught exceptions.
- * - **Telemetry Link**: Run `npm run test` or check `[telemetry.test]` in Vitest output.
+ * - **Telemetry Link**: Search `[telemetry_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -84,6 +84,6 @@ describe('telemetry', () => {
     });
 });
 
-// Metadata: [telemetry_test]
+
 
 // Metadata: [telemetry_test]

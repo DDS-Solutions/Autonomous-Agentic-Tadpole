@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[system.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[system]` in tracing logs.
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -84,6 +84,6 @@ pub async fn debug_queues(
 }
 
 
-// Metadata: [system]
+
 
 // Metadata: [system]

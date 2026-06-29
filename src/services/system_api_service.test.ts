@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Failure to propagate backend-wide maintenance signals or incorrect parsing of environment-level metadata during an infrastructure handshake.
- * - **Telemetry Link**: Search `[system_api_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[system_api_service_test]` in console logs.
  */
 
 
@@ -331,6 +331,6 @@ describe('system_api_service', () => {
 });
 
 
-// Metadata: [system_api_service_test]
+
 
 // Metadata: [system_api_service_test]

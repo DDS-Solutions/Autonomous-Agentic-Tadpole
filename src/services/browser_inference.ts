@@ -1,16 +1,4 @@
 /**
- * @docs ARCHITECTURE:UI-Services
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Agent**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[browser_inference]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
@@ -23,6 +11,11 @@
  * - **Local-Only**: Models are downloaded once and cached. No inference 
  *   data is sent back to external APIs.
  * - **Sandboxed Context**: The model only sees sanitized DOM summaries.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[browser_inference]` in observability traces.
+ */
  */
 
 import { env, pipeline, TextGenerationPipeline, FeatureExtractionPipeline } from '@huggingface/transformers';

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incorrect provider string mapping (causes Vault lookup failure) or missing model IDs when a new service is integrated.
- * - **Telemetry Link**: Search for `[Constants]` in source audits.
+ * - **Telemetry Link**: Search for `[constants]` in source audits.
  */
 
 export const PROVIDERS = {
@@ -31,6 +31,6 @@ export const MODEL_IDS = {
 } as const;
 
 
-// Metadata: [constants]
+
 
 // Metadata: [constants]

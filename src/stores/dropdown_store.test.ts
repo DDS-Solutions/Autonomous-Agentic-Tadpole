@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Z-index conflicts or multiple dropdowns remaining open simultaneously due to missing singleton guards in the state machine.
- * - **Telemetry Link**: Search `[dropdown_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[dropdown_store_test]` in console logs.
  */
 
 
@@ -81,6 +81,6 @@ describe('use_dropdown_store', () => {
 });
 
 
-// Metadata: [dropdown_store_test]
+
 
 // Metadata: [dropdown_store_test]

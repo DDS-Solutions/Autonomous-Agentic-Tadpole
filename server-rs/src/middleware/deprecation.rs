@@ -8,6 +8,7 @@
 //! clients can parse remaining support windows (DEP-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[deprecation]` in tracing logs.
 //! - **Failure Path**: Missing lifecycle headers in legacy responses or
 //!   malformed date strings preventing client-side expiration logic.
 //! - **Trace Scope**: `server-rs::middleware::deprecation`
@@ -105,6 +106,8 @@ mod tests {
     }
 }
 
-// Metadata: [deprecation]
+
+
+
 
 // Metadata: [deprecation]

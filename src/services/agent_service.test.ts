@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Duplicate agent IDs in the cache after a refresh or failure to hydrate agent metadata during a network partition.
- * - **Telemetry Link**: Search `[agent_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[agent_service_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -287,6 +287,6 @@ describe('agent_service', () => {
     });
 });
 
-// Metadata: [agent_service_test]
+
 
 // Metadata: [agent_service_test]

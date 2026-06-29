@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Tab path mismatch during deep-link navigation, or active-state loss after a layout crash.
- * - **Telemetry Link**: Search for `[TabStore]` or `set_active_tab` in UI logs.
+ * - **Telemetry Link**: Search for `[tab_store]` or `set_active_tab` in UI logs.
  */
 
 import { create } from 'zustand';
@@ -233,6 +233,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [tab_store]
+
 
 // Metadata: [tab_store]

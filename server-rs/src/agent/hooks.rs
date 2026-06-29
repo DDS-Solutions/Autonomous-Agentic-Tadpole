@@ -9,6 +9,7 @@
 //! or custom environment setup without modifying the core Rust runner.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[hooks]` in tracing logs.
 //! - **Failure Path**: Hook script timeout (stuck process), permission
 //!   denied on the `hooks/` directory, or non-zero exit codes from
 //!   side-effect scripts causing mission interruption.
@@ -113,6 +114,8 @@ impl HooksManager {
     }
 }
 
-// Metadata: [hooks]
+
+
+
 
 // Metadata: [hooks]

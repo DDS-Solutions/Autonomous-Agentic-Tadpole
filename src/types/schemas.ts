@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[schemas]` in console logs.
 */
 
 // 🧬 AUTO-GENERATED TADPOLE OS SCHEMAS - DO NOT EDIT MANUALLY
@@ -41,6 +41,8 @@ export type SwarmPulse = { timestamp: number; nodes: PulseNode[]; edges: PulseCo
 export type SymbolNode = { name: string; path: string; kind: string; signature: string }
 
 
-// Metadata: [schemas]
+
+
+
 
 // Metadata: [schemas]

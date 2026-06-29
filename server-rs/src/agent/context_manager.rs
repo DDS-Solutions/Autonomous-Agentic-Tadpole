@@ -8,6 +8,7 @@
 //! Uses `tiktoken-rs` for precise parity with OpenAI tokenization.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[context_manager]` in tracing logs.
 //! - **Failure Path**: Token limit breach due to high-latency summarization
 //!   loop, or loss of fact-preservation (file paths, error codes)
 //!   during heuristic compaction.
@@ -131,6 +132,8 @@ impl ContextManager {
     }
 }
 
-// Metadata: [context_manager]
+
+
+
 
 // Metadata: [context_manager]

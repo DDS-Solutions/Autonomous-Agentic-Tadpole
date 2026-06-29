@@ -6,6 +6,7 @@
 //! Part of IMR-01 (Intelligent Model Registry).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[capability_matrix]` in tracing logs.
 //! - **Failure Path**: Fallback to conservative defaults (No Vision/Tools) if 
 //!   pattern matching fails.
 //! - **Trace Scope**: `server-rs::agent::capability_matrix`
@@ -98,6 +99,8 @@ mod tests {
     }
 }
 
-// Metadata: [capability_matrix]
+
+
+
 
 // Metadata: [capability_matrix]

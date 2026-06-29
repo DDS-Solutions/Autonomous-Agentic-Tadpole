@@ -11,6 +11,7 @@
 //! single user-interactive session (CONT-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Job execution stalls due to worker pool
 //!   exhaustion, database deadlocks during state-persistence, or
 //!   cron-expression validation failures.
@@ -63,6 +64,8 @@ pub fn partition_context(agent_id: &str, mission_id: &str, history: &str) -> Vec
     blocks
 }
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

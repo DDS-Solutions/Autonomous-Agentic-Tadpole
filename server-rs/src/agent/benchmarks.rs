@@ -9,6 +9,7 @@
 //! table for longitudinal analysis.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[benchmarks]` in tracing logs.
 //! - **Failure Path**: Benchmark timeout on under-provisioned hardware,
 //!   SQLite deadlocks during high-concurrency stress tests, or invalid
 //!   test IDs causing early return errors.
@@ -221,6 +222,8 @@ pub async fn run_benchmark_suite(
     Ok(result)
 }
 
-// Metadata: [benchmarks]
+
+
+
 
 // Metadata: [benchmarks]

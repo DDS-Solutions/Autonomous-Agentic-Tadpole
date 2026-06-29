@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Progress bar overflow (utilization > 100%), budget update rejection due to invalid numeric input, or `status_breached` indicator desync with backend enforcement.
- * - **Telemetry Link**: Search for `[Governance_Section]` or `budget_breached` in monitoring logs.
+ * - **Telemetry Link**: Search for `[GovernanceSection]` or `budget_breached` in monitoring logs.
  */
 
 import { useState } from 'react';
@@ -198,10 +198,10 @@ export function GovernanceSection({
     );
 }
 
-// Metadata: [Governance_Section]
+
 
 // Metadata: [Governance_Section]
 
-// Metadata: [GovernanceSection]
+
 
 // Metadata: [GovernanceSection]

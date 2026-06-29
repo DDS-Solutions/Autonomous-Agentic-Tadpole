@@ -7,7 +7,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Failed binding export due to missing `#[derive(Type)]` on new Rust structs or file permission errors on Windows.
-//! - **Telemetry Link**: Search `[Bridge]` in server traces.
+//! - **Telemetry Link**: Search `[bridge]` in server traces.
 //!
 
 
@@ -29,7 +29,7 @@ pub fn export_bindings() {
     output.push_str(" * \n");
     output.push_str(" * ### 🔍 Debugging & Observability\n");
     output.push_str(" * - **Failure Path**: Type mismatch if Rust structs drift without triggering a re-generation.\n");
-    output.push_str(" * - **Telemetry Link**: Not tracked (Static generated types). Search `[generated]` in observability traces.\n");
+    output.push_str(" * - **Telemetry Link**: Not tracked (Static generated types). Search `[bridge]` in observability traces.\n");
     output.push_str(" */\n\n");
     
     macro_rules! export_type {
@@ -99,6 +99,6 @@ mod tests {
     }
 }
 
-// Metadata: [bridge]
+
 
 // Metadata: [bridge]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Graph rendering cycles or infinite layout loops when circular agent dependencies are introduced in the `agent_store`.
- * - **Telemetry Link**: Search `[Org_Chart.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Org_Chart_test]` in console logs.
  */
 
 
@@ -195,6 +195,6 @@ describe('Org_Chart', () => {
 });
 
 
-// Metadata: [Org_Chart_test]
+
 
 // Metadata: [Org_Chart_test]

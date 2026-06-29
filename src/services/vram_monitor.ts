@@ -9,7 +9,7 @@
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: WebGPU adapter unavailable, system API unreachable, or invalid 
  *   memory pressure readings causing premature throttling.
- * - **Telemetry Link**: Search `[VramMonitor]` in trace logs.
+ * - **Telemetry Link**: Search `[vram_monitor]` in trace logs.
  */
 
 import { system_api_service } from './system_api_service';
@@ -144,6 +144,6 @@ class VramMonitor {
 
 export const vram_monitor_service = new VramMonitor();
 
-// Metadata: [vram_monitor]
+
 
 // Metadata: [vram_monitor]

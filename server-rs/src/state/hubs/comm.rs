@@ -8,6 +8,7 @@
 //! human-in-the-loop decisions.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[comm]` in tracing logs.
 //! - **Failure Path**: Broadcast channel lag causing dropped telemetry,
 //!   oversight resolver timeout (leading to task abortion), or memory
 //!   leaks in the `DashMap` due to unconsumed oversight entries.
@@ -41,6 +42,8 @@ pub struct CommunicationHub {
     pub event_sequence: std::sync::atomic::AtomicU64,
 }
 
-// Metadata: [comm]
+
+
+
 
 // Metadata: [comm]

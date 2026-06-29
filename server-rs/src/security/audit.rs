@@ -16,6 +16,7 @@
 //! (panic) to prevent state corruption.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[audit]` in tracing logs.
 //! - **Failure Path**: Hash chain breakage (`prev_hash` mismatch),
 //!   invalid digital signatures (key mismatch), or audit logging
 //!   bottlenecks under high-throughput tool execution.
@@ -525,6 +526,8 @@ mod tests {
     }
 }
 
-// Metadata: [audit]
+
+
+
 
 // Metadata: [audit]

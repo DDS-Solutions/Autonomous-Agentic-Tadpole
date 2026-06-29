@@ -6,6 +6,7 @@
 //! by suggesting 'refactor_synthesized_skill' when dynamic tools break.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[refinement]` in tracing logs.
 //! - **Trace Scope**: `server-rs::agent::runner::refinement`
 
 use super::{AgentRunner, RunContext};
@@ -50,9 +51,9 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [refinement]
 
-// Metadata: [refinement]
+
+
 
 #[cfg(test)]
 mod tests {
@@ -129,3 +130,5 @@ mod tests {
         assert!(output.contains("refactor_synthesized_skill"));
     }
 }
+
+// Metadata: [refinement]

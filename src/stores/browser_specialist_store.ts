@@ -1,22 +1,15 @@
 /**
- * @docs ARCHITECTURE:UI-Stores
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Stores**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[browser_specialist_store]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Stores
  * 
  * ### AI Assist Note
  * **Browser Specialist Store**: Manages the lifecycle and state of local-first 
  * inference. Handles model loading progress and thinking states for the 
  * "Sovereign Browser Specialist".
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[browser_specialist_store]` in observability traces.
+ */
  */
 
 import { create } from 'zustand';

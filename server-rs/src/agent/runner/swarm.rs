@@ -8,6 +8,7 @@
 //! strategic delegation.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[swarm]` in tracing logs.
 //! - **Failure Path**: Circular recursion detected (SEC-01), max swarm depth
 //!   exceeded, or sub-agent recruitment failure.
 //! - **Trace Scope**: `server-rs::agent::runner::swarm`
@@ -776,6 +777,8 @@ mod tests {
     }
 }
 
-// Metadata: [swarm]
+
+
+
 
 // Metadata: [swarm]

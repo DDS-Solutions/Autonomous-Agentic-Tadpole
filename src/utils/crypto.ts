@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Worker initialization failure, message timeout, or invalid JSON payload.
- * - **Telemetry Link**: Check `[CryptoWorker]` logs in the browser console.
+ * - **Telemetry Link**: Search `[crypto]` in console logs.
  */
 // Worker instance
 let crypto_worker: Worker | null = null;
@@ -68,6 +68,6 @@ export async function decrypt_text(encrypted_json: string, password: string): Pr
 }
 
 
-// Metadata: [crypto]
+
 
 // Metadata: [crypto]

@@ -11,12 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Sovereign Security)**:
-> This directive enforces the **Delegate-First** protocol for AgentAPI validation.
-> - **Alpha Restriction**: Agent 2 is prohibited from direct system status checks.
-> - **Mandatory Delegation**: Technical verification must be performed by Agent 7 (Nexus) or Agent 13 (Sentry).
-
 # 📖 Directive: API Integrity Audit (SOP-SEC-09)
 
 ## 🎯 Primary Objective
@@ -51,6 +45,6 @@ The COO MUST NOT attempt `system:check_system_status`. Instead, it must:
 - [x] Kernel health verified (Delegated to Agent 7).
 - [x] Zero security violations (`CBS` or `PermissionPolicy`) recorded in the audit trail.
 
-[//]: # (Metadata: [api_integrity_audit])
+
 
 [//]: # (Metadata: [api_integrity_audit])

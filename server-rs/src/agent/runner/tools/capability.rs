@@ -96,6 +96,6 @@ impl ZeroTrustGuard {
     }
 }
 
-// Metadata: [capability]
+
 
 // Metadata: [capability]

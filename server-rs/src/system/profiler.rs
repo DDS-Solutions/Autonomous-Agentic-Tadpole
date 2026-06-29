@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[profiler.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[profiler]` in tracing logs.
 
 use serde::{Deserialize, Serialize};
 use parking_lot::Mutex;
@@ -111,6 +111,6 @@ mod tests {
     }
 }
 
-// Metadata: [profiler]
+
 
 // Metadata: [profiler]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: State mismatch between the `missions_store` and the UI grid during rapid mission status transitions (e.g. queueing to execution).
- * - **Telemetry Link**: Search `[Missions.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Missions_test]` in console logs.
  */
 
 
@@ -388,6 +388,6 @@ describe('Missions Page', () => {
 });
 
 
-// Metadata: [Missions_test]
+
 
 // Metadata: [Missions_test]

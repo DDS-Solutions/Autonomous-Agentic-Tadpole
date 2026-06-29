@@ -16,7 +16,7 @@
 //! - **Failure Path**: Permission denied due to `Deny` policy mode,
 //!   timeout during external MCP server execution, or malformed
 //!   JSON-RPC tool arguments causing parse failures.
-//! - **Telemetry Link**: Search for `[MCP]` or `engine:mcp_pulse` in
+//! - **Telemetry Link**: Search for `[mod]` or `engine:mcp_pulse` in
 //!   `tracing` logs for real-time tool performance tracking.
 //! - **Trace Scope**: `server-rs::agent::mcp`
 
@@ -606,6 +606,6 @@ pub async fn get_blast_radius(
     Ok(McpResult::Raw(serde_json::to_string_pretty(&affected).unwrap_or_default()))
 }
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

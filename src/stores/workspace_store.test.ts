@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Filesystem path collisions or failure to enforce project-level resource isolation during a multi-cluster deployment.
- * - **Telemetry Link**: Search `[workspace_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[workspace_store_test]` in console logs.
  */
 
 
@@ -309,6 +309,6 @@ describe('use_workspace_store', () => {
 });
 
 
-// Metadata: [workspace_store_test]
+
 
 // Metadata: [workspace_store_test]

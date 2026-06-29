@@ -23,7 +23,7 @@
 //!      `sqlx::migrate!` binary hash.
 //!   3. For I/O errors, ensure the `.tmp/` or data directory has
 //!      `0755` permissions for the engine process.
-//! - **Telemetry Link**: Search for `[Database]` or `[SQLx]` in
+//! - **Telemetry Link**: Search for `[db]` or `[SQLx]` in
 //!   `tracing` logs for query performance and migration status.
 //! - **Trace Scope**: `server-rs::db`
 use anyhow::Result;
@@ -359,6 +359,6 @@ pub async fn check_integrity(pool: &SqlitePool) -> Result<String> {
 
 
 
-// Metadata: [db]
+
 
 // Metadata: [db]

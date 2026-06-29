@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Invalid field update dispatch, or unexpected state property pollution.
- * - **Telemetry Link**: Search for `panel_reducer` in tracing logs.
+ * - **Telemetry Link**: Search `[use_provider_form_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -70,6 +70,6 @@ describe('panel_reducer', () => {
     });
 });
 
-// Metadata: [use_provider_form_test]
+
 
 // Metadata: [use_provider_form_test]

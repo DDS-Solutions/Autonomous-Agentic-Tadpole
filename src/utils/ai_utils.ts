@@ -5,7 +5,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[ai_utils]` in console logs.
 */
 
 /**
@@ -89,6 +89,8 @@ export const extract_neural_output = (raw: string, fallback: string = 'Analysis 
     return fallback;
 };
 
-// Metadata: [ai_utils]
+
+
+
 
 // Metadata: [ai_utils]

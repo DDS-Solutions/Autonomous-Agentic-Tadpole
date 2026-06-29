@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[Security_Dashboard_test]` in console logs.
 */
 
 /**
@@ -209,6 +209,8 @@ describe('Security_Dashboard', () => {
     });
 });
 
-// Metadata: [Security_Dashboard_test]
+
+
+
 
 // Metadata: [Security_Dashboard_test]

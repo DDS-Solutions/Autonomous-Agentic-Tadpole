@@ -16,6 +16,7 @@
 //! ensure the user retains final state control (PERM-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[permissions]` in tracing logs.
 //! - **Failure Path**: Permission denial for unrecognized tools,
 //!   UI-blocking during waiting-for-approval states, or
 //!   misconfiguration of the internal tool whitelist.
@@ -163,6 +164,8 @@ impl PermissionPolicy {
     }
 }
 
-// Metadata: [permissions]
+
+
+
 
 // Metadata: [permissions]

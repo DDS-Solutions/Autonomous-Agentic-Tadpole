@@ -7,6 +7,7 @@
 //! for **Infrastructure Fallbacks**.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[registry]` in tracing logs.
 //! - **Failure Path**: Missing or empty default provider lists, causing
 //!   agent initialization to stall.
 //! - **Trace Scope**: `server-rs::agent::registry`
@@ -95,6 +96,8 @@ mod tests {
     }
 }
 
-// Metadata: [registry]
+
+
+
 
 // Metadata: [registry]

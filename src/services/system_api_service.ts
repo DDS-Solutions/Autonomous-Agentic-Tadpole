@@ -10,7 +10,7 @@
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Deployment timeout (exceeding 2h `DEPLOY_TIMEOUT`), hardware discovery failure (unreachable nodes), or job queue starvation.
  * - **IMR-01 Link**: See `sync_provider_models` for dynamic discovery logic.
- * - **Telemetry Link**: Look for `engine:health` or search `[SystemAPI]` in tracing logs.
+ * - **Telemetry Link**: Look for `engine:health` or search `[system_api_service]` in tracing logs.
  * 
  * @aiContext
  * - **Dependencies**: `base_api_service`.
@@ -651,6 +651,6 @@ export const system_api_service = {
 export type { Skill_Manifest } from './mission_api_service';
 
 
-// Metadata: [system_api_service]
+
 
 // Metadata: [system_api_service]

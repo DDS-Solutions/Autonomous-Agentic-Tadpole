@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Broken internal document links or failure to load local markdown assets during air-gapped system states.
- * - **Telemetry Link**: Search `[Docs.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Docs_test]` in console logs.
  */
 
 
@@ -210,6 +210,6 @@ describe('Docs Page', () => {
 });
 
 
-// Metadata: [Docs_test]
+
 
 // Metadata: [Docs_test]

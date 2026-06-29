@@ -16,7 +16,7 @@
 //! - **Failure Path**: 413 Payload Too Large on multi-minute audio
 //!   uploads, 401 Unauthorized for missing provider keys, or malformed
 //!   multipart boundaries causing parse errors in `transcribe_audio`.
-//! - **Telemetry Link**: Search for `[Audio]` or `[BunkerCache]` in
+//! - **Telemetry Link**: Search for `[audio]` or `[BunkerCache]` in
 //!   `tracing` logs for performance and cache-hit metrics.
 //! - **Trace Scope**: `server-rs::routes::audio`
 
@@ -368,6 +368,6 @@ mod tests {
     }
 }
 
-// Metadata: [audio]
+
 
 // Metadata: [audio]

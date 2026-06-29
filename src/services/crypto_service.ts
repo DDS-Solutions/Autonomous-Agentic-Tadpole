@@ -12,7 +12,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Obfuscation loop failure (infinite base64 encoding), or ID collision in low-entropy environments.
- * - **Telemetry Link**: Search for `[CryptoService]` in UI logs.
+ * - **Telemetry Link**: Search for `[crypto_service]` in UI logs.
  */
 
 
@@ -77,6 +77,6 @@ export class Crypto_Service {
 }
 
 
-// Metadata: [crypto_service]
+
 
 // Metadata: [crypto_service]

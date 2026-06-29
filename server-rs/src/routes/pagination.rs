@@ -13,6 +13,7 @@
 //! outputs before dispatching to the frontend (NET-04).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[pagination]` in tracing logs.
 //! - **Failure Path**: Off-by-one errors in offset calculation,
 //!   broken HATEOAS links due to incorrect `base_path` resolution,
 //!   or performance degradation when slicing very large in-memory
@@ -297,6 +298,8 @@ mod tests {
     }
 }
 
-// Metadata: [pagination]
+
+
+
 
 // Metadata: [pagination]

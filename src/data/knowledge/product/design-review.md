@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[design_review]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: design-review
@@ -59,6 +52,6 @@ Prepare the Figma file for engineers (redlines, assets, empty states).
 2. **Consolidate**: Synthesize conflicting feedback during the meeting.
 3. **Focus**: Don't bikeshed on minor details. Focus on the core user flow.
 
-[//]: # (Metadata: [design_review])
+
 
 [//]: # (Metadata: [design_review])

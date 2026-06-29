@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[rust_engine]` in audit logs.
-
 # Rust Engine Development Guidelines
 
 This directive defines the code patterns, compiler constraints, and architectural invariants for modifying the `server-rs` Rust engine.

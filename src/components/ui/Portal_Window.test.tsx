@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Recursive window opening loops ('Stroboscope effect') or failure to trigger `on_close` during parent component unmounting.
- * - **Telemetry Link**: Search `[Portal_Window.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Portal_Window_test]` in console logs.
  */
 
 
@@ -113,6 +113,6 @@ describe('Portal_Window', () => {
 });
 
 
-// Metadata: [Portal_Window_test]
+
 
 // Metadata: [Portal_Window_test]

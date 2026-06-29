@@ -8,6 +8,7 @@
 //! (ps1, sh, py) to register new agentic skills.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[skills]` in tracing logs.
 //! - **Failure Path**: 400 Bad Request on invalid multipart boundaries,
 //!   500 Internal Server Error during script persistence to disk, or
 //!   silent failure of YAML frontmatter parsing in imported skills.
@@ -552,6 +553,8 @@ pub async fn promote_artifact(
 }
 
 
-// Metadata: [skills]
+
+
+
 
 // Metadata: [skills]

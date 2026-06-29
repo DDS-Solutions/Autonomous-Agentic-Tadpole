@@ -8,7 +8,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[graph]` in tracing logs.
+//! - **Telemetry Link**: Search `[engine]` in tracing logs.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -656,6 +656,6 @@ mod tests {
     }
 }
 
-// Metadata: [engine]
+
 
 // Metadata: [engine]

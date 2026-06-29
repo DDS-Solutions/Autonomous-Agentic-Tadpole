@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Missing `objective` property in raw JSON, or invalid `priority` enum value after backend expansion.
- * - **Telemetry Link**: Look for `interface Mission` during backend parity audits.
+ * - **Telemetry Link**: Search `[mission]` in console logs.
  */
 
 /**
@@ -38,6 +38,6 @@ export interface Mission {
 }
 
 
-// Metadata: [mission]
+
 
 // Metadata: [mission]

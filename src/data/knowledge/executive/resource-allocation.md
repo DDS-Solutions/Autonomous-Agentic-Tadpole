@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[resource_allocation]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: resource-allocation
@@ -58,6 +51,6 @@ Move resources to the bottleneck. This is painful but necessary.
 2. **Sunk Cost Fallacy**: Money spent is gone. Only look forward.
 3. **People are not Widgets**: You can't just swap a Backend Dev for a Sales Rep instantly.
 
-[//]: # (Metadata: [resource_allocation])
+
 
 [//]: # (Metadata: [resource_allocation])

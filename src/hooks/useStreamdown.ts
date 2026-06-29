@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[useStreamdown]` in console logs.
 */
 
 import { useState, useEffect } from 'react';
@@ -62,6 +62,8 @@ export const useStreamdown = () => {
     };
 };
 
-// Metadata: [useStreamdown]
+
+
+
 
 // Metadata: [useStreamdown]

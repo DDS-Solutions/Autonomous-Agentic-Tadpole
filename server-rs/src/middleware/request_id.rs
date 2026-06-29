@@ -9,6 +9,7 @@
 //! can be reconciled across the distributed engine (TRAC-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[request_id]` in tracing logs.
 //! - **Failure Path**: Header duplication (middleware double-nesting) or
 //!   missing ID in the final response if the middleware execution is
 //!   bypassed by a high-level error handler.
@@ -142,6 +143,8 @@ mod tests {
     }
 }
 
-// Metadata: [request_id]
+
+
+
 
 // Metadata: [request_id]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Field mismatches during store hydration or API serialization drift.
- * - **Telemetry Link**: Not tracked (Static Domain Model).
+ * - **Telemetry Link**: Search `[domain]` in console logs.
  */
 
 import type { ModelConfigDto } from './wire';
@@ -141,6 +141,6 @@ export interface Task_Payload {
 
 export type AgentPatch = Partial<Agent>;
 
-// Metadata: [domain]
+
 
 // Metadata: [domain]

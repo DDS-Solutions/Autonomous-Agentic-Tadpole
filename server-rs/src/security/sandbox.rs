@@ -10,7 +10,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Docker daemon unresponsive, Wasm file missing or malformed,
 //!   resource exhaustion (OOM), or execution timeouts.
-//! - **Telemetry Link**: Search `[Sandbox]` in logs.
+//! - **Telemetry Link**: Search `[sandbox]` in logs.
 
 use crate::error::AppError;
 use std::path::Path;
@@ -175,6 +175,6 @@ pub async fn execute_sandboxed(
     }
 }
 
-// Metadata: [sandbox]
+
 
 // Metadata: [sandbox]

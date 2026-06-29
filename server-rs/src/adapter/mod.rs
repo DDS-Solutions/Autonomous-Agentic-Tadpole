@@ -13,7 +13,7 @@
 //! - **Failure Path**: Permission denied on restricted workspace paths,
 //!   Discord webhook rate limits (429), or Vault decryption failure
 //!   due to corrupted metadata.
-//! - **Telemetry Link**: Search for `[Adapter]` or `[Vault]` in `tracing`
+//! - **Telemetry Link**: Search for `[mod]` or `[Vault]` in `tracing`
 //!   logs for bridge lifecycle events.
 //! - **Trace Scope**: `server-rs::adapter`
 
@@ -23,6 +23,6 @@ pub mod filesystem;
 mod tests_filesystem;
 pub mod vault;
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

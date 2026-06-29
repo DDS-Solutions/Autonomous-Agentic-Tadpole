@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[vram_monitor_test]` in console logs.
 */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -103,6 +103,8 @@ describe('VramMonitor', () => {
     });
 });
 
-// Metadata: [vram_monitor_test]
+
+
+
 
 // Metadata: [vram_monitor_test]

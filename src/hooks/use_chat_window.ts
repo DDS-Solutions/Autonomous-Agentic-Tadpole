@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Viewport overflow (if `window.innerHeight` changes unexpectedly), detachment failure (if pop-up blocker is active), or transform ratio glitches on mobile.
- * - **Telemetry Link**: Uses `useMotionValue` for x/y vectors. Search `[useChatWindow]` in UI traces.
+ * - **Telemetry Link**: Uses `useMotionValue` for x/y vectors. Search `[use_chat_window]` in UI traces.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -159,6 +159,6 @@ export function useChatWindow() {
     };
 }
 
-// Metadata: [use_chat_window]
+
 
 // Metadata: [use_chat_window]

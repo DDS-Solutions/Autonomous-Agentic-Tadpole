@@ -7,6 +7,7 @@
 //! **Context Summarization** (4k token threshold) to optimize prompt windows.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[context]` in tracing logs.
 //! - **Failure Path**: Agent/Model/Provider lookup failure, invalid workspace ID,
 //!   summarization error, or RAG connection timeout.
 //! - **Trace Scope**: `server-rs::agent::runner::context`
@@ -517,6 +518,8 @@ mod tests {
     }
 }
 
-// Metadata: [context]
+
+
+
 
 // Metadata: [context]

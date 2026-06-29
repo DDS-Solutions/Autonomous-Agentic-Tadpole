@@ -8,7 +8,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Pulse drift, overflow on coordinate mapping, or status code mismatch with UI.
-//! - **Telemetry Link**: Search for `[PulseCollector]` or `SwarmPulse` in backend logs.
+//! - **Telemetry Link**: Search for `[pulse_types]` or `SwarmPulse` in backend logs.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -47,6 +47,6 @@ impl SwarmPulse {
     }
 }
 
-// Metadata: [pulse_types]
+
 
 // Metadata: [pulse_types]

@@ -16,7 +16,7 @@
 //! - **Failure Path**: 500 Internal Server Error due to database
 //!   connectivity issues during result persistence, or benchmark
 //!   timeouts during high-concurrency stress tests.
-//! - **Telemetry Link**: Search for `[Benchmark]` or `[Performance]`
+//! - **Telemetry Link**: Search for `[benchmarks]` or `[Performance]`
 //!   in `tracing` logs for suite execution milestones.
 //! - **Trace Scope**: `server-rs::routes::benchmarks`
 
@@ -89,6 +89,6 @@ pub async fn trigger_benchmark(
     Ok(Json(result))
 }
 
-// Metadata: [benchmarks]
+
 
 // Metadata: [benchmarks]

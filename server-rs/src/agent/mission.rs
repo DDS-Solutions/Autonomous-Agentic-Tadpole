@@ -9,6 +9,7 @@
 //! prevent database bloat from excessive LLM output.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mission]` in tracing logs.
 //! - **Failure Path**: SQLite connection pool exhaustion during high-concurrency
 //!   logging, invalid status transitions (e.g., Pending -> Completed without Active),
 //!   or budget breach detection triggers during turn resolution.
@@ -524,6 +525,8 @@ mod tests {
     }
 }
 
-// Metadata: [mission]
+
+
+
 
 // Metadata: [mission]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Trace ID parentage loss during async handoffs, or recursive trace loops in circular mission flows.
- * - **Telemetry Link**: Search for `[TraceStore]` or `TRACE_PULSE` in service logs.
+ * - **Telemetry Link**: Search for `[trace_store]` or `TRACE_PULSE` in service logs.
  * 
  * ```mermaid
  * stateDiagram-v2
@@ -203,6 +203,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [trace_store]
+
 
 // Metadata: [trace_store]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Validation errors when mapping nested form fields back to the flat domain model in `agent_mappers`.
- * - **Telemetry Link**: Not tracked (Static Form Type).
+ * - **Telemetry Link**: Search `[form]` in console logs.
  */
 
 import type { 
@@ -59,6 +59,6 @@ export interface AgentFormState {
     connector_configs: Agent_Connector_Config[];
 }
 
-// Metadata: [form]
+
 
 // Metadata: [form]

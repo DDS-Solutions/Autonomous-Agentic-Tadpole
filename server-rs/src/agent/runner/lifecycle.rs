@@ -7,6 +7,7 @@
 //! registry agents into the database if missing.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[lifecycle]` in tracing logs.
 //! - **Failure Path**: Circular recursion detected, max swarm depth exceeded,
 //!   budget exhausted, or agent health degradation (failure rate too high).
 //! - **Trace Scope**: `server-rs::agent::runner::lifecycle`
@@ -336,9 +337,9 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [lifecycle]
 
-// Metadata: [lifecycle]
+
+
 
 #[cfg(test)]
 mod tests {
@@ -395,3 +396,5 @@ mod tests {
         assert!(format!("{}", result.unwrap_err()).contains("message too long"));
     }
 }
+
+// Metadata: [lifecycle]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Inconsistent agent list state after batch delete or failure to display validation errors during illegal agent creation attempts.
- * - **Telemetry Link**: Search `[Agent_Manager.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Agent_Manager_test]` in console logs.
  */
 
 import '@testing-library/jest-dom';
@@ -163,6 +163,6 @@ describe('Agent_Manager', () => {
 });
 
 
-// Metadata: [Agent_Manager_test]
+
 
 // Metadata: [Agent_Manager_test]

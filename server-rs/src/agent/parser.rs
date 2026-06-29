@@ -9,6 +9,7 @@
 //! chunks for optimal RAG precision.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[parser]` in tracing logs.
 //! - **Failure Path**: UTF-8 decoding errors on legacy binary files,
 //!   malformed CSV headers causing alignment mismatch, or PDF text-layer
 //!   extraction failure (empty page or OCR required).
@@ -289,6 +290,8 @@ fn extract_pdf_text_strings(block: &str) -> String {
     result.join(" ")
 }
 
-// Metadata: [parser]
+
+
+
 
 // Metadata: [parser]

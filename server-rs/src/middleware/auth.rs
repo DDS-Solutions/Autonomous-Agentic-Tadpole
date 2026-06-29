@@ -9,6 +9,7 @@
 //! (bearer.<token>) for browser-based WebSocket upgrades (AUTH-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[auth]` in tracing logs.
 //! - **Failure Path**: Missing `Authorization` header, invalid token
 //!   checksum, or malformed WebSocket subprotocol strings. Triggers
 //!   `401 Unauthorized`.
@@ -259,6 +260,8 @@ mod tests {
     }
 }
 
-// Metadata: [auth]
+
+
+
 
 // Metadata: [auth]

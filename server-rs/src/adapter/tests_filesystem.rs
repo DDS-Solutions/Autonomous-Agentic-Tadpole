@@ -9,7 +9,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Unexpected directory creation failure, or false positive on security fault checks.
-//! - **Telemetry Link**: Search for `SECURITY FAULT` in backend logs to trace blocked escape attempts.
+//! - **Telemetry Link**: Search `[tests_filesystem]` in tracing logs.
 
 #[cfg(test)]
 mod tests {
@@ -121,6 +121,6 @@ mod tests {
     }
 }
 
-// Metadata: [tests_filesystem]
+
 
 // Metadata: [tests_filesystem]

@@ -1,20 +1,14 @@
 /**
- * @docs ARCHITECTURE:Core
- *
- * ### AI Assist Note
- * **LedgerSection**: Core technical resource for the Tadpole OS infrastructure.
- *
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI errors or callback stack traces.
- * - **Telemetry Link**: Search `[LedgerSection]` in console logs.
- */
-
-/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
  * **UI Component**: Agent status ledger monitor, context packet configurer, and skill subscription manager.
  * Allows viewing living automation states, modifying context packets, and managing/approving skill scope approvals.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI errors or callback stack traces.
+ * - **Telemetry Link**: Search `[LedgerSection]` in console logs.
+ */
  */
 
 import React, { useState, useEffect, useCallback } from 'react';

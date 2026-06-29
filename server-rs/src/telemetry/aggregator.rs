@@ -21,7 +21,7 @@
 //! - **Failure Path**: Metric reporting skew due to anomalous latency
 //!   outliers, memory pressure from large sliding windows, or
 //!   broadcast channel lag causing missed spans.
-//! - **Telemetry Link**: Search for `📊 [Telemetry]` or `[Metric]` in
+//! - **Telemetry Link**: Search `[aggregator]` in tracing logs.
 //!   `tracing` logs for periodic aggregation reports.
 //! - **Trace Scope**: `server-rs::telemetry::aggregator`
 
@@ -144,6 +144,6 @@ impl MetricAggregator {
     }
 }
 
-// Metadata: [aggregator]
+
 
 // Metadata: [aggregator]

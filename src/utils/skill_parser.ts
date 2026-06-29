@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Malformed JSON in markdown block (parse error), missing `#` header in unstructured files (fallback name assigned), or ID sanitization collision.
- * - **Telemetry Link**: Search for `SkillParser` in UI logs or capability import traces.
+ * - **Telemetry Link**: Search `[skill_parser]` in console logs.
  */
 
 import { ValidationUtils } from './validation_utils';
@@ -74,6 +74,6 @@ export const SkillParser = {
     }
 };
 
-// Metadata: [skill_parser]
+
 
 // Metadata: [skill_parser]

@@ -7,6 +7,7 @@
 //! Polling every 60s, it awakens dormant agents to perform scheduled missions.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[executor]` in tracing logs.
 //! - **Trace Scope**: `server-rs::agent::continuity::executor`
 
 use chrono::Utc;
@@ -275,6 +276,8 @@ mod tests {
     }
 }
 
-// Metadata: [executor]
+
+
+
 
 // Metadata: [executor]

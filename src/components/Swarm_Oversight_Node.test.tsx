@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Mismatched `cluster_id` causing empty state rendering or failure to clear the `active_proposals` in the `workspace_store`.
- * - **Telemetry Link**: Search `[Swarm_Oversight_Node.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Swarm_Oversight_Node_test]` in console logs.
  */
 
 
@@ -83,6 +83,6 @@ describe('Swarm_Oversight_Node', () => {
 });
 
 
-// Metadata: [Swarm_Oversight_Node_test]
+
 
 // Metadata: [Swarm_Oversight_Node_test]

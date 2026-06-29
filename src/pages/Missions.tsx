@@ -6,7 +6,7 @@
  * Orchestrates mission initialization, real-time status tracking, and swarm collaboration logs.
  * 
  * ### 🔍 Debugging & Observability
- * - **Telemetry Link**: Uses `crypto.randomUUID()` for `trace_id` generation. Search `[MissionsBoard]` or specific `mission_id` in logs.
+ * - **Telemetry Link**: Uses `crypto.randomUUID()` for `trace_id` generation. Search `[Missions]` or specific `mission_id` in logs.
  */
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
@@ -404,6 +404,6 @@ export default function Missions() {
     );
 }
 
-// Metadata: [Missions]
+
 
 // Metadata: [Missions]

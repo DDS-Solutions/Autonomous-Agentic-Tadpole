@@ -14,6 +14,7 @@
 //! orchestration (GOV-04).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[test_oversight]` in tracing logs.
 //! - **Failure Path**: Deadlocks in the `oversight_resolvers`
 //!   broadcast channel, mission context leaks during rejection, or
 //!   incorrect state reporting in the `mission_history` table.
@@ -123,6 +124,8 @@ async fn test_e2e_oversight_approval_loop() {
     assert!(!approved_rej, "Oversight should have been rejected");
 }
 
-// Metadata: [test_oversight]
+
+
+
 
 // Metadata: [test_oversight]

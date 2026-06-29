@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Signature verification failures for untrusted skills or failure to hot-reload the skill list after a new plugin is injected.
- * - **Telemetry Link**: Search `[Skills.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Skills_test]` in console logs.
  */
 
 
@@ -256,6 +256,6 @@ describe('Skills Page', () => {
 });
 
 
-// Metadata: [Skills_test]
+
 
 // Metadata: [Skills_test]

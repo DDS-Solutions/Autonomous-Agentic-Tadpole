@@ -9,6 +9,7 @@
 //! enter the `Completed` state.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[backlog]` in tracing logs.
 //! - **Failure Path**: Deadlocks in the task DAG (circular dependencies),
 //!   orphaned tasks with missing parent references, or invalid status
 //!   transitions (e.g., Blocked -> InProgress without dependency resolution).
@@ -116,6 +117,8 @@ impl MissionBacklog {
     }
 }
 
-// Metadata: [backlog]
+
+
+
 
 // Metadata: [backlog]

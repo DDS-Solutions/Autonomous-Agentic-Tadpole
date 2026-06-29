@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Channel mismatch (subscribing to non-existent topic), stale data if `throttle_ms` is too high, or implicit connection overhead if called in high-frequency loops.
- * - **Telemetry Link**: Search for `[useWebSocketEvent]` or `[Tadpole_OS_Socket]` in browser logs.
+ * - **Telemetry Link**: Search for `[use_web_socket_event]` or `[Tadpole_OS_Socket]` in browser logs.
  */
 
 import { useEffect, useRef } from 'react';
@@ -70,6 +70,6 @@ export function useWebSocketEvent<T = unknown>(
 }
 
 
-// Metadata: [use_web_socket_event]
+
 
 // Metadata: [use_web_socket_event]

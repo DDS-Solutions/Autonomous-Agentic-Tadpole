@@ -1,20 +1,13 @@
 /**
- * @docs ARCHITECTURE:UI-Components
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Interface**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[Skill_Header]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
  * **UI Component**: Contextual header for the Capability Forge. 
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[Skill_Header]` in observability traces.
+ */
  */
 
 import React from 'react';

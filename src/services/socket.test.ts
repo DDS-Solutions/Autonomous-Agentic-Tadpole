@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Race conditions in state updates during rapid connect/disconnect cycles or failure to handle binary payloads in the handoff channel.
- * - **Telemetry Link**: Search `[socket.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[socket_test]` in console logs.
  */
 
 
@@ -309,6 +309,6 @@ describe('Tadpole_OS_Socket_Client', () => {
 });
 
 
-// Metadata: [socket_test]
+
 
 // Metadata: [socket_test]

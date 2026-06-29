@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incorrect collaborator set calculations or UI state lag during high-frequency tab switching between Mission Clusters.
- * - **Telemetry Link**: Search `[Agent_Status_Grid.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Agent_Status_Grid_test]` in console logs.
  */
 
 
@@ -123,6 +123,6 @@ describe('Agent_Status_Grid', () => {
 });
 
 
-// Metadata: [Agent_Status_Grid_test]
+
 
 // Metadata: [Agent_Status_Grid_test]

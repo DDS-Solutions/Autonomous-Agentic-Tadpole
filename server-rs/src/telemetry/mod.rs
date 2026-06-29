@@ -16,7 +16,7 @@
 //! - **Failure Path**: Broadcast channel capacity saturation (2000
 //!   events), malformed JSON in dynamic attributes, or OTel
 //!   extension mismatches causing trace discontinuity.
-//! - **Telemetry Link**: Search for `[Telemetry]` or `[Trace]` in
+//! - **Telemetry Link**: Search for `[mod]` or `[Trace]` in
 //!   `tracing` logs for bridge performance benchmarks.
 //! - **Trace Scope**: `server-rs::telemetry`
 //!
@@ -266,7 +266,7 @@ pub fn init_prometheus_metrics() {
     Lazy::force(&OVERSIGHT_COST_USD);
 }
 
-// Metadata: [mod]
+
 
 
 // Metadata: [mod]

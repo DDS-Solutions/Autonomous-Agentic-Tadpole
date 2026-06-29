@@ -10,7 +10,7 @@
 //! - **Failure Path**: 503 Service Unavailable if the Axum router
 //!   is saturated, incorrect agent counts due to registry sync delays,
 //!   or database locking issues blocking health queries.
-//! - **Telemetry Link**: Search for `tadpole_online_rust` in health logs.
+//! - **Telemetry Link**: Search `[health]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::health`
 
 use crate::error::AppError;
@@ -208,6 +208,6 @@ pub async fn metrics_handler() -> Result<impl IntoResponse, AppError> {
 }
 
 
-// Metadata: [health]
+
 
 // Metadata: [health]

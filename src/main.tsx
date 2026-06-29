@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: DOM `#root` node missing (hard crash), Vite HMR disconnect, or CSS bundle loading failure (shows unstyled content).
- * - **Telemetry Link**: Search for `[TadpoleRoot]` in initial load traces. confirmed (v687) check confirmed (final) (v688)
+ * - **Telemetry Link**: Search for `[main]` in initial load traces. confirmed (v687) check confirmed (final) (v688)
  */
 
 import { StrictMode } from 'react'
@@ -22,6 +22,6 @@ createRoot(document.getElementById('root')!).render(
 )
 
 
-// Metadata: [main]
+
 
 // Metadata: [main]

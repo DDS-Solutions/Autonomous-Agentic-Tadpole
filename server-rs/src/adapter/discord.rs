@@ -9,6 +9,7 @@
 //! `429 Too Many Requests` (LMT-04).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[discord]` in tracing logs.
 //! - **Failure Path**: Invalid Webhook URL (404), Rate Limit Exceeded
 //!   (429), or JSON payload rejection due to over-sized content buffers
 //!   (DISC-01).
@@ -68,6 +69,8 @@ impl DiscordAdapter {
     }
 }
 
-// Metadata: [discord]
+
+
+
 
 // Metadata: [discord]

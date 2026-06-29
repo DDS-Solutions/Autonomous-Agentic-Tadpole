@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Recursive re-renders during prop updates or failure to parse the `json_metadata` field from the agent store.
- * - **Telemetry Link**: Search `[Agent_Card_Memo.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Agent_Card_Memo_test]` in console logs.
  */
 
 import '@testing-library/jest-dom';
@@ -90,6 +90,6 @@ describe('Agent_Card_Memo', () => {
 });
 
 
-// Metadata: [Agent_Card_Memo_test]
+
 
 // Metadata: [Agent_Card_Memo_test]

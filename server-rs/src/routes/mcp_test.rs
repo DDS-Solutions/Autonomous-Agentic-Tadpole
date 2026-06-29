@@ -14,6 +14,7 @@
 //! refactors (MCP-05).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mcp_test]` in tracing logs.
 //! - **Failure Path**: 500 Internal Server Error for tool execution due
 //!   to missing workspace directories, incorrect path parameter
 //!   extraction, or state initialization failures in the test context.
@@ -77,6 +78,8 @@ mod tests {
     }
 }
 
-// Metadata: [mcp_test]
+
+
+
 
 // Metadata: [mcp_test]

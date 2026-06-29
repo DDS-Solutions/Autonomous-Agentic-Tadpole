@@ -12,6 +12,7 @@
 //! non-local network access when the shield is active (PRIV-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[privacy]` in tracing logs.
 //! - **Failure Path**: False positive breach detection due to local
 //!   proxy misconfiguration, or failure to detect connectivity if the
 //!   canary endpoint (google.com) is blocked/down.
@@ -79,6 +80,8 @@ pub async fn start_privacy_guard(app_state: Arc<AppState>) {
     }
 }
 
-// Metadata: [privacy]
+
+
+
 
 // Metadata: [privacy]

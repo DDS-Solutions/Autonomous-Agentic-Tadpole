@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Standup response timeout, or duplicate report generation from a single agent.
- * - **Telemetry Link**: Search for `[Standups_View]` or `SYNC_UP` in service logs.
+ * - **Telemetry Link**: Search for `[Standups]` or `SYNC_UP` in service logs.
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -374,6 +374,6 @@ export default function Standups() {
 }
 
 
-// Metadata: [Standups]
+
 
 // Metadata: [Standups]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regex collision with user-generated text or unmapped AAAK codes causing translation drift.
- * - **Telemetry Link**: Run `npm run test` or check Vitest results for `aaak_decoder.test`.
+ * - **Telemetry Link**: Search `[aaak_decoder_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -64,6 +64,6 @@ describe('AAAK Decoder', () => {
     });
 });
 
-// Metadata: [aaak_decoder_test]
+
 
 // Metadata: [aaak_decoder_test]

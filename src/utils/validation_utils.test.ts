@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Unexpected sanitization of valid characters or incorrect limit boundary checks (off-by-one).
- * - **Telemetry Link**: Run `npm run test` or check `[validation_utils.test]` in Vitest results.
+ * - **Telemetry Link**: Search `[validation_utils_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -64,6 +64,6 @@ describe('ValidationUtils', () => {
     });
 });
 
-// Metadata: [validation_utils_test]
+
 
 // Metadata: [validation_utils_test]

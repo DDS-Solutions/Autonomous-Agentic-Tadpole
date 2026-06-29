@@ -16,6 +16,7 @@
 //! background loop to minimize write contention (MET-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[metering]` in tracing logs.
 //! - **Failure Path**: Budget exhaustion causing 429 errors,
 //!   flush-to-db latency causing temporary metric discrepancies,
 //!   or incorrect USD-to-token conversions for local models.
@@ -550,6 +551,8 @@ mod tests {
     }
 }
 
-// Metadata: [metering]
+
+
+
 
 // Metadata: [metering]

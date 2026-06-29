@@ -5,7 +5,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[supervisor]` in tracing logs.
 */
 
 //! Worker Supervision System — Sovereign Reliability Layer
@@ -113,6 +113,8 @@ impl SupervisedSpawn for Arc<AppState> {
     }
 }
 
-// Metadata: [supervisor]
+
+
+
 
 // Metadata: [supervisor]

@@ -18,6 +18,7 @@
 //! JSON pruning to mitigate recursive depth attacks (PRUNE-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[serialization]` in tracing logs.
 //! - **Failure Path**: Accidental truncation of legitimate high-volume
 //!   telemetry (e.g., swarm graph state or mission logs), or
 //!   bypass of pruning via deeply nested non-string primitives.
@@ -85,6 +86,8 @@ mod tests {
     }
 }
 
-// Metadata: [serialization]
+
+
+
 
 // Metadata: [serialization]

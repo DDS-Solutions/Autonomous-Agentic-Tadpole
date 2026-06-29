@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Circular dependency if sub-components import from this index (unlikely in current architecture).
- * - **Telemetry Link**: N/A (Static Export).
+ * - **Telemetry Link**: Search `[index]` in console logs.
  */
 
 export * from './AgentConfigHeader';
@@ -20,6 +20,6 @@ export * from './MaintenanceSection';
 export * from './DirectMessageConsole';
 export * from './useAgentConfig';
 
-// Metadata: [index]
+
 
 // Metadata: [index]

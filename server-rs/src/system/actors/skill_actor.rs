@@ -134,6 +134,6 @@ impl SkillScannerActor {
     }
 }
 
-// Metadata: [skill_actor]
+
 
 // Metadata: [skill_actor]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Chat history buffer overflow, or message delivery failure during heavy backend telemetry pulses.
- * - **Telemetry Link**: Search for `[SovereignStore]` or `MESSAGE_SYNC` in UI logs.
+ * - **Telemetry Link**: Search for `[sovereign_store]` or `MESSAGE_SYNC` in UI logs.
  * 
  * ```mermaid
  * stateDiagram-v2
@@ -364,6 +364,6 @@ if (chat_channel) {
 }
 
 
-// Metadata: [sovereign_store]
+
 
 // Metadata: [sovereign_store]

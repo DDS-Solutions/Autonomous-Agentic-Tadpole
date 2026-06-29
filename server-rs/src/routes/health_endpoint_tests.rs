@@ -5,6 +5,7 @@
 //! checking WAL size, sqlite connection pool status, and LLM budget usage structure.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[health_endpoint_tests]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::health_endpoint_tests`
 
 #[cfg(test)]
@@ -87,6 +88,8 @@ mod tests {
     }
 }
 
-// Metadata: [health_endpoint_tests]
+
+
+
 
 // Metadata: [health_endpoint_tests]

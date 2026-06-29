@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incomplete standup reports due to agent timeout or failure to parse the markdown summary from the `standup_store`.
- * - **Telemetry Link**: Search `[Standups.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Standups_test]` in console logs.
  */
 
 
@@ -263,6 +263,6 @@ describe('Standups Page', () => {
 });
 
 
-// Metadata: [Standups_test]
+
 
 // Metadata: [Standups_test]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Broken deep-links to specific MD files, or search index corruption causing query misses.
- * - **Telemetry Link**: Search for `[Docs_View]` or `load_artifact` in service logs.
+ * - **Telemetry Link**: Search for `[Docs]` or `load_artifact` in service logs.
  */
 
 /**
@@ -396,6 +396,6 @@ ${i18n.t('docs.error_footer')}
 }
 
 
-// Metadata: [Docs]
+
 
 // Metadata: [Docs]

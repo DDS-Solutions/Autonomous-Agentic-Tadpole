@@ -14,7 +14,7 @@
 //! - **Failure Path**: Permission denial (gating failure), audit logging
 //!   latency under high-throughput mission execution, or metering drift
 //!   due to provider-side token mismatches.
-//! - **Telemetry Link**: Search for `[Security]` or `[Audit]` in `tracing`
+//! - **Telemetry Link**: Search for `[mod]` or `[Audit]` in `tracing`
 //!   logs for policy enforcement milestones.
 //! - **Trace Scope**: `server-rs::security`
 //!
@@ -28,6 +28,6 @@ pub mod sandbox;
 #[cfg(test)]
 mod permission_tests;
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

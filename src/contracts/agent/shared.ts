@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Status mismatch between frontend unions and backend `EngineAgent` strings in Rust.
- * - **Telemetry Link**: Not tracked (Static Primitives).
+ * - **Telemetry Link**: Search `[shared]` in console logs.
  */
 
 export type Agent_Status = 'idle' | 'active' | 'suspended' | 'failed' | 'throttled' | 'offline' | 'thinking' | 'coding' | 'speaking';
@@ -41,6 +41,6 @@ export type Department =
     | 'Growth' 
     | 'Success';
 
-// Metadata: [shared]
+
 
 // Metadata: [shared]

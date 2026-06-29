@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Invalid model choice for provider (e.g. Claude on OpenAI host) or `as const` violation in type narrowing.
- * - **Telemetry Link**: Search for `MODEL_OPTIONS` in model configuration views.
+ * - **Telemetry Link**: Search `[models]` in console logs.
  */
 
 /**
@@ -58,6 +58,6 @@ export const MODEL_OPTIONS = [
 export type ModelName = typeof MODEL_OPTIONS[number];
 
 
-// Metadata: [models]
+
 
 // Metadata: [models]

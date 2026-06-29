@@ -7,6 +7,7 @@
 //! to pause agent execution until a decision is received.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[oversight]` in tracing logs.
 //! - **Failure Path**: Oversight channel timeout, duplicate entry IDs,
 //!   or telemetry broadcast failure during status updates.
 //! - **Trace Scope**: `server-rs::agent::runner::oversight`
@@ -125,9 +126,9 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [oversight]
 
-// Metadata: [oversight]
+
+
 
 #[cfg(test)]
 mod tests {
@@ -166,3 +167,5 @@ mod tests {
         assert_eq!(msg["text"], "Hello World");
     }
 }
+
+// Metadata: [oversight]

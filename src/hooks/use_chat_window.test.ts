@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Viewport-relative coordinate calculation errors or state drift between the hook and the global store.
- * - **Telemetry Link**: Search `[useChatWindow.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[use_chat_window_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -95,6 +95,6 @@ describe('useChatWindow', () => {
     });
 });
 
-// Metadata: [use_chat_window_test]
+
 
 // Metadata: [use_chat_window_test]

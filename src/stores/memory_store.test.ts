@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Loss of memory context during project switching or failure to prune stale memory rows during a vacuum operation.
- * - **Telemetry Link**: Search `[memory_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[memory_store_test]` in console logs.
  */
 
 
@@ -185,6 +185,6 @@ describe('use_memory_store', () => {
 });
 
 
-// Metadata: [memory_store_test]
+
 
 // Metadata: [memory_store_test]

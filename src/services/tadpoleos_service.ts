@@ -13,7 +13,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Service resolution error (incorrectly mapped delegate), backend 404/500 propagation, or base URL mismatch in `settings_store`.
- * - **Telemetry Link**: Search for `[TadpoleOSService]` in browser logs or look for `v1/` routes in backend audit trails.
+ * - **Telemetry Link**: Search for `[tadpoleos_service]` in browser logs or look for `v1/` routes in backend audit trails.
  */
 
 
@@ -138,6 +138,6 @@ export type Connection_State = 'connecting' | 'connected' | 'disconnected' | 're
 export type { Skill_Manifest } from './mission_api_service';
 
 
-// Metadata: [tadpoleos_service]
+
 
 // Metadata: [tadpoleos_service]

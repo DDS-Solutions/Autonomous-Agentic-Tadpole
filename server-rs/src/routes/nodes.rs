@@ -17,7 +17,7 @@
 //! - **Failure Path**: Duplicate node registration causing logic
 //!   collisions, network timeout during peer discovery, or
 //!   inaccessible node addresses causing mission routing failures.
-//! - **Telemetry Link**: Search for `🔍 Discovery scan initiated` in
+//! - **Telemetry Link**: Search `[nodes]` in tracing logs.
 //!   `tracing` logs for swarm topology events.
 //! - **Trace Scope**: `server-rs::routes::nodes`
 
@@ -86,6 +86,6 @@ pub async fn discover_nodes(
     }
 }
 
-// Metadata: [nodes]
+
 
 // Metadata: [nodes]

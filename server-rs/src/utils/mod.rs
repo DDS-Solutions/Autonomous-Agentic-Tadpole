@@ -13,7 +13,7 @@
 //! - **Failure Path**: AST parsing failures (unsupported syntax),
 //!   RAG embedding dimension mismatches, or serialization buffer
 //!   overflows during high-volume state synchronization.
-//! - **Telemetry Link**: Search for `[Utils]` or `[RAG]` in `tracing`
+//! - **Telemetry Link**: Search for `[mod]` or `[RAG]` in `tracing`
 //!   logs for primitive execution benchmarks.
 //! - **Trace Scope**: `server-rs::utils`
 
@@ -30,6 +30,6 @@ pub fn is_docker() -> bool {
     std::path::Path::new("/.dockerenv").exists()
 }
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

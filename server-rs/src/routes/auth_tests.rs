@@ -13,6 +13,7 @@
 //! unauthenticated data leaks (SEC-07).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[auth_tests]` in tracing logs.
 //! - **Failure Path**: 401 Unauthorized for valid tokens due to casing
 //!   mismatches in "Bearer", failure to correctly extract subprotocol
 //!   tokens, or database connection errors in the mock `AppState`.
@@ -127,6 +128,8 @@ async fn test_auth_invalid_ws_subprotocol() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-// Metadata: [auth_tests]
+
+
+
 
 // Metadata: [auth_tests]

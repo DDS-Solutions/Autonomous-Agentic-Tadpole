@@ -18,7 +18,7 @@
 //!   authentication issues, duplicate agent ID collisions during
 //!   template merge, or schema mismatches in the imported `swarm.json`
 //!   config.
-//! - **Telemetry Link**: Search for `📥 [ModelStore]` or `✅ Successfully
+//! - **Telemetry Link**: Search `[templates]` in tracing logs.
 //!   initiated pull` in `tracing` logs (internal Note: templates use
 //!   similar pull patterns).
 //! - **Trace Scope**: `server-rs::routes::templates`
@@ -243,6 +243,6 @@ pub async fn install_template(
         .into_response())
 }
 
-// Metadata: [templates]
+
 
 // Metadata: [templates]

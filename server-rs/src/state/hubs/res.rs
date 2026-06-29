@@ -12,7 +12,7 @@
 //!   LanceDB connection timeout, or deadlocks in the `CodeGraph`
 //!   (parking_lot::RwLock) during workspace-wide scans.
 //! - **Trace Scope**: `server-rs::state::hubs::res`
-//! - **Telemetry Link**: Search for `engine:health` or `subsystem:status` logs.
+//! - **Telemetry Link**: Search `[res]` in tracing logs.
 
 use std::sync::Arc;
 
@@ -270,6 +270,6 @@ impl ResourceHub {
     }
 }
 
-// Metadata: [res]
+
 
 // Metadata: [res]

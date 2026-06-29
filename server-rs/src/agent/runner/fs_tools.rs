@@ -8,6 +8,7 @@
 //! deletions and vault archiving.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[fs_tools]` in tracing logs.
 //! - **Failure Path**: File not found (try `list_files` first), permission
 //!   denied, oversight rejection, or invalid relative path navigation.
 //! - **Trace Scope**: `server-rs::agent::runner::fs_tools`
@@ -346,6 +347,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [fs_tools]
+
+
+
 
 // Metadata: [fs_tools]

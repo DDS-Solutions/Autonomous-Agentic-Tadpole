@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[date_utils]` in console logs.
 */
 
 /**
@@ -54,6 +54,8 @@ export const get_safe_date = (input: unknown, fallback: Date | null = null): Dat
     return fallback;
 };
 
-// Metadata: [date_utils]
+
+
+
 
 // Metadata: [date_utils]

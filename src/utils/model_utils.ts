@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Model resolution mismatch leading to 404 (wrong ID), or incorrect provider detection causing API key routing errors.
- * - **Telemetry Link**: Look for `resolve_technical_model_id` in call stacks when model switching fails.
+ * - **Telemetry Link**: Search `[model_utils]` in console logs.
  */
 
 export const MODEL_MAP: Record<string, string> = {
@@ -219,6 +219,6 @@ export function get_model_color(model_name: string): string {
     return 'text-zinc-400 border-zinc-800 bg-zinc-900';
 }
 
-// Metadata: [model_utils]
+
 
 // Metadata: [model_utils]

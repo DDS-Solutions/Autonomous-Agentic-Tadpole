@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regex collision with user-generated text (false positive detection) or unmapped AAAK codes (remains raw).
- * - **Telemetry Link**: Search for `decodeAAAK` in UI logs or dashboard tracing.
+ * - **Telemetry Link**: Search `[aaak_decoder]` in console logs.
  */
 
 export const AAAK_MAP: Record<string, string> = {
@@ -50,6 +50,6 @@ export function isAAAK(text: string): boolean {
   return /[*|]|RES:|FND:|SRC:|GOAL:/.test(text);
 }
 
-// Metadata: [aaak_decoder]
+
 
 // Metadata: [aaak_decoder]

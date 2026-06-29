@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Workspace mount failure (filesystem permissions), or sandboxed process leak.
- * - **Telemetry Link**: Search for `[Workspaces_View]` or `SANDBOX_SYNC` in service logs.
+ * - **Telemetry Link**: Search for `[Workspaces]` or `SANDBOX_SYNC` in service logs.
  */
 
 import { useState, useEffect } from 'react';
@@ -294,6 +294,6 @@ export default function Workspaces() {
 }
 
 
-// Metadata: [Workspaces]
+
 
 // Metadata: [Workspaces]

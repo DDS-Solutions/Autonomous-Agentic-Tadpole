@@ -16,6 +16,7 @@
 //! topological discovery for the RAG system (GRAPH-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[graph]` in tracing logs.
 //! - **Failure Path**: Filesystem permission issues during scan,
 //!   malformed READMEs causing parsing failures, or depth-limited
 //!   scans missing deep-nested mission-specific modules.
@@ -243,6 +244,8 @@ mod tests {
     }
 }
 
-// Metadata: [graph]
+
+
+
 
 // Metadata: [graph]

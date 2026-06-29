@@ -14,6 +14,7 @@
 //! telemetry (NET-05).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[ws_tests]` in tracing logs.
 //! - **Failure Path**: Unexpected 403 Forbidden for valid origins due
 //!   to incorrect `ALLOWED_ORIGINS` regex, 101 Switching Protocols
 //!   failures due to missing `Sec-WebSocket-Key`, or port
@@ -136,6 +137,8 @@ async fn test_ws_invalid_origin_blocked() {
     }
 }
 
-// Metadata: [ws_tests]
+
+
+
 
 // Metadata: [ws_tests]

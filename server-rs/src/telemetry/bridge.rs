@@ -7,6 +7,7 @@
 //! are recorded for the QA-99 auditor to synthesize mission reports.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[bridge]` in tracing logs.
 //! - **Failure Path**: Database write contention during high-frequency swarm
 //!   activity, malformed event schemas, or broadcast channel lag.
 //! - **Trace Scope**: `server-rs::telemetry::bridge`
@@ -118,6 +119,8 @@ impl TelemetryBridge {
     }
 }
 
-// Metadata: [bridge]
+
+
+
 
 // Metadata: [bridge]

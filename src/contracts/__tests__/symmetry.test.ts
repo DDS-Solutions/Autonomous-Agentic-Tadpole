@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regression in JSON stringification/parsing or field mapping drift between domain and wire layers.
- * - **Telemetry Link**: Not tracked (Unit Test).
+ * - **Telemetry Link**: Search `[symmetry_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -101,6 +101,6 @@ describe('Contract Symmetry Tests', () => {
     });
 });
 
-// Metadata: [symmetry_test]
+
 
 // Metadata: [symmetry_test]

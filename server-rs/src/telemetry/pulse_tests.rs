@@ -6,7 +6,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[pulse_tests.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[pulse_tests]` in tracing logs.
 //!
 //! @docs ARCHITECTURE:Telemetry
 //!
@@ -135,6 +135,6 @@ fn test_messagepack_serialization_density() {
     );
 }
 
-// Metadata: [pulse_tests]
+
 
 // Metadata: [pulse_tests]

@@ -10,6 +10,7 @@
 //! Tests both the in-memory `DashMap` and the debounced disk sync.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[tests_skills]` in tracing logs.
 //! - **Failure Path**: IO permission errors, malformed Markdown parsing, or
 //!   stale file handles preventing clean deletion.
 //! - **Trace Scope**: `server-rs::agent::tests_skills`
@@ -111,6 +112,8 @@ async fn test_workflows_registry_save_and_delete() -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-// Metadata: [tests_skills]
+
+
+
 
 // Metadata: [tests_skills]

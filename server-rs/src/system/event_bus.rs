@@ -10,7 +10,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Channel buffer saturation, job-spawning failures due to claims lock,
 //!   or invalid trigger mappings.
-//! - **Telemetry Link**: Search `[EventBus]` in server logs.
+//! - **Telemetry Link**: Search `[event_bus]` in server logs.
 
 // Event bus is scaffolded infrastructure for reactive automation — wired in a subsequent phase.
 #![allow(dead_code)]
@@ -140,6 +140,6 @@ async fn process_event(state: &Arc<AppState>, event: SystemEvent) -> Result<(), 
     Ok(())
 }
 
-// Metadata: [event_bus]
+
 
 // Metadata: [event_bus]

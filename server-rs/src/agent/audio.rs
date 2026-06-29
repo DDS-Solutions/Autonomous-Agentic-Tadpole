@@ -8,6 +8,7 @@
 //! Optimized for low-latency streaming pulses to the Bunker UI.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[audio]` in tracing logs.
 //! - **Failure Path**: Missing ONNX model files at paths defined in
 //!   environment variables, ORT session initialization failure due to
 //!   missing native library dependencies, or thread pool exhaustion
@@ -294,6 +295,8 @@ impl NeuralAudioEngine {
     }
 }
 
-// Metadata: [audio]
+
+
+
 
 // Metadata: [audio]

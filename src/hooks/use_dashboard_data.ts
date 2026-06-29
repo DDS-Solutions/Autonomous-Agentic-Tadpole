@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Stale recruitment velocity (if `now` isn't stable), log buffer overflow (exceeding 100 entries), or telemetry sync lag if `init_telemetry` fails.
- * - **Telemetry Link**: Search for `[useDashboardData]` in component logs or check `Total Cost` / `Total Tokens` in UI audits.
+ * - **Telemetry Link**: Search for `[use_dashboard_data]` in component logs or check `Total Cost` / `Total Tokens` in UI audits.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -142,6 +142,6 @@ export function useDashboardData() {
     };
 }
 
-// Metadata: [use_dashboard_data]
+
 
 // Metadata: [use_dashboard_data]

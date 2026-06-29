@@ -10,6 +10,7 @@
 //! disk bloat from terminated missions.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[memory]` in tracing logs.
 //! - **Failure Path**: LanceDB table lock contention, FTS index corruption,
 //!   malformed Arrow batch schemas during ingestion, or 429 rate limits 
 //!   on embedding provider callbacks.
@@ -638,6 +639,8 @@ mod tests {
     }
 }
 
-// Metadata: [memory]
+
+
+
 
 // Metadata: [memory]

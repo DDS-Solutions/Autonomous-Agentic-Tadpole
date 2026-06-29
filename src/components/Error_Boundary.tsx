@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Failure to catch async errors (standard React limitation), infinite retry loops if the underlying fault persists after reset, or CSS animation blocking.
- * - **Telemetry Link**: Search for `[Neural Sector Fault]` or `Error_Boundary` in browser logs.
+ * - **Telemetry Link**: Search `[Error_Boundary]` in console logs.
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
@@ -121,6 +121,6 @@ export const SectorBoundary = ({ children, name }: { children: ReactNode, name: 
     </Error_Boundary>
 );
 
-// Metadata: [Error_Boundary]
+
 
 // Metadata: [Error_Boundary]

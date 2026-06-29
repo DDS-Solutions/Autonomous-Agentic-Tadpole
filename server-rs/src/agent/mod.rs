@@ -9,6 +9,7 @@
 //! observability across the mission lifecycle.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Provider timeouts, mission state corruption (hanging
 //!   active missions), or rate-limit saturation.
 //! - **Trace Scope**: `server-rs::agent` (Search for `[Agent]` or `[Mission]` tags)
@@ -89,6 +90,8 @@ pub struct SyncManifest {
     pub metadata: Option<String>,
 }
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

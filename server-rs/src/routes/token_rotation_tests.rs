@@ -6,6 +6,7 @@
 //! rotation grace period.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[token_rotation_tests]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::token_rotation_tests`
 
 #[cfg(test)]
@@ -125,6 +126,8 @@ mod tests {
     }
 }
 
-// Metadata: [token_rotation_tests]
+
+
+
 
 // Metadata: [token_rotation_tests]

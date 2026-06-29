@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: YAML parsing error (during skill import), MCP handshake timeout, or workflow dependency cycle.
- * - **Telemetry Link**: Search for `[MissionAPI]` or `/v1/skills` in backend audit trails.
+ * - **Telemetry Link**: Search for `[mission_api_service]` or `/v1/skills` in backend audit trails.
  * 
  * @aiContext
  * - **Dependencies**: `base_api_service`.
@@ -160,6 +160,6 @@ export const mission_api_service = {
 };
 
 
-// Metadata: [mission_api_service]
+
 
 // Metadata: [mission_api_service]

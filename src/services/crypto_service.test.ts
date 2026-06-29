@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Merkle proof mismatch due to incorrect log ordering or failure to provide entropy during token generation.
- * - **Telemetry Link**: Search `[crypto_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[crypto_service_test]` in console logs.
  */
 
 
@@ -106,6 +106,6 @@ describe('crypto_service', () => {
 });
 
 
-// Metadata: [crypto_service_test]
+
 
 // Metadata: [crypto_service_test]

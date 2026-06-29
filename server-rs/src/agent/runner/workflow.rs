@@ -7,6 +7,7 @@
 //! optimizing token usage for SME (Subject Matter Expert) workloads.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[workflow]` in tracing logs.
 //! - **Failure Path**: SOP parsing error, step execution timeout, or
 //!   unexpected tool failure during a deterministic step.
 //! - **Trace Scope**: `server-rs::agent::runner::workflow`
@@ -144,6 +145,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [workflow]
+
+
+
 
 // Metadata: [workflow]

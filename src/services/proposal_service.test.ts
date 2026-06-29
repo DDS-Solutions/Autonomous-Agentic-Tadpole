@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Proposal state corruption when a vote is cast exactly at the expiration deadline or failure to trigger the execution hook after a successful vote.
- * - **Telemetry Link**: Search `[proposal_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[proposal_service_test]` in console logs.
  */
 
 
@@ -104,6 +104,6 @@ describe('proposal_service', () => {
 });
 
 
-// Metadata: [proposal_service_test]
+
 
 // Metadata: [proposal_service_test]

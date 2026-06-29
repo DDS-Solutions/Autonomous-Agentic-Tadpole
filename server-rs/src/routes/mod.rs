@@ -14,7 +14,7 @@
 //! - **Failure Path**: 404 (Incorrect subsystem route prefix), 405
 //!   (Method mismatch), or WebSocket handshake failure due to
 //!   missing subprotocols.
-//! - **Telemetry Link**: Search for `[Route]` or `[Handler]` in
+//! - **Telemetry Link**: Search for `[mod]` or `[Handler]` in
 //!   `tracing` logs for request lifecycle benchmarks.
 //! - **Trace Scope**: `server-rs::routes`
 
@@ -64,6 +64,6 @@ mod shutdown_orchestrator_tests;
 #[cfg(test)]
 mod agentic_engine_tests;
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

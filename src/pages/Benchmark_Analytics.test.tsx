@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: SVG crash on undefined metric sets or incorrect time-bucket aggregation in the trend chart during rapid telemetry updates.
- * - **Telemetry Link**: Search `[Benchmark_Analytics.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Benchmark_Analytics_test]` in console logs.
  */
 
 
@@ -198,6 +198,6 @@ describe('Benchmark_Analytics', () => {
 });
 
 
-// Metadata: [Benchmark_Analytics_test]
+
 
 // Metadata: [Benchmark_Analytics_test]

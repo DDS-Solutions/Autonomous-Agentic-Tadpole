@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Skill registry inconsistency when a new tool is added to a Bunker node but not yet propagated to the frontend discovery layer.
- * - **Telemetry Link**: Search `[skill_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[skill_store_test]` in console logs.
  */
 
 
@@ -327,6 +327,6 @@ describe('use_skill_store', () => {
 });
 
 
-// Metadata: [skill_store_test]
+
 
 // Metadata: [skill_store_test]

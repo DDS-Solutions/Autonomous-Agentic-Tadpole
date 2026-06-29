@@ -25,7 +25,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Filesystem mount collision, recursive project structure overflow, or artifact persistence lag.
- * - **Telemetry Link**: Search for `[WorkspaceStore]` or `PROJECT_SYNC` in service logs.
+ * - **Telemetry Link**: Search for `[workspace_store]` or `PROJECT_SYNC` in service logs.
  */
 
 
@@ -469,6 +469,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [workspace_store]
+
 
 // Metadata: [workspace_store]

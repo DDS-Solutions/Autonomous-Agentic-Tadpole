@@ -2,20 +2,13 @@
  * @docs ARCHITECTURE:UI-Hooks
  * 
  * ### AI Assist Note
- * **Sovereign Interface component for the Tadpole OS dashboard.**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[useErrorRemediation.ts]` in observability traces.
- */
-
-/**
- * @docs ARCHITECTURE:UI-Hooks
- * 
- * ### AI Assist Note
  * **Autonomous Remediation Hook**: Interprets high-fidelity error codes (RFC 9457)
  * from the Tadpole engine and suggests actionable "Sovereign Repairs."
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[useErrorRemediation]` in console logs.
+ */
  */
 
 import { useCallback } from 'react';
@@ -90,6 +83,6 @@ export function useErrorRemediation() {
     return { get_remediation };
 }
 
-// Metadata: [useErrorRemediation]
+
 
 // Metadata: [useErrorRemediation]

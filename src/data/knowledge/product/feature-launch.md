@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[feature_launch]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: feature-launch
@@ -61,6 +54,6 @@ Flip the feature flag. Send the email/tweet.
 2. **Soft Launch**: Ideally, beta test with friendly users before the big announcement.
 3. **Success Metrics**: Define *before* launch what success looks like (e.g., "10% adoption in week 1").
 
-[//]: # (Metadata: [feature_launch])
+
 
 [//]: # (Metadata: [feature_launch])

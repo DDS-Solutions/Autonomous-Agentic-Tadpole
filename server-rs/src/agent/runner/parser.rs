@@ -9,6 +9,7 @@
 //! trailing commas.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[parser]` in tracing logs.
 //! - **Failure Path**: Heavily nested JSON that exceeds regex recursion limits
 //!   or multiple conflicting tool calls in a single turn.
 //! - **Trace Scope**: `server-rs::agent::runner::parser`
@@ -457,6 +458,8 @@ mod tests {
     }
 }
 
-// Metadata: [parser]
+
+
+
 
 // Metadata: [parser]

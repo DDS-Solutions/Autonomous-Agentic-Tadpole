@@ -1,22 +1,15 @@
 /**
- * @docs ARCHITECTURE:UI-Services
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Agent**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[visual_monitor_bridge]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
  * **Visual Monitor Bridge**: Connects the telemetry stream with the local 
  * inference specialist. Listens for backend inspection requests and 
  * handles the event-response loop.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[visual_monitor_bridge]` in observability traces.
+ */
  */
 
 import { tadpole_os_socket } from './socket';

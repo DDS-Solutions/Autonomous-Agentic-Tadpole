@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[telemetry_layer_tests.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[telemetry_layer_tests]` in tracing logs.
 //!
 //! @docs ARCHITECTURE:Telemetry Hardening
 //!
@@ -114,6 +114,6 @@ async fn test_telemetry_span_update_on_close() {
     assert_eq!(update_event["update"]["status"], "success");
 }
 
-// Metadata: [telemetry_layer_tests]
+
 
 // Metadata: [telemetry_layer_tests]

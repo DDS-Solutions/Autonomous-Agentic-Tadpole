@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Improper parsing of JSON-stringified `skills` or `workflows` during frontend hydration.
- * - **Telemetry Link**: Not tracked (Static Wire DTO).
+ * - **Telemetry Link**: Search `[wire]` in console logs.
  */
 
 import type { Department } from '../agent/shared';
@@ -25,6 +25,6 @@ export interface Role_Blueprint_Dto {
     createdAt?: string;
 }
 
-// Metadata: [wire]
+
 
 // Metadata: [wire]

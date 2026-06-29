@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[bridge_tests]` in tracing logs.
 */
 
 use std::sync::Arc;
@@ -58,6 +58,8 @@ async fn test_telemetry_bridge_persistence() {
     assert!(found, "Expected log message not found in database");
 }
 
-// Metadata: [bridge_tests]
+
+
+
 
 // Metadata: [bridge_tests]

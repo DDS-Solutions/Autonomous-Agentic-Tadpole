@@ -1,21 +1,14 @@
 /**
- * @docs ARCHITECTURE:UI-Components
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Interface**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[Empty_State]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
  * **UI Component**: Reusable fallback visualization for null data states. 
  * Provides a standardized "Neutral Footprint" using Tailwind tokens.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[Empty_State]` in observability traces.
+ */
  */
 
 import React from 'react';

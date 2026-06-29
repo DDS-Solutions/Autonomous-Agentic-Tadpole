@@ -9,6 +9,7 @@
 //! Normalization** (NFKC) to prevent character-swapping attacks.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[sanitizer]` in tracing logs.
 //! - **Failure Path**: False positives on legitimate technical
 //!   discussions, recursion depth limit (exhaustion prevention), or
 //!   normalization performance regressions on multi-MB text buffers.
@@ -162,6 +163,8 @@ mod tests {
     }
 }
 
-// Metadata: [sanitizer]
+
+
+
 
 // Metadata: [sanitizer]

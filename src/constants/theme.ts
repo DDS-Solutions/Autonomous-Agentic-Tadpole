@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Hex code mismatch with `index.css` (visual desync) or opacity string failure in Canvas rendering.
- * - **Telemetry Link**: Search for `THEME_COLORS` in source audits.
+ * - **Telemetry Link**: Search `[theme]` in console logs.
  */
 
 export const THEME_COLORS = {
@@ -48,6 +48,6 @@ export const GRAPH_THEME = {
     TELEMETRY_BG: 'rgba(255, 255, 255, 0.1)',
 };
 
-// Metadata: [theme]
+
 
 // Metadata: [theme]

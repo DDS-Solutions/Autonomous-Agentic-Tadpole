@@ -9,6 +9,7 @@
 //! write restrictions.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[audio_cache]` in tracing logs.
 //! - **Failure Path**: SQLite IO errors (e.g., "database is locked"),
 //!   hash collisions (extremely rare), or BLOB size limits on extremely
 //!   long synthesis outputs.
@@ -93,6 +94,8 @@ impl BunkerCache {
     }
 }
 
-// Metadata: [audio_cache]
+
+
+
 
 // Metadata: [audio_cache]

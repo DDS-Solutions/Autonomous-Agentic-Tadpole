@@ -26,7 +26,7 @@
 //! - **Failure Path**: Port in use (8000), `.env` validation failure
 //!   (panics during boot), or LanceDB file lock contention preventing
 //!   AppState initialization.
-//! - **Telemetry Link**: Search for `[Main]` or `[Sidecar]` in `tracing`
+//! - **Telemetry Link**: Search for `[main]` or `[Sidecar]` in `tracing`
 //!   logs for boot sequence milestones.
 //! - **Trace Scope**: `server-rs::main`
 
@@ -256,6 +256,6 @@ async fn shutdown_signal() {
     tracing::info!("🛑 Shutdown signal received, draining connections...");
 }
 
-// Metadata: [main]
+
 
 // Metadata: [main]

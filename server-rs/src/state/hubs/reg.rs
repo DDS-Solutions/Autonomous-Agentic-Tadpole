@@ -8,6 +8,7 @@
 //! Aggregation** for a high-fidelity capability surface.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[reg]` in tracing logs.
 //! - **Failure Path**: Registry cache staling due to persistence sync
 //!   delays, duplicate skill IDs in the `DashMap`, or `McpHost` tool
 //!   enumeration timeouts.
@@ -129,6 +130,8 @@ impl RegistryHub {
     }
 }
 
-// Metadata: [reg]
+
+
+
 
 // Metadata: [reg]

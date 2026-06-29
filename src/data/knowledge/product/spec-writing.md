@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[spec_writing]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: spec-writing
@@ -61,6 +54,6 @@ Format: "As a [Role], I want to [Action], so that [Benefit]."
 2. **Living Document**: The spec changes as we learn. Keep it updated.
 3. **Visuals > Text**: A mockup is worth 1000 words.
 
-[//]: # (Metadata: [spec_writing])
+
 
 [//]: # (Metadata: [spec_writing])

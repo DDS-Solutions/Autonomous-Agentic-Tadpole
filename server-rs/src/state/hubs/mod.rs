@@ -14,6 +14,7 @@
 //! secret redacting, or pool access) (STA-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Circular dependencies between physical hubs due
 //!   to incorrect re-exports, initialization order failures leading
 //!   to `None` references in `AppState`, or high-frequency lock
@@ -26,6 +27,8 @@ pub mod reg;
 pub mod res;
 pub mod sec;
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

@@ -5,6 +5,7 @@
 //! skill set. Implements the **Self-Refactoring** loop for synthesized scripts.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[evolution_tools]` in tracing logs.
 //! - **Failure Path**: File system lock during script update, invalid Python 
 //!   syntax in refactored code, or security block on unauthorized paths.
 //! - **Trace Scope**: `server-rs::agent::runner::evolution_tools`
@@ -185,6 +186,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [evolution_tools]
+
+
+
 
 // Metadata: [evolution_tools]

@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[sscp_tests]` in tracing logs.
 */
 
 //! SSCP Phase 1, 2 & 3 Verification Tests — Drive G
@@ -414,6 +414,8 @@ mod tests {
     }
 }
 
-// Metadata: [sscp_tests]
+
+
+
 
 // Metadata: [sscp_tests]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Serialization mismatch between frontend camelCase (DTO) and backend snake_case (Serde).
- * - **Telemetry Link**: Not tracked (Static Wire DTO).
+ * - **Telemetry Link**: Search `[wire]` in console logs.
  */
 
 import type { Agent_Connector_Config } from './shared';
@@ -94,6 +94,6 @@ export interface Raw_Agent_Memory_Entry {
     metadata?: Record<string, unknown>;
 }
 
-// Metadata: [wire]
+
 
 // Metadata: [wire]

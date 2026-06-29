@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Collision between sidebar z-index and modal overlays or failure to persist the 'Node Certified' status across navigation events.
- * - **Telemetry Link**: Search `[Sidebar.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Sidebar_test]` in console logs.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -53,6 +53,6 @@ describe('Sidebar Component', () => {
 });
 
 
-// Metadata: [Sidebar_test]
+
 
 // Metadata: [Sidebar_test]

@@ -10,6 +10,7 @@
 //! Window Resets** to recover from long-tail API stalls.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[rate_limiter]` in tracing logs.
 //! - **Failure Path**: Resource exhaustion due to overlapping 60s windows,
 //!   atomic counter overflow, or semaphore deadlocks in high-concurrency
 //!   spawn contexts.
@@ -122,6 +123,8 @@ impl RateLimiter {
     }
 }
 
-// Metadata: [rate_limiter]
+
+
+
 
 // Metadata: [rate_limiter]

@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Agent limit reached (prevents creation), filtering logic mismatch (missing agents in search), or `Agent_Card` stale state (check `React.memo` equality logic).
- * - **Telemetry Link**: Check `fetch_agents` in `agent_store` or search `[AgentManager]` in component logs.
+ * - **Telemetry Link**: Check `fetch_agents` in `agent_store` or search `[Agent_Manager]` in component logs.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -440,6 +440,6 @@ export const Agent_Card_Memo = React.memo(Agent_Card, (prev_props, next_props) =
 });
 
 
-// Metadata: [Agent_Manager]
+
 
 // Metadata: [Agent_Manager]

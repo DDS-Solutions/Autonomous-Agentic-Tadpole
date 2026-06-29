@@ -12,7 +12,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Connection timeouts (MAX_RETRIES reached), invalid API key/URL format causing 403/404, or MessagePack decoding errors for binary pulses.
- * - **Telemetry Link**: Search for `[Tadpole_OS_Socket]` or `bearer.tadpole` in browser/proxy logs.
+ * - **Telemetry Link**: Search for `[socket]` or `bearer.tadpole` in browser/proxy logs.
  */
 
 
@@ -567,6 +567,6 @@ export const tadpole_os_socket = new Proxy({} as Tadpole_OS_Socket_Client, {
 });
 
 
-// Metadata: [socket]
+
 
 // Metadata: [socket]

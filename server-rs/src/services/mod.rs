@@ -10,6 +10,7 @@
 //! that exceeds the scope of a single request handler (SERV-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Service-init timeouts, state-drift between
 //!   in-memory registries and persistent storage, or performance
 //!   bottlenecks during large-scale discovery scans.
@@ -23,6 +24,8 @@ pub mod parser;
 #[cfg(test)]
 mod tests;
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

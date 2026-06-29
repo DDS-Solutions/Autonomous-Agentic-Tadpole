@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: 401/403 Auth Failure (invalid bearer token), 408/504 Timeout (exceeding `DEFAULT_TIMEOUT`), or traceparent corruption.
- * - **Telemetry Link**: Every request emits an `X-Request-Id`. Search browser/proxy logs for this ID or `[BaseAPI]`.
+ * - **Telemetry Link**: Search `[base_api_service]` in console logs.
  * 
  * @aiContext
  * - **Dependencies**: `settings_store`, `trace_store`.
@@ -284,6 +284,6 @@ export async function api_request<T = unknown>(
     }
 }
 
-// Metadata: [base_api_service]
+
 
 // Metadata: [base_api_service]

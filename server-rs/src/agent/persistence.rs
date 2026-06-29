@@ -10,6 +10,7 @@
 //! state across engine restarts.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[persistence]` in tracing logs.
 //! - **Failure Path**: SQLite statement-cache staling across migrations
 //!   (causing row decoding panics), JSON parsing errors in
 //!   `infra_providers.json`, or heartbeat timeout misconfiguration
@@ -920,6 +921,8 @@ mod tests {
     }
 }
 
-// Metadata: [persistence]
+
+
+
 
 // Metadata: [persistence]

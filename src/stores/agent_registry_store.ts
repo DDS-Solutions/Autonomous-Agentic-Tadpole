@@ -9,6 +9,7 @@
  * and configuration (AGNT-01).
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[agent_registry_store]` in console logs.
  * - **Failure Path**: Race conditions during multi-tab updates, 
  *   persistence hydration failures, or stale registry data.
  * - **Trace Scope**: `src/stores/agent_registry_store`
@@ -144,6 +145,8 @@ if (sync_channel) {
     };
 }
 
-// Metadata: [agent_registry_store]
+
+
+
 
 // Metadata: [agent_registry_store]

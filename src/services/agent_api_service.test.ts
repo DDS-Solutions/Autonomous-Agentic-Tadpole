@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Inconsistent agent state when the backend returns a 201 Created but the subsequent status poll fails.
- * - **Telemetry Link**: Search `[agent_api_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[agent_api_service_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -227,6 +227,6 @@ describe('agent_api_service', () => {
     });
 });
 
-// Metadata: [agent_api_service_test]
+
 
 // Metadata: [agent_api_service_test]

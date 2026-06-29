@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regression in snake_case to camelCase conversion or failed parsing of SQLx JSON fields.
- * - **Telemetry Link**: Not tracked (Unit Test).
+ * - **Telemetry Link**: Search `[agent_mappers_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -133,6 +133,6 @@ describe('agent_mappers', () => {
     });
 });
 
-// Metadata: [agent_mappers_test]
+
 
 // Metadata: [agent_mappers_test]

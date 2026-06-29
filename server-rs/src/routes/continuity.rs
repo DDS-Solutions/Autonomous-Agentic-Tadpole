@@ -16,6 +16,7 @@
 //! jobs to prevent runtime scheduling failures (CONT-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[continuity]` in tracing logs.
 //! - **Failure Path**: 400 Bad Request on invalid cron expressions,
 //!   404 on missing workflow/agent IDs, or job execution stalls due to
 //!   budget exhaustion or runner suspension.
@@ -285,6 +286,8 @@ pub async fn delete_workflow_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// Metadata: [continuity]
+
+
+
 
 // Metadata: [continuity]

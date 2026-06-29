@@ -12,6 +12,7 @@
 //! execution plan (MCP-02).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[registry]` in tracing logs.
 //! - **Failure Path**: Tool name collisions during registration,
 //!   missing metadata in the `ToolHandler` implementation, or
 //!   memory leaks from excessive tool registrations in long-running
@@ -129,6 +130,8 @@ mod tests {
     }
 }
 
-// Metadata: [registry]
+
+
+
 
 // Metadata: [registry]

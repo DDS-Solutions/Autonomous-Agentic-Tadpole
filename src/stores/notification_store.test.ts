@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory leaks from uncleared timers or race conditions when multiple notifications are added/removed rapidly.
- * - **Telemetry Link**: Search `[notification_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[notification_store_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -110,6 +110,6 @@ describe('notification_store', () => {
     });
 });
 
-// Metadata: [notification_store_test]
+
 
 // Metadata: [notification_store_test]

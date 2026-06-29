@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: TypeScript compilation error (due to union type mismatch), or runtime object property absence when backend DTOs evolve.
- * - **Telemetry Link**: Search for `interface Agent` or `Agent_Status` in codebase audits to verify schema alignment.
+ * - **Telemetry Link**: Search `[index]` in console logs.
  */
 
 
@@ -95,6 +95,6 @@ export interface Swarm_Pulse {
 }
 
 
-// Metadata: [index]
+
 
 // Metadata: [index]

@@ -10,6 +10,7 @@
 //! wildcard (`*`) mode is active (CORS-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[cors]` in tracing logs.
 //! - **Failure Path**: `Origin mismatch` preflight errors on custom
 //!   Bunker deployments, missing `Authorization` or `x-request-id`
 //!   headers in the allowed list, or credential failures on wildcard origins.
@@ -111,9 +112,9 @@ pub fn create_cors_layer() -> CorsLayer {
     .allow_credentials(allow_credentials)
 }
 
-// Metadata: [cors]
 
-// Metadata: [cors]
+
+
 
 #[cfg(test)]
 mod tests {
@@ -153,3 +154,5 @@ mod tests {
         }
     }
 }
+
+// Metadata: [cors]

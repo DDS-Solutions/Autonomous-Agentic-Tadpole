@@ -14,6 +14,7 @@
 //! - **Safe Mode** (SEC-05): Disables all mutation tools based on mission metadata.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[synthesis]` in tracing logs.
 //! - **Failure Path**: Tokenizer failure, mission context retrieval fault (match fallback),
 //!   or identity lookup cache miss.
 //! - **Trace Scope**: `server-rs::agent::runner::synthesis`
@@ -1184,6 +1185,8 @@ mod tests {
     }
 }
 
-// Metadata: [synthesis]
+
+
+
 
 // Metadata: [synthesis]

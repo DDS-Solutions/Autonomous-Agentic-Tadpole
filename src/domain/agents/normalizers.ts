@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Failed parsing of JSON-stringified arrays (skills/workflows) or mapping drift between camelCase (wire) and snake_case (domain).
- * - **Telemetry Link**: Search `[Normalizer]` in UI traces.
+ * - **Telemetry Link**: Search `[normalizers]` in UI traces.
  */
 
 import type { 
@@ -230,6 +230,6 @@ export const normalize_agent_memory_entry = (raw: Raw_Agent_Memory_Entry): Agent
     };
 };
 
-// Metadata: [normalizers]
+
 
 // Metadata: [normalizers]

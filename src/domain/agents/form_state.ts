@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Status mismatch between domain and form, or incorrect slot mapping (primary/secondary/tertiary).
- * - **Telemetry Link**: Search `[FormState]` in UI traces.
+ * - **Telemetry Link**: Search `[form_state]` in UI traces.
  */
 
 console.debug("[FormState] Domain logic loaded");
@@ -177,6 +177,6 @@ export const serializeFormState = (state: AgentFormState): AgentPatch => {
     };
 };
 
-// Metadata: [form_state]
+
 
 // Metadata: [form_state]

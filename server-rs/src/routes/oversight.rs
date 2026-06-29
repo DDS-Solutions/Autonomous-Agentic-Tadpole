@@ -15,7 +15,7 @@
 //! - **Failure Path**: 404 on resolution due to resolver timeout,
 //!   decisions stalling in the queue due to missing human input, or
 //!   Merkle integrity failures on tampered log entries.
-//! - **Telemetry Link**: Search for `⚖️ [Oversight]` in `tracing` logs
+//! - **Telemetry Link**: Search `[oversight]` in tracing logs.
 //!   for decision lifecycle events.
 //! - **Trace Scope**: `server-rs::routes::oversight`
 
@@ -914,6 +914,6 @@ pub async fn get_token_burn(
     }))
 }
 
-// Metadata: [oversight]
+
 
 // Metadata: [oversight]

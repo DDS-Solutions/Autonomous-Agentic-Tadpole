@@ -17,7 +17,7 @@
 //!   malformed schema syntax causing parse errors, or incorrect
 //!   "isSet" reporting due to cache staleness in the `EnvSchema`
 //!   instance.
-//! - **Telemetry Link**: Search for `Failed to load schema` in
+//! - **Telemetry Link**: Search `[env_schema]` in tracing logs.
 //!   `tracing` logs for configuration audit events.
 //! - **Trace Scope**: `server-rs::routes::env_schema`
 
@@ -56,6 +56,6 @@ pub async fn get_env_schema(
     }
 }
 
-// Metadata: [env_schema]
+
 
 // Metadata: [env_schema]

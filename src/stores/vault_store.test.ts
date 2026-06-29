@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Unauthorized access if a vault segment is unsealed without a valid Merkle proof or failure to rotate session keys during a security breach.
- * - **Telemetry Link**: Search `[vault_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[vault_store_test]` in console logs.
  */
 
 
@@ -151,6 +151,6 @@ describe('use_vault_store', () => {
 });
 
 
-// Metadata: [vault_store_test]
+
 
 // Metadata: [vault_store_test]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Config state drift where the UI reflects a setting (e.g. 'Dark Mode') that failed to persist to the backend or local cache.
- * - **Telemetry Link**: Search `[Settings.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Settings_test]` in console logs.
  */
 
 
@@ -174,6 +174,6 @@ describe('Settings Page', () => {
 });
 
 
-// Metadata: [Settings_test]
+
 
 // Metadata: [Settings_test]

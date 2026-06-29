@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Invalid JSON in `custom_headers`, or mismatched protocol/endpoint combination (405).
- * - **Telemetry Link**: Search for `Handshake: Invalid JSON headers` in UI logs.
+ * - **Telemetry Link**: Search `[Protocol_Section]` in console logs.
  */
 
 import React from 'react';
@@ -208,6 +208,6 @@ export function Protocol_Section({
     );
 }
 
-// Metadata: [Protocol_Section]
+
 
 // Metadata: [Protocol_Section]

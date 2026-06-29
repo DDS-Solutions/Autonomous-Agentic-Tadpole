@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Settings persistence failure (local storage quota), or theme flashing on page reload.
- * - **Telemetry Link**: Search for `[Settings_View]` or `SETTINGS_UPDATE` in UI logs.
+ * - **Telemetry Link**: Search for `[Settings]` or `SETTINGS_UPDATE` in UI logs.
  */
 
 import React, { useState } from 'react';
@@ -653,6 +653,6 @@ export default function Settings(): React.ReactElement {
 }
 
 
-// Metadata: [Settings]
+
 
 // Metadata: [Settings]

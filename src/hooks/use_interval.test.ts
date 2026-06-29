@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Timer leak (setInterval not cleared) or incorrect execution frequency in high-latency React renders.
- * - **Telemetry Link**: Run `npm run test` or check `[use_interval.test]` in Vitest output.
+ * - **Telemetry Link**: Search `[use_interval_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -73,6 +73,6 @@ describe('useInterval', () => {
     });
 });
 
-// Metadata: [use_interval_test]
+
 
 // Metadata: [use_interval_test]

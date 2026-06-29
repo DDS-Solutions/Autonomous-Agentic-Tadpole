@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Circular dependencies if barrels are imported cross-layer (avoid importing barrel in sub-files).
- * - **Telemetry Link**: Not tracked (Index Barrel).
+ * - **Telemetry Link**: Search `[index]` in console logs.
  */
 
 export * from './shared';
@@ -15,6 +15,6 @@ export * from './wire';
 export * from './domain';
 export * from './form';
 
-// Metadata: [index]
+
 
 // Metadata: [index]

@@ -17,7 +17,7 @@
 //!   port availability conflicts (UDP 5353), or Hydra-RS scan
 //!   panics during codebase indexing. Check the bootstrap_intent if
 //!   specific workers are missing.
-//! - **Telemetry Link**: Search for `[Bootstrap]` or `[Hydra-RS]` in
+//! - **Telemetry Link**: Search for `[mod]` or `[Hydra-RS]` in
 //!   `tracing` logs for phase-specific boot milestones.
 //! - **Trace Scope**: `server-rs::startup`
 
@@ -677,6 +677,6 @@ mod tests {
     }
 }
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

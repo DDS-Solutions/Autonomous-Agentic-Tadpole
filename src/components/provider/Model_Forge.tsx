@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Model limit reached, invalid model schema, or unauthorized model access (403).
- * - **Telemetry Link**: Search for `add_model` or `edit_model` in `model_store` logs.
+ * - **Telemetry Link**: Search `[Model_Forge]` in console logs.
  */
 
 import React, { useState } from 'react';
@@ -248,6 +248,6 @@ export function Model_Forge({
     );
 }
 
-// Metadata: [Model_Forge]
+
 
 // Metadata: [Model_Forge]

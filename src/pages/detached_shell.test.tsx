@@ -1,6 +1,6 @@
 /**
- * @docs ARCHITECTURE:UI-Pages
- * 
+ * @docs ARCHITECTURE:TestSuites
+ *
  * ### AI Assist Note
  * **@docs ARCHITECTURE:TestSuites**
  * Handles reactive state and high-fidelity user interactions.
@@ -9,12 +9,14 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[detached_shell_test]` in observability traces.
  */
-
-/**
- * @docs ARCHITECTURE:TestSuites
  *
  * Verifies detached windows only subscribe to dashboard-wide data when their
  * content actually needs agent registry state.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[detached_shell_test]` in observability traces.
+ */
  */
 
 import { describe, expect, it, beforeEach, vi } from 'vitest';

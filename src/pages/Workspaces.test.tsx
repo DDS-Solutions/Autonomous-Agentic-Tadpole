@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: State leakage between workspaces (e.g. agents appearing in the wrong project) or failure to hydrate the `workspace_store` after a project switch.
- * - **Telemetry Link**: Search `[Workspaces.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Workspaces_test]` in console logs.
  */
 
 
@@ -185,6 +185,6 @@ describe('Workspaces Page', () => {
 });
 
 
-// Metadata: [Workspaces_test]
+
 
 // Metadata: [Workspaces_test]

@@ -6,6 +6,7 @@
  * Orchestrates the visualization of internal engine states, service health, and middleware performance metrics.
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Engine_Dashboard]` in console logs.
  */
 
 import { Fragment } from 'react';
@@ -225,6 +226,8 @@ export default function Engine_Dashboard() {
     );
 }
 
-// Metadata: [Engine_Dashboard]
+
+
+
 
 // Metadata: [Engine_Dashboard]

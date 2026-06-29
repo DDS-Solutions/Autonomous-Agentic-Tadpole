@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[constants.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[constants]` in tracing logs.
 //!
 //! @docs ARCHITECTURE:Agent Identities
 //!
@@ -25,6 +25,6 @@ pub const AGENT_COO: &str = "2";
 /// The Alpha Agent. Legacy identifier or special core utility agent.
 pub const AGENT_ALPHA: &str = "alpha";
 
-// Metadata: [constants]
+
 
 // Metadata: [constants]

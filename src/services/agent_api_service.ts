@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: 429 Rate Limit (governed by `model_store` RPM/TPM), Vault lock-out (prevents task dispatch), or memory fragmentation during semantic search.
- * - **Telemetry Link**: Look for `X-Request-Id` in backend logs or search `[AgentAPI]` in backend tracing.
+ * - **Telemetry Link**: Look for `X-Request-Id` in backend logs or search `[agent_api_service]` in backend tracing.
  * 
  * @aiContext
  * - **Dependencies**: `base_api_service`, `vault_store`, `model_store`, `provider_store`.
@@ -479,6 +479,6 @@ export const agent_api_service = {
 };
 
 
-// Metadata: [agent_api_service]
+
 
 // Metadata: [agent_api_service]

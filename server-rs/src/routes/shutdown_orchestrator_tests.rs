@@ -5,6 +5,7 @@
 //! and graceful shutdown triggers, confirming state persistence and registry flushing.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[shutdown_orchestrator_tests]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::shutdown_orchestrator_tests`
 
 #[cfg(test)]
@@ -114,6 +115,8 @@ mod tests {
     }
 }
 
-// Metadata: [shutdown_orchestrator_tests]
+
+
+
 
 // Metadata: [shutdown_orchestrator_tests]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Lexical parsing errors (unclosed quotes), agent resolution ambiguity (multiple matches), or API timeout during `/deploy` or `/send`.
- * - **Telemetry Link**: Search for `[CommandProcessor]` in `event_bus` logs or `process_command` trace spans.
+ * - **Telemetry Link**: Search for `[command_processor]` in `event_bus` logs or `process_command` trace spans.
  */
 
 import { event_bus } from '../services/event_bus';
@@ -686,6 +686,6 @@ function check_if_tactical(text: string): boolean {
     return tactical_keywords.some(k => lower.includes(k));
 }
 
-// Metadata: [command_processor]
+
 
 // Metadata: [command_processor]

@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Viewport overflow (if sidebar is pinned on mobile), tab sync mismatch (BroadcastChannel data collision), or layout layout flickering during page transitions.
- * - **Telemetry Link**: Watch for `tab_store` mutations or search `[DashboardLayout]` in UI traces.
+ * - **Telemetry Link**: Watch for `tab_store` mutations or search `[Dashboard_Layout]` in UI traces.
  */
 
 import React, { useEffect, useState, Suspense, lazy } from 'react';
@@ -382,5 +382,5 @@ export default function Dashboard_Layout() {
     );
 }
 
-// Metadata: [Dashboard_Layout]
+
 // Metadata: [Dashboard_Layout]

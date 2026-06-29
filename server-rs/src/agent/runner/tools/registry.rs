@@ -55,6 +55,6 @@ impl ToolRegistry {
     }
 }
 
-// Metadata: [registry]
+
 
 // Metadata: [registry]

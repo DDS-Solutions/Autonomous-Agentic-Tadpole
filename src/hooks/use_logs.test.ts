@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Missing logs on initial mount or memory pressure from excessive state updates in high-velocity swarms.
- * - **Telemetry Link**: Run `npm run test` or search `[use_logs.test]` in Vitest logs.
+ * - **Telemetry Link**: Search `[use_logs_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -89,6 +89,6 @@ describe('useLogs', () => {
     });
 });
 
-// Metadata: [use_logs_test]
+
 
 // Metadata: [use_logs_test]

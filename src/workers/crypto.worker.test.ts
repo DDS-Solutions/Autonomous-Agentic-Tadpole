@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Unit test regression (failure in Vitest runner) or global context (`globalThis`) pollution.
- * - **Telemetry Link**: Run `npm run test` or check Vitest dashboard.
+ * - **Telemetry Link**: Search `[crypto_worker_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -102,6 +102,6 @@ describe('crypto.worker', () => {
 });
 
 
-// Metadata: [crypto_worker_test]
+
 
 // Metadata: [crypto_worker_test]

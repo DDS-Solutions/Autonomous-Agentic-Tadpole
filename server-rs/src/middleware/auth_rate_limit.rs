@@ -12,7 +12,7 @@
 //! - **Failure Path**: False positive blocks on shared NAT gateways,
 //!   memory bloat from high IP churn (ephemeral attackers), or missing
 //!   `ConnectInfo` in reverse proxy setups.
-//! - **Telemetry Link**: Search `[Security]` in server traces.
+//! - **Telemetry Link**: Search `[auth_rate_limit]` in server traces.
 //! - **Trace Scope**: `server-rs::middleware::auth_rate_limit`
 
 use axum::{
@@ -156,6 +156,6 @@ mod tests {
     }
 }
 
-// Metadata: [auth_rate_limit]
+
 
 // Metadata: [auth_rate_limit]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Invalid parameter propagation to the backend or failure to handle provider-specific quota limits during a model swap.
- * - **Telemetry Link**: Search `[model_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[model_store_test]` in console logs.
  */
 
 
@@ -129,6 +129,6 @@ describe('use_model_store', () => {
 });
 
 
-// Metadata: [model_store_test]
+
 
 // Metadata: [model_store_test]

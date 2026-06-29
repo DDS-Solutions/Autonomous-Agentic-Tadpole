@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Job overlap (race conditions) or failure to persist 'Last Run' metadata to the `jobs_store` after a system restart.
- * - **Telemetry Link**: Search `[Scheduled_Jobs.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Scheduled_Jobs_test]` in console logs.
  */
 
 
@@ -347,6 +347,6 @@ describe('Scheduled_Jobs Page', () => {
 });
 
 
-// Metadata: [Scheduled_Jobs_test]
+
 
 // Metadata: [Scheduled_Jobs_test]

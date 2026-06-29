@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory leaks due to uncapped log growth or failure to render specific log severities in the Oversight Dashboard.
- * - **Telemetry Link**: Search `[trace_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[trace_store_test]` in console logs.
  */
 
 
@@ -159,6 +159,6 @@ describe('use_trace_store', () => {
 });
 
 
-// Metadata: [trace_store_test]
+
 
 // Metadata: [trace_store_test]

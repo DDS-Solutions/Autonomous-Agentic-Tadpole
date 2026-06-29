@@ -7,6 +7,7 @@
 //! external traffic when local-only mode is active.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[provider]` in tracing logs.
 //! - **Failure Path**: Missing API keys, unknown provider protocol, or rate limit
 //!   (RPM/TPM) breach. Falling back to `NullProvider` ensures missions degrade
 //!   gracefully instead of crashing.
@@ -621,7 +622,7 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [provider]
+
 
 #[cfg(test)]
 mod tests {
@@ -766,5 +767,7 @@ mod tests {
         }
     }
 }
+
+
 
 // Metadata: [provider]

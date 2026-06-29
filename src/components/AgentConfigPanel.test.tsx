@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Mismatched vitest mocks for `tadpole_os_service` or incorrect i18n key resolution causing label mismatches.
- * - **Telemetry Link**: Search `[AgentConfigPanel.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[AgentConfigPanel_test]` in console logs.
  */
 
 import '@testing-library/jest-dom';
@@ -102,6 +102,6 @@ describe('AgentConfigPanel', () => {
 });
 
 
-// Metadata: [AgentConfigPanel_test]
+
 
 // Metadata: [AgentConfigPanel_test]

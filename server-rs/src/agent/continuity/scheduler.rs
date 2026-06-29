@@ -6,6 +6,7 @@
 //! **The Scheduler Registry**: Manages the database state for scheduled jobs.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[scheduler]` in tracing logs.
 //! - **Persistence**: `scheduled_jobs` and `scheduled_job_runs` tables.
 
 use crate::error::AppError;
@@ -495,6 +496,8 @@ mod tests {
     }
 }
 
-// Metadata: [scheduler]
+
+
+
 
 // Metadata: [scheduler]

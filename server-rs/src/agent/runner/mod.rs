@@ -9,6 +9,7 @@
 //! recruitment.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Budget exhaustion, recursion depth limit (SEC-01),
 //!   prompt injection detection, or API provider timeouts.
 //! - **Trace Scope**: `server-rs::agent::runner` (Check for `AgentExecution` span)
@@ -687,6 +688,8 @@ mod tests {
     }
 }
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[hiring_approval]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: hiring-approval
@@ -60,6 +53,6 @@ Does the compensation package fit the band? Are we giving away too much equity?
 2. **Culture Add, not Fit**: Look for diversity of thought.
 3. **No "Nice" Hires**: Only hire if it's a "Hell Yes".
 
-[//]: # (Metadata: [hiring_approval])
+
 
 [//]: # (Metadata: [hiring_approval])

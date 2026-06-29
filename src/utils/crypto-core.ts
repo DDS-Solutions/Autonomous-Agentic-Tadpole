@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Decryption failure (incorrect password), PBKDF2 iteration mismatch, or missing `SubtleCrypto` in non-secure contexts.
- * - **Telemetry Link**: Triggers `Decryption failed` errors in calling services.
+ * - **Telemetry Link**: Search `[crypto_core]` in console logs.
  */
 /**
  * @module utils/crypto-core
@@ -107,6 +107,6 @@ export async function decrypt_raw(encrypted_json: string, password: string): Pro
 }
 
 
-// Metadata: [crypto_core]
+
 
 // Metadata: [crypto_core]

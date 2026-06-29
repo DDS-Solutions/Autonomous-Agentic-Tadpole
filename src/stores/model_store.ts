@@ -9,7 +9,7 @@
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Inventory desync between tabs (check `BroadcastChannel` heartbeat), or modality routing failure during agent initialization.
  * - **IMR-01 Link**: See `sync_models` for ingestion of backend inferred capabilities.
- * - **Telemetry Link**: Search for `[ModelStore]` or `MODELS_SYNC` in UI logs.
+ * - **Telemetry Link**: Search for `[model_store]` or `MODELS_SYNC` in UI logs.
  */
 
 import { create } from 'zustand';
@@ -353,6 +353,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [model_store]
+
 
 // Metadata: [model_store]

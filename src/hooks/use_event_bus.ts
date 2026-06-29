@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory leaks if `unsubscribe` fails, buffer overflow if `maxBuffer` is too small for the burst rate, or UI jank if `flush` takes > 16ms.
- * - **Telemetry Link**: Search for `[useEventBus]` in browser console or trace frames.
+ * - **Telemetry Link**: Search for `[use_event_bus]` in browser console or trace frames.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -67,6 +67,6 @@ export function useEventBus(
 }
 
 
-// Metadata: [use_event_bus]
+
 
 // Metadata: [use_event_bus]

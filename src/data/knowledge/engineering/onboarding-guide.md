@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[onboarding_guide]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 # Tadpole OS: Unified Onboarding Protocol
 
@@ -83,6 +76,6 @@ The "Surface" layer connects the swarm to the physical world and external apps.
 *   **Engineering**: "Refactor legacy telemetry hooks into a unified event-bus architecture."
 *   **Security**: "Execute a red-team simulation against the primary identity-provider."
 
-[//]: # (Metadata: [onboarding_guide])
+
 
 [//]: # (Metadata: [onboarding_guide])

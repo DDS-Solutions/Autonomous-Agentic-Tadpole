@@ -9,7 +9,7 @@
  *
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Stale target_node during dispatch, or process_command timeout.
- * - **Telemetry Link**: Search `[useChatDispatch]` in browser console.
+ * - **Telemetry Link**: Search `[use_chat_dispatch]` in browser console.
  */
 
 import { useState, useCallback } from 'react';
@@ -144,6 +144,6 @@ export function useChatDispatch(
     };
 }
 
-// Metadata: [use_chat_dispatch]
+
 
 // Metadata: [use_chat_dispatch]

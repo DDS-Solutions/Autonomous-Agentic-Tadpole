@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Command timeout failures or incorrect status mapping (e.g. 'queued' instead of 'in_progress') during backend engine load spikes.
- * - **Telemetry Link**: Search `[Ops_Dashboard.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Ops_Dashboard_test]` in console logs.
  */
 
 
@@ -295,6 +295,6 @@ describe('Ops_Dashboard', () => {
 });
 
 
-// Metadata: [Ops_Dashboard_test]
+
 
 // Metadata: [Ops_Dashboard_test]

@@ -8,6 +8,7 @@
 //! discovery and capability inference (Vision, Tools, Reasoning).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[types]` in tracing logs.
 //! - **Failure Path**: JSON deserialization mismatch (422 Unprocessable Entity),
 //!   missing model config defaults leading to `None` pointer dereference
 //!   logic errors, or invalid rate limit parsing from environment variables.
@@ -1338,6 +1339,8 @@ mod contract_tests {
     }
 }
 
-// Metadata: [types]
+
+
+
 
 // Metadata: [types]

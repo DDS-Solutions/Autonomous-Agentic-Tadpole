@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Mission deadlock when a parent task is completed but the child tasks are stuck in 'pending' or 'failed' states.
- * - **Telemetry Link**: Search `[mission_api_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[mission_api_service_test]` in console logs.
  */
 
 
@@ -114,6 +114,6 @@ describe('mission_api_service', () => {
 });
 
 
-// Metadata: [mission_api_service_test]
+
 
 // Metadata: [mission_api_service_test]

@@ -6,7 +6,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path: Runtime logic error or state corruption.**
- * - **Telemetry Link**: Search `[Hardware_Load.tsx]` in tracing logs.
+ * - **Telemetry Link**: Search `[Hardware_Load]` in console logs.
  */
 
 import { useState, useEffect } from 'react';
@@ -171,6 +171,6 @@ export function Hardware_Load() {
     );
 }
 
-// Metadata: [Hardware_Load]
+
 
 // Metadata: [Hardware_Load]

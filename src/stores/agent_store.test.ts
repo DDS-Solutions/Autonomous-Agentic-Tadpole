@@ -8,7 +8,7 @@
  *
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: State corruption during batch agent updates or failure to invalidate the cache after a backend sync.
- * - **Telemetry Link**: Search `[agent_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[agent_store_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
@@ -311,6 +311,6 @@ describe('agent_store suites', () => {
     });
 });
 
-// Metadata: [agent_store_test]
+
 
 // Metadata: [agent_store_test]

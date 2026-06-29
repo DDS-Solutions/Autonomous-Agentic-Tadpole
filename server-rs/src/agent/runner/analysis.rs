@@ -7,6 +7,7 @@
 //! Performs **Semantic Pruning** of large logs to optimize auditor prompt windows.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[analysis]` in tracing logs.
 //! - **Failure Path**: lanceDB connection failure during drift analysis,
 //!   embedding API timeout, or Agent 99 recruitment failure.
 //! - **Trace Scope**: `server-rs::agent::runner::analysis`
@@ -190,6 +191,8 @@ pub(crate) fn spawn_post_mission_analysis(
     });
 }
 
-// Metadata: [analysis]
+
+
+
 
 // Metadata: [analysis]

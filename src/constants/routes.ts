@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: 404 Route mismatch (if `get_route_by_path` fallback fails), or ChunkLoadError during lazy-loading on slow networks.
- * - **Telemetry Link**: Search for `Route_Config` or `APP_ROUTES` in navigation trace spans.
+ * - **Telemetry Link**: Search `[routes]` in console logs.
  */
 
 import { lazy } from 'react';
@@ -66,6 +66,6 @@ export const get_route_by_path = (path: string) => {
 };
 
 
-// Metadata: [routes]
+
 
 // Metadata: [routes]

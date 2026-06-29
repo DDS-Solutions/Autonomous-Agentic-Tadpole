@@ -5,7 +5,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[schema_gen]` in tracing logs.
 */
 
 //! Type Synchronization Utility — Rust to TypeScript
@@ -77,6 +77,8 @@ pub fn export_types() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// Metadata: [schema_gen]
+
+
+
 
 // Metadata: [schema_gen]

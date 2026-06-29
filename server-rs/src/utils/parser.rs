@@ -18,6 +18,7 @@
 //! re-parsing (PARSE-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[parser]` in tracing logs.
 //! - **Failure Path**: Tree-sitter grammar loading failure,
 //!   unsupported language extensions, or query mismatch causing
 //!   incomplete symbol extraction.
@@ -345,6 +346,8 @@ mod tests {
     }
 }
 
-// Metadata: [parser]
+
+
+
 
 // Metadata: [parser]

@@ -14,6 +14,7 @@
 //! (SEC-05).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[tests_rate_limiter]` in tracing logs.
 //! - **Failure Path**: Unexpected window reset delays, atomic counter
 //!   overflows in extreme throughput scenarios, or incorrect
 //!   per-model budget mapping.
@@ -94,6 +95,8 @@ mod tests {
     }
 }
 
-// Metadata: [tests_rate_limiter]
+
+
+
 
 // Metadata: [tests_rate_limiter]

@@ -8,6 +8,7 @@
 //! across the entire agentic lifecycle.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[gov]` in tracing logs.
 //! - **Failure Path**: Atomic counter overflow in `tpm_accumulator`,
 //!   deadlocks in `default_budget_usd` (parking_lot::RwLock), or
 //!   unsynchronized privacy mode states across distributed workers.
@@ -42,6 +43,8 @@ pub struct GovernanceHub {
     pub observed_max_depth: AtomicU32,
 }
 
-// Metadata: [gov]
+
+
+
 
 // Metadata: [gov]

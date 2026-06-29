@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: WebSocket closure (shows "OFFLINE"), stale pulse data (if pulse interval > health interval), or missing event fields in the `Engine_Health_Event`.
- * - **Telemetry Link**: Subscribes to `tadpole_os_socket` for `SYNC_HEALTH` and `SWARM_PULSE` events.
+ * - **Telemetry Link**: Search `[use_engine_status]` in console logs.
  */
 
 import { useState, useEffect } from 'react';
@@ -107,6 +107,6 @@ export function useEngineStatus(): Engine_Status {
 }
 
 
-// Metadata: [use_engine_status]
+
 
 // Metadata: [use_engine_status]

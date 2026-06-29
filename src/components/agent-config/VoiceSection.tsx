@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Voice identity list missing for specific engines, STT engine selection silent failure if provider key is missing, or browser fallback triggered unexpectedly.
- * - **Telemetry Link**: Search for `[Voice_Section]` or `VOCAL_ID` in service logs.
+ * - **Telemetry Link**: Search for `[VoiceSection]` or `VOCAL_ID` in service logs.
  */
 
 import { Info } from 'lucide-react';
@@ -122,6 +122,6 @@ export function VoiceSection({ voice, stt_engine, theme_color, on_update_voice }
 
 // Metadata: [Voice_Section]
 
-// Metadata: [VoiceSection]
+
 
 // Metadata: [VoiceSection]

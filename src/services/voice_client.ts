@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: WebSocket buffer underflow (audio stuttering), transcription latency spike, or sample-rate mismatch.
- * - **Telemetry Link**: Search for `[VoiceClient]` or `audio_stream_chunk` in UI tracing.
+ * - **Telemetry Link**: Search for `[voice_client]` or `audio_stream_chunk` in UI tracing.
  * 
  * @aiContext
  * - **Dependencies**: `socket.ts` (audio sync), `tadpoleos_service.ts` (TTS).
@@ -325,6 +325,6 @@ export class Voice_Client {
 export const voice_client = new Voice_Client();
 
 
-// Metadata: [voice_client]
+
 
 // Metadata: [voice_client]

@@ -8,6 +8,7 @@
 //! by calculating neural costs per step.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[intelligence]` in tracing logs.
 //! - **Failure Path**: Provider API timeout, tool execution panic, budget breach
 //!   during a long chain, or tokenizer failure during prompt assembly.
 //! - **Trace Scope**: `server-rs::agent::runner::intelligence`
@@ -720,6 +721,8 @@ mod tests {
     }
 }
 
-// Metadata: [intelligence]
+
+
+
 
 // Metadata: [intelligence]

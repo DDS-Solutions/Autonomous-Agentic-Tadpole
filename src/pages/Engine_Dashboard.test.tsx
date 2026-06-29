@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Telemetry lag during high-frequency updates or incorrect color mapping for status transition bars.
- * - **Telemetry Link**: Search `[Engine_Dashboard.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Engine_Dashboard_test]` in console logs.
  */
 
 
@@ -124,6 +124,6 @@ describe('Engine_Dashboard Page', () => {
 });
 
 
-// Metadata: [Engine_Dashboard_test]
+
 
 // Metadata: [Engine_Dashboard_test]

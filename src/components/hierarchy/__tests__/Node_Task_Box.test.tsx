@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incorrect status hex-code resolution or overflow issues in long-form task descriptions.
- * - **Telemetry Link**: Search `[Node_Task_Box.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Node_Task_Box_test]` in console logs.
  */
 
 
@@ -57,6 +57,6 @@ describe('Node_Task_Box', () => {
 });
 
 
-// Metadata: [Node_Task_Box_test]
+
 
 // Metadata: [Node_Task_Box_test]

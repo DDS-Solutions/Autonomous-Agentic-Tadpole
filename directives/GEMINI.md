@@ -21,13 +21,6 @@ trigger: always_on
 **Last Hardened**: 2026-04-16
 **Standard Compliance**: ECC-OS (Enhanced Contextual Clarity - Orchestration Standards)
 
-> [!IMPORTANT]
-> **AI Assist Note (Orchestration Logic)**:
-> This document is the "Operating System" for all agents in the Tadpole swarm.
-> - **Execution Loop**: All complex tasks MUST follow the **Aletheia Protocol** (Generator -> Verifier -> Reviser).
-> - **Metadata Mandatory**: Every tool call and response must be traced via `X-Request-Id`.
-> - **Self-Correction**: Agents are authorized to perform self-healing retries for JSON malformations (`Self-Healing Retry`).
-
 ---
 
 ## 🧠 Aletheia Reasoning Flow

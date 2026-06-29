@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Message loss during rapid inter-agent bursts or failure to synchronize 'detached' visualizer state across session tabs.
- * - **Telemetry Link**: Search `[sovereign_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[sovereign_store_test]` in console logs.
  */
 
 
@@ -210,6 +210,6 @@ describe('use_sovereign_store', () => {
 });
 
 
-// Metadata: [sovereign_store_test]
+
 
 // Metadata: [sovereign_store_test]

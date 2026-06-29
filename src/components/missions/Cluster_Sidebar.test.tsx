@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Debounce timer leaks, budget input focus loss, or cluster selection state mismatch.
- * - **Telemetry Link**: Search `[Cluster_Sidebar.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Cluster_Sidebar_test]` in console logs.
  */
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -131,6 +131,6 @@ describe('Cluster_Sidebar Component', () => {
     });
 });
 
-// Metadata: [Cluster_Sidebar_test]
+
 
 // Metadata: [Cluster_Sidebar_test]

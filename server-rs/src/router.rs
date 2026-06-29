@@ -16,7 +16,7 @@
 //! - **Failure Path**: CORS origin mismatches causing frontend XHR
 //!   failures, 401 Unauthorized due to incorrect Bearer tokens, or
 //!   501 Not Implemented for disabled feature-gated memory routes.
-//! - **Telemetry Link**: Search for `[Router]` or `[Auth]` in
+//! - **Telemetry Link**: Search for `[router]` or `[Auth]` in
 //!   `tracing` logs for request-id tracking and permission denials.
 //! - **Trace Scope**: `server-rs::router`
 
@@ -531,6 +531,6 @@ async fn not_found_handler() -> impl axum::response::IntoResponse {
     (status, body)
 }
 
-// Metadata: [router]
+
 
 // Metadata: [router]

@@ -9,6 +9,7 @@
  * registry re-hydration (AGNT-02).
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[agent_telemetry_store]` in console logs.
  * - **Failure Path**: Socket disconnection, telemetry drift from canonical 
  *   registry state, or high-concurrency UI flickering.
  * - **Trace Scope**: `src/stores/agent_telemetry_store`
@@ -66,6 +67,8 @@ export const use_agent_telemetry_store = create<Telemetry_State>()((set) => ({
     }
 }));
 
-// Metadata: [agent_telemetry_store]
+
+
+
 
 // Metadata: [agent_telemetry_store]

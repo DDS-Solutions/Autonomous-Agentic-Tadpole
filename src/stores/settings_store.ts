@@ -16,7 +16,7 @@
  *      `127.0.0.1:8000`.
  *   3. For "Nuclear Rehydration" failures, use the `Nuclear Purge` 
  *      manual override in the Ops Dashboard.
- * - **Telemetry Link**: Search for `[SettingsStore]` in traces or check `tadpole_settings` in browser devtools.
+ * - **Telemetry Link**: Search for `[settings_store]` in traces or check `tadpole_settings` in browser devtools.
  */
 
 import { create } from 'zustand';
@@ -201,6 +201,6 @@ export const use_settings_store = create<Settings_State>()(
 export const get_settings = (): Tadpole_Settings => use_settings_store.getState().settings;
 export const save_settings = (s: Tadpole_Settings): string | null => use_settings_store.getState().save_settings(s);
 
-// Metadata: [settings_store]
+
 
 // Metadata: [settings_store]

@@ -7,7 +7,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Transaction commit deadlock, SQL constraint violation during bulk insert, or SQLx connection acquisition timeout.
-//! - **Telemetry Link**: Traced via active system database connection logs.
+//! - **Telemetry Link**: Search `[db]` in tracing logs.
 
 use super::GraphSnapshot;
 use crate::error::AppError;
@@ -242,6 +242,6 @@ fn git_output(root: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-// Metadata: [db]
+
 
 // Metadata: [db]

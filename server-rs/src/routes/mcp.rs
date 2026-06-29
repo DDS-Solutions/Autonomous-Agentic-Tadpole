@@ -15,7 +15,7 @@
 //! - **Failure Path**: Tool discovery timeouts from slow external
 //!   MCP servers, 403 Forbidden for unauthorized direct execution, or
 //!   workspace creation failures in the `data/workspaces` directory.
-//! - **Telemetry Link**: Search for `MCP tool execution` in `tracing`
+//! - **Telemetry Link**: Search `[mcp]` in tracing logs.
 //!   logs for tool-call audit trails.
 //! - **Trace Scope**: `server-rs::routes::mcp`
 
@@ -124,6 +124,6 @@ pub async fn execute_mcp_tool(
     }
 }
 
-// Metadata: [mcp]
+
 
 // Metadata: [mcp]

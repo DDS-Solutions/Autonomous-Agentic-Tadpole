@@ -10,7 +10,7 @@
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Voice client initialization stall, or orphaned
  *   speak timeouts on rapid unmount/remount.
- * - **Telemetry Link**: Search `[useChatVoice]` in browser console.
+ * - **Telemetry Link**: Search `[use_chat_voice]` in browser console.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -144,6 +144,6 @@ export function useChatVoice(
     };
 }
 
-// Metadata: [use_chat_voice]
+
 
 // Metadata: [use_chat_voice]

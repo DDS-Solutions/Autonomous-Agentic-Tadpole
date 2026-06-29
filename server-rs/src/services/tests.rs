@@ -8,7 +8,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: AppState mock uninitialized, or model catalog schema mismatch.
-//! - **Telemetry Link**: Search for `NodeRegistry` or `AppState` in backend tracing logs.
+//! - **Telemetry Link**: Search `[tests]` in tracing logs.
 
 use crate::agent::types::SwarmNode;
 use crate::routes::model_manager::{get_model_catalog, pull_model, PullModelPayload};
@@ -115,6 +115,6 @@ async fn test_app_state_registry_integrity() {
     );
 }
 
-// Metadata: [tests]
+
 
 // Metadata: [tests]

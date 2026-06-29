@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Store hydration delay (blank lists), or MCP discovery timeout for external servers.
- * - **Telemetry Link**: Search for `[Skills_View]` or `FORGE_SYNC` in service logs.
+ * - **Telemetry Link**: Search for `[Skills]` or `FORGE_SYNC` in service logs.
  */
 
 import { useEffect, useState } from 'react';
@@ -506,6 +506,6 @@ export default function Skills() {
 }
 
 
-// Metadata: [Skills]
+
 
 // Metadata: [Skills]

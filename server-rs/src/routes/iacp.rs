@@ -9,7 +9,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Insufficient budget for hiring agent, nonexistent hiring/target agent,
 //!   or database connection failures.
-//! - **Telemetry Link**: Search `[IACP]` in server traces.
+//! - **Telemetry Link**: Search `[iacp]` in server traces.
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -187,6 +187,6 @@ pub async fn execute_hire(
     ))
 }
 
-// Metadata: [iacp]
+
 
 // Metadata: [iacp]

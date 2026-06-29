@@ -13,6 +13,7 @@
 //! including middleware.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[agent_tests]` in tracing logs.
 //! - **Failure Path**: Auth token mismatch, validation schema drift, or
 //!   Registry state leakage between tests.
 //! - **Trace Scope**: `server-rs::routes::agent_tests`
@@ -255,6 +256,8 @@ async fn test_get_agents_pagination() {
     assert_eq!(body2["data"].as_array().unwrap().len(), 5);
 }
 
-// Metadata: [agent_tests]
+
+
+
 
 // Metadata: [agent_tests]

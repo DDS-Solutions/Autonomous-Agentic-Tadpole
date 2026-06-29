@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Duplicate skill entries not being filtered or missing model IDs in DTO serialization.
- * - **Telemetry Link**: Run `npm run test` or check `[slot_utils.test]` in Vitest logs.
+ * - **Telemetry Link**: Search `[slot_utils_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -68,6 +68,6 @@ describe('slot_utils', () => {
     });
 });
 
-// Metadata: [slot_utils_test]
+
 
 // Metadata: [slot_utils_test]

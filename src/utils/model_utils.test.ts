@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incorrect provider mapping leading to invalid API key usage or failure to apply global default model to legacy agents.
- * - **Telemetry Link**: Run `npm run test` or search `[model_utils.test]` in Vitest logs.
+ * - **Telemetry Link**: Search `[model_utils_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -115,6 +115,6 @@ describe('model_utils', () => {
     });
 });
 
-// Metadata: [model_utils_test]
+
 
 // Metadata: [model_utils_test]

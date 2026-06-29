@@ -6,15 +6,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path: Runtime logic error or state corruption.**
- * - **Telemetry Link**: Search `[memory_store.ts]` in tracing logs.
- */
-
-/**
- * @docs ARCHITECTURE:State
- * 
- * ### AI Assist Note
- * **Zustand State**: Long-term memory persistence and retrieval.
- * Orchestrates memory fetch, save, search, and pruning with the Tadpole Engine.
+ * - **Telemetry Link**: Search `[memory_store]` in console logs.
  */
 
 import { create } from 'zustand';
@@ -119,6 +111,6 @@ export const use_memory_store = create<Memory_State>((set) => ({
     clear: () => set({ memories: [], error: null })
 }));
 
-// Metadata: [memory_store]
+
 
 // Metadata: [memory_store]

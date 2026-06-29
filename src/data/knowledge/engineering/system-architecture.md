@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[system_architecture]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: system-architecture
@@ -74,6 +67,6 @@ All code must pass the **Tadpole Automated Test Suite** before merging.
 3. **Drafting is Cheap, Coding is Expensive**: Iterate on the whiteboard/document, not in the IDE.
 4. **Trust, but Verify**: Agents are autonomous but not infallible. Oversight is mandatory.
 
-[//]: # (Metadata: [system_architecture])
+
 
 [//]: # (Metadata: [system_architecture])

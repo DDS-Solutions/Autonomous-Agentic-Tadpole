@@ -9,6 +9,7 @@
 //! Workspace** on disk (REAP-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[reaper]` in tracing logs.
 //! - **Failure Path**: Filesystem permission errors during workspace purge,
 //!   database locks during batch deletion, or incomplete cleanup (orphaned logs).
 //! - **Trace Scope**: `server-rs::agent::reaper`
@@ -125,6 +126,8 @@ impl SwarmReaper {
     }
 }
 
-// Metadata: [reaper]
+
+
+
 
 // Metadata: [reaper]

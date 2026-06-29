@@ -528,6 +528,6 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
     );
 }
 
-// Metadata: [AgentConfigPanel]
+
 
 // Metadata: [AgentConfigPanel]

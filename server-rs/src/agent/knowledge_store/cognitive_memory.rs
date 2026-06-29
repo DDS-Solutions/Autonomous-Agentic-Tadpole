@@ -9,7 +9,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: database query error, LLM api communication failure, or worker loop panic.
-//! - **Telemetry Link**: Search `[CognitiveMemory]` in logs.
+//! - **Telemetry Link**: Search `[cognitive_memory]` in logs.
 
 // Background cognitive pipeline: scaffolded, wired in a subsequent phase.
 #![allow(dead_code)]
@@ -163,6 +163,6 @@ async fn summarize_memories(
     Ok(response_text)
 }
 
-// Metadata: [cognitive_memory]
+
 
 // Metadata: [cognitive_memory]

@@ -8,6 +8,7 @@
 //! in `tokio::spawn` contexts.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[provider_trait]` in tracing logs.
 //! - **Failure Path**: Improper trait object casting, missing `Send/Sync`
 //!   bounds causing compilation errors in async contexts, or function
 //!   call parsing mismatches.
@@ -43,6 +44,8 @@ pub trait LlmProvider: Send + Sync {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, AppError>;
 }
 
-// Metadata: [provider_trait]
+
+
+
 
 // Metadata: [provider_trait]

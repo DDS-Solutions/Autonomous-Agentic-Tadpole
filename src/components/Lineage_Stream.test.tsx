@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[Lineage_Stream_test]` in console logs.
 */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -148,6 +148,8 @@ describe('Lineage_Stream Verification', () => {
     });
 });
 
-// Metadata: [Lineage_Stream_test]
+
+
+
 
 // Metadata: [Lineage_Stream_test]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory leaks if `cancelAnimationFrame` fails on unmount, or UI lag if `throttleMs` is set too high for real-time tracking needs.
- * - **Telemetry Link**: Search for `[useThrottledStatus]` in browser performance profiles.
+ * - **Telemetry Link**: Search for `[use_throttled_status]` in browser performance profiles.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -56,6 +56,6 @@ export function useThrottledStatus<T>(initialState: T, throttleMs: number = 100)
 }
 
 
-// Metadata: [use_throttled_status]
+
 
 // Metadata: [use_throttled_status]

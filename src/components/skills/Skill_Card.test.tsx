@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Mismatched skill IDs during batch updates or failure to render the 'Certified' badge for core system skills.
- * - **Telemetry Link**: Search `[Skill_Card.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Skill_Card_test]` in console logs.
  */
 
 
@@ -102,6 +102,6 @@ describe('Skill_Card', () => {
 });
 
 
-// Metadata: [Skill_Card_test]
+
 
 // Metadata: [Skill_Card_test]

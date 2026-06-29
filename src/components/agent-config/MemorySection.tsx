@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory Save RPC timeout, connector path invalidation (FS error), or memory list flash during background refresh.
- * - **Telemetry Link**: Search for `[Memory_Section]` or `neural_injection` in service logs.
+ * - **Telemetry Link**: Search for `[MemorySection]` or `neural_injection` in service logs.
  */
 
 import { useState } from 'react';
@@ -197,6 +197,6 @@ export function MemorySection({
 
 // Metadata: [Memory_Section]
 
-// Metadata: [MemorySection]
+
 
 // Metadata: [MemorySection]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Node heartbeat timeout (unreachable), resource reporting overflow (NaN in metrics), or compute shard desync.
- * - **Telemetry Link**: Search for `[NodeStore]` or `NODE_HEARTBEAT` in service logs.
+ * - **Telemetry Link**: Search for `[node_store]` or `NODE_HEARTBEAT` in service logs.
  */
 
 import { create } from 'zustand';
@@ -116,6 +116,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [node_store]
+
 
 // Metadata: [node_store]

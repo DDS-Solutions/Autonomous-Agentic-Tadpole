@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[code_review]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: code-review
@@ -61,6 +54,6 @@ Are there SQL injections? XSS vulnerabilities? Exposed secrets? Insecure depende
 2. **Be Specific**: "Fix this" is bad. "This loop is O(n^2), consider using a hash map for O(n)" is good.
 3. **Blockers vs. Nits**: Distinguish between "Must Fix" (bugs, security) and "Nice to Have" (style, preference).
 
-[//]: # (Metadata: [code_review])
+
 
 [//]: # (Metadata: [code_review])

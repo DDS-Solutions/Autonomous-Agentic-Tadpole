@@ -7,6 +7,7 @@
 //! volatile governance data.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[metrics_tools]` in tracing logs.
 //! - **Failure Path**: Agent ID not found in registry (should be impossible
 //!   during a run), or serialization errors.
 //! - **Trace Scope**: `server-rs::agent::runner::metrics_tools`
@@ -83,6 +84,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [metrics_tools]
+
+
+
 
 // Metadata: [metrics_tools]

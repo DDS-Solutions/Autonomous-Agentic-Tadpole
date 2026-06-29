@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Task timeout, password mismatch (decryption error), or worker instance crashes.
- * - **Telemetry Link**: Search for `[CryptoWorker]` in system status or browser logs.
+ * - **Telemetry Link**: Search for `[crypto_worker]` in system status or browser logs.
  */
 import { encrypt_raw, decrypt_raw } from '../utils/crypto-core.js';
 
@@ -59,6 +59,6 @@ const post_msg = (msg: Worker_Reply) => {
         }
     };
 
-// Metadata: [crypto_worker]
+
 
 // Metadata: [crypto_worker]

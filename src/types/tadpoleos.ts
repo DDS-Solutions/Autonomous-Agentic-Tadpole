@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: `Tadpole_OS_Model_Config` mismatch (missing `api_key` or `base_url`), or pulse status enum drift.
- * - **Telemetry Link**: Search for `Tadpole_OS_Model_Config` in trace attributes.
+ * - **Telemetry Link**: Search `[tadpoleos]` in console logs.
  */
 
 /**
@@ -96,6 +96,6 @@ export interface Tadpole_OS_Session {
 }
 
 
-// Metadata: [tadpoleos]
+
 
 // Metadata: [tadpoleos]

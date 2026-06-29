@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: JSON parse errors if the database contains malformed skills/workflows strings.
- * - **Telemetry Link**: Search `[RoleNormalizer]` in UI traces.
+ * - **Telemetry Link**: Search `[normalizer]` in UI traces.
  */
 
 console.debug("[RoleNormalizer] Domain logic loaded");
@@ -63,6 +63,6 @@ const parse_json_array = (json_str: string): string[] => {
     }
 };
 
-// Metadata: [normalizer]
+
 
 // Metadata: [normalizer]

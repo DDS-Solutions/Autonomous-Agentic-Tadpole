@@ -9,6 +9,7 @@
 //! persistent engine storage.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[filesystem]` in tracing logs.
 //! - **Failure Path**: Illegal path traversal attempt (triggers `SECURITY
 //!   FAULT`), permission denied at the OS level, or disk exhaustion
 //!   preventing write operations.
@@ -313,6 +314,8 @@ mod tests {
     }
 }
 
-// Metadata: [filesystem]
+
+
+
 
 // Metadata: [filesystem]

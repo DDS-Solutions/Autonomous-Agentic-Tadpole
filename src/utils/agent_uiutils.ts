@@ -1,21 +1,14 @@
 /**
- * @docs ARCHITECTURE:Core
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Infrastructure**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[agent_uiutils]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Infrastructure
  * @docs OPERATIONS_MANUAL:Navigation
  * 
  * ### AI Assist Note
  * **Infrastructure Utilities**: Global mapping functions for agent-related UI states. 
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[agent_uiutils]` in observability traces.
+ */
  */
 
 console.debug("[AgentUIUtils] Module loaded");

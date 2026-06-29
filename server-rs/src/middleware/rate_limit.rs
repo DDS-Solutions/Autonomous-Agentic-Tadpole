@@ -11,7 +11,7 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: 429 Too Many Requests status on legitimate
 //!   bursts, or memory leaks in the bucket registry during IP churn.
-//! - **Telemetry Link**: Verify `X-RateLimit-*` headers in the "Network"
+//! - **Telemetry Link**: Search `[rate_limit]` in tracing logs.
 //!   tab of the Tadpole OS dashboard.
 //! - **Trace Scope**: `server-rs::middleware::rate_limit`
 
@@ -170,6 +170,6 @@ mod tests {
     }
 }
 
-// Metadata: [rate_limit]
+
 
 // Metadata: [rate_limit]

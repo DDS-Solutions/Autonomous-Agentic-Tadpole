@@ -18,6 +18,7 @@
 //! manual user approval for complex but valid orchestration (SCAN-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[scanner]` in tracing logs.
 //! - **Failure Path**: False positive risk detection on valid complex
 //!   commands, pattern-bypass via advanced shell obfuscation, or performance
 //!   degradation under high-frequency command scanning.
@@ -252,6 +253,8 @@ mod tests {
     }
 }
 
-// Metadata: [scanner]
+
+
+
 
 // Metadata: [scanner]

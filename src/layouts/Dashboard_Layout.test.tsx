@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Suspense fallback flicker, detachment state desync, or broken global navigation shortcuts.
- * - **Telemetry Link**: Run `npm run test` or search `[Dashboard_Layout.test]` in Vitest output.
+ * - **Telemetry Link**: Search `[Dashboard_Layout_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -211,6 +211,6 @@ describe('Dashboard_Layout', () => {
     });
 });
 
-// Metadata: [Dashboard_Layout_test]
+
 
 // Metadata: [Dashboard_Layout_test]

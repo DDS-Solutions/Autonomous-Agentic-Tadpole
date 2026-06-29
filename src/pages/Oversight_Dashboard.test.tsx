@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[Oversight_Dashboard_test]` in console logs.
 */
 
 /**
@@ -166,6 +166,8 @@ describe('Oversight_Dashboard Page', () => {
     });
 });
 
-// Metadata: [Oversight_Dashboard_test]
+
+
+
 
 // Metadata: [Oversight_Dashboard_test]

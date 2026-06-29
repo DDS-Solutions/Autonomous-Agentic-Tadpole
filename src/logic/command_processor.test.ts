@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regex parsing failure for complex quoted strings or incorrect scope resolution for overlapping cluster/agent names.
- * - **Telemetry Link**: Search `[command_processor.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[command_processor_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -235,6 +235,6 @@ describe('process_command', () => {
     });
 });
 
-// Metadata: [command_processor_test]
+
 
 // Metadata: [command_processor_test]

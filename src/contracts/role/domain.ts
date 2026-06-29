@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Validation errors when importing roles from legacy JSON manifests or ID collisions in the role store.
- * - **Telemetry Link**: Not tracked (Static Domain Model).
+ * - **Telemetry Link**: Search `[domain]` in console logs.
  */
 
 import type { Department } from '../agent/shared';
@@ -24,6 +24,6 @@ export interface Role {
     created_at?: string;
 }
 
-// Metadata: [domain]
+
 
 // Metadata: [domain]

@@ -13,6 +13,7 @@
 //! degraded environments (CONT-02).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[types]` in tracing logs.
 //! - **Failure Path**: Deserialization errors for legacy job
 //!   metadata, malformed cron-expressions in the database, or
 //!   timestamp inconsistencies causing missed execution windows.
@@ -103,6 +104,8 @@ pub struct UpdateJobRequest {
     pub max_failures: Option<i64>,
 }
 
-// Metadata: [types]
+
+
+
 
 // Metadata: [types]

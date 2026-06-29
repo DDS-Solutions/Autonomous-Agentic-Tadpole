@@ -9,6 +9,7 @@
 //! from any layer to the HTTP surface (ERR-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[error]` in tracing logs.
 //! - **Failure Path**: Incorrect HTTP status mapping for domain errors.
 //! - **Trace Scope**: `server-rs::error`
 
@@ -642,6 +643,8 @@ mod tests {
     }
 }
 
-// Metadata: [error]
+
+
+
 
 // Metadata: [error]

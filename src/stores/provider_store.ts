@@ -26,7 +26,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Provider authentication failure (check base64 vault tokens), or provider discovery timeout during backend sync.
- * - **Telemetry Link**: Search for `[ProviderStore]` or `PROVIDERS_SYNC` in UI logs.
+ * - **Telemetry Link**: Search for `[provider_store]` or `PROVIDERS_SYNC` in UI logs.
  */
 
 
@@ -404,6 +404,6 @@ if (sync_channel) {
 }
 
 
-// Metadata: [provider_store]
+
 
 // Metadata: [provider_store]

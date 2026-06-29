@@ -10,6 +10,7 @@
 //! process restarts.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[workflows]` in tracing logs.
 //! - **Failure Path**: Malformed Markdown without headers (parser
 //!   error), missing workflow files in `data/workflows/`, or logic
 //!   errors in title-to-step mapping.
@@ -118,6 +119,8 @@ pub async fn load_workflow(
     WorkflowExecutionState::new(name.to_string(), &content)
 }
 
-// Metadata: [workflows]
+
+
+
 
 // Metadata: [workflows]

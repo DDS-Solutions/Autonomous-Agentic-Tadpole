@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Improper mapping of optional fields causing 400 Bad Request from Axum backend, or field-name drift during contract updates.
- * - **Telemetry Link**: Search `[Serializer]` in UI traces.
+ * - **Telemetry Link**: Search `[serializers]` in UI traces.
  */
 
 import type { AgentPatch, AgentUpdateDto } from '../../contracts/agent';
@@ -146,6 +146,6 @@ export const serialize_agent_update = (patch: AgentPatch): AgentUpdateDto => {
 
 // Telemetry Trace: [Serializer]
 
-// Metadata: [serializers]
+
 
 // Metadata: [serializers]

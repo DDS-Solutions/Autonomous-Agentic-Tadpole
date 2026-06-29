@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: API desync, quota overflow, or socket disconnection.
- * - **Telemetry Link**: Search for `[Governance_Service]` in UI tracing.
+ * - **Telemetry Link**: Search for `[governance_service]` in UI tracing.
  */
 
 import { system_api_service } from './system_api_service';
@@ -104,6 +104,6 @@ class Governance_Service {
 
 export const governance_service = Governance_Service.get_instance();
 
-// Metadata: [governance_service]
+
 
 // Metadata: [governance_service]

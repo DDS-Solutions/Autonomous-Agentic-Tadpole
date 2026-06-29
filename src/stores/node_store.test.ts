@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Stale node status in the UI when a Bunker goes offline without sending a final disconnect signal or failure to merge newly discovered node metadata.
- * - **Telemetry Link**: Search `[node_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[node_store_test]` in console logs.
  */
 
 
@@ -145,6 +145,6 @@ describe('use_node_store', () => {
 });
 
 
-// Metadata: [node_store_test]
+
 
 // Metadata: [node_store_test]

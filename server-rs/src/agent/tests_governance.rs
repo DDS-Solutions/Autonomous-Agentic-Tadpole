@@ -13,6 +13,7 @@
 //! `AgentRunner`'s oversight dispatch logic (GOV-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[tests_governance]` in tracing logs.
 //! - **Failure Path**: Test timeouts due to background resolver
 //!   stalls, race conditions during oversight entry registration, or
 //!   incorrect state isolation in the mock environment.
@@ -222,6 +223,8 @@ async fn test_mandatory_oversight_rejection() {
     );
 }
 
-// Metadata: [tests_governance]
+
+
+
 
 // Metadata: [tests_governance]

@@ -6,7 +6,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[permission_tests.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[permission_tests]` in tracing logs.
 //!
 //! @docs ARCHITECTURE:Security Governance Testing
 //!
@@ -119,6 +119,6 @@ async fn test_permission_policy_unknown_tool_safety() {
     );
 }
 
-// Metadata: [permission_tests]
+
 
 // Metadata: [permission_tests]

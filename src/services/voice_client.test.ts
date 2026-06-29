@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Audio buffer overflow during long recordings or failure to release the microphone device after a session ends.
- * - **Telemetry Link**: Search `[voice_client.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[voice_client_test]` in console logs.
  */
 
 
@@ -194,6 +194,6 @@ describe('Voice_Client', () => {
 });
 
 
-// Metadata: [voice_client_test]
+
 
 // Metadata: [voice_client_test]

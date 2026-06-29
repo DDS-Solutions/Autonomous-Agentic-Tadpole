@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Hex code validation failure (rare but possible via manual input bypass), color picker z-index overlap in detached mode, or role selector desync during store hydration.
- * - **Telemetry Link**: Search for `[Agent_Config_Header]` or `color_profile` in UI logs.
+ * - **Telemetry Link**: Search for `[AgentConfigHeader]` or `color_profile` in UI logs.
  */
 
 import { X, Sliders, ChevronDown, ExternalLink } from 'lucide-react';
@@ -149,6 +149,6 @@ export function AgentConfigHeader({
 
 // Metadata: [Agent_Config_Header]
 
-// Metadata: [AgentConfigHeader]
+
 
 // Metadata: [AgentConfigHeader]

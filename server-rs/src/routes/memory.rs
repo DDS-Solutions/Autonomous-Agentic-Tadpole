@@ -13,6 +13,7 @@
 //! (MEM-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[memory]` in tracing logs.
 //! - **Failure Path**: 404/500 if `vector-memory` feature is disabled,
 //!   LanceDB table lock contention during concurrent writes, or
 //!   embedding dimension mismatches on provider switching.
@@ -585,6 +586,8 @@ mod tests {
     }
 }
 
-// Metadata: [memory]
+
+
+
 
 // Metadata: [memory]

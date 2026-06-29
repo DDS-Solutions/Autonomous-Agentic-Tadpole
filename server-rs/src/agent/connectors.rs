@@ -9,6 +9,7 @@
 //! Ensures **Incremental Sync** by tracking `last_sync_at` timestamps.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[connectors]` in tracing logs.
 //! - **Failure Path**: Permission denied on source directories,
 //!   embedding provider rate limits (429) during batch ingestion,
 //!   or LanceDB table lock contention.
@@ -462,6 +463,8 @@ mod tests {
     }
 }
 
-// Metadata: [connectors]
+
+
+
 
 // Metadata: [connectors]

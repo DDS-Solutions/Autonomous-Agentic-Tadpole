@@ -12,6 +12,7 @@
 //! to ensure no regressions in environment interaction (MCP-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mcp_tests]` in tracing logs.
 //! - **Failure Path**: Tool discovery failures due to incorrect
 //!   registry lookup, protocol mismatch when calling external
 //!   servers, or permission denial for unauthorized test operations.
@@ -202,6 +203,8 @@ mod tests {
     }
 }
 
-// Metadata: [mcp_tests]
+
+
+
 
 // Metadata: [mcp_tests]

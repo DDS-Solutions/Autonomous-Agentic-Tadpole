@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: API key vault write failure (401/403), or invalid endpoint URL format.
- * - **Telemetry Link**: Search for `[Auth_Layer]` or `set_encrypted_config` in UI tracing.
+ * - **Telemetry Link**: Search for `[Auth_Section]` or `set_encrypted_config` in UI tracing.
  */
 
 import React from 'react';
@@ -188,6 +188,6 @@ export function Auth_Section({
     );
 }
 
-// Metadata: [Auth_Section]
+
 
 // Metadata: [Auth_Section]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Memory leak if subscriptions aren't cleaned up or BroadcastChannel deadlock in multi-tab environments.
- * - **Telemetry Link**: Run `npm run test` or check for `[event_bus.test]` in Vitest traces.
+ * - **Telemetry Link**: Search `[event_bus_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -115,6 +115,6 @@ describe('event_bus', () => {
     });
 });
 
-// Metadata: [event_bus_test]
+
 
 // Metadata: [event_bus_test]

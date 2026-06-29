@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Improper mapping of optional skills or workflows leading to 400 Bad Request from backend.
- * - **Telemetry Link**: Search `[SlotUtils]` in UI traces.
+ * - **Telemetry Link**: Search `[slot_utils]` in UI traces.
  */
 
 console.debug("[SlotUtils] Module loaded");
@@ -44,6 +44,6 @@ export const get_aggregate_workflows = (slots: Record<string, Agent_Model_Slot_S
     return [...new Set(all_workflows)];
 };
 
-// Metadata: [slot_utils]
+
 
 // Metadata: [slot_utils]

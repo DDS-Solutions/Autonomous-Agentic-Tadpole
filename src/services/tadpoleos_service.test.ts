@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Service initialization deadlock if one of the underlying API clients fails to hydrate or failure to clear stale cache on logout.
- * - **Telemetry Link**: Search `[tadpoleos_service.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[tadpoleos_service_test]` in console logs.
  */
 
 
@@ -131,6 +131,6 @@ describe('tadpole_os_service Facade', () => {
 });
 
 
-// Metadata: [tadpoleos_service_test]
+
 
 // Metadata: [tadpoleos_service_test]

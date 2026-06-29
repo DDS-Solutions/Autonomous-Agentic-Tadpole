@@ -18,7 +18,7 @@
 //!   due to malformed keys, 400 Bad Request for insecure HTTP
 //!   transmissions to external endpoints (SEC-01), or dependency
 //!   orphaning if models are not decommissioned alongside providers.
-//! - **Telemetry Link**: Search for `🔍 [Test Trace]` or `🗑️ [infra-trace]`
+//! - **Telemetry Link**: Search `[model_manager]` in tracing logs.
 //!   in `tracing` logs for infrastructure audit events.
 //! - **Trace Scope**: `server-rs::routes::model_manager`
 
@@ -657,6 +657,6 @@ pub async fn ollama_proxy_pull(
     }
 }
 
-// Metadata: [model_manager]
+
 
 // Metadata: [model_manager]

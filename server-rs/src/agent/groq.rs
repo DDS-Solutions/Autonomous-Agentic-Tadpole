@@ -9,6 +9,7 @@
 //! generations.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[groq]` in tracing logs.
 //! - **Failure Path**: 429 Rate Limit (RPM/TPM) due to aggressive swarm
 //!   bursting, 400 Bad Request on "tool_use_failed" hallucinations, or
 //!   multipart boundary errors during Whisper transcription.
@@ -415,6 +416,8 @@ impl crate::agent::provider_trait::LlmProvider for GroqProvider {
     }
 }
 
-// Metadata: [groq]
+
+
+
 
 // Metadata: [groq]

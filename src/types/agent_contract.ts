@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Circular imports or type mismatches if new contract fields are missing from this proxy.
- * - **Telemetry Link**: Not tracked (Static exports).
+ * - **Telemetry Link**: Search `[agent_contract]` in console logs.
  * 
  * @deprecated Use imports from '@/contracts/agent' instead.
  * This file is maintained for backward compatibility during the contract consolidation.
@@ -23,6 +23,6 @@ export type {
     Agent_Connector_Config
 } from '../contracts/agent';
 
-// Metadata: [agent_contract]
+
 
 // Metadata: [agent_contract]

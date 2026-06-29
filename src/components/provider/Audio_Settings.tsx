@@ -6,6 +6,7 @@
  * Manages the available transcription engines for the specific provider.
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Audio_Settings]` in console logs.
  * - **Failure Path**: Audio model ID mismatch (400), or missing model availability for specific region.
  */
 
@@ -88,6 +89,8 @@ export function Audio_Settings({
     );
 }
 
-// Metadata: [Audio_Settings]
+
+
+
 
 // Metadata: [Audio_Settings]

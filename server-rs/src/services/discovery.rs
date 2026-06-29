@@ -15,7 +15,7 @@
 //! - **Failure Path**: UDP 5353 blocked by host firewall, mDNS
 //!   daemon initialization failures (OS-level), or IP address
 //!   resolution conflicts on multi-homed systems.
-//! - **Telemetry Link**: Search for `📡 [Discovery]` or `[mDNS]` in
+//! - **Telemetry Link**: Search `[discovery]` in tracing logs.
 //!   `tracing` logs for peer arrival/departure events.
 //! - **Trace Scope**: `server-rs::services::discovery`
 
@@ -169,6 +169,6 @@ impl SwarmDiscoveryManager {
     }
 }
 
-// Metadata: [discovery]
+
 
 // Metadata: [discovery]

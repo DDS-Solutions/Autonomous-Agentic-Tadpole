@@ -15,7 +15,7 @@
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Backend offline (falls back to mocks), data normalization schema mismatch, or failing to persist updates to the Rust sidecar.
  * - **Failure Path**: Agent status "ghosting" (stuck in 'busy' without a task), or desync between local `agent_store` and global Rust registry.
- * - **Telemetry Link**: Search for `[AgentService]` or `update_agent_status` in UI logs.
+ * - **Telemetry Link**: Search for `[agent_service]` or `update_agent_status` in UI logs.
  */
 
 
@@ -106,6 +106,6 @@ export { normalize_agent_dto as normalize_agent };
 export const get_mock_agents = (): Agent[] => mock_agents as unknown as Agent[];
 
 
-// Metadata: [agent_service]
+
 
 // Metadata: [agent_service]

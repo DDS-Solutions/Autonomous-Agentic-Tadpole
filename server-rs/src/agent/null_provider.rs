@@ -13,6 +13,7 @@
 //! mock state (LLM-02).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[null_provider]` in tracing logs.
 //! - **Failure Path**: Unexpected substitution in production due to
 //!   secret management errors, or zeroed embedding vectors causing
 //!   similarity calculation failures in the RAG layer.
@@ -178,6 +179,8 @@ mod tests {
     }
 }
 
-// Metadata: [null_provider]
+
+
+
 
 // Metadata: [null_provider]

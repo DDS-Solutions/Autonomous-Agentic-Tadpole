@@ -11,6 +11,7 @@
 //! schema validation. Useful for testing migration logic without disk I/O.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[db_tests]` in tracing logs.
 //! - **Failure Path**: Migration script syntax error or locked memory pointer.
 //! - **Trace Scope**: `server-rs::db_tests`
 
@@ -45,6 +46,8 @@ mod tests {
     }
 }
 
-// Metadata: [db_tests]
+
+
+
 
 // Metadata: [db_tests]

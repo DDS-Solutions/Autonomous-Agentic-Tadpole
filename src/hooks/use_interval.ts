@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Callback closure staleness (if `savedCallback` isn't updated), or interval drift during heavy main-thread load.
- * - **Telemetry Link**: Search for `[useInterval]` in browser performance profiles.
+ * - **Telemetry Link**: Search for `[use_interval]` in browser performance profiles.
  */
 
 import { useEffect, useRef } from 'react';
@@ -36,6 +36,6 @@ export function useInterval(callback: () => void, delay: number | null) {
 }
 
 
-// Metadata: [use_interval]
+
 
 // Metadata: [use_interval]

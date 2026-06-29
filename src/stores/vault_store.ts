@@ -20,7 +20,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Master-key decryption failure (lockout), or credential leakage in UI logs (obfuscation guard check).
- * - **Telemetry Link**: Search for `[VaultStore]` or `VAULT_ACCESS` in UI logs.
+ * - **Telemetry Link**: Search for `[vault_store]` or `VAULT_ACCESS` in UI logs.
  */
 
 
@@ -222,6 +222,6 @@ export const use_vault_store = create<Vault_State>()(
 );
 
 
-// Metadata: [vault_store]
+
 
 // Metadata: [vault_store]

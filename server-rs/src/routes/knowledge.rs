@@ -15,6 +15,7 @@
 //! | DELETE | /knowledge/{id}             | Remove an entry by ID                |
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[knowledge]` in tracing logs.
 //! - **Failure Path**: GOOGLE_API_KEY missing (embedding), LanceDB lock, or
 //!   SQLite UNIQUE constraint hit on dedup (returns 200, not 409).
 //! - **Trace Scope**: `server-rs::routes::knowledge` (Search `[IKS]`)
@@ -172,6 +173,8 @@ pub async fn get_knowledge_peers(
     Ok(Json(peers))
 }
 
-// Metadata: [knowledge]
+
+
+
 
 // Metadata: [knowledge]

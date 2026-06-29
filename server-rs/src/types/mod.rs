@@ -17,7 +17,7 @@
 //! - **Failure Path**: Status mismatch during the boot sequence,
 //!   malformed UUIDs in log entries, or severity level inconsistencies
 //!   causing UI filtering issues.
-//! - **Telemetry Link**: Search for `[Status]` or `[Log]` in `tracing`
+//! - **Telemetry Link**: Search for `[mod]` or `[Log]` in `tracing`
 //!   logs for lifecycle and event benchmarks.
 //! - **Trace Scope**: `server-rs::types`
 
@@ -88,6 +88,6 @@ pub enum SubsystemStatus {
     Failed(String),
 }
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

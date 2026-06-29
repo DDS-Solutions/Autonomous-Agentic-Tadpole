@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[recipes.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[recipes]` in tracing logs.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -203,6 +203,6 @@ agents:
     }
 }
 
-// Metadata: [recipes]
+
 
 // Metadata: [recipes]

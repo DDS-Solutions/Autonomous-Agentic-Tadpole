@@ -13,6 +13,7 @@
 //! asynchronous task boundaries (CONT-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[workflow]` in tracing logs.
 //! - **Failure Path**: Placeholder injection failures due to missing
 //!   context keys, step-order conflicts in the database, or agent
 //!   timeouts during high-concurrency workflow bursts.
@@ -365,6 +366,8 @@ mod tests {
     }
 }
 
-// Metadata: [workflow]
+
+
+
 
 // Metadata: [workflow]

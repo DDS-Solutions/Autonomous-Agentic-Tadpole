@@ -6,15 +6,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path: Runtime logic error or state corruption.**
- * - **Telemetry Link**: Search `[use_model_manager.ts]` in tracing logs.
- */
-
-/**
- * @docs ARCHITECTURE:Logic
- * 
- * ### AI Assist Note
- * **Root/Core**: Manages the use model manager. 
- * Part of the Tadpole-OS core layer.
+ * - **Telemetry Link**: Search `[use_model_manager]` in console logs.
  */
 
 import { useState, useMemo } from 'react';
@@ -200,6 +192,6 @@ export function useModelManager() {
 }
 
 
-// Metadata: [use_model_manager]
+
 
 // Metadata: [use_model_manager]

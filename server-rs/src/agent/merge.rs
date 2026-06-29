@@ -8,7 +8,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Field collision during concurrent `AgentConfigUpdate` applications or mismatch in CamelCase deserialization from frontend.
-//! - **Telemetry Link**: Search `[AgentMerge]` in server traces.
+//! - **Telemetry Link**: Search `[merge]` in server traces.
 //!
 
 use serde::{Deserialize, Serialize};
@@ -436,6 +436,6 @@ mod tests {
 
 // Metadata: [AgentMerge]
 
-// Metadata: [merge]
+
 
 // Metadata: [merge]

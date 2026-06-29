@@ -9,7 +9,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Null route type, missing search parameters, or lazy-load synchronization errors.
- * - **Telemetry Link**: Search for `[DetachedShell]` in UI traces or check `Portal_Window` spawn logs.
+ * - **Telemetry Link**: Search for `[detached_shell]` in UI traces or check `Portal_Window` spawn logs.
  */
 
 import { Suspense, lazy } from 'react';
@@ -194,6 +194,6 @@ export default function Detached_Shell() {
     );
 }
 
-// Metadata: [detached_shell]
+
 
 // Metadata: [detached_shell]

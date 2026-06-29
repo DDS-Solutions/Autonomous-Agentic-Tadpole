@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Infinite re-render loops or failure to clear the error state during manual user rescue attempts.
- * - **Telemetry Link**: Search `[Error_Boundary.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Error_Boundary_test]` in console logs.
  */
 
 
@@ -103,6 +103,6 @@ describe('SectorBoundary', () => {
 });
 
 
-// Metadata: [Error_Boundary_test]
+
 
 // Metadata: [Error_Boundary_test]

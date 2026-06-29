@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[ux_enhancements]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: ux-enhancements
@@ -53,6 +46,6 @@ The `Docs` page implements a relevance-weighted search engine.
 33: - **Director Protocol:** The Zap icon label has been standardized to **"Skills & Workflows"** to accurately represent the agent's skill and directive set.
 34: - **Z-Index Intelligence:** Dropdown logic dynamically elevates the Resource Row (`z-50`) during interaction to prevent overlap by adjacent nodes or lower UI layers.
 
-[//]: # (Metadata: [ux_enhancements])
+
 
 [//]: # (Metadata: [ux_enhancements])

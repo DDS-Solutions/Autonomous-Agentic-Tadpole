@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Oversight deadlock (proposal waiting indefinitely), or ledger persistence failure during high-volume decision pulses.
- * - **Telemetry Link**: Search for `[ProposalService]` or `/v1/oversight` in backend logs.
+ * - **Telemetry Link**: Search for `[proposal_service]` or `/v1/oversight` in backend logs.
  * 
  * @aiContext
  * - **Dependencies**: `workspace_store`.
@@ -86,6 +86,6 @@ export class proposal_service {
 }
 
 
-// Metadata: [proposal_service]
+
 
 // Metadata: [proposal_service]

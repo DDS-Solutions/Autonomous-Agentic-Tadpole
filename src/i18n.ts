@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Key missing in `en.json` (returns the key string), circular object reference during `returnObjects: true`, or interpolation failure due to missing param keys.
- * - **Telemetry Link**: Search for `[I18n]` or `i18n.t` in browser logs.
+ * - **Telemetry Link**: Search for `[i18n]` or `i18n.t` in browser logs.
  */
 
 import common from './locales/common.json';
@@ -160,6 +160,6 @@ class I18n {
 
 export const i18n = new I18n();
 
-// Metadata: [i18n]
+
 
 // Metadata: [i18n]

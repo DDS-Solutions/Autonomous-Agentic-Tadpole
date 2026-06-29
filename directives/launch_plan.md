@@ -17,13 +17,6 @@
 **Last Hardened**: 2026-04-01
 **Standard Compliance**: ECC-PLAN (Enhanced Contextual Clarity - Planning Standards)
 
-> [!IMPORTANT]
-> **AI Assist Note (Planning Logic)**:
-> This document defines a 10-day aggressive launch sequence.
-> - **Critical Path**: Content Creation (Days 3-4) -> QA (Days 5-6) -> Setup (Days 7-8).
-> - **Dependency**: QA (Day 5-6) MUST be completed before Tools Setup (Day 7-8).
-> - **Execution**: All launch-related materials must be cross-verified against `SECURITY.md` for secret leakage.
-
 ---
 
 ## 🚀 Launch Sequence Flow

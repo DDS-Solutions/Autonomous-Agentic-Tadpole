@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incompatible schema versions in local templates causing instantiation failures or missing metadata in the blueprint preview pane.
- * - **Telemetry Link**: Search `[Template_Store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Template_Store_test]` in console logs.
  */
 
 
@@ -219,6 +219,6 @@ describe('Template_Store Page', () => {
 });
 
 
-// Metadata: [Template_Store_test]
+
 
 // Metadata: [Template_Store_test]

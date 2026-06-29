@@ -14,7 +14,7 @@
 //! - **Failure Path**: 404 on valid agent IDs due to registry cache
 //!   staling, 400 on suspended agent tasks, or zombie runner tasks
 //!   failing silently after process restarts.
-//! - **Telemetry Link**: Search for `[Gateway]` in `tracing` logs for
+//! - **Telemetry Link**: Search for `[agent]` in `tracing` logs for
 //!   dispatch/sync events.
 //! - **Trace Scope**: `server-rs::routes::agent`
 
@@ -520,7 +520,7 @@ pub async fn delete_agent(
 }
 
 
-// Metadata: [agent]
+
 
 
 // Metadata: [agent]

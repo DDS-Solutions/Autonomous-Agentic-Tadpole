@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Incorrect token metric scaling or stale model icons during high-frequency agent state updates.
- * - **Telemetry Link**: Search `[Node_Header.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Node_Header_test]` in console logs.
  */
 
 
@@ -100,6 +100,6 @@ describe('Node_Header', () => {
 });
 
 
-// Metadata: [Node_Header_test]
+
 
 // Metadata: [Node_Header_test]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Failed store hydration (empty roles), role deletion mismatch, or migration errors across store versions.
- * - **Telemetry Link**: Search `[RoleStore]` in UI traces.
+ * - **Telemetry Link**: Search `[role_store]` in UI traces.
  */
 
 console.debug("[RoleStore] Module loaded");
@@ -145,6 +145,6 @@ export const select_role_names = (state: Role_State) =>
 export const select_role_list = (state: Role_State) => 
     Object.values(state.roles || {}).sort((a, b) => a.name.localeCompare(b.name));
 
-// Metadata: [role_store]
+
 
 // Metadata: [role_store]

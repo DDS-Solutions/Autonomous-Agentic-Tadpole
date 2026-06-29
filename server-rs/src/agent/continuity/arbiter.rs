@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[arbiter]` in tracing logs.
 */
 
 use std::sync::Arc;
@@ -184,6 +184,8 @@ impl ContextArbiter {
     }
 }
 
-// Metadata: [arbiter]
+
+
+
 
 // Metadata: [arbiter]

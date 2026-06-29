@@ -12,6 +12,7 @@
 //! the response to prevent RFC 6455 handshake failures (WS-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[ws]` in tracing logs.
 //! - **Failure Path**: Unexpected connection drops due to missing
 //!   subprotocol acknowledgments, 403 Forbidden on Origin mismatches,
 //!   or buffer overflows during high-frequency pulse bursts.
@@ -329,6 +330,8 @@ async fn handle_live_socket(mut client_ws: WebSocket, _state: Arc<AppState>) {
     }
 }
 
-// Metadata: [ws]
+
+
+
 
 // Metadata: [ws]

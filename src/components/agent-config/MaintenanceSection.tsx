@@ -1,21 +1,15 @@
 /**
- * @docs ARCHITECTURE:Core
- *
- * ### AI Assist Note
- * **MaintenanceSection**: Core technical resource for the Tadpole OS infrastructure.
- *
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI errors or callback stack traces.
- * - **Telemetry Link**: Search `[MaintenanceSection]` in console logs.
- */
-
-/**
  * @docs ARCHITECTURE:Interface
  * 
  * ### AI Assist Note
  * **UI Component**: Agent Maintenance Diagnostics panel.
  * Evaluates and displays agent stability across 7 dimensions (Capability Drift, Memory Health,
  * Rate Limits, Latency, Error Rate, Budget Headroom, Dependency Health) with premium visuals.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI errors or callback stack traces.
+ * - **Telemetry Link**: Search `[MaintenanceSection]` in console logs.
+ */
  */
 
 import React, { useState, useEffect, useCallback } from 'react';

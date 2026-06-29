@@ -17,6 +17,7 @@
 //! from the calling agent's provider config (dimensional consistency).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: `GOOGLE_API_KEY` missing, LanceDB schema mismatch,
 //!   SQLite UNIQUE constraint on `content_hash` (expected — means dedup hit).
 //! - **Trace Scope**: `server-rs::agent::knowledge_store` (Search `[IKS]`)
@@ -36,6 +37,8 @@ pub use store::KnowledgeStore;
 
 // Telemetry Tag duplicate reference: [IKS]
 
-// Metadata: [mod]
+
+
+
 
 // Metadata: [mod]

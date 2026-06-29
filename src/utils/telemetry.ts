@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: event_bus emission failure, or recursive redaction stack overflow on extremely nested metadata.
- * - **Telemetry Link**: Search for `📡` or `✅` in UI/Backend logs to trace operation lifecycles.
+ * - **Telemetry Link**: Search `[telemetry]` in console logs.
  */
 
 import { event_bus } from '../services/event_bus';
@@ -112,6 +112,6 @@ export async function track_operation<T>(
     }
 }
 
-// Metadata: [telemetry]
+
 
 // Metadata: [telemetry]

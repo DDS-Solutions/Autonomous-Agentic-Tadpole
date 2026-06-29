@@ -14,6 +14,7 @@
 //! successful archival before closing the mission context (RUN-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[finalize]` in tracing logs.
 //! - **Failure Path**: Partial persistence due to database locks during
 //!   finalization, memory archival failures in LanceDB, or
 //!   telemetry broadcast drops causing UI desync.
@@ -358,11 +359,11 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [finalize]
 
-// Metadata: [finalize]
 
-// Metadata: [finalize]
+
+
+
 
 #[cfg(test)]
 mod tests {
@@ -412,3 +413,5 @@ mod tests {
         assert_eq!(agent.health.failure_count, 0);
     }
 }
+
+// Metadata: [finalize]

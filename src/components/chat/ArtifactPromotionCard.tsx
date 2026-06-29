@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[ArtifactPromotionCard]` in console logs.
 */
 
 import React, { useState } from 'react';
@@ -162,6 +162,8 @@ export const ArtifactPromotionCard: React.FC<ArtifactPromotionCardProps> = ({
     );
 };
 
-// Metadata: [ArtifactPromotionCard]
+
+
+
 
 // Metadata: [ArtifactPromotionCard]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Unit test regression (failure in Vitest runner) or mocked dependency mismatch.
- * - **Telemetry Link**: Run `npm run test` or check Vitest dashboard.
+ * - **Telemetry Link**: Search `[agent_uiutils_test]` in console logs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -98,6 +98,6 @@ describe('agentUIUtils', () => {
 
 
 
-// Metadata: [agent_uiutils_test]
+
 
 // Metadata: [agent_uiutils_test]

@@ -73,6 +73,6 @@ impl SovereignStateManifest {
     }
 }
 
-// Metadata: [manifest]
+
 
 // Metadata: [manifest]

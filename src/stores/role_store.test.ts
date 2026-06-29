@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Missing role metadata during agent creation or failure to enforce role-specific capability masks during a profile update.
- * - **Telemetry Link**: Search `[role_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[role_store_test]` in console logs.
  */
 
 
@@ -85,6 +85,6 @@ describe('use_role_store', () => {
 });
 
 
-// Metadata: [role_store_test]
+
 
 // Metadata: [role_store_test]

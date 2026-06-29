@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[Neural_Waterfall_test]` in console logs.
 */
 
 import { render, screen, act } from '@testing-library/react';
@@ -165,6 +165,8 @@ describe('Neural_Waterfall Verification', () => {
     });
 });
 
-// Metadata: [Neural_Waterfall_test]
+
+
+
 
 // Metadata: [Neural_Waterfall_test]

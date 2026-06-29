@@ -8,6 +8,7 @@
 //! data exfiltration.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[external_tools]` in tracing logs.
 //! - **Failure Path**: Webhook missing/invalid, external URL timeout, oversight
 //!   rejection, or database error during financial log retrieval.
 //! - **Trace Scope**: `server-rs::agent::runner::external_tools`
@@ -221,6 +222,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [external_tools]
+
+
+
 
 // Metadata: [external_tools]

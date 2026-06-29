@@ -11,7 +11,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: 409 on double-claim race; 404 if agent/task not found
-//! - **Telemetry Link**: Search `[Ledger]`, `[Receipt]`, `[Claim]` in logs
+//! - **Telemetry Link**: Search `[agentic_engine]`, `[Receipt]`, `[Claim]` in logs
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -1082,6 +1082,6 @@ pub struct ClaimResponse {
 }
 
 
-// Metadata: [agentic_engine]
+
 
 // Metadata: [agentic_engine]

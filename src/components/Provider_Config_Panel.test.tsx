@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Failed handshake with `tadpole_os_service`, or incorrect conditional rendering of the `Local_Server_Module`.
- * - **Telemetry Link**: Search for `test_provider` in tracing logs.
+ * - **Telemetry Link**: Search `[Provider_Config_Panel_test]` in console logs.
  */
 
 import '@testing-library/jest-dom';
@@ -134,6 +134,6 @@ describe('Provider_Config_Panel', () => {
     });
 });
 
-// Metadata: [Provider_Config_Panel_test]
+
 
 // Metadata: [Provider_Config_Panel_test]

@@ -1,21 +1,14 @@
 /**
- * @docs ARCHITECTURE:Core
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Security**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[security_utils]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Security
  * 
  * ### AI Assist Note
  * **Security Utility**: Provides robust sanitization for real-time telemetry and agent-generated content.
  * Prevents XSS by stripping dangerous HTML tags and event handlers.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[security_utils]` in observability traces.
+ */
  */
 
 /**

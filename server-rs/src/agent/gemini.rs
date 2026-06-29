@@ -9,6 +9,7 @@
 //! hierarchy.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[gemini]` in tracing logs.
 //! - **Failure Path**: 429 Rate Limit (transient), 403 Quota Exhausted
 //!   (fatal), or cache miss due to TTL expiration.
 //! - **Trace Scope**: `server-rs::agent::gemini`
@@ -422,7 +423,9 @@ fn remove_additional_properties(v: &mut serde_json::Value) {
     }
 }
 
-// Metadata: [gemini]
+
+
+
+
 
 // Metadata: [gemini]
-

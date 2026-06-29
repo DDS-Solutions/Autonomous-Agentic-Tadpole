@@ -7,6 +7,7 @@
 //! applying deterministic fallback rates for unrecognized models.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[rates]` in tracing logs.
 //! - **Failure Path**: Model ID mismatch causing incorrect billing, or
 //!   stale static rates for rapidly evolving provider pricing.
 //! - **Trace Scope**: `server-rs::agent::rates`
@@ -156,6 +157,8 @@ mod tests {
     }
 }
 
-// Metadata: [rates]
+
+
+
 
 // Metadata: [rates]

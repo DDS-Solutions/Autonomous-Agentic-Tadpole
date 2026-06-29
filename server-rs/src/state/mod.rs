@@ -15,6 +15,7 @@
 //! communication, security, and persistence.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 //! - **Failure Path**: Double-locking `parking_lot::RwLock` in nested
 //!   callbacks, DB pool exhaustion during high-concurrency bursts, or
 //!   state corruption due to out-of-order event broadcasts.
@@ -1272,9 +1273,9 @@ impl Default for AppState {
     }
 }
 
-// Metadata: [mod]
 
-// Metadata: [mod]
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1344,3 +1345,5 @@ mod tests {
         assert_eq!(active_node, node1);
     }
 }
+
+// Metadata: [mod]

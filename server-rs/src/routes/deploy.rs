@@ -16,7 +16,7 @@
 //! - **Failure Path**: 401 Unauthorized for invalid `NEURAL_TOKEN`,
 //!   500 Internal Server Error for missing deployment scripts, or
 //!   script timeouts during resource-intensive build processes.
-//! - **Telemetry Link**: Search for `🚀 Authenticated deploy` or
+//! - **Telemetry Link**: Search `[deploy]` in tracing logs.
 //!   `✅ Deployment succeeded` in `tracing` logs for audit history.
 //! - **Trace Scope**: `server-rs::routes::deploy`
 
@@ -292,6 +292,6 @@ pub async fn trigger_pre_pr(
     }
 }
 
-// Metadata: [deploy]
+
 
 // Metadata: [deploy]

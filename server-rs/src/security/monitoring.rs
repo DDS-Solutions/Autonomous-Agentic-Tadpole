@@ -16,6 +16,7 @@
 //! high-level isolation by default (MON-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[monitoring]` in tracing logs.
 //! - **Failure Path**: Memory pressure exhaustion triggering kernel
 //!   OOM-killer, false negative sandbox detection in rootless
 //!   environments, or CPU load spikes causing watchdog timeouts.
@@ -154,6 +155,8 @@ impl SystemMonitorTrait for MockSystemMonitor {
     }
 }
 
-// Metadata: [monitoring]
+
+
+
 
 // Metadata: [monitoring]

@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Connectivity 'False Positives' where a provider is marked 'Active' but subsequent requests fail due to invalid endpoint metadata or expired API keys.
- * - **Telemetry Link**: Search `[provider_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[provider_store_test]` in console logs.
  */
 
 
@@ -126,6 +126,6 @@ describe('use_provider_store', () => {
 });
 
 
-// Metadata: [provider_store_test]
+
 
 // Metadata: [provider_store_test]

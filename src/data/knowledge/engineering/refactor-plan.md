@@ -3,20 +3,13 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Core**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[refactor_plan]` in audit logs.
 >
 > ### AI Assist Note
 > Automated governance and architectural tracking.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
 
 ---
 name: refactor-plan
@@ -60,6 +53,6 @@ Make small, incremental changes (e.g., "Extract Method", "Rename Variable"). Com
 2. **Don't Mix Features**: Do not add new features while refactoring.
 3. **Tests are Holy**: If you break a test, you broke the refactor.
 
-[//]: # (Metadata: [refactor_plan])
+
 
 [//]: # (Metadata: [refactor_plan])

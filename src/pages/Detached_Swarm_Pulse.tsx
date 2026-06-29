@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Websocket desync, D3 force-layout jitter, or memory leaks during high-velocity mission bursts.
- * - **Telemetry Link**: Look for `[SwarmPulse]` in UI traces or check the global telemetry ring buffer.
+ * - **Telemetry Link**: Search `[Detached_Swarm_Pulse]` in console logs.
  */
 
 import { Suspense } from 'react';
@@ -79,6 +79,6 @@ export default function Detached_Swarm_Pulse() {
 
 // Metadata: [detached_swarm_pulse]
 
-// Metadata: [Detached_Swarm_Pulse]
+
 
 // Metadata: [Detached_Swarm_Pulse]

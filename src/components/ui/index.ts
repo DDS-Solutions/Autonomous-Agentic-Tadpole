@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Circular dependency if a primitive imports a high-level UI component, or missing export during new component onboarding.
- * - **Telemetry Link**: Check this file if `import { ... } from './ui'` fails in feature modules.
+ * - **Telemetry Link**: Search `[index]` in console logs.
  */
 
 // Barrel export for all UI primitives
@@ -24,6 +24,6 @@ export * from './Connection_Banner';
 export * from './LD_Json';
 export * from './GPUBackground';
 
-// Metadata: [index]
+
 
 // Metadata: [index]

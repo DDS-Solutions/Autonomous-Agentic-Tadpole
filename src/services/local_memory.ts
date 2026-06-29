@@ -1,16 +1,4 @@
 /**
- * @docs ARCHITECTURE:UI-Services
- * 
- * ### AI Assist Note
- * **@docs ARCHITECTURE:Agent**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[local_memory]` in observability traces.
- */
-
-/**
  * @docs ARCHITECTURE:Agent
  * 
  * ### AI Assist Note
@@ -18,6 +6,11 @@
  * Uses IndexedDB (Dexie) for persistence and local embeddings for semantic search.
  * Implements **Zero-Trust Memory**: ensuring that sensitive mission data 
  * never leaves the user's browser during RAG operations.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: UI regression, hook desync, or API timeout.
+ * - **Telemetry Link**: Search `[local_memory]` in observability traces.
+ */
  */
 
 import Dexie, { type Table } from 'dexie';

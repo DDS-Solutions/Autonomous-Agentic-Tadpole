@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[Settings_Handoff_test]` in console logs.
 */
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -137,6 +137,8 @@ describe('Settings: Sovereign Neural Handoff Verification', () => {
     });
 });
 
-// Metadata: [Settings_Handoff_test]
+
+
+
 
 // Metadata: [Settings_Handoff_test]

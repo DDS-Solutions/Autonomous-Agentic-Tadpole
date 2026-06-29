@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Command delivery timeout (Websocket drop), empty prompt rejection, or `agent_name` desync during rapid node selection.
- * - **Telemetry Link**: Search for `[Direct_Message_Console]` or `send_command` in browser logs.
+ * - **Telemetry Link**: Search for `[DirectMessageConsole]` or `send_command` in browser logs.
  */
 
 import { Send } from 'lucide-react';
@@ -70,6 +70,6 @@ export function DirectMessageConsole({
 
 // Metadata: [Direct_Message_Console]
 
-// Metadata: [DirectMessageConsole]
+
 
 // Metadata: [DirectMessageConsole]

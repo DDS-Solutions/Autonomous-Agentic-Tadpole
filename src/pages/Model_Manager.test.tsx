@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Vault deadlock after failed unlock attempts or incorrect modality filtering logic in the provider inventory grid.
- * - **Telemetry Link**: Search `[Model_Manager.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[Model_Manager_test]` in console logs.
  */
 
 
@@ -279,6 +279,6 @@ describe('Model_Manager Page', () => {
 });
 
 
-// Metadata: [Model_Manager_test]
+
 
 // Metadata: [Model_Manager_test]

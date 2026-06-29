@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Configuration drift when local settings fail to synchronize with the backend `config.yaml` or failure to apply reactive UI updates on theme change.
- * - **Telemetry Link**: Search `[settings_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[settings_store_test]` in console logs.
  */
 
 
@@ -157,6 +157,6 @@ describe('settings_store', () => {
 });
 
 
-// Metadata: [settings_store_test]
+
 
 // Metadata: [settings_store_test]

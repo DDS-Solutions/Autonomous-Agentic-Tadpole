@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Provider list empty (loading race condition), skill selection desync when toggling multiple rapidly, or temperature slider rounding errors.
- * - **Telemetry Link**: Search for `[Model_Slot_Config]` or `PROVIDER_SWITCH` in browser tracing.
+ * - **Telemetry Link**: Search for `[ModelSlotConfig]` or `PROVIDER_SWITCH` in browser tracing.
  */
 
 import { Info } from 'lucide-react';
@@ -276,6 +276,6 @@ export function ModelSlotConfig({
 }
 
 
-// Metadata: [ModelSlotConfig]
+
 
 // Metadata: [ModelSlotConfig]

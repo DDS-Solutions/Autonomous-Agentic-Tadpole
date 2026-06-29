@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Sanitization collision (two different names resulting in the same `sanitize_id`), or URL protocol rejection.
- * - **Telemetry Link**: Look for `is_valid_name` or `sanitize_id` in call stacks during "Invalid Configuration" errors.
+ * - **Telemetry Link**: Search `[validation_utils]` in console logs.
  */
 
 /**
@@ -62,6 +62,6 @@ export const ValidationUtils = {
 };
 
 
-// Metadata: [validation_utils]
+
 
 // Metadata: [validation_utils]

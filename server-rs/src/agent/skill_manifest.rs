@@ -8,6 +8,7 @@
 //! across disparate skill implementations.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[skill_manifest]` in tracing logs.
 //! - **Failure Path**: Unsupported `schema_version`, missing `skill.json` in
 //!   a discovered directory, or validation failure for critical permissions.
 //! - **Trace Scope**: `server-rs::agent::skill_manifest`
@@ -260,6 +261,8 @@ mod tests {
     }
 }
 
-// Metadata: [skill_manifest]
+
+
+
 
 // Metadata: [skill_manifest]

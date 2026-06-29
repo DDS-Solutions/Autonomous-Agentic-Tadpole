@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Model pull timeout or failure to route node-specific deployment signals to the designated Bunker node.
- * - **Telemetry Link**: Search `[local_swarm.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[local_swarm_test]` in console logs.
  */
 
 
@@ -75,6 +75,6 @@ describe('system_api_service - Local Swarm', () => {
 });
 
 
-// Metadata: [local_swarm_test]
+
 
 // Metadata: [local_swarm_test]

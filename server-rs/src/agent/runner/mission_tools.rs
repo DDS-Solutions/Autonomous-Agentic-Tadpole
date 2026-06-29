@@ -7,6 +7,7 @@
 //! codebase writes) and **Breadcrumb Resolution** for ambiguous project paths.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mission_tools]` in tracing logs.
 //! - **Failure Path**: Sector RAG (LanceDB) connection error, codebase path
 //!   validation failure (traversal block), or sensitive file (e.g. .env) access block.
 //! - **Trace Scope**: `server-rs::agent::runner::mission_tools`
@@ -806,6 +807,8 @@ impl AgentRunner {
     }
 }
 
-// Metadata: [mission_tools]
+
+
+
 
 // Metadata: [mission_tools]

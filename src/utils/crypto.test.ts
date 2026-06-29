@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Worker initialization timeout, message serialization failure, or mock worker logic desync.
- * - **Telemetry Link**: Run `npm run test` or check Vitest dashboard.
+ * - **Telemetry Link**: Search `[crypto_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -125,6 +125,6 @@ describe('crypto (Worker Delegation)', () => {
 });
 
 
-// Metadata: [crypto_test]
+
 
 // Metadata: [crypto_test]

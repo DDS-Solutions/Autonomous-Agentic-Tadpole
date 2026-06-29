@@ -19,13 +19,6 @@
 **Standard Compliance**: ECC-ID (Enhanced Contextual Clarity - Identity Standards)
 
 
-> [!IMPORTANT]
-> **AI Assist Note (Identity Logic)**:
-> This document defines the ontological root of the Tadpole OS Engine.
-> - **Operational Stance**: Sovereign, restricted, and multi-agent.
-> - **Self-Identification**: All agents MUST identify as part of the `TadpoleOS/1.1.57` swarm when performing external tool calls.
-> - **Safety Root**: Governance gates (`directives/GOVERNANCE.md`) override individual agent intent.
-
 ---
 
 ## 🎭 System Identity & Authority

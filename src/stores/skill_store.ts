@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Hook trigger failure (regex mismatch), MCP server handshake timeout, or workflow sequence ordering corruption.
- * - **Telemetry Link**: Search for `[SkillStore]` or `FORGE_SYNC` in UI/Service logs.
+ * - **Telemetry Link**: Search for `[skill_store]` or `FORGE_SYNC` in UI/Service logs.
  * 
  * ```mermaid
  * stateDiagram-v2
@@ -260,6 +260,6 @@ export const use_skill_store = create<Skill_State & Skill_Actions>()((set, get) 
 }));
 
 
-// Metadata: [skill_store]
+
 
 // Metadata: [skill_store]

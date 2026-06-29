@@ -8,6 +8,7 @@
 //! Security Boundaries** across all agentic activities.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[sec]` in tracing logs.
 //! - **Failure Path**: Merkle chain integrity breach (tampered logs), budget
 //!   quota exhaustion blocking valid missions, or shell scanner
 //!   false-positives on sanitized command strings.
@@ -44,6 +45,8 @@ pub struct SecurityHub {
 }
 
 
-// Metadata: [sec]
+
+
+
 
 // Metadata: [sec]

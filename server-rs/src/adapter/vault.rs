@@ -9,6 +9,7 @@
 //! within the designated vault boundaries (VLT-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[vault]` in tracing logs.
 //! - **Failure Path**: Illegal path traversal attempt (`Illegal path
 //!   traversal detected`), permission denied on vault root, or disk
 //!   exhaustion preventing log append operations.
@@ -77,6 +78,8 @@ impl VaultAdapter {
     }
 }
 
-// Metadata: [vault]
+
+
+
 
 // Metadata: [vault]

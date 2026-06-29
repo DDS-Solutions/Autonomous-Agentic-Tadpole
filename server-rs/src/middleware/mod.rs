@@ -14,7 +14,7 @@
 //! - **Failure Path**: CORS pre-flight rejection (origin mismatch),
 //!   401 Unauthorized (invalid `NEURAL_TOKEN`), or 429 Too Many
 //!   Requests (Rate-limit exceeded).
-//! - **Telemetry Link**: Search for `[Middleware]` or `[Security]` in
+//! - **Telemetry Link**: Search for `[mod]` or `[Security]` in
 //!   `tracing` logs for block/deny events.
 //! - **Trace Scope**: `server-rs::middleware`
 //!
@@ -76,6 +76,6 @@ pub fn extract_client_ip(req: &Request<Body>) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-// Metadata: [mod]
+
 
 // Metadata: [mod]

@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Route dead-loops (if `TabSync` logic fails), theme injection flicker, or `Error_Boundary` catch during lazy-loading.
- * - **Telemetry Link**: Look for `Global OS Hub` in error traces or search `[AppKernel]` in component logs.
+ * - **Telemetry Link**: Look for `Global OS Hub` in error traces or search `[App]` in component logs.
  */
 
 import { useEffect, Suspense, useRef } from 'react';
@@ -183,6 +183,6 @@ export default function App(): React.ReactElement {
 }
 
 
-// Metadata: [App]
+
 
 // Metadata: [App]

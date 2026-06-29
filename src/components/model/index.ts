@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Circular dependency if sub-components import from this index, or missing export causing runtime undefined.
- * - **Telemetry Link**: N/A (Registry only).
+ * - **Telemetry Link**: Search `[index]` in console logs.
  */
 
 export * from './use_model_manager';
@@ -19,6 +19,6 @@ export * from './Model_Row';
 export * from './Add_Provider_Dialog';
 export * from './Add_Node_Dialog';
 
-// Metadata: [index]
+
 
 // Metadata: [index]

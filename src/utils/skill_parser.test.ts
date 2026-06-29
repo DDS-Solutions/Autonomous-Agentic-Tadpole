@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Regex failure in pattern extraction or sanitization collision in unnamed skills.
- * - **Telemetry Link**: Run `npm run test` or search `[skill_parser.test]` in Vitest logs.
+ * - **Telemetry Link**: Search `[skill_parser_test]` in console logs.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -102,6 +102,6 @@ Command: recovery
     });
 });
 
-// Metadata: [skill_parser_test]
+
 
 // Metadata: [skill_parser_test]

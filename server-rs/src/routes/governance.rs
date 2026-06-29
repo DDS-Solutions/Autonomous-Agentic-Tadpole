@@ -7,7 +7,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Database connection timeouts during blueprint retrieval or unique constraint violations on save.
-//! - **Telemetry Link**: Search `[Governance]` in server traces.
+//! - **Telemetry Link**: Search `[governance]` in server traces.
 //!
 
 use crate::agent::types::RoleBlueprint;
@@ -84,6 +84,6 @@ pub async fn get_sovereign_manifest(
     (StatusCode::OK, Json(serde_json::json!({ "manifest": manifest }))).into_response()
 }
 
-// Metadata: [governance]
+
 
 // Metadata: [governance]

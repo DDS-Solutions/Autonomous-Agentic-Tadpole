@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: State flicker when switching active tabs while an agent is 'thinking', model list empty due to provider API failure, or 'suspended' status not reflecting in the LED indicator.
- * - **Telemetry Link**: Search for `[Cognition_Section]` or `status_active` in UI tracing.
+ * - **Telemetry Link**: Search for `[CognitionSection]` or `status_active` in UI tracing.
  */
 
 import { Pause, Play, Shield, Globe, Award } from 'lucide-react';
@@ -151,6 +151,6 @@ export function CognitionSection({
 
 // Metadata: [Cognition_Section]
 
-// Metadata: [CognitionSection]
+
 
 // Metadata: [CognitionSection]

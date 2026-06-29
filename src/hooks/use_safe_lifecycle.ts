@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Abort signal leakage (failing to pass `getSignal()` to fetch), or `isMounted` state desync on concurrent effect execution.
- * - **Telemetry Link**: Search for `COMPONENT_UNMOUNTED` or `[useSafeLifecycle]` in trace logs.
+ * - **Telemetry Link**: Search `[use_safe_lifecycle]` in console logs.
  */
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
@@ -74,6 +74,6 @@ export function useSafeLifecycle() {
 }
 
 
-// Metadata: [use_safe_lifecycle]
+
 
 // Metadata: [use_safe_lifecycle]

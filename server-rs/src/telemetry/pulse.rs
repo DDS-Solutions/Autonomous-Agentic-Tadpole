@@ -11,6 +11,7 @@
 //! overhead across multiple concurrent client visualizers (PULS-01).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[pulse]` in tracing logs.
 //! - **Failure Path**: High CPU/Memory overhead during pulse
 //!   generation for large swarms (>100 agents), MessagePack
 //!   deserialization failures in the frontend, or stale signal
@@ -137,6 +138,8 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
     }
 }
 
-// Metadata: [pulse]
+
+
+
 
 // Metadata: [pulse]

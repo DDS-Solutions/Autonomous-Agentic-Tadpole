@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Tool call mismatch with governance store (state desync) or timestamp parsing error in UI views.
- * - **Telemetry Link**: Search for `MOCK_PENDING` in governance dashboard debugging.
+ * - **Telemetry Link**: Search `[mock_oversight]` in console logs.
  */
 
 
@@ -111,6 +111,6 @@ export const MOCK_LEDGER: LedgerEntry[] = [
 ];
 
 
-// Metadata: [mock_oversight]
+
 
 // Metadata: [mock_oversight]

@@ -6,7 +6,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Budget exceeded, max recursion reached, sentinel block, or context compression error.
- * - **Telemetry Link**: Search `[runner_error]` in trace logs.
+ * - **Telemetry Link**: Search `[error]` in trace logs.
  */
 
 use thiserror::Error;
@@ -28,6 +28,6 @@ pub enum RunnerError {
 
 // Metadata: [runner_error]
 
-// Metadata: [error]
+
 
 // Metadata: [error]

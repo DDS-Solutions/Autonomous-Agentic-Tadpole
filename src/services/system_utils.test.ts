@@ -8,7 +8,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Improper stringification of circular error objects or failure to redact sensitive data before logging (delegated to telemetry usually).
- * - **Telemetry Link**: Run `npm run test` or check `[system_utils.test]` in Vitest results.
+ * - **Telemetry Link**: Search `[system_utils_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -75,6 +75,6 @@ describe('system_utils', () => {
     });
 });
 
-// Metadata: [system_utils_test]
+
 
 // Metadata: [system_utils_test]

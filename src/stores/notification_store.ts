@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Notification queue starvation (alerts not showing), or persistent "zombie" toasts after manual dismissal.
- * - **Telemetry Link**: Search for `[NotificationStore]` or `ALERT_PULSE` in UI logs.
+ * - **Telemetry Link**: Search for `[notification_store]` or `ALERT_PULSE` in UI logs.
  */
 
 import { create } from 'zustand';
@@ -93,6 +93,6 @@ export const use_notification_store = create<Notification_State>((set) => ({
 }));
 
 
-// Metadata: [notification_store]
+
 
 // Metadata: [notification_store]

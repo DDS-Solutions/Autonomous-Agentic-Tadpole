@@ -7,7 +7,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Strict CSP blocking legitimate websocket connections or asset loading on specific edge browsers.
-//! - **Telemetry Link**: Search `[SecurityHeaders]` in server traces.
+//! - **Telemetry Link**: Search `[security_headers]` in server traces.
 //!
 
 use axum::{
@@ -69,6 +69,6 @@ pub async fn inject_security_headers(
     response
 }
 
-// Metadata: [security_headers]
+
 
 // Metadata: [security_headers]

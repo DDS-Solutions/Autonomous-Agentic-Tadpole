@@ -17,7 +17,7 @@
 //!   thresholds, missing environment variables in the redactor
 //!   registry, or performance overhead during high-concurrency log
 //!   processing.
-//! - **Telemetry Link**: Search for `🔐 [SecretRedactor]` or
+//! - **Telemetry Link**: Search `[secret_redactor]` in tracing logs.
 //!   `[REDACTED]` in `tracing` logs for validation of successful
 //!   scrubbing.
 //! - **Trace Scope**: `server-rs::secret_redactor`
@@ -242,6 +242,6 @@ mod tests {
     }
 }
 
-// Metadata: [secret_redactor]
+
 
 // Metadata: [secret_redactor]

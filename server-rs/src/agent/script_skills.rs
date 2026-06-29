@@ -13,6 +13,7 @@
 //! persistence is made atomic via temp-file rotation.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[script_skills]` in tracing logs.
 //! - **Failure Path**: Invalid YAML frontmatter in `SKILL.md`, duplicate
 //!   skill names in the `DashMap`, or `WORKSPACE_ROOT` resolution failure.
 //! - **Trace Scope**: `server-rs::agent::script_skills`
@@ -588,6 +589,8 @@ This is the body content."#;
     }
 }
 
-// Metadata: [script_skills]
+
+
+
 
 // Metadata: [script_skills]

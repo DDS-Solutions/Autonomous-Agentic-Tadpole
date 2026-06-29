@@ -9,6 +9,7 @@
 //! **In-Flight JSON Correction** before failing.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[openai]` in tracing logs.
 //! - **Failure Path**: 429 Rate Limit on bursts (RPM/TPM), 400 Bad Request
 //!   on tool schema mismatch, or regex bypass on multi-line JSON blocks
 //!   exceeding the capture window.
@@ -542,6 +543,8 @@ fn is_oom_error(text: &str) -> bool {
     oom_keywords.iter().any(|k| lower.contains(k))
 }
 
-// Metadata: [openai]
+
+
+
 
 // Metadata: [openai]

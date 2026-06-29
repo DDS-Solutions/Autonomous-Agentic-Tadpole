@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Schema mismatch with `types/index.ts` (TypeScript error) or missing `id` (store hydration failure).
- * - **Telemetry Link**: Search for `mock_agents` in dev-mode console or state snapshots.
+ * - **Telemetry Link**: Search `[mock_agents]` in console logs.
  */
 
 import type { Agent, Task } from '../contracts/agent';
@@ -434,6 +434,6 @@ export const tasks: Task[] = [
 
 
 
-// Metadata: [mock_agents]
+
 
 // Metadata: [mock_agents]

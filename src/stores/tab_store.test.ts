@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Duplicate tabs created due to inconsistent path normalization or failure to broadcast state changes across window instances.
- * - **Telemetry Link**: Search `[tab_store.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[tab_store_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -113,6 +113,6 @@ describe('tab_store', () => {
     });
 });
 
-// Metadata: [tab_store_test]
+
 
 // Metadata: [tab_store_test]

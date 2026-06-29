@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Binary path not found (404), permission denied (EACCES), or driver crash during boot.
- * - **Telemetry Link**: Search for `Manual boot sequence` or `System termination signal` in UI logs.
+ * - **Telemetry Link**: Search `[Local_Server_Module]` in console logs.
  */
 
 import React from 'react';
@@ -86,6 +86,6 @@ export function Local_Server_Module({
     );
 }
 
-// Metadata: [Local_Server_Module]
+
 
 // Metadata: [Local_Server_Module]

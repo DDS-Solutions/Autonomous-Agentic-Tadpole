@@ -16,7 +16,7 @@
 //! - **Failure Path**: Missing `.env.schema` file at the root,
 //!   malformed schema decorators causing parse errors, or
 //!   unauthorized access to sensitive variables in debug logs.
-//! - **Telemetry Link**: Search for `🔐 [EnvSchema]` in `tracing`
+//! - **Telemetry Link**: Search `[env_schema]` in tracing logs.
 //!   logs for the startup "Validation Report" status.
 //! - **Trace Scope**: `server-rs::env_schema`
 
@@ -262,6 +262,6 @@ pub fn validate_and_report(schema_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Metadata: [env_schema]
+
 
 // Metadata: [env_schema]

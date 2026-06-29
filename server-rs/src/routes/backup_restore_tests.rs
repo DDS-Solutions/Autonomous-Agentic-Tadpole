@@ -5,6 +5,7 @@
 //! VACUUM-based hot backup and integrity_check safety limits.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[backup_restore_tests]` in tracing logs.
 //! - **Trace Scope**: `server-rs::routes::backup_restore_tests`
 
 #[cfg(test)]
@@ -68,6 +69,8 @@ mod tests {
     }
 }
 
-// Metadata: [backup_restore_tests]
+
+
+
 
 // Metadata: [backup_restore_tests]

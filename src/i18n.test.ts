@@ -7,7 +7,7 @@
  * legacy fallback warnings, and defensive fallback paths for missing keys.
  * 
  * ### 🔍 Debugging & Observability
- * - **Telemetry Link**: Search `[i18n.test]` in tracing logs.
+ * - **Telemetry Link**: Search `[i18n_test]` in console logs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -112,6 +112,6 @@ describe('I18n Engine Hardening & XSS Validation', () => {
   });
 });
 
-// Metadata: [i18n_test]
+
 
 // Metadata: [i18n_test]

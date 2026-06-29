@@ -14,6 +14,7 @@
 //! against evolving injection tactics (SEC-06).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[test_sanitizer]` in tracing logs.
 //! - **Failure Path**: False positives on harmless technical text
 //!   (e.g., "override" in a code comment), regex performance
 //!   degradation on very large inputs, or bypass mutations using
@@ -56,6 +57,8 @@ mod tests {
     }
 }
 
-// Metadata: [test_sanitizer]
+
+
+
 
 // Metadata: [test_sanitizer]

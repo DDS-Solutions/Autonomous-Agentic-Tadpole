@@ -16,7 +16,7 @@
 //! - **Failure Path**: 404 Not Found due to incorrect path resolution
 //!   logic in `find_doc_path`, 403 Forbidden for attempted directory
 //!   traversal, or file-lock errors during high-frequency reads.
-//! - **Telemetry Link**: Search for `📖 Fetching knowledge doc` in
+//! - **Telemetry Link**: Search `[docs]` in tracing logs.
 //!   `tracing` logs for document access history.
 //! - **Trace Scope**: `server-rs::routes::docs`
 
@@ -159,6 +159,6 @@ pub async fn get_operations_manual() -> Result<impl IntoResponse, AppError> {
     }
 }
 
-// Metadata: [docs]
+
 
 // Metadata: [docs]

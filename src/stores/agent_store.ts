@@ -9,6 +9,7 @@
  * a single source of truth for the frontend (AGNT-03).
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[agent_store]` in console logs.
  * - **Failure Path**: Reconciliation lag or inconsistent identity mapping 
  *   between registry and telemetry streams.
  * - **Trace Scope**: `src/stores/agent_store`
@@ -72,6 +73,8 @@ export const use_agent_store = <T = Agent_Store_State>(
 // Re-export individual stores for granular subscriptions (Performance Optimization)
 export { use_agent_registry_store, use_agent_telemetry_store };
 
-// Metadata: [agent_store]
+
+
+
 
 // Metadata: [agent_store]

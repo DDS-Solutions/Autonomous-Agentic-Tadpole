@@ -6,15 +6,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path: Runtime logic error or state corruption.**
- * - **Telemetry Link**: Search `[system_utils.ts]` in tracing logs.
- */
-
-/**
- * @docs ARCHITECTURE:DiagnosticUtilities
- *
- * ### AI Assist Note
- * **Root Log Aggregator**: Standardizes error propagation across the entire Tadpole OS.
- * Surfaces failures to the `event_bus` with full diagnostic metadata, including stack traces and object state.
+ * - **Telemetry Link**: Search `[system_utils]` in console logs.
  */
 
 import { event_bus } from './event_bus';
@@ -69,6 +61,6 @@ export const log_error = (
     });
 };
 
-// Metadata: [system_utils]
+
 
 // Metadata: [system_utils]

@@ -16,7 +16,7 @@
 //! - **Failure Path**: Partial agent halting due to registry lock
 //!   contention, database write failures during shutdown, or zombie
 //!   processes if the delayed exit fails to trigger.
-//! - **Telemetry Link**: Search for `🛑 [Kill Switch]` or `💀 [Shutdown]`
+//! - **Telemetry Link**: Search `[engine_control]` in tracing logs.
 //!   in `tracing` logs for governance audit events.
 //! - **Trace Scope**: `server-rs::routes::engine_control`
 
@@ -125,6 +125,6 @@ pub async fn shutdown_engine(
     )
 }
 
-// Metadata: [engine_control]
+
 
 // Metadata: [engine_control]

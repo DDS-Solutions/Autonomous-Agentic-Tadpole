@@ -9,6 +9,7 @@
 //! by Claude 3.5 Sonnet (LLM-03).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[anthropic]` in tracing logs.
 //! - **Failure Path**: API version mismatches (requires `anthropic-version` header),
 //!   400 Bad Request on `input_schema` validation, or tool call duplication.
 //! - **Trace Scope**: `server-rs::agent::anthropic`
@@ -197,6 +198,8 @@ impl LlmProvider for AnthropicProvider {
     }
 }
 
-// Metadata: [anthropic]
+
+
+
 
 // Metadata: [anthropic]

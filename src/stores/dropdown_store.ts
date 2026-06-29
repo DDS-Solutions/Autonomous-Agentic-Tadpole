@@ -6,19 +6,10 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path: Runtime logic error or state corruption.**
- * - **Telemetry Link**: Search `[dropdown_store.ts]` in tracing logs.
+ * - **Telemetry Link**: Search `[dropdown_store]` in console logs.
  */
 
 import { create } from 'zustand';
-
-/**
- * @docs ARCHITECTURE:State
- * 
- * ### AI Assist Note
- * **Zustand State**: Centralized dropdown state for the Hierarchy.
- * Replaces 15+ props that were threaded from Org_Chart → Hierarchy_Node.
- * Only one dropdown can be open at a time.
- */
 
 /** Identifies which dropdown category is active. */
 export type Dropdown_Type = 'skill' | 'model' | 'model_2' | 'model_3' | 'role';
@@ -57,6 +48,6 @@ export const use_dropdown_store = create<Dropdown_State>((set, get) => ({
     }
 }));
 
-// Metadata: [dropdown_store]
+
 
 // Metadata: [dropdown_store]
