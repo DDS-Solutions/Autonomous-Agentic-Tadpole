@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[3_server_server_side_performance]` in audit logs.
 >
 > ### AI Assist Note
 > 3. Server-Side Performance
@@ -502,6 +502,8 @@ The response is sent immediately while logging happens in the background.
 Reference: [https://nextjs.org/docs/app/api-reference/functions/after](https://nextjs.org/docs/app/api-reference/functions/after)
 
 
-[//]: # (Metadata: [3_server_server_side_performance])
+
+
+
 
 [//]: # (Metadata: [3_server_server_side_performance])

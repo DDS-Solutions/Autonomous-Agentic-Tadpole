@@ -11,19 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Documentation**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[ARCHITECTURE]` in audit logs.
->
-> ### AI Assist Note
-> Tadpole OS architecture.
->
-> ### Debugging & Observability
-> Traceability via `execution/parity_guard.py`.
-
 # Tadpole OS Architecture
 
 Tadpole OS is a local-first agent operations platform with a React dashboard, a Rust Axum engine, SQLite persistence, and a Python execution layer for skills and MCP tools.
@@ -180,6 +167,6 @@ The engine implements several strategies to ensure resilience and zero-panic ope
 - **Non-Blocking Orchestration**: All filesystem I/O in the MCP execution and Memory Palace rehydration modules is migrated to `tokio::fs` to prevent event-loop stalling.
 - **Lock-free Read Queries**: Read-based code graph queries execute concurrently while workspace scans compile on background blocking threads, preventing request timeouts.
 
-[//]: # (Metadata: [ARCHITECTURE])
+
 
 [//]: # (Metadata: [ARCHITECTURE])

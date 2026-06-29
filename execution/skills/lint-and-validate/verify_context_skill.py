@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[verify_context_skill]` in system logs.
 """
 
 from typing import Dict, Any, List
@@ -84,6 +84,8 @@ class VerifyContextSkill(BaseSkill):
         except Exception as e:
             return f"Error during AI context audit: {str(e)}"
 
-# Metadata: [verify_context_skill]
+
+
+
 
 # Metadata: [verify_context_skill]

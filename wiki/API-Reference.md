@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[API-Reference]` in audit logs.
-
 # 📡 API Reference
 
 > **Base URL:** `http://127.0.0.1:8000`  

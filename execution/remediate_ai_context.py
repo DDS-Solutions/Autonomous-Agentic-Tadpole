@@ -8,7 +8,7 @@ to satisfy system-wide verify_ai_context.py audits.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Workspace filesystem write blocks or directory traversal errors.
-- **Telemetry Link**: Search for `[Remediator]` in execution outputs.
+- **Telemetry Link**: Search `[remediate_ai_context]` in system logs.
 """
 
 import os
@@ -167,6 +167,8 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Metadata: [remediate_ai_context]
+
+
+
 
 # Metadata: [remediate_ai_context]

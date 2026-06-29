@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[trade_off_analysis]` in audit logs.
 >
 > ### AI Assist Note
 > Trade-off Analysis & ADR
@@ -89,6 +89,8 @@ docs/
     └── adr-003-adopt-repository-pattern.md
 ```
 
-[//]: # (Metadata: [trade_off_analysis])
+
+
+
 
 [//]: # (Metadata: [trade_off_analysis])

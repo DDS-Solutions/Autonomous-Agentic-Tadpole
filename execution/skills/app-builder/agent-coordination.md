@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[agent_coordination]` in audit logs.
 >
 > ### AI Assist Note
 > Agent Coordination
@@ -83,6 +83,8 @@
 
 > 🔴 **CRITICAL:** Phase 1.5 is MANDATORY. No specialist agents proceed without PLAN.md verification.
 
-[//]: # (Metadata: [agent_coordination])
+
+
+
 
 [//]: # (Metadata: [agent_coordination])

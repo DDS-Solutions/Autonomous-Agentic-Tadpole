@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[rate_limiting]` in audit logs.
 >
 > ### AI Assist Note
 > Rate Limiting Principles
@@ -43,6 +43,8 @@ Include in headers:
 └── Return 429 when exceeded
 ```
 
-[//]: # (Metadata: [rate_limiting])
+
+
+
 
 [//]: # (Metadata: [rate_limiting])

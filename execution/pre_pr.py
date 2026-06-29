@@ -8,7 +8,7 @@ Quality verification gate for testing and code validation.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Fails if linting, tests, or check steps fail.
-- **Telemetry Link**: Run audit log tracing.
+- **Telemetry Link**: Search `[pre_pr]` in system logs.
 """
 import sys
 import os
@@ -156,6 +156,8 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Metadata: [pre_pr]
+
+
+
 
 # Metadata: [pre_pr]

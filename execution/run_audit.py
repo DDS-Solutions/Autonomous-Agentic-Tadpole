@@ -7,7 +7,7 @@ Dynamically queries SQLite agent allocations, quotas, and cost structures, yield
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Missing tadpole.db, locked SQLite connection, or directory permission failure.
-- **Telemetry Link**: Search `[swarm_audit]` in system logs.
+- **Telemetry Link**: Search `[run_audit]` in system logs.
 """
 
 import os
@@ -170,6 +170,8 @@ if __name__ == "__main__":
 
 # Metadata: [swarm_audit]
 
-# Metadata: [run_audit]
+
+
+
 
 # Metadata: [run_audit]

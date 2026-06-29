@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[Configuration]` in audit logs.
-
 # ⚙️ Configuration
 
 All configuration is loaded from `.env` in the workspace root. Schema is validated at startup against `.env.schema`.

@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[1_async_eliminating_waterfalls]` in audit logs.
 >
 > ### AI Assist Note
 > 1. Eliminating Waterfalls
@@ -324,6 +324,8 @@ Both components share the same promise, so only one fetch occurs. Layout renders
 **Trade-off:** Faster initial paint vs potential layout shift. Choose based on your UX priorities.
 
 
-[//]: # (Metadata: [1_async_eliminating_waterfalls])
+
+
+
 
 [//]: # (Metadata: [1_async_eliminating_waterfalls])

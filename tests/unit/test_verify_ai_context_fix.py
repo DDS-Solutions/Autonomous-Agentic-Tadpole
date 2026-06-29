@@ -54,6 +54,7 @@ class TestVerifyAiContextFix(unittest.TestCase):
         //! Core technical resource.
         //!
         //! ### 🔍 Debugging & Observability
+        //! - **Telemetry Link**: Search `[test_verify_ai_context_fix]` in system logs.
         //! - Search `[Database]` in logs.
         """
         meta = verify_ai_context.extract_metadata(sample)
@@ -64,6 +65,8 @@ class TestVerifyAiContextFix(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-# Metadata: [test_verify_ai_context_fix]
+
+
+
 
 # Metadata: [test_verify_ai_context_fix]

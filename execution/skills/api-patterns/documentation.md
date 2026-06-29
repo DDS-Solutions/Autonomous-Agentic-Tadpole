@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[documentation]` in audit logs.
 >
 > ### AI Assist Note
 > API Documentation Principles
@@ -38,6 +38,8 @@ Essentials:
 └── Changelog
 ```
 
-[//]: # (Metadata: [documentation])
+
+
+
 
 [//]: # (Metadata: [documentation])

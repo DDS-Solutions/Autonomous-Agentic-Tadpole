@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[4_client_client_side_data_fetching]` in audit logs.
 >
 > ### AI Assist Note
 > 4. Client-Side Data Fetching
@@ -276,6 +276,8 @@ function cachePrefs(user: FullUser) {
 **Benefits:** Schema evolution via versioning, reduced storage size, prevents storing tokens/PII/internal flags.
 
 
-[//]: # (Metadata: [4_client_client_side_data_fetching])
+
+
+
 
 [//]: # (Metadata: [4_client_client_side_data_fetching])

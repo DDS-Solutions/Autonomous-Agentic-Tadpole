@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[RUNBOOK_INDEX]` in audit logs.
-
 # Runbook Index — Symptom ➔ Script Mapping
 
 This runbook directory guides engineers and automated agents in resolving common operational failure modes of Tadpole OS using the appropriate diagnostic and repair scripts.

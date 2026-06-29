@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[Operations-Manual]` in audit logs.
-
 # 🏥 Operations Manual
 
 Runbooks for day-2 production operations. See also `docs/OPERATIONS_MANUAL.md` for the full version.

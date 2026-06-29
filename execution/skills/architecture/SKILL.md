@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[SKILL]` in audit logs.
 >
 > ### AI Assist Note
 > Core technical resource for the Tadpole OS Sovereign infrastructure.
@@ -54,6 +54,8 @@ allowed-tools: Read, Glob, Grep
 3.  **Data Sovereignty**: Design data flows that respect where data lives.
 4.  **Fail Safe**: Architecture must handle component failure gracefully.
 
-[//]: # (Metadata: [SKILL])
+
+
+
 
 [//]: # (Metadata: [SKILL])

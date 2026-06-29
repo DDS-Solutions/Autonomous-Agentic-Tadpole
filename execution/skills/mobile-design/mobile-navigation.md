@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[mobile_navigation]` in audit logs.
 >
 > ### AI Assist Note
 > Mobile Navigation Reference
@@ -470,6 +470,8 @@ Don't reinvent navigation.
 
 > **Remember:** Navigation is invisible when done right. Users shouldn't think about HOW to get somewhere—they just get there. If they notice navigation, something is wrong.
 
-[//]: # (Metadata: [mobile_navigation])
+
+
+
 
 [//]: # (Metadata: [mobile_navigation])

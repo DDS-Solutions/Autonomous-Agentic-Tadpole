@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[index]` in audit logs.
-
 # Architectural Decision Records (ADR)
 
 This folder contains formal records of architectural design decisions made for Tadpole OS.

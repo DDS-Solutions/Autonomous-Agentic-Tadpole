@@ -8,7 +8,7 @@ Ensures unified logging and runtime composition via SkillRegistry orchestration.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Registry missing for sub-skill calls, pydantic schema validation failures.
-- **Telemetry Link**: Search for `[BaseSkill]` in skill execution logs.
+- **Telemetry Link**: Search `[base_skill]` in system logs.
 """
 
 from abc import ABC, abstractmethod
@@ -83,6 +83,8 @@ class CompositeSkill(BaseSkill):
         """Composite skills usually coordinate multiple sub-calls here."""
         pass
 
-# Metadata: [base_skill]
+
+
+
 
 # Metadata: [base_skill]

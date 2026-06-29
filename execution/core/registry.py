@@ -8,7 +8,7 @@ Redirects standard output to standard error to prevent MCP stdio stream corrupti
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Import errors during discovery, arguments schema validation errors, directory not found.
-- **Telemetry Link**: Search for `[SkillRegistry]` in skill loading and execution logs.
+- **Telemetry Link**: Search `[registry]` in system logs.
 """
 
 import os
@@ -113,6 +113,8 @@ class SkillRegistry:
             })
         return tools
 
-# Metadata: [registry]
+
+
+
 
 # Metadata: [registry]

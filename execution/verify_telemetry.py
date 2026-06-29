@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[verify_telemetry]` in system logs.
 """
 
 import json
@@ -57,6 +57,8 @@ def verify_telemetry():
 if __name__ == "__main__":
     verify_telemetry()
 
-# Metadata: [verify_telemetry]
+
+
+
 
 # Metadata: [verify_telemetry]

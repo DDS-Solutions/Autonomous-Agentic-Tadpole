@@ -12,7 +12,7 @@ memory behavior are generated from the Axum router source.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[generate_api_reference]` in system logs.
 """
 
 from __future__ import annotations
@@ -928,6 +928,8 @@ if __name__ == "__main__":
     main()
 
 
-# Metadata: [generate_api_reference]
+
+
+
 
 # Metadata: [generate_api_reference]

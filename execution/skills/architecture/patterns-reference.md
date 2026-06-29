@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[patterns_reference]` in audit logs.
 >
 > ### AI Assist Note
 > Architecture Patterns Reference
@@ -62,6 +62,8 @@
 - Removing complexity is MUCH harder than adding it
 - When in doubt, choose simpler option
 
-[//]: # (Metadata: [patterns_reference])
+
+
+
 
 [//]: # (Metadata: [patterns_reference])

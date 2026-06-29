@@ -6,7 +6,7 @@
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[lib.rs]` in tracing logs.
+//! - **Telemetry Link**: Search `[lib]` in tracing logs.
 
 //!   @docs ARCHITECTURE:Performance
 //!
@@ -112,6 +112,8 @@ mod tests {
     }
 }
 
-// Metadata: [lib]
+
+
+
 
 // Metadata: [lib]

@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[mobile_testing]` in audit logs.
 >
 > ### AI Assist Note
 > Mobile Testing Patterns
@@ -368,6 +368,8 @@ Before writing tests, answer:
 
 > **Remember:** Good mobile testing is about testing the RIGHT things, not EVERYTHING. A flaky E2E test is worse than no test. A failing unit test that catches a bug is worth 100 passing trivial tests.
 
-[//]: # (Metadata: [mobile_testing])
+
+
+
 
 [//]: # (Metadata: [mobile_testing])

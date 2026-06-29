@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[decision_trees]` in audit logs.
 >
 > ### AI Assist Note
 > Decision Trees & Context Templates
@@ -430,6 +430,8 @@ Complex workflows
 
 > **Remember**: These templates show STRUCTURE and THINKING process. Every project needs fresh color, typography, and styling decisions based on its unique context. ASK when unclear.
 
-[//]: # (Metadata: [decision_trees])
+
+
+
 
 [//]: # (Metadata: [decision_trees])

@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[response]` in audit logs.
 >
 > ### AI Assist Note
 > Response Format Principles
@@ -49,6 +49,8 @@ Include:
 2. Do users need to jump to specific pages?
 3. Is data frequently changing?
 
-[//]: # (Metadata: [response])
+
+
+
 
 [//]: # (Metadata: [response])

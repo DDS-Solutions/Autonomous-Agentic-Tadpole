@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[system_telemetry_skill]` in system logs.
 """
 
 from typing import Dict, Any, List
@@ -137,6 +137,8 @@ class SystemTelemetrySkill(BaseSkill):
         import json
         return json.dumps(data, indent=2)
 
-# Metadata: [system_telemetry_skill]
+
+
+
 
 # Metadata: [system_telemetry_skill]

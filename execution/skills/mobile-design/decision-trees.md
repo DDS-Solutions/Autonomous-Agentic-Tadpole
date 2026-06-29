@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[decision_trees]` in audit logs.
 >
 > ### AI Assist Note
 > Mobile Decision Trees
@@ -528,6 +528,8 @@ API cache?           → Query library
 
 > **Remember:** These trees are guides for THINKING, not rules to follow blindly. Every project has unique constraints. ASK clarifying questions when requirements are vague, and choose based on actual needs, not defaults.
 
-[//]: # (Metadata: [decision_trees])
+
+
+
 
 [//]: # (Metadata: [decision_trees])

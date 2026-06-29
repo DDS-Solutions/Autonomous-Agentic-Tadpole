@@ -11,19 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Documentation**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[SECURITY]` in audit logs.
->
-> ### AI Assist Note
-> Tadpole OS security policy.
->
-> ### Debugging & Observability
-> Traceability via `execution/parity_guard.py`.
-
 # Tadpole OS Security Policy
 
 This document reflects the security controls currently implemented in the Rust engine and frontend runtime.
@@ -182,6 +169,6 @@ Before deploying beyond local development:
 | Vector memory disabled | memory routes return `501` without feature | run engine without `vector-memory` and call memory route |
 | Vector memory enabled | memory routes become available | run engine with `--features vector-memory` |
 
-[//]: # (Metadata: [SECURITY])
+
 
 [//]: # (Metadata: [SECURITY])

@@ -8,7 +8,7 @@ Performs PRAGMA column checks to ensure backward/forward schema compatibility.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: sqlite3.OperationalError due to database locking or missing data/ directory, column mismatch.
-- **Telemetry Link**: Search for `[AgentBoot]` in database registration logs.
+- **Telemetry Link**: Search `[register_agent_2]` in system logs.
 """
 import sqlite3
 import json
@@ -91,6 +91,8 @@ conn.close()
 
 print(f"✅ [AgentBoot] Agent 2 (Tadpole/COO) registered in tadpole.db with provider=ollama, model=gemma4:e4b, base_url={agent['base_url']}")
 
-# Metadata: [register_agent_2]
+
+
+
 
 # Metadata: [register_agent_2]

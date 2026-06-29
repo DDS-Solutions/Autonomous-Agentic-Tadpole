@@ -1,5 +1,5 @@
-//! @docs ARCHITECTURE:Core
-//! 
+//! @docs ARCHITECTURE:MacroRegistry
+//!
 //! ### AI Assist Note
 //! **! Tadpole OS Procedural Macro Library**
 //! This module implements high-fidelity logic for the Sovereign Reality layer.
@@ -7,7 +7,11 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[lib]` in tracing logs.
-
+//! @docs STANDARDS:SovereignTooling
+//!
+//! ### 🔍 Debugging & Observability
+//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
+//! - **Telemetry Link**: Search `[lib]` in tracing logs.
 //! Tadpole OS Procedural Macro Library
 //!
 //! This crate provides the `#[agent_tool]` attribute macro, which acts as the
@@ -15,9 +19,6 @@
 //! generation of MCP-compliant JSON Schemas and boilerplate trait implementations
 //! from standard Rust functions.
 //!
-//! @docs ARCHITECTURE:MacroRegistry
-//! @docs STANDARDS:SovereignTooling
-
 extern crate proc_macro;
 
 use proc_macro::TokenStream;

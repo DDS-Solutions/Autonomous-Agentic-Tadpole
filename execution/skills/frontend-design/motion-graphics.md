@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[motion_graphics]` in audit logs.
 >
 > ### AI Assist Note
 > Motion Graphics Reference
@@ -318,6 +318,8 @@ What animation do you need?
 
 > **Remember**: Motion graphics should enhance, not distract. Every animation must serve a PURPOSE—feedback, guidance, delight, or storytelling.
 
-[//]: # (Metadata: [motion_graphics])
+
+
+
 
 [//]: # (Metadata: [motion_graphics])

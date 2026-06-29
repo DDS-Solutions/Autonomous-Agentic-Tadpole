@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[7_js_javascript_performance]` in audit logs.
 >
 > ### AI Assist Note
 > 7. JavaScript Performance
@@ -696,6 +696,8 @@ const sorted = [...items].sort((a, b) => a.value - b.value)
 - `.with()` - immutable element replacement
 
 
-[//]: # (Metadata: [7_js_javascript_performance])
+
+
+
 
 [//]: # (Metadata: [7_js_javascript_performance])

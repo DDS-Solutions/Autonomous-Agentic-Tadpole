@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[rest]` in audit logs.
 >
 > ### AI Assist Note
 > REST Principles
@@ -52,6 +52,8 @@ Principles:
 | Rate limited | 429 | Too many requests |
 | Server error | 500 | Our fault |
 
-[//]: # (Metadata: [rest])
+
+
+
 
 [//]: # (Metadata: [rest])

@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[context_discovery]` in audit logs.
 >
 > ### AI Assist Note
 > Context Discovery
@@ -55,6 +55,8 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-[//]: # (Metadata: [context_discovery])
+
+
+
 
 [//]: # (Metadata: [context_discovery])

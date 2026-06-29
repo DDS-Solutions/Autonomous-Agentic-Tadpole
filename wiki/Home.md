@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[Home]` in audit logs.
-
 # 🐸 Autonomous Agentic Tadpole — Wiki
 
 > **Version:** v1.1.59 &nbsp;|&nbsp; **Engine:** Rust 2021 + Axum &nbsp;|&nbsp; **Dashboard:** React 19 + TypeScript &nbsp;|&nbsp; **DB:** SQLite / SQLx

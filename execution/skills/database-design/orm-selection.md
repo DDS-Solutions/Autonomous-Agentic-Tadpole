@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[orm_selection]` in audit logs.
 >
 > ### AI Assist Note
 > ORM Selection (2025)
@@ -42,6 +42,8 @@ What's the context?
 | **Kysely** | Type-safe SQL builder | Manual migrations |
 | **Raw SQL** | Complex queries, control | Manual type safety |
 
-[//]: # (Metadata: [orm_selection])
+
+
+
 
 [//]: # (Metadata: [orm_selection])

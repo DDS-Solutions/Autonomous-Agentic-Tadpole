@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[mobile_performance]` in audit logs.
 >
 > ### AI Assist Note
 > Mobile Performance Reference
@@ -779,6 +779,8 @@ Low-end Android ← Test device
 
 > **Remember:** Performance is not optimization—it's baseline quality. A slow app is a broken app. Test on the worst device your users have, not the best device you have.
 
-[//]: # (Metadata: [mobile_performance])
+
+
+
 
 [//]: # (Metadata: [mobile_performance])

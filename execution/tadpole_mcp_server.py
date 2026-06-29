@@ -8,7 +8,7 @@ Uses stdio to communicate with clients, discovering class-based skills via the S
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Failed stdio streams, missing skill manifest JSON, or subprocess timeouts.
-- **Telemetry Link**: Search for `[MCPHost]` in log traces.
+- **Telemetry Link**: Search `[tadpole_mcp_server]` in system logs.
 """
 
 import asyncio
@@ -231,6 +231,8 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 
-# Metadata: [tadpole_mcp_server]
+
+
+
 
 # Metadata: [tadpole_mcp_server]

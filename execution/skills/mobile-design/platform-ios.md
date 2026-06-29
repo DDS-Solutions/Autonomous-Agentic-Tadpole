@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[platform_ios]` in audit logs.
 >
 > ### AI Assist Note
 > iOS Platform Guidelines
@@ -573,6 +573,8 @@ AccessibilityInfo.isReduceMotionEnabled()
 
 > **Remember:** iOS users have strong expectations from other iOS apps. Deviating from HIG patterns feels "broken" to them. When in doubt, use the native component.
 
-[//]: # (Metadata: [platform_ios])
+
+
+
 
 [//]: # (Metadata: [platform_ios])

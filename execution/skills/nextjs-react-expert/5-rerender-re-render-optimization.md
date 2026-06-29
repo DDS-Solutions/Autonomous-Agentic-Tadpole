@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[5_rerender_re_render_optimization]` in audit logs.
 >
 > ### AI Assist Note
 > 5. Re-render Optimization
@@ -593,6 +593,8 @@ function Tracker() {
 ```
 
 
-[//]: # (Metadata: [5_rerender_re_render_optimization])
+
+
+
 
 [//]: # (Metadata: [5_rerender_re_render_optimization])

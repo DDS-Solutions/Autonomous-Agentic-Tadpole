@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[8_advanced_advanced_patterns]` in audit logs.
 >
 > ### AI Assist Note
 > 8. Advanced Patterns
@@ -162,6 +162,8 @@ function SearchInput({ onSearch }: { onSearch: (q: string) => void }) {
 ```
 
 
-[//]: # (Metadata: [8_advanced_advanced_patterns])
+
+
+
 
 [//]: # (Metadata: [8_advanced_advanced_patterns])

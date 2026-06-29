@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[SKILL]` in audit logs.
 >
 > ### AI Assist Note
 > Core technical resource for the Tadpole OS Sovereign infrastructure.
@@ -69,6 +69,8 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 3.  **Scope**: No load tests on Prod.
 4.  **Secrets**: Env vars.
 
-[//]: # (Metadata: [SKILL])
+
+
+
 
 [//]: # (Metadata: [SKILL])

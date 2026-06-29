@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[2_bundle_bundle_size_optimization]` in audit logs.
 >
 > ### AI Assist Note
 > 2. Bundle Size Optimization
@@ -252,6 +252,8 @@ function FlagsProvider({ children, flags }: Props) {
 The `typeof window !== 'undefined'` check prevents bundling preloaded modules for SSR, optimizing server bundle size and build speed.
 
 
-[//]: # (Metadata: [2_bundle_bundle_size_optimization])
+
+
+
 
 [//]: # (Metadata: [2_bundle_bundle_size_optimization])

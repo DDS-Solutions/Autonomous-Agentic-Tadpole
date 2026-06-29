@@ -7,7 +7,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
-- **Telemetry Link**: Traced via active system logging channels.
+- **Telemetry Link**: Search `[parity_guard_skill]` in system logs.
 """
 
 from typing import Dict, Any
@@ -63,6 +63,8 @@ class ParityGuardSkill(BaseSkill):
         except Exception as e:
             return f"Error during parity audit: {str(e)}"
 
-# Metadata: [parity_guard_skill]
+
+
+
 
 # Metadata: [parity_guard_skill]

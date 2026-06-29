@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[doc]` in audit logs.
 >
 > ### AI Assist Note
 > Antigravity Skills
@@ -188,6 +188,8 @@ Bằng cách tạo Skills, bạn đã biến mô hình AI đa năng thành một
 - ✅ Agent tự động biết cách làm việc với nhóm của bạn
 
 Thay vì liên tục nhắc AI "nhớ thêm license" hoặc "sửa format commit", giờ đây Agent sẽ tự động thực hiện!
-[//]: # (Metadata: [doc])
+
+
+
 
 [//]: # (Metadata: [doc])

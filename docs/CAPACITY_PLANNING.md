@@ -11,13 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift or legacy terminology.
-> - **Telemetry Link**: Search `[CAPACITY_PLANNING]` in audit logs.
-
 # Tadpole OS Capacity Planning
 
 This document details the hardware profiling, sizing formulas, and memory limits for running the Tadpole OS agent engine.

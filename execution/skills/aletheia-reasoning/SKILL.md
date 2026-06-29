@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[SKILL]` in audit logs.
 >
 > ### AI Assist Note
 > Core technical resource for the Tadpole OS Sovereign infrastructure.
@@ -58,6 +58,8 @@ The refiner. It takes specific feedback from the Verifier and makes targeted adj
 2. **Failure Attribution**: When rejecting a solution, the Verifier must state precisely *why* it failed (e.g., "hallucinated theorem" or "off-by-one error").
 3. **Draft Context**: The Reviser should keep the history of previous failures to avoid repeating the same mistakes.
 
-[//]: # (Metadata: [SKILL])
+
+
+
 
 [//]: # (Metadata: [SKILL])

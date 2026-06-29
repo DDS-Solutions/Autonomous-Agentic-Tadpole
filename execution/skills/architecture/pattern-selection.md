@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[pattern_selection]` in audit logs.
 >
 > ### AI Assist Note
 > Pattern Selection Guidelines
@@ -80,6 +80,8 @@ START: What's your MAIN concern?
 | CQRS | Unnecessary complexity | Single model |
 | Repository | YAGNI for simple CRUD | ORM direct access |
 
-[//]: # (Metadata: [pattern_selection])
+
+
+
 
 [//]: # (Metadata: [pattern_selection])

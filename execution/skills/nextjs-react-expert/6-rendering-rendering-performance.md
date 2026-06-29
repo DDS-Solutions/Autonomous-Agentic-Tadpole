@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[6_rendering_rendering_performance]` in audit logs.
 >
 > ### AI Assist Note
 > 6. Rendering Performance
@@ -444,6 +444,8 @@ function SearchResults() {
 Reference: [useTransition](https://react.dev/reference/react/useTransition)
 
 
-[//]: # (Metadata: [6_rendering_rendering_performance])
+
+
+
 
 [//]: # (Metadata: [6_rendering_rendering_performance])

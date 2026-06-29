@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[schema_design]` in audit logs.
 >
 > ### AI Assist Note
 > Schema Design Principles
@@ -68,6 +68,8 @@ Use TIMESTAMPTZ (with timezone) not TIMESTAMP
 └── SET DEFAULT → Children get default value
 ```
 
-[//]: # (Metadata: [schema_design])
+
+
+
 
 [//]: # (Metadata: [schema_design])

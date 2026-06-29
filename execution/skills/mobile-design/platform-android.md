@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[platform_android]` in audit logs.
 >
 > ### AI Assist Note
 > Android Platform Guidelines
@@ -678,6 +678,8 @@ if (reduceMotion) {
 
 > **Remember:** Android users expect Material Design. Custom designs that ignore Material patterns feel foreign and broken. Use Material components as your foundation, customize thoughtfully.
 
-[//]: # (Metadata: [platform_android])
+
+
+
 
 [//]: # (Metadata: [platform_android])

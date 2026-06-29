@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[mobile_typography]` in audit logs.
 >
 > ### AI Assist Note
 > Mobile Typography Reference
@@ -445,6 +445,8 @@ Long text: 1.5-1.75
 
 > **Remember:** If users can't read your text, your app is broken. Typography isn't decoration—it's the primary interface. Test on real devices, in real conditions, with accessibility settings enabled.
 
-[//]: # (Metadata: [mobile_typography])
+
+
+
 
 [//]: # (Metadata: [mobile_typography])

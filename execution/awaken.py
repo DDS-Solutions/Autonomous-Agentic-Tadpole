@@ -84,7 +84,7 @@ def get_headers(file_path, pillar, purpose=None):
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[{tag}]` in tracing logs.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
 //! 
 """
     elif ext in ['.ts', '.tsx', '.js']:
@@ -97,7 +97,7 @@ def get_headers(file_path, pillar, purpose=None):
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[{tag}]` in observability traces.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
  */
 
 """
@@ -111,7 +111,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.
-- **Telemetry Link**: Search `[{tag}]` in system logs.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
 """
 
 '''
@@ -121,7 +121,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:{pillar}**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[{tag}]` in audit logs.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
 >
 > ### AI Assist Note
 > {purpose}
@@ -138,7 +138,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
   Standardized HTML resource.
   ### 🔍 Debugging & Observability
   - **Failure Path**: Rendering error or broken asset links.
-  - **Telemetry Link**: Search `[{tag}]` in system traces.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
 -->
 
 """
@@ -151,7 +151,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 #
 # ### 🔍 Debugging & Observability
 # - **Failure Path**: Environment error, permission denied, or command failure.
-# - **Telemetry Link**: Search `[{tag}]` in audit logs.
+//! - **Telemetry Link**: Search `[awaken]` in system logs.
 
 """
     else:
@@ -298,6 +298,8 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Metadata: [awaken]
+
+
+
 
 # Metadata: [awaken]

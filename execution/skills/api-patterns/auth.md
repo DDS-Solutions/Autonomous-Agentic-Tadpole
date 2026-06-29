@@ -3,7 +3,7 @@
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:Infrastructure:Execution**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Cross-reference with `execution/parity_guard.py` results.
+> - **Telemetry Link**: Search `[auth]` in audit logs.
 >
 > ### AI Assist Note
 > Authentication Patterns
@@ -36,6 +36,8 @@ Important:
 └── Never store sensitive data in JWT
 ```
 
-[//]: # (Metadata: [auth])
+
+
+
 
 [//]: # (Metadata: [auth])

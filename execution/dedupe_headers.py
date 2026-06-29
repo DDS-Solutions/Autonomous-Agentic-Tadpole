@@ -23,7 +23,7 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 ROOT = Path(__file__).resolve().parent.parent
-TARGET_DIRS = ['server-rs/src', 'src', 'directives', '.agent/skills']
+TARGET_DIRS = ['.']
 
 # Header regexes by file extension
 HEADER_PATTERNS = {
@@ -281,12 +281,17 @@ def main():
         if not target_path.exists():
             continue
             
-        for r, _, files in os.walk(target_path):
+        for r, dirs, files in os.walk(target_path):
+            # Prune directories in place to avoid walking into huge dependency or build directories
+            dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', 'target', 'dist', '.tmp', 'reports', 'coverage', 'scratch', 'build', '.venv', 'venv']]
             for file in files:
+                ext = os.path.splitext(file)[1]
+                if ext not in HEADER_PATTERNS:
+                    continue
                 file_path = os.path.join(r, file)
                 modified, err = clean_file(file_path, dry_run=args.dry_run)
                 if err:
-                    print(f"❌ Error in {file}: {err}")
+                    print(f"❌ Error in {file_path}: {err}")
                     errors_count += 1
                 elif modified:
                     print(f"🧹 Cleaned duplicate markers in: {os.path.relpath(file_path, ROOT)}")

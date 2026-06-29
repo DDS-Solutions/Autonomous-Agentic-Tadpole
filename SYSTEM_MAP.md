@@ -11,19 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
-> [!IMPORTANT]
-> **AI Assist Note (Knowledge Heritage)**:
-> This document is part of the "Sovereign Reality" documentation.
-> - **@docs ARCHITECTURE:Core**
-> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-> - **Telemetry Link**: Search `[SYSTEM_MAP]` in audit logs.
->
-> ### AI Assist Note
-> Tadpole OS system architecture map.
->
-> ### Debugging & Observability
-> Traceability via `execution/parity_guard.py`.
-
 # Tadpole OS System Map
 
 **Version**: 1.1.57
@@ -108,6 +95,6 @@ Default Cargo features are empty. These features are opt-in:
 
 Without `vector-memory`, memory routes intentionally return `501 Not Implemented`.
 
-[//]: # (Metadata: [SYSTEM_MAP])
+
 
 [//]: # (Metadata: [SYSTEM_MAP])

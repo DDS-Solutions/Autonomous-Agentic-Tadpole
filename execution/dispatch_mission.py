@@ -8,7 +8,7 @@ to the active Tadpole Agent 2 over HTTP.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Connection failures to localhost:8000, 401 Unauthorized errors from incorrect token.
-- **Telemetry Link**: Search for `[Dispatcher]` in task dispatch traces.
+- **Telemetry Link**: Search `[dispatch_mission]` in system logs.
 """
 
 import requests
@@ -43,6 +43,8 @@ def dispatch_mission():
 if __name__ == "__main__":
     dispatch_mission()
 
-# Metadata: [dispatch_mission]
+
+
+
 
 # Metadata: [dispatch_mission]
