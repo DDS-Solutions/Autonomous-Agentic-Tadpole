@@ -13,7 +13,7 @@
 
 # Tadpole OS System Map
 
-**Version**: 1.1.57
+**Version**: 1.1.58
 **Runtime shape**: React dashboard + Rust Axum engine + SQLite persistence + Python execution layer.
 
 This map reflects the current code layout and should be used as the first orientation document when reviewing the system.

@@ -47,6 +47,12 @@ PATHS = {
     "SYSTEM_MAP.md": r'\*\*Version\*\*:\s*([0-9.]+)',
     "docs/API_REFERENCE.md": r'\*\*Version\*\*:\s*([0-9.]+)',
     "docs/openapi.yaml": r'version:\s*([0-9.]+)',
+    "src/pages/Governance_View.tsx": r'OS:\s*v([0-9.]+)',
+    "server-rs/src/services/privacy.rs": r'TadpoleOS/([0-9.]+)',
+    "CLAUDE.md": r'TadpoleOS/([0-9.]+)',
+    "AGENTS.md": r'TadpoleOS/([0-9.]+)',
+    "execution/dispatch_mission.py": r'TadpoleOS/([0-9.]+)',
+    "scripts/deploy-linuxlite.ps1": r'version\s*=\s*"([^"]+)"',
 }
 
 def bump_version(current_version, part):

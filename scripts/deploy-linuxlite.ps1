@@ -10,7 +10,7 @@ if (-not (Test-Path $BackupDir)) {
 
 # 1. Read version
 if (-not (Test-Path "version.json")) {
-    @{ version = "1.1.57" } | ConvertTo-Json | Set-Content "version.json"
+    @{ version = "1.1.58" } | ConvertTo-Json | Set-Content "version.json"
 }
 $Version = (Get-Content version.json | ConvertFrom-Json).version
 

@@ -98,7 +98,7 @@ impl Default for SkillManifest {
             name: "unknown".to_string(),
             display_name: None,
             description: "".to_string(),
-            version: "1.1.57".to_string(),
+            version: "1.1.58".to_string(),
             author: None,
             permissions: vec![],
             toolset_group: None,

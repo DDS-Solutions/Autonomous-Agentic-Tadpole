@@ -27,7 +27,7 @@ pub async fn start_privacy_guard(app_state: Arc<AppState>) {
     tracing::info!("🛡️ [PrivacyGuard] Air-Gap Monitor Active.");
 
     let client = match reqwest::Client::builder()
-        .user_agent("TadpoleOS/1.1.57")
+        .user_agent("TadpoleOS/1.1.58")
         .timeout(std::time::Duration::from_secs(3))
         .build()
     {

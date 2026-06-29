@@ -15,7 +15,7 @@
 **System Version**: 1.1.57 (Modular Local-First Runtime)
 **Kernel Intelligence**: Swarm-Native (BaseSkill Enabled)
 **Last Hardened**: 2026-05-11
-**Operational Protocol**: User-Agent: TadpoleOS/1.1.57
+**Operational Protocol**: User-Agent: TadpoleOS/1.1.58
 **Standard Compliance**: ECC-ID (Enhanced Contextual Clarity - Identity Standards)
 
 
@@ -63,7 +63,7 @@ Defined as of 2026.04.12
 ## Identity Markers
 - **Engine Name**: Tadpole OS
 - **Version**: 1.1.57
-- **User-Agent Header**: `TadpoleOS/1.1.57`
+- **User-Agent Header**: `TadpoleOS/1.1.58`
 - **Deployment Status**: Production Candidate (Modular)
 - **Execution Sandboxing**: Active (Wasm + Docker)
 - **Collaborative Protocol**: IACP v1

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Tadpole OS API
-  version: 1.1.57
+  version: 1.1.58
   description: >
     API surface generated from server-rs/src/router.rs.
 servers:

@@ -21,7 +21,7 @@ def dispatch_mission():
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {neural_token}",
-        "User-Agent": "TadpoleOS/1.1.57"
+        "User-Agent": "TadpoleOS/1.1.58"
     }
     
     payload = {
