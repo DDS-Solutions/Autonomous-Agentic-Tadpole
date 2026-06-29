@@ -10,7 +10,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[browser_specialist_store]` in observability traces.
  */
- */
 
 import { create } from 'zustand';
 import { browser_inference_service, type InferenceStatus } from '../services/browser_inference';

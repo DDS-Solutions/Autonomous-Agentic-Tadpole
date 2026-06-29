@@ -9,7 +9,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[Empty_State]` in observability traces.
  */
- */
 
 import React from 'react';
 

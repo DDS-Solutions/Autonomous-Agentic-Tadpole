@@ -8,7 +8,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[Skill_Header]` in observability traces.
  */
- */
 
 import React from 'react';
 import { Settings, Search, Upload } from 'lucide-react';

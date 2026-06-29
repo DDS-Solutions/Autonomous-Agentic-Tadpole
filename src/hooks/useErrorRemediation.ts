@@ -9,7 +9,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[useErrorRemediation]` in console logs.
  */
- */
 
 import { useCallback } from 'react';
 

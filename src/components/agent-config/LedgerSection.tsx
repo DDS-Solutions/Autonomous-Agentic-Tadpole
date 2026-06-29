@@ -9,7 +9,6 @@
  * - **Failure Path**: UI errors or callback stack traces.
  * - **Telemetry Link**: Search `[LedgerSection]` in console logs.
  */
- */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, RefreshCw, Save, ShieldCheck, CheckCircle2, AlertTriangle, Play, Database } from 'lucide-react';

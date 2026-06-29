@@ -9,7 +9,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[security_utils]` in observability traces.
  */
- */
 
 /**
  * Sanitizes a string by stripping HTML tags and potentially dangerous attributes.

@@ -16,7 +16,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[browser_inference]` in observability traces.
  */
- */
 
 import { env, pipeline, TextGenerationPipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
 import { sanitize_ui_context, extract_neural_output } from '../utils/ai_utils';

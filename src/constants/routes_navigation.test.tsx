@@ -2,22 +2,13 @@
  * @docs ARCHITECTURE:TestSuites
  *
  * ### AI Assist Note
- * **@docs ARCHITECTURE:TestSuites**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[routes_navigation_test]` in observability traces.
- */
- *
  * Verifies every registered application route is reachable from the primary
  * navigation shell. This catches route/menu drift before a page becomes
  * effectively hidden.
  *
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[routes_navigation_test]` in observability traces.
- */
+ * - **Telemetry Link**: Search `[routes_navigation_test]` in console logs.
  */
 
 import { describe, expect, it } from 'vitest';

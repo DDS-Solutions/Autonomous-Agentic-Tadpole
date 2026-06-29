@@ -2,22 +2,13 @@
  * @docs ARCHITECTURE:TestSuites
  *
  * ### AI Assist Note
- * **@docs ARCHITECTURE:TestSuites**
- * Handles reactive state and high-fidelity user interactions.
- * 
- * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[Dashboard_Route_Smoke_test]` in observability traces.
- */
- *
  * Route smoke coverage for the dashboard shell. Each APP_ROUTES entry is
  * mounted through Dashboard_Layout with a lightweight page mock so registry
  * drift, lazy import drift, and tab resolution failures are caught together.
  *
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[Dashboard_Route_Smoke_test]` in observability traces.
- */
+ * - **Telemetry Link**: Search `[Dashboard_Route_Smoke_test]` in console logs.
  */
 
 import { describe, expect, it, beforeEach, vi } from 'vitest';

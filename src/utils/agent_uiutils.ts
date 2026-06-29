@@ -9,7 +9,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[agent_uiutils]` in observability traces.
  */
- */
 
 console.debug("[AgentUIUtils] Module loaded");
 

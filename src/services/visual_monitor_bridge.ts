@@ -10,7 +10,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[visual_monitor_bridge]` in observability traces.
  */
- */
 
 import { tadpole_os_socket } from './socket';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';

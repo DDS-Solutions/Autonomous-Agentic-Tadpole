@@ -11,7 +11,6 @@
  * - **Failure Path**: UI regression, hook desync, or API timeout.
  * - **Telemetry Link**: Search `[local_memory]` in observability traces.
  */
- */
 
 import Dexie, { type Table } from 'dexie';
 import { browser_inference_service } from './browser_inference';

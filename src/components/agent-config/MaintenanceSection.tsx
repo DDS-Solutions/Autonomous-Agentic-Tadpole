@@ -10,7 +10,6 @@
  * - **Failure Path**: UI errors or callback stack traces.
  * - **Telemetry Link**: Search `[MaintenanceSection]` in console logs.
  */
- */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, RefreshCw, AlertTriangle, CheckCircle2, ShieldAlert, Clock, Coins, Brain, GitPullRequest } from 'lucide-react';
