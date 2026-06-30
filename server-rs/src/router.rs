@@ -61,6 +61,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .route("/metrics", get(routes::health::metrics_handler))
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
+        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             crate::middleware::boot::wait_for_system_ready,

@@ -81,7 +81,8 @@ impl SystemService for CodeGraphDbRefreshService {
         let db_path = root.join(".code-review-graph").join("graph.db");
         let salt = app_state.resources.obfuscation_salt.clone();
 
-        let refresh_fut = crate::intelligence::graph_store::refresh_code_review_graph_db(root, db_path, salt);
+        let git_path = app_state.resources.git_path.clone();
+        let refresh_fut = crate::intelligence::graph_store::refresh_code_review_graph_db(root, db_path, salt, git_path);
         match tokio::time::timeout(std::time::Duration::from_secs(300), refresh_fut).await {
             Ok(Ok(summary)) => {
                 app_state.resources.set_subsystem_status(

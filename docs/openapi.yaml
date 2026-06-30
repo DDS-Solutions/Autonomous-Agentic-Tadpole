@@ -17,6 +17,7 @@ tags:
   - name: engine
   - name: governance
   - name: infra
+  - name: intelligence
   - name: mcp
   - name: memory
   - name: model-manager
@@ -1922,6 +1923,148 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/intelligence/blast-radius:
+    get:
+      tags: [intelligence]
+      summary: "Get blast radius"
+      parameters:
+        - name: name
+          in: query
+          required: true
+          description: "Symbol name"
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: "Obfuscated file path"
+          schema: { type: string }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolNodeList'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/intelligence/graph:
+    get:
+      tags: [intelligence]
+      summary: "Get code graph"
+      parameters:
+        - name: path_prefix
+          in: query
+          required: false
+          description: "Filter nodes by path prefix"
+          schema: { type: string }
+        - name: max_nodes
+          in: query
+          required: false
+          description: "Cap maximum nodes returned"
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeGraphResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/intelligence/graph/rebuild:
+    post:
+      tags: [intelligence]
+      summary: "Rebuild code graph"
+      parameters:
+        - name: dry_run
+          in: query
+          required: false
+          description: "Dry run capacity check"
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphRebuildResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/intelligence/resolve:
+    get:
+      tags: [intelligence]
+      summary: "Resolve code context"
+      parameters:
+        - name: name
+          in: query
+          required: true
+          description: "Symbol name"
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: "Obfuscated file path"
+          schema: { type: string }
+        - name: budget
+          in: query
+          required: false
+          description: "Token budget constraint"
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResponse'
         "401":
           description: Unauthorized
           content:
@@ -3913,3 +4056,59 @@ components:
       required: [decision]
       properties:
         decision: { type: string }
+    SymbolNode:
+      type: object
+      required: [name, path, kind, signature, start_line, end_line, tokens]
+      properties:
+        name: { type: string }
+        path: { type: string }
+        kind: { type: string }
+        signature: { type: string }
+        start_line: { type: integer }
+        end_line: { type: integer }
+        tokens: { type: integer }
+    CodeGraphLink:
+      type: object
+      required: [source, target]
+      properties:
+        source: { type: string }
+        target: { type: string }
+    CodeGraphResponse:
+      type: object
+      required: [nodes, links, anomalies]
+      properties:
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/SymbolNode' }
+        links:
+          type: array
+          items: { $ref: '#/components/schemas/CodeGraphLink' }
+        anomalies:
+          type: array
+          items: { type: string }
+    GraphSummary:
+      type: object
+      required: [node_count, edge_count, file_count]
+      properties:
+        node_count: { type: integer }
+        edge_count: { type: integer }
+        file_count: { type: integer }
+    GraphRebuildResponse:
+      type: object
+      required: [status, dry_run]
+      properties:
+        status: { type: string }
+        dry_run: { type: boolean }
+        summary: { $ref: '#/components/schemas/GraphSummary', nullable: true }
+    SymbolNodeList:
+      type: array
+      items: { $ref: '#/components/schemas/SymbolNode' }
+    ResolveResponse:
+      type: object
+      required: [symbols, budget, accumulated_tokens]
+      properties:
+        symbols:
+          type: array
+          items: { $ref: '#/components/schemas/SymbolNode' }
+        budget: { type: integer }
+        accumulated_tokens: { type: integer }

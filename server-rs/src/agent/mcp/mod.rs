@@ -599,8 +599,8 @@ pub async fn get_blast_radius(
     let path = args.get("path").and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
 
-    let graph_lock = ctx.state.resources.get_symbol_graph().await;
-    let graph = graph_lock.read();
+    let graph_swap = ctx.state.resources.get_symbol_graph().await;
+    let graph = graph_swap.load();
     let affected = graph.calculate_blast_radius(symbol_name, path);
     
     Ok(McpResult::Raw(serde_json::to_string_pretty(&affected).unwrap_or_default()))

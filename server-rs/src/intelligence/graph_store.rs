@@ -177,6 +177,7 @@ pub async fn refresh_code_review_graph_db(
     root: PathBuf,
     db_path: PathBuf,
     salt: String,
+    git_path: Option<PathBuf>,
 ) -> Result<GraphDbRefreshSummary, AppError> {
     tracing::info!("🔄 [graph_store] Refreshing persistent graph database...");
     let root = root
@@ -195,7 +196,7 @@ pub async fn refresh_code_review_graph_db(
 
     let pool = db::open_graph_pool(&db_path).await?;
     db::ensure_schema(&pool).await?;
-    db::write_snapshot(&pool, &snapshot).await?;
+    db::write_snapshot(&pool, &snapshot, git_path.as_deref()).await?;
     pool.close().await;
 
     Ok(GraphDbRefreshSummary {
@@ -437,10 +438,12 @@ fn scan_files(root: &Path, salt: &str) -> Result<Vec<FileRecord>, AppError> {
             .unwrap_or("unknown")
             .to_string();
 
-        let mut hash_input = content.as_bytes().to_vec();
-        hash_input.extend_from_slice(salt.as_bytes());
-        let hash = md5::compute(&hash_input);
-        let file_hash = format!("{:x}", hash);
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        hasher.update(salt.as_bytes());
+        let hash = hasher.finalize();
+        let file_hash = hex::encode(hash);
 
         records.push(FileRecord {
             absolute_path,
@@ -948,6 +951,7 @@ mod tests {
             dir.path().to_path_buf(),
             db.clone(),
             "test-salt".to_string(),
+            None,
         )
         .await
         .unwrap();
@@ -955,6 +959,7 @@ mod tests {
             dir.path().to_path_buf(),
             db.clone(),
             "test-salt".to_string(),
+            None,
         )
         .await
         .unwrap();
@@ -968,11 +973,11 @@ mod tests {
         std::fs::write(dir.path().join("a.rs"), "fn alpha() {}\n").unwrap();
         std::fs::write(dir.path().join("b.rs"), "fn beta() { alpha(); }\n").unwrap();
         let db = dir.path().join(".code-review-graph/graph.db");
-        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string())
+        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string(), None)
             .await
             .unwrap();
         std::fs::remove_file(dir.path().join("b.rs")).unwrap();
-        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string())
+        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string(), None)
             .await
             .unwrap();
         let pool = db::open_graph_pool(&db).await.unwrap();
@@ -993,7 +998,7 @@ mod tests {
         )
         .unwrap();
         let db = dir.path().join(".code-review-graph/graph.db");
-        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string())
+        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string(), None)
             .await
             .unwrap();
 
@@ -1016,7 +1021,7 @@ mod tests {
         )
         .unwrap();
         let db = dir.path().join(".code-review-graph/graph.db");
-        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string())
+        refresh_code_review_graph_db(dir.path().to_path_buf(), db.clone(), "salt".to_string(), None)
             .await
             .unwrap();
         let pool = db::open_graph_pool(&db).await.unwrap();

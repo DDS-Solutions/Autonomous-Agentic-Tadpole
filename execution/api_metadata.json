@@ -32,6 +32,10 @@
     "POST /v1/agents/{id}/tasks": "TaskAcceptedResponse",
     "POST /v1/skills/register": "GenericSuccessResponse",
     "POST /v1/skills/proposals/{id}/resolve": "GenericSuccessResponse",
-    "POST /v1/skills/promote": "GenericSuccessResponse"
+    "POST /v1/skills/promote": "GenericSuccessResponse",
+    "GET /v1/intelligence/graph": "CodeGraphResponse",
+    "POST /v1/intelligence/graph/rebuild": "GraphRebuildResponse",
+    "GET /v1/intelligence/blast-radius": "SymbolNodeList",
+    "GET /v1/intelligence/resolve": "ResolveResponse"
   }
 }

@@ -30,36 +30,18 @@
 //!   logs for boot sequence milestones.
 //! - **Trace Scope**: `server-rs::main`
 
-use crate::state::AppState;
+use server_rs::{
+    config::Config,
+    secret_redactor::SecretRedactor,
+    state::AppState,
+    startup,
+    router,
+};
 use std::{net::SocketAddr, sync::Arc};
-
-mod adapter;
-mod agent;
-mod bridge;
-mod db;
-#[cfg(test)]
-mod db_tests;
-mod config;
-mod env_schema;
-pub mod error;
-mod intelligence;
-mod middleware;
-mod networking;
-mod router;
-mod routes;
-mod secret_redactor;
-mod security;
-mod services;
-mod startup;
-mod state;
-mod system;
-mod telemetry;
-mod types;
-mod utils;
 
 fn main() -> anyhow::Result<()> {
     // 1. Load configuration and validate environment variables early
-    let config = crate::config::Config::load()?;
+    let config = Config::load()?;
 
     // 2. Set current working directory to WORKSPACE_ROOT if set and valid
     if let Some(ref canonical_path) = config.workspace_root {
@@ -94,7 +76,7 @@ fn main() -> anyhow::Result<()> {
         );
 
         // SEC-04: Clean panic messages of secrets before writing to disk
-        let redactor = crate::secret_redactor::SecretRedactor::from_env();
+        let redactor = SecretRedactor::from_env();
         let log_msg = redactor.scrub(&raw_log_msg);
 
         // Try to find a writable path for the log
@@ -131,7 +113,7 @@ fn main() -> anyhow::Result<()> {
     rt.block_on(async_main(config))
 }
 
-async fn async_main(config: crate::config::Config) -> anyhow::Result<()> {
+async fn async_main(config: Config) -> anyhow::Result<()> {
     // --- [STAGE: INTENT DETECTION] ---
     // Detect flags that don't require the full engine (Code Graph, mDNS, etc.)
     // Optimized for sub-100ms response for administrative queries.

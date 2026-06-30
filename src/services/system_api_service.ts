@@ -18,10 +18,14 @@
  * - **Mocking**: Mock `api_request` from `base_api_service` for unit tests.
  */
 
-
 import type { Swarm_Node } from '../types/index';
 export type { Swarm_Node };
-import { api_request, DEPLOY_TIMEOUT } from './base_api_service';
+import { api_request } from './base_api_service';
+
+import { engine_api_service } from './engine_api_service';
+import { model_manager_api_service } from './model_manager_api_service';
+import { oversight_api_service } from './oversight_api_service';
+import { continuity_api_service } from './continuity_api_service';
 
 /** Quota_Details - Consumption metrics for budget governance. */
 export interface Quota_Details {
@@ -159,116 +163,54 @@ export interface Scheduled_Job_Run {
 }
 
 export const system_api_service = {
-    /**
-     * get_engine_status
-     * Fetches detailed health and feature metrics from the engine.
-     */
-    get_engine_status: async (options: RequestInit = {}): Promise<{ status: string, version: string, heartbeat: string, active_agents: number, features: string[] } | null> => {
-        try {
-            return await api_request<{ status: string, version: string, heartbeat: string, active_agents: number, features: string[] }>('/v1/engine/health', { 
-                method: 'GET', 
-                timeout: 5000,
-                ...options 
-            });
-        } catch {
-            return null;
-        }
-    },
+    // --- Engine Delegation ---
+    get_engine_status: engine_api_service.get_engine_status,
+    check_health: engine_api_service.check_health,
+    deploy_engine: engine_api_service.deploy_engine,
+    speak: engine_api_service.speak,
+    kill_agents: engine_api_service.kill_agents,
+    shutdown_engine: engine_api_service.shutdown_engine,
+    transcribe: engine_api_service.transcribe,
+    install_template: engine_api_service.install_template,
+    pre_pr_engine: engine_api_service.pre_pr_engine,
 
-    /**
-     * check_health
-     * Checks if the TadpoleOS instance is reachable.
-     */
-    check_health: async (): Promise<boolean> => {
-        try {
-            const status = await system_api_service.get_engine_status();
-            return status !== null;
-        } catch {
-            return false;
-        }
-    },
+    // --- Model Manager Delegation ---
+    test_provider: model_manager_api_service.test_provider,
+    get_providers: model_manager_api_service.get_providers,
+    update_provider: model_manager_api_service.update_provider,
+    delete_provider: model_manager_api_service.delete_provider,
+    sync_provider_models: model_manager_api_service.sync_provider_models,
+    update_model: model_manager_api_service.update_model,
+    delete_model: model_manager_api_service.delete_model,
+    get_models: model_manager_api_service.get_models,
+    get_model_catalog: model_manager_api_service.get_model_catalog,
+    pull_model: model_manager_api_service.pull_model,
 
-    /**
-     * deploy_engine
-     * Triggers a production deployment of the engine.
-     * 
-     * ### 🏗️ CI/CD Orchestration
-     * This command initiates the native build/deploy cycle. It bypasses 
-     * the standard 30s timeout and uses a specialized 2h `DEPLOY_TIMEOUT` 
-     * block to accommodate heavy containerization and hardware provisioning.
-     */
-    deploy_engine: async (target?: string | number): Promise<{ status: string, output?: string }> => {
-        const url = target ? `/v1/engine/deploy?target=${target}` : '/v1/engine/deploy';
-        return api_request<{ status: string, output?: string }>(url, {
-            method: 'POST',
-            timeout: DEPLOY_TIMEOUT
-        });
-    },
+    // --- Oversight Delegation ---
+    get_pending_oversight: oversight_api_service.get_pending_oversight,
+    get_oversight_ledger: oversight_api_service.get_oversight_ledger,
+    decide_oversight: oversight_api_service.decide_oversight,
+    get_security_quotas: oversight_api_service.get_security_quotas,
+    update_security_quota: oversight_api_service.update_security_quota,
+    get_mission_quotas: oversight_api_service.get_mission_quotas,
+    update_mission_quota: oversight_api_service.update_mission_quota,
+    get_audit_trail: oversight_api_service.get_audit_trail,
+    get_agent_health: oversight_api_service.get_agent_health,
+    get_integrity_status: oversight_api_service.get_integrity_status,
+    update_governance_settings: oversight_api_service.update_governance_settings,
 
-    /**
-     * speak
-     * Synthesizes text to audio using the backend TTS engine.
-     */
-    speak: async (text: string, voice?: string, engine?: string): Promise<Blob> => {
-        return api_request<Blob>('/v1/engine/speak', {
-            method: 'POST',
-            body: JSON.stringify({ text, voice, engine }),
-            response_type: 'blob'
-        });
-    },
+    // --- Continuity Delegation ---
+    get_scheduled_jobs: continuity_api_service.get_scheduled_jobs,
+    create_scheduled_job: continuity_api_service.create_scheduled_job,
+    update_scheduled_job: continuity_api_service.update_scheduled_job,
+    delete_scheduled_job: continuity_api_service.delete_scheduled_job,
+    get_scheduled_job_runs: continuity_api_service.get_scheduled_job_runs,
+    list_continuity_workflows: continuity_api_service.list_continuity_workflows,
+    create_continuity_workflows: continuity_api_service.create_continuity_workflows,
+    add_continuity_workflows_step: continuity_api_service.add_continuity_workflows_step,
+    delete_continuity_workflows: continuity_api_service.delete_continuity_workflows,
 
-    /**
-     * kill_agents
-     * Halts all running agents.
-     */
-    kill_agents: async (): Promise<void> => {
-        await api_request('/v1/engine/kill', { method: 'POST' });
-    },
-
-    /**
-     * shutdown_engine
-     * Shuts down the backend server.
-     */
-    shutdown_engine: async (): Promise<void> => {
-        await api_request('/v1/engine/shutdown', { method: 'POST' });
-    },
-
-    /**
-     * transcribe
-     * Transcribes audio using the backend's high-fidelity Whisper engine.
-     */
-    transcribe: async (audio_blob: Blob): Promise<string> => {
-        const form_data = new FormData();
-        form_data.append('file', audio_blob, 'speech.wav');
-
-        const data = await api_request<{ text?: string }>('/v1/engine/transcribe', {
-            method: 'POST',
-            body: form_data,
-            headers: { 'Content-Type': undefined as unknown as string }
-        });
-
-        return data.text || '';
-    },
-
-    /**
-     * test_provider
-     * Connectivity test Trace for a given provider configuration.
-     */
-    test_provider: async (config: Provider_Test_Config): Promise<{ status: string; latency?: number; message?: string }> => {
-        try {
-            return await api_request<{ status: string; latency?: number }>(`/v1/model-manager/providers/${config.id}/test`, {
-                method: 'POST',
-                body: JSON.stringify(config)
-            });
-        } catch (error) {
-            const is_timeout = error === 'TIMEOUT';
-            const msg = is_timeout
-                ? 'Handshake timeout: The provider endpoint is unresponsive.'
-                : (error instanceof Error ? error.message : 'Network connection refused.');
-            return { status: 'error', message: msg };
-        }
-    },
-
+    // --- Infrastructure & Shared Services ---
     /**
      * get_nodes
      * Returns all registered Bunker nodes from the infrastructure tier.
@@ -305,85 +247,6 @@ export const system_api_service = {
     },
 
     /**
-     * get_scheduled_jobs
-     * Lists all autonomous scheduled jobs.
-     */
-    get_scheduled_jobs: async (): Promise<Scheduled_Job[]> => {
-        const res = await api_request<{ jobs: Scheduled_Job[] } | Scheduled_Job[]>('/v1/continuity/jobs', { method: 'GET' });
-        return Array.isArray(res) ? res : (res.jobs || []);
-    },
-
-    /**
-     * create_scheduled_job
-     * Creates a new scheduled job for the Continuity Scheduler.
-     */
-    create_scheduled_job: async (job: Partial<Scheduled_Job>): Promise<Scheduled_Job> => {
-        return api_request<Scheduled_Job>('/v1/continuity/jobs', {
-            method: 'POST',
-            body: JSON.stringify(job)
-        });
-    },
-
-    /**
-     * update_scheduled_job
-     * Updates an existing scheduled job.
-     */
-    update_scheduled_job: async (id: string, job: Partial<Scheduled_Job>): Promise<Scheduled_Job> => {
-        return api_request<Scheduled_Job>(`/v1/continuity/jobs/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(job)
-        });
-    },
-
-    /**
-     * delete_scheduled_job
-     * Deletes a scheduled job.
-     */
-    delete_scheduled_job: async (id: string): Promise<void> => {
-        return api_request<void>(`/v1/continuity/jobs/${id}`, { method: 'DELETE' });
-    },
-
-    /**
-     * get_scheduled_job_runs
-     * Fetches the run history for a specific scheduled job.
-     */
-    get_scheduled_job_runs: async (id: string): Promise<Scheduled_Job_Run[]> => {
-        const res = await api_request<{ runs: Scheduled_Job_Run[] } | Scheduled_Job_Run[]>(`/v1/continuity/jobs/${id}/runs`, { method: 'GET' });
-        return Array.isArray(res) ? res : (res.runs || []);
-    },
-
-    /**
-     * get_pending_oversight
-     * Fetches actions awaiting human approval.
-     */
-    get_pending_oversight: async (): Promise<unknown[]> => {
-        const res = await api_request<unknown | unknown[]>('/v1/oversight/pending', { method: 'GET' });
-        return Array.isArray(res) ? res : ((res as { data?: unknown[] }).data || []);
-    },
-
-    /**
-     * get_oversight_ledger
-     * Fetches the historical ledger of all oversight decisions.
-     * Requests up to 100 items (the server-side clamp limit) to ensure accurate statistics
-     * and avoid card truncation issues when database entries exceed the default of 25.
-     */
-    get_oversight_ledger: async (): Promise<unknown[]> => {
-        const res = await api_request<unknown | unknown[]>('/v1/oversight/ledger?per_page=100', { method: 'GET' });
-        return Array.isArray(res) ? res : ((res as { data?: unknown[] }).data || []);
-    },
-
-    /**
-     * decide_oversight
-     * Records a decision (approve/reject) for a pending oversight action.
-     */
-    decide_oversight: async (id: string, decision: 'approved' | 'rejected'): Promise<void> => {
-        await api_request(`/v1/oversight/${id}/decide`, {
-            method: 'POST',
-            body: JSON.stringify({ decision })
-        });
-    },
-
-    /**
      * get_knowledge_docs
      * Lists all available knowledge docs from the backend.
      */
@@ -416,241 +279,11 @@ export const system_api_service = {
     },
 
     /**
-     * get_providers
-     * Returns all registered AI infrastructure providers.
-     */
-    get_providers: async (): Promise<Record<string, unknown>[]> => {
-        return api_request<Record<string, unknown>[]>('/v1/model-manager/providers', { method: 'GET' });
-    },
-
-    /**
-     * update_provider
-     * Updates or creates an AI infrastructure provider.
-     */
-    update_provider: async (id: string, config: Record<string, unknown>): Promise<{ status: string }> => {
-        return api_request<{ status: string }>(`/v1/model-manager/providers/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(config)
-        });
-    },
-
-    /**
-     * delete_provider
-     * Deletes an AI infrastructure provider.
-     */
-    delete_provider: async (id: string): Promise<void> => {
-        await api_request(`/v1/model-manager/providers/${id}`, { method: 'DELETE' });
-    },
-
-    /**
-     * sync_provider_models
-     * Triggers dynamic discovery of available models for a provider via IMR-01.
-     * 
-     * ### 💎 Intelligent Model Registry (IMR-01)
-     * Queries the provider's native list-models endpoint and synchronizes 
-     * with the local `infra_models.json` registry. Automatically 
-     * reconciles pricing/token mappings for new capabilities (IMR-P2).
-     */
-    sync_provider_models: async (id: string): Promise<{ status: string; added: number; discovered: number; message: string }> => {
-        return api_request<{ status: string; added: number; discovered: number; message: string }>(`/v1/model-manager/providers/${id}/sync`, {
-            method: 'POST'
-        });
-    },
-
-    /**
-     * update_model
-     * Updates or creates an AI infrastructure model.
-     */
-    update_model: async (id: string, entry: Record<string, unknown>): Promise<{ status: string }> => {
-        return api_request<{ status: string }>(`/v1/model-manager/models/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(entry)
-        });
-    },
-
-    /**
-     * delete_model
-     * Deletes an AI infrastructure model entry.
-     */
-    delete_model: async (id: string): Promise<void> => {
-        await api_request(`/v1/model-manager/models/${id}`, { method: 'DELETE' });
-    },
-
-    /**
-     * get_models
-     * Returns all registered AI infrastructure models.
-     */
-    get_models: async (): Promise<Record<string, unknown>[]> => {
-        return api_request<Record<string, unknown>[]>('/v1/model-manager/models', { method: 'GET' });
-    },
-
-    /**
-     * get_security_quotas
-     * Returns aggregate security quotas (budget vs spent).
-     */
-    get_security_quotas: async (): Promise<Quotas> => {
-        return api_request('/v1/oversight/security/quotas', { method: 'GET' });
-    },
-
-    /**
-     * update_security_quota
-     * Updates a specific security quota for an entity.
-     */
-    update_security_quota: async (entity_id: string, budget_usd: number): Promise<{ status: string }> => {
-        return api_request(`/v1/oversight/security/quotas/${entity_id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ budget_usd })
-        });
-    },
-
-    /**
-     * get_mission_quotas
-     * Returns all registered mission quotas.
-     */
-    get_mission_quotas: async (): Promise<{ quotas: Quota_Details[] }> => {
-        return api_request('/v1/oversight/security/missions/quotas', { method: 'GET' });
-    },
-
-    /**
-     * update_mission_quota
-     * Updates the budget quota for a specific mission cluster.
-     */
-    update_mission_quota: async (cluster_id: string, budget_usd: number): Promise<{ status: string }> => {
-        return api_request(`/v1/oversight/security/missions/${cluster_id}/quota`, {
-            method: 'PUT',
-            body: JSON.stringify({ budget_usd })
-        });
-    },
-
-    /**
-     * get_audit_trail
-     * Returns the full historical audit trail.
-     */
-    get_audit_trail: async (page = 1, per_page = 50): Promise<{ data: Audit_Entry[]; total: number }> => {
-        return api_request(`/v1/oversight/security/audit-trail?page=${page}&per_page=${per_page}`, { method: 'GET' });
-    },
-
-    /**
-     * get_agent_health
-     * Returns health metrics for all agents.
-     */
-    get_agent_health: async (): Promise<{ agents: Agent_Health[] }> => {
-        return api_request('/v1/oversight/security/health', { method: 'GET' });
-    },
-
-    /**
-     * list_continuity_workflows
-     * Lists all existing workflows for scheduled jobs.
-     */
-    list_continuity_workflows: async (): Promise<Workflow_Entry[]> => {
-        const res = await api_request<{ workflows: Workflow_Entry[] } | Workflow_Entry[]>('/v1/continuity/workflows', { method: 'GET' });
-        return Array.isArray(res) ? res : (res.workflows || []);
-    },
-
-    /**
-     * create_continuity_workflows
-     * Creates a new workflow definition for scheduled jobs.
-     */
-    create_continuity_workflows: async (data: { name: string; description?: string }): Promise<Workflow_Entry> => {
-        return api_request<Workflow_Entry>('/v1/continuity/workflows', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    },
-
-    /**
-     * add_continuity_workflows_step
-     * Adds a step to an existing continuity workflow.
-     */
-    add_continuity_workflows_step: async (workflow_id: string, step: Partial<Workflow_Step>): Promise<Workflow_Step> => {
-        return api_request<Workflow_Step>(`/v1/continuity/workflows/${workflow_id}/steps`, {
-            method: 'POST',
-            body: JSON.stringify(step)
-        });
-    },
-
-    /**
-     * delete_continuity_workflows
-     * Deletes a continuity workflow definition.
-     */
-    delete_continuity_workflows: async (workflow_id: string): Promise<void> => {
-        return api_request(`/v1/continuity/workflows/${workflow_id}`, { method: 'DELETE' });
-    },
-
-    /**
-     * get_integrity_status
-     * Checks the Merkle chain integrity status.
-     */
-    get_integrity_status: async (): Promise<{ integrity_score: number, status: string, verified_count: number, total_count: number }> => {
-        return api_request('/v1/oversight/security/integrity', { method: 'GET' });
-    },
-
-    /**
-     * update_governance_settings
-     * Updates global governance and oversight settings.
-     */
-    update_governance_settings: async (settings: Record<string, unknown>): Promise<unknown> => {
-        return api_request('/v1/oversight/settings', {
-            method: 'PUT',
-            body: JSON.stringify(settings)
-        });
-    },
-
-    /**
-     * get_model_catalog
-     * Fetches the curated model catalog from the infrastructure tier.
-     */
-    get_model_catalog: async (): Promise<Store_Model[]> => {
-        return api_request<Store_Model[]>('/v1/model-manager/model-store/catalog', { method: 'GET' });
-    },
-
-    /**
-     * pull_model
-     * Initiates a model pull/download sequence on a specific Bunker node.
-     */
-    pull_model: async (model_id: string, node_id: string): Promise<{ status: string }> => {
-        return api_request<{ status: string }>('/v1/model-manager/model-store/pull', {
-            method: 'POST',
-            body: JSON.stringify({ tag: model_id, node_id: node_id })
-        });
-    },
-
-    /**
      * get_sovereign_manifest
      * Fetches the real-time Sovereign State Manifest.
      */
     get_sovereign_manifest: async (): Promise<string> => {
         const data = await api_request<{ manifest: string }>('/v1/governance/manifest', { method: 'GET' });
         return data.manifest;
-    },
-
-    /**
-     * install_template
-     * Installs a template from the official repository.
-     */
-    install_template: async (repository_url: string, path: string): Promise<void> => {
-        await api_request('/v1/engine/templates/install', {
-            method: 'POST',
-
-            body: JSON.stringify({ repository_url: repository_url, path })
-        });
-    },
-
-    /**
-     * pre_pr_engine
-     * Triggers the Pre-PR Quality Gate checks on the backend engine.
-     */
-    pre_pr_engine: async (): Promise<{ status: string, output?: string, error?: string }> => {
-        return api_request<{ status: string, output?: string, error?: string }>('/v1/engine/pre-pr', {
-            method: 'POST'
-        });
     }
 };
-
-// Re-export types for consumers
-export type { Skill_Manifest } from './mission_api_service';
-
-
-
-
-// Metadata: [system_api_service]

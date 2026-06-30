@@ -33,7 +33,7 @@ pub trait GraphSynthesizer: Send + Sync {
         salt: &str,
         to_delete: &[PathBuf],
         updates: Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>,
-    ) -> Result<(), GraphError>;
+    ) -> Result<bool, GraphError>;
 }
 
 /// Default implementation of [`GraphSynthesizer`].
@@ -46,7 +46,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
         salt: &str,
         to_delete: &[PathBuf],
         updates: Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<bool, GraphError> {
         // 1. Remove deleted files from caches
         for path in to_delete {
             let rel_path = to_unix_path(path.strip_prefix(&graph.root).unwrap_or(path));
@@ -100,11 +100,12 @@ impl GraphSynthesizer for GraphSynthesisEngine {
                     tokens: token_count,
                 };
                 if graph.graph.node_count() >= MAX_NODES {
-                    return Err(GraphError::Internal(format!(
-                        "Maximum node count limit exceeded: {} nodes, max allowed is {}",
+                    tracing::warn!(
+                        "⚠️ [graph] Maximum node count limit reached: {} nodes, max allowed is {}. Terminating node synthesis early.",
                         graph.graph.node_count(),
                         MAX_NODES
-                    )));
+                    );
+                    return Ok(false);
                 }
                 let idx = graph.graph.add_node(node);
                 graph.index.insert(key, idx);
@@ -171,11 +172,12 @@ impl GraphSynthesizer for GraphSynthesisEngine {
                                     && added_edges.insert((src_idx, target_idx))
                                 {
                                     if graph.graph.edge_count() >= MAX_EDGES {
-                                        return Err(GraphError::Internal(format!(
-                                            "Maximum edge count limit exceeded: {} edges, max allowed is {}",
+                                        tracing::warn!(
+                                            "⚠️ [graph] Maximum edge count limit reached: {} edges, max allowed is {}. Terminating edge synthesis early.",
                                             graph.graph.edge_count(),
                                             MAX_EDGES
-                                        )));
+                                        );
+                                        return Ok(false);
                                     }
                                     graph.graph.add_edge(
                                         src_idx,
@@ -198,7 +200,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
             graph.graph.edge_count()
         );
 
-        Ok(())
+        Ok(true)
     }
 }
 

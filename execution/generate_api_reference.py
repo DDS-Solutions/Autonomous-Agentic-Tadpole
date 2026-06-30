@@ -41,6 +41,7 @@ class Route:
 
 NESTS = {
     "build_agent_routes": "/agents",
+    "build_intelligence_routes": "/intelligence",
     "build_oversight_routes": "/oversight",
     "build_infra_routes": "/infra",
     "build_model_manager_routes": "/model-manager",
@@ -70,6 +71,7 @@ METHOD_ROUTER_MAP = {
 
 TAG_BY_PREFIX = [
     ("/v1/engine", "engine"),
+    ("/v1/intelligence", "intelligence"),
     ("/v1/agents", "agents"),
     ("/v1/oversight", "oversight"),
     ("/v1/infra", "infra"),
@@ -361,7 +363,25 @@ def write_openapi(routes: list[Route]) -> None:
             if route.public:
                 lines.append("      security: []")
             params = path_params(path)
-            if params:
+            intel_params = []
+            if path == "/v1/intelligence/graph":
+                intel_params = [
+                    ("path_prefix", "query", False, "string", "Filter nodes by path prefix"),
+                    ("max_nodes", "query", False, "integer", "Cap maximum nodes returned")
+                ]
+            elif path == "/v1/intelligence/graph/rebuild":
+                intel_params = [
+                    ("dry_run", "query", False, "boolean", "Dry run capacity check")
+                ]
+            elif path in ("/v1/intelligence/blast-radius", "/v1/intelligence/resolve"):
+                intel_params = [
+                    ("name", "query", True, "string", "Symbol name"),
+                    ("path", "query", True, "string", "Obfuscated file path")
+                ]
+                if path == "/v1/intelligence/resolve":
+                    intel_params.append(("budget", "query", False, "integer", "Token budget constraint"))
+
+            if params or intel_params:
                 lines.append("      parameters:")
                 for param in params:
                     lines.extend(
@@ -370,6 +390,16 @@ def write_openapi(routes: list[Route]) -> None:
                             "          in: path",
                             "          required: true",
                             "          schema: { type: string }",
+                        ]
+                    )
+                for p_name, p_in, p_req, p_type, p_desc in intel_params:
+                    lines.extend(
+                        [
+                            f"        - name: {p_name}",
+                            f"          in: {p_in}",
+                            f"          required: {str(p_req).lower()}",
+                            f"          description: {escape_yaml_string(p_desc)}",
+                            f"          schema: {{ type: {p_type} }}",
                         ]
                     )
             if route.feature_note:
@@ -851,6 +881,67 @@ def write_openapi(routes: list[Route]) -> None:
             "        decision: { type: string }",
         ]
     )
+
+    schemas_raw = """SymbolNode:
+  type: object
+  required: [name, path, kind, signature, start_line, end_line, tokens]
+  properties:
+    name: { type: string }
+    path: { type: string }
+    kind: { type: string }
+    signature: { type: string }
+    start_line: { type: integer }
+    end_line: { type: integer }
+    tokens: { type: integer }
+CodeGraphLink:
+  type: object
+  required: [source, target]
+  properties:
+    source: { type: string }
+    target: { type: string }
+CodeGraphResponse:
+  type: object
+  required: [nodes, links, anomalies]
+  properties:
+    nodes:
+      type: array
+      items: { $ref: '#/components/schemas/SymbolNode' }
+    links:
+      type: array
+      items: { $ref: '#/components/schemas/CodeGraphLink' }
+    anomalies:
+      type: array
+      items: { type: string }
+GraphSummary:
+  type: object
+  required: [node_count, edge_count, file_count]
+  properties:
+    node_count: { type: integer }
+    edge_count: { type: integer }
+    file_count: { type: integer }
+GraphRebuildResponse:
+  type: object
+  required: [status, dry_run]
+  properties:
+    status: { type: string }
+    dry_run: { type: boolean }
+    summary: { $ref: '#/components/schemas/GraphSummary', nullable: true }
+SymbolNodeList:
+  type: array
+  items: { $ref: '#/components/schemas/SymbolNode' }
+ResolveResponse:
+  type: object
+  required: [symbols, budget, accumulated_tokens]
+  properties:
+    symbols:
+      type: array
+      items: { $ref: '#/components/schemas/SymbolNode' }
+    budget: { type: integer }
+    accumulated_tokens: { type: integer }"""
+    # Parse the multiline string and split by lines, prefixing each line with two spaces (since we are outputting under schemas)
+    for schema_line in schemas_raw.strip().split("\n"):
+        lines.append("    " + schema_line)
+    
     OPENAPI.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

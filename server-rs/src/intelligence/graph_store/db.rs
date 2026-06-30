@@ -28,9 +28,30 @@ pub(super) async fn open_graph_pool(db_path: &Path) -> Result<SqlitePool, AppErr
 }
 
 pub(super) async fn ensure_schema(pool: &SqlitePool) -> Result<(), AppError> {
+    // 1. Create metadata table first so we can query version
+    sqlx::query("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        .execute(pool)
+        .await?;
+
+    let mut current_version = 0;
+    if let Ok(row) = sqlx::query_as::<_, (String, String)>("SELECT key, value FROM metadata WHERE key = 'schema_version'")
+        .fetch_one(pool)
+        .await
+    {
+        if let Ok(v) = row.1.parse::<u32>() {
+            current_version = v;
+        }
+    }
+
+    if current_version > 0 && current_version < 10 {
+        // Run migration to add file_hash_sha256 column if not present
+        let _ = sqlx::query("ALTER TABLE nodes ADD COLUMN file_hash_sha256 TEXT")
+            .execute(pool)
+            .await;
+    }
+
     let schema = [
-        "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, name TEXT NOT NULL, qualified_name TEXT NOT NULL UNIQUE, file_path TEXT NOT NULL, line_start INTEGER, line_end INTEGER, language TEXT, parent_name TEXT, params TEXT, return_type TEXT, modifiers TEXT, is_test INTEGER DEFAULT 0, file_hash TEXT, extra TEXT DEFAULT '{}', updated_at REAL NOT NULL, signature TEXT, community_id INTEGER)",
+        "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, name TEXT NOT NULL, qualified_name TEXT NOT NULL UNIQUE, file_path TEXT NOT NULL, line_start INTEGER, line_end INTEGER, language TEXT, parent_name TEXT, params TEXT, return_type TEXT, modifiers TEXT, is_test INTEGER DEFAULT 0, file_hash TEXT, file_hash_sha256 TEXT, extra TEXT DEFAULT '{}', updated_at REAL NOT NULL, signature TEXT, community_id INTEGER)",
         "CREATE TABLE IF NOT EXISTS edges (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, source_qualified TEXT NOT NULL, target_qualified TEXT NOT NULL, file_path TEXT NOT NULL, line INTEGER DEFAULT 0, extra TEXT DEFAULT '{}', confidence REAL DEFAULT 1.0, confidence_tier TEXT DEFAULT 'EXTRACTED', updated_at REAL NOT NULL)",
         "CREATE TABLE IF NOT EXISTS communities (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 0, parent_id INTEGER, cohesion REAL NOT NULL DEFAULT 0.0, size INTEGER NOT NULL DEFAULT 0, dominant_language TEXT, description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
         "CREATE TABLE IF NOT EXISTS community_summaries (community_id INTEGER PRIMARY KEY, name TEXT NOT NULL, purpose TEXT DEFAULT '', key_symbols TEXT DEFAULT '[]', risk TEXT DEFAULT 'unknown', size INTEGER DEFAULT 0, dominant_language TEXT DEFAULT '')",
@@ -64,6 +85,7 @@ pub(super) async fn ensure_schema(pool: &SqlitePool) -> Result<(), AppError> {
 pub(super) async fn write_snapshot(
     pool: &SqlitePool,
     snapshot: &GraphSnapshot,
+    git_path: Option<&Path>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     for table in [
@@ -87,7 +109,7 @@ pub(super) async fn write_snapshot(
 
     let now = Utc::now().timestamp_millis() as f64 / 1000.0;
     for node in &snapshot.nodes {
-        sqlx::query("INSERT INTO nodes (id, kind, name, qualified_name, file_path, line_start, line_end, language, parent_name, params, return_type, modifiers, is_test, file_hash, extra, updated_at, signature, community_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)")
+        sqlx::query("INSERT INTO nodes (id, kind, name, qualified_name, file_path, line_start, line_end, language, parent_name, params, return_type, modifiers, is_test, file_hash, file_hash_sha256, extra, updated_at, signature, community_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)")
             .bind(node.id)
             .bind(&node.kind)
             .bind(&node.name)
@@ -101,6 +123,7 @@ pub(super) async fn write_snapshot(
             .bind(&node.return_type)
             .bind(&node.modifiers)
             .bind(if node.is_test { 1 } else { 0 })
+            .bind(&node.file_hash)
             .bind(&node.file_hash)
             .bind(&node.extra)
             .bind(now)
@@ -195,7 +218,7 @@ pub(super) async fn write_snapshot(
         }
     }
 
-    write_metadata(&mut tx, snapshot).await?;
+    write_metadata(&mut tx, snapshot, git_path).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -203,21 +226,22 @@ pub(super) async fn write_snapshot(
 async fn write_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     snapshot: &GraphSnapshot,
+    git_path: Option<&Path>,
 ) -> Result<(), AppError> {
     let timestamp = Utc::now().to_rfc3339();
     let metadata = [
-        ("schema_version", "9".to_string()),
+        ("schema_version", "10".to_string()),
         ("last_build_type", "startup_full".to_string()),
         ("postprocess_level", "full".to_string()),
         ("last_updated", timestamp.clone()),
         ("last_postprocessed_at", timestamp),
         (
             "git_branch",
-            git_output(&snapshot.root, &["branch", "--show-current"]).unwrap_or_default(),
+            git_output(git_path, &snapshot.root, &["branch", "--show-current"]).unwrap_or_else(|| "git_unavailable".to_string()),
         ),
         (
             "git_head_sha",
-            git_output(&snapshot.root, &["rev-parse", "HEAD"]).unwrap_or_default(),
+            git_output(git_path, &snapshot.root, &["rev-parse", "HEAD"]).unwrap_or_else(|| "git_unavailable".to_string()),
         ),
     ];
     for (key, value) in metadata {
@@ -230,8 +254,9 @@ async fn write_metadata(
     Ok(())
 }
 
-fn git_output(root: &Path, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new("git")
+fn git_output(git_path: Option<&Path>, root: &Path, args: &[&str]) -> Option<String> {
+    let git_cmd = git_path?;
+    let output = std::process::Command::new(git_cmd)
         .args(args)
         .current_dir(root)
         .output()

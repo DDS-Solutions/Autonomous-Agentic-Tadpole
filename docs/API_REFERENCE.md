@@ -123,6 +123,15 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/infra/nodes` | `routes::nodes::get_nodes` | Protected |
 | `POST` | `/v1/infra/nodes/discover` | `routes::nodes::discover_nodes` | Protected |
 
+## Intelligence
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/intelligence/blast-radius` | `routes::intelligence::get_blast_radius` | Protected |
+| `GET` | `/v1/intelligence/graph` | `routes::intelligence::get_code_graph` | Protected |
+| `POST` | `/v1/intelligence/graph/rebuild` | `routes::intelligence::rebuild_code_graph` | Protected |
+| `GET` | `/v1/intelligence/resolve` | `routes::intelligence::resolve_code_context` | Protected |
+
 ## Mcp
 
 | Method | Path | Handler | Notes |

@@ -48,6 +48,37 @@ pub async fn install_template(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<InstallTemplateRequest>,
 ) -> Result<axum::response::Response, AppError> {
+    // 🛡️ [Security Hardening] Validate repository URL to prevent command/flag injection
+    let repo_url = payload.repository_url.trim();
+    if repo_url.starts_with('-') {
+        return Err(AppError::BadRequest("Repository URL cannot start with a hyphen.".to_string()));
+    }
+
+    // Parse URL scheme validation
+    let parsed_url = reqwest::Url::parse(repo_url).map_err(|e| {
+        AppError::BadRequest(format!("Invalid Repository URL: {e}"))
+    })?;
+    let scheme = parsed_url.scheme();
+    if scheme != "http" && scheme != "https" && scheme != "git" {
+        return Err(AppError::BadRequest(format!(
+            "Unsupported repository URL scheme: {scheme}. Only http, https, and git protocols are allowed."
+        )));
+    }
+
+    // Validate path parameter to prevent directory traversal
+    if payload.path.contains("..") || payload.path.starts_with('/') || payload.path.starts_with('\\') {
+        return Err(AppError::BadRequest("Invalid template path: Directory traversal or absolute paths are prohibited.".to_string()));
+    }
+
+    let git_cmd = match state.resources.git_path.as_ref() {
+        Some(path) => path.clone(),
+        None => {
+            return Err(AppError::InternalServerError(
+                "Git executable is not resolved on the system.".to_string(),
+            ));
+        }
+    };
+
     let dl_id = uuid::Uuid::new_v4().to_string();
     let temp_dir = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -57,12 +88,12 @@ pub async fn install_template(
 
     let _ = tokio::fs::create_dir_all(&temp_dir).await;
 
-    // 1. Clone repository
-    let status = match tokio::process::Command::new("git")
+    // 1. Clone repository using the boot-resolved git command
+    let status = match tokio::process::Command::new(&git_cmd)
         .arg("clone")
         .arg("--depth")
         .arg("1")
-        .arg(&payload.repository_url)
+        .arg(repo_url)
         .arg(&temp_dir)
         .status()
         .await
@@ -70,8 +101,7 @@ pub async fn install_template(
         Ok(s) => s,
         Err(e) => {
             return Err(AppError::InternalServerError(format!(
-                "Failed to execute git: {}",
-                e
+                "Failed to execute git: {e}"
             )));
         }
     };
@@ -243,6 +273,50 @@ pub async fn install_template(
         .into_response())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_install_template_validation() {
+        let app_state = Arc::new(AppState::new_minimal_mock().await);
+
+        // Case 1: Hyphen prefix to prevent option injection
+        let req = InstallTemplateRequest {
+            repository_url: "--upload-pack=evil".to_string(),
+            path: "agents".to_string(),
+        };
+        let res = install_template(axum::extract::State(app_state.clone()), Json(req)).await;
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            AppError::BadRequest(msg) => assert!(msg.contains("cannot start with a hyphen")),
+            other => panic!("Expected BadRequest, got {:?}", other),
+        }
+
+        // Case 2: Invalid protocol / scheme
+        let req = InstallTemplateRequest {
+            repository_url: "ftp://github.com/user/repo".to_string(),
+            path: "agents".to_string(),
+        };
+        let res = install_template(axum::extract::State(app_state.clone()), Json(req)).await;
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            AppError::BadRequest(msg) => assert!(msg.contains("Unsupported repository URL scheme")),
+            other => panic!("Expected BadRequest, got {:?}", other),
+        }
+
+        // Case 3: Path traversal attempt
+        let req = InstallTemplateRequest {
+            repository_url: "https://github.com/user/repo.git".to_string(),
+            path: "../outside".to_string(),
+        };
+        let res = install_template(axum::extract::State(app_state.clone()), Json(req)).await;
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            AppError::BadRequest(msg) => assert!(msg.contains("Directory traversal")),
+            other => panic!("Expected BadRequest, got {:?}", other),
+        }
+    }
+}
 
 // Metadata: [templates]

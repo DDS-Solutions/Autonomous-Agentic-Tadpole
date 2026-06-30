@@ -66,7 +66,7 @@ impl CodeSymbolGraph {
     /// 3. **Parse** — parallel AST extraction for changed files only.
     /// 4. **Synthesize** — integrate into the live graph, reindex, rebuild edges.
     #[allow(clippy::type_complexity)]
-    pub fn build(&mut self, salt: &str) -> Result<(), GraphError> {
+    pub fn build(&mut self, salt: &str) -> Result<bool, GraphError> {
         tracing::info!(
             "🔍 [graph] Building symbol-level knowledge graph for {}...",
             self.root.display()
@@ -78,14 +78,15 @@ impl CodeSymbolGraph {
         let synthesizer = GraphSynthesisEngine;
 
         // 1. Discovery
-        let discovered_files = discovery.discover(&self.root)?;
+        let mut discovered_files = discovery.discover(&self.root)?;
 
         if discovered_files.len() > MAX_DISCOVERED_FILES {
-            return Err(GraphError::Internal(format!(
-                "Workspace size limit exceeded: found {} files, max allowed is {}",
+            tracing::warn!(
+                "⚠️ [graph] Workspace size limit exceeded: found {} files, max allowed is {}. Truncating list of files to synthesize.",
                 discovered_files.len(),
                 MAX_DISCOVERED_FILES
-            )));
+            );
+            discovered_files.truncate(MAX_DISCOVERED_FILES);
         }
 
         // 2. Cache check
@@ -99,16 +100,16 @@ impl CodeSymbolGraph {
                 self.graph.node_count(),
                 self.graph.edge_count()
             );
-            return Ok(());
+            return Ok(true);
         }
 
         // 3. Parsing
         let updates = parser.parse_files(&to_parse, &self.root)?;
 
         // 4. Synthesis
-        synthesizer.synthesize(self, salt, &to_delete, updates)?;
+        let success = synthesizer.synthesize(self, salt, &to_delete, updates)?;
 
-        Ok(())
+        Ok(success)
     }
 
     /// Audits the graph for structural anomalies (dead code — symbols with 0
@@ -249,12 +250,17 @@ impl CodeSymbolGraph {
     /// edges (callers) via BFS until the budget is exhausted or depth 50 is reached.
     /// The target node's signature is truncated (with `"..."` suffix) if it alone
     /// exceeds the budget.
-    pub fn resolve_context(&self, symbol_name: &str, path: &str, budget: usize) -> Vec<SymbolNode> {
+    pub fn resolve_context(
+        &self,
+        symbol_name: &str,
+        path: &str,
+        budget: usize,
+        bpe: Option<&tiktoken_rs::CoreBPE>,
+    ) -> Vec<SymbolNode> {
         let real_path = self.resolve_path(path);
         let key = index_key(&real_path, symbol_name);
         let mut results = Vec::new();
         let mut accumulated_tokens = 0;
-        let bpe = tiktoken_rs::cl100k_base().ok();
 
         if let Some(&start_idx) = self.index.get(&key) {
             let start_node = &self.graph[start_idx];
@@ -647,11 +653,11 @@ mod tests {
         graph.build(&salt).unwrap();
 
         // Large budget — both symbols should fit
-        let resolved_large = graph.resolve_context("helper", "main.rs", 1000);
+        let resolved_large = graph.resolve_context("helper", "main.rs", 1000, None);
         assert_eq!(resolved_large.len(), 2);
 
         // Tiny budget — only target should be returned and its signature truncated
-        let resolved_small = graph.resolve_context("helper", "main.rs", 2);
+        let resolved_small = graph.resolve_context("helper", "main.rs", 2, None);
         assert!(resolved_small[0].signature.ends_with("..."));
     }
 }

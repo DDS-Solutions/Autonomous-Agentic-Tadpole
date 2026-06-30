@@ -1145,6 +1145,7 @@ mod tests {
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
                 symbol_graph: tokio::sync::OnceCell::new(),
+                tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 rate_limiters: dashmap::DashMap::new(),
@@ -1159,6 +1160,7 @@ mod tests {
                 ))),
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+                git_path: which::which("git").ok(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]

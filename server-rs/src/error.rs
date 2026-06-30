@@ -122,6 +122,9 @@ pub enum AppError {
     #[error("Forbidden: {0}")]
     Forbidden(String),
 
+    #[error("Intel Path Unknown: {0}")]
+    IntelPathUnknown(String),
+
     #[error("Not Found: {0}")]
     NotFound(String),
 
@@ -251,8 +254,13 @@ impl AppError {
             }
             AppError::Forbidden(_) => {
                 status_code = StatusCode::FORBIDDEN;
-                type_slug = "forbidden".to_string();
+                type_slug = "intel-boundary-violation".to_string();
                 severity = "CRITICAL";
+            }
+            AppError::IntelPathUnknown(_) => {
+                status_code = StatusCode::NOT_FOUND;
+                type_slug = "intel-path-unknown".to_string();
+                severity = "ERROR";
             }
             AppError::NotFound(_) => {
                 status_code = StatusCode::NOT_FOUND;

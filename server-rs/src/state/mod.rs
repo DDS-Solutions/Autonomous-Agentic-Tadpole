@@ -174,6 +174,7 @@ impl AppState {
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
                 symbol_graph: tokio::sync::OnceCell::new(),
+                tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -192,6 +193,7 @@ impl AppState {
                 ))),
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+                git_path: which::which("git").ok(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -308,6 +310,7 @@ impl AppState {
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
                 code_graph: tokio::sync::OnceCell::new(),
                 symbol_graph: tokio::sync::OnceCell::new(),
+                tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -326,6 +329,7 @@ impl AppState {
                 ))),
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+                git_path: which::which("git").ok(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -618,6 +622,7 @@ impl AppState {
                 audio_cache,
                 code_graph: OnceCell::new(),
                 symbol_graph: OnceCell::new(),
+                tokenizer_bpe: OnceCell::new(),
                 identity_context: OnceCell::new(),
                 memory_context: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -641,6 +646,7 @@ impl AppState {
                 },
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+                git_path: which::which("git").ok(),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -1236,6 +1242,7 @@ impl Default for AppState {
             audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
             code_graph: OnceCell::new(),
             symbol_graph: OnceCell::new(),
+            tokenizer_bpe: OnceCell::new(),
             identity_context: OnceCell::new(),
             memory_context: OnceCell::new(),
             #[cfg(feature = "vector-memory")]
@@ -1254,6 +1261,7 @@ impl Default for AppState {
             ))),
             parser: Arc::new(SymbolParser::new()),
             obfuscation_salt: uuid::Uuid::new_v4().to_string(),
+            git_path: which::which("git").ok(),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

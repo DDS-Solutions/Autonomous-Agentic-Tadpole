@@ -7,7 +7,7 @@
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Type mismatch if Rust structs drift without triggering a re-generation.
- * - **Telemetry Link**: Not tracked (Static generated types). Search `[generated]` in observability traces.
+ * - **Telemetry Link**: Static type definition file. Not tracked in runtime telemetry.
  */
 
 export type EngineAgent = { identity: AgentIdentity; models: AgentModels; economics: AgentEconomics; health: AgentHealth; capabilities: AgentCapabilities; state: AgentState; metadata: Partial<{ [key in string]: JsonValue }>; created_at: string | null; requires_oversight: boolean; voice_id: string | null; voice_engine: string | null; stt_engine: string | null; connector_configs: ConnectorConfig[]; version: number; runner_policy: RunnerPolicy }

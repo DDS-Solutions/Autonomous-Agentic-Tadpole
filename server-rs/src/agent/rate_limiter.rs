@@ -26,11 +26,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// Both limits are opt-in — if rpm/tpm are `None` in the model config, no throttling occurs.
 ///
 /// # Usage
-/// ```
-/// let limiter = RateLimiter::new(60, 100_000); // 60 RPM, 100k TPM
+/// ```no_run
+/// # use server_rs::agent::rate_limiter::RateLimiter;
+/// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+/// let limiter = RateLimiter::new(Some(60), Some(100_000)); // 60 RPM, 100k TPM
 /// limiter.acquire(512).await; // "I'm about to use ~512 tokens"
 /// // make your API call
 /// limiter.record_usage(420); // "I actually used 420 tokens"
+/// # });
 /// ```
 use std::sync::Arc;
 use tokio::sync::Mutex;

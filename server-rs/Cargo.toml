@@ -45,6 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 dashmap = "6.0"
 parking_lot = "0.12"
+arc-swap = "1.7.1"
 sysinfo = "0.38.4"
 # Database Persistence
 sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "tls-rustls", "sqlite", "chrono", "json", "migrate", "derive", "macros" ] }
@@ -97,6 +98,7 @@ rmp-serde = "1.3.1"
 specta-typescript = "0.0.8"
 specta = { version = "2.0.0-rc.21", features = ["derive", "chrono", "serde", "export", "serde_json"] }
 urlencoding = "2.1.3"
+which = "4.4.2"
 
 [features]
 # default = ["vector-memory", "neural-audio"]

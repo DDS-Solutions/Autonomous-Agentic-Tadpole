@@ -92,10 +92,6 @@ pub async fn get_ledger(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (page, per_page) = params.sanitize();
-    let limit = per_page as i32;
-    let offset = ((page as i32) - 1) * limit;
-
     let rows = sqlx::query(
         r#"
         SELECT 
@@ -112,12 +108,9 @@ pub async fn get_ledger(
             LIMIT 1
         )
         WHERE o.status != 'pending' 
-        ORDER BY o.created_at DESC 
-        LIMIT ? OFFSET ?
+        ORDER BY o.created_at DESC
         "#
     )
-    .bind(limit)
-    .bind(offset)
     .fetch_all(&state.resources.pool)
     .await
     .map_err(AppError::Sqlx)?;
@@ -556,15 +549,9 @@ pub async fn get_audit_trail(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (page, per_page) = params.sanitize();
-    let limit = per_page as i32;
-    let offset = ((page as i32) - 1) * limit;
-
     // We pull directly from audit_trail instead of oversight_log for "top-tier" integrity
     let entries: Vec<AuditEntry> =
-        sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT ? OFFSET ?")
-            .bind(limit)
-            .bind(offset)
+        sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC")
             .fetch_all(&state.resources.pool)
             .await
             .map_err(AppError::Sqlx)?;

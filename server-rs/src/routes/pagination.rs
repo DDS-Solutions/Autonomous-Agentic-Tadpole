@@ -42,10 +42,10 @@ fn default_per_page() -> u32 {
 }
 
 impl PaginationParams {
-    /// Returns clamped, safe values (page >= 1, per_page in 1..=100).
+    /// Returns clamped, safe values (page >= 1, per_page in 1..=10000).
     pub fn sanitize(&self) -> (u32, u32) {
         let page = self.page.max(1);
-        let per_page = self.per_page.clamp(1, 100);
+        let per_page = self.per_page.clamp(1, 10000);
         (page, per_page)
     }
 
@@ -237,10 +237,10 @@ mod tests {
     fn pagination_caps_per_page() {
         let p = PaginationParams {
             page: 1,
-            per_page: 500,
+            per_page: 15000,
         };
         let (_, per_page) = p.sanitize();
-        assert_eq!(per_page, 100);
+        assert_eq!(per_page, 10000);
     }
 
     #[test]

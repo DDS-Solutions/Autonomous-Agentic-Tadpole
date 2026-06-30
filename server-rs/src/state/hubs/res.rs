@@ -56,7 +56,9 @@ pub struct ResourceHub {
     /// @state: Deferred (Warmed up lazily to prevent CPU/RAM spikes)
     pub code_graph: OnceCell<Arc<RwLock<CodeGraph>>>,
     /// Symbol-level knowledge graph for blast radius analysis.
-    pub symbol_graph: OnceCell<Arc<RwLock<CodeSymbolGraph>>>,
+    pub symbol_graph: OnceCell<Arc<arc_swap::ArcSwap<CodeSymbolGraph>>>,
+    /// Cached tiktoken BPE core.
+    pub tokenizer_bpe: OnceCell<Option<Arc<tiktoken_rs::CoreBPE>>>,
     /// Global system identity context loaded from `directives/IDENTITY.md`.
     /// @state: Deferred
     pub identity_context: OnceCell<String>,
@@ -97,6 +99,8 @@ pub struct ResourceHub {
     pub parser: Arc<SymbolParser>,
     /// Dynamic boot-time cryptographically secure salt. Used for path obfuscation.
     pub obfuscation_salt: String,
+    /// Absolute path to git binary, resolved at boot.
+    pub git_path: Option<std::path::PathBuf>,
 }
 
 impl ResourceHub {
@@ -155,7 +159,7 @@ impl ResourceHub {
     }
 
     /// Lazily initializes and returns the symbol-level knowledge graph.
-    pub async fn get_symbol_graph(&self) -> Arc<RwLock<CodeSymbolGraph>> {
+    pub async fn get_symbol_graph(&self) -> Arc<arc_swap::ArcSwap<CodeSymbolGraph>> {
         let is_uninitialized = self.symbol_graph.get().is_none();
         if is_uninitialized {
             self.set_subsystem_status("SymbolGraph", SubsystemStatus::Warming(0.0));
@@ -175,13 +179,21 @@ impl ResourceHub {
                     tracing::error!("🚨 [Graph] Failed to build graph in blocking task: {:?}", e);
                     CodeSymbolGraph::new(self.base_dir.clone())
                 });
-                Arc::new(RwLock::new(built_g))
+                Arc::new(arc_swap::ArcSwap::new(Arc::new(built_g)))
             })
             .await;
         if is_uninitialized {
             self.set_subsystem_status("SymbolGraph", SubsystemStatus::Ready);
         }
         graph.clone()
+    }
+
+    /// Lazily initializes and returns the cached tiktoken BPE core.
+    pub async fn get_tokenizer_bpe(&self) -> Option<Arc<tiktoken_rs::CoreBPE>> {
+        self.tokenizer_bpe
+            .get_or_init(|| async { tiktoken_rs::cl100k_base().ok().map(Arc::new) })
+            .await
+            .clone()
     }
 
     /// Lazily initializes and returns the identity context.

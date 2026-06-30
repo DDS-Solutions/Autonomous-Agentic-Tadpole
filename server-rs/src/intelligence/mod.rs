@@ -20,6 +20,7 @@ Core system module providing specialized functionality for the agent swarm.
 
 pub mod graph;
 pub mod graph_store;
+pub mod service;
 
 
 

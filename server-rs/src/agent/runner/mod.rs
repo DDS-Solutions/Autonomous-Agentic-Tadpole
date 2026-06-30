@@ -56,7 +56,7 @@ mod workflow;
 
 /// Context bag for data resolved during the setup phase of a run.
 #[derive(Clone)]
-pub(crate) struct RunContext {
+pub struct RunContext {
     pub agent_id: String,
     pub name: String,
     pub role: String,

@@ -386,6 +386,15 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **Zero-Downtime Token Rotation**: Auth middleware now supports dual-token validation via `NEURAL_TOKEN_OLD` / `NEURAL_TOKEN_NEW` env vars, enabling safe production token rotation with a configurable grace window. Documented in `docs/SECURITY.md`.
 - **MCP Subprocess Sandboxing**: Hardened `execution/tadpole_mcp_server.py` with `asyncio.create_subprocess_exec` (no `shell=True`), `shlex`-based command splitting, a skill allowlist, JSON Schema input validation, hard 30-second execution timeout, and `resource.setrlimit` CPU/memory constraints on Linux/Docker.
 
+### 🧠 Graph Engine & Oversight Hardening
+- **Lock-Free Concurrent Graph Engine**: Replaced `parking_lot::RwLock` with lock-free concurrent access via `arc_swap::ArcSwap` in `ResourceHub` to guarantee non-blocking reads during background graph rebuilds.
+- **Path Traversal Hardening & Error Segregation**: Tightened `/v1/intelligence/blast-radius` and `/v1/intelligence/resolve` to validate input paths unconditionally. Missing paths return `404 Not Found` (`IntelPathUnknown`), whereas path boundary violations (like directory traversal attempts) return `403 Forbidden` (`Forbidden`).
+- **Oversight Ledger Pagination Fix**: Resolved a critical double-pagination bug in `/v1/oversight/ledger` and `/v1/oversight/security/audit-trail` that capped the approved card count in the dashboard at 100 entries.
+- **SHA-256 Hashing for Code Review Graph**: Replaced MD5 hashing with SHA-256 in `graph_store::scan_files::file_hash` and bumped the schema version to 10 with a dual-write `file_hash_sha256` migration window.
+- **Git Resolution at Boot**: Cached `git` executable absolute path at boot via `which` to ensure hermetic and safe execution of sub-processes.
+- **Axum Request Limit**: Added a global 16 KiB default request limit in router to prevent Denial-of-Service attacks.
+- **Robustness Cap Warning and Truncation**: Demoted `MAX_NODES` and `MAX_EDGES` exceeding checks from fatal errors to early-termination warning logs, leaving the previous graph intact, and resolved workspace-wide file bloat via `MAX_DISCOVERED_FILES` truncation.
+
 ### 🗄️ Database Reliability
 - **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-mode-safe `VACUUM INTO` hot backups, SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
 - **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db.rs` for programmatic backup orchestration.
