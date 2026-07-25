@@ -57,14 +57,60 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
     // SEC: This ensures the schema is always consistent and up-to-date.
     let migrator = sqlx::migrate!("./migrations");
 
-
-
+    // ### Self-Annealing Boot: Hotfix Reconciler (DB-02)
+    // When agents modify the DB schema out-of-band (e.g., adding columns during
+    // autonomous tool synthesis), migrations can fail with 'duplicate column' or
+    // 'VersionMismatch'. The reconciler detects these known failures and attempts
+    // targeted hotfixes before retrying, preventing dead-engine-on-restart.
     if let Err(e) = migrator.run(&pool).await {
-        tracing::error!("❌ Critical failure during database migrations: {}", e);
-        return Err(anyhow::anyhow!("Database migration failure: {}", e));
-    }
+        let err_str = format!("{}", e);
+        tracing::warn!("⚠️ [db] Initial migration failed: {}. Attempting self-annealing hotfix...", err_str);
 
-    tracing::info!("✅ Database migrations applied successfully");
+        let mut hotfix_applied = false;
+
+        // Hotfix: duplicate column errors from out-of-band schema modifications
+        if err_str.contains("duplicate column name") {
+            tracing::info!("🔧 [db] Detected duplicate column conflict. Marking conflicting migration as applied...");
+            // Extract the migration version from the error if possible
+            if let Some(version_str) = err_str.split("ExecuteMigration(").nth(1)
+                .and_then(|s| s.split(')').next())
+                .and_then(|s| s.rsplit(", ").next())
+            {
+                if let Ok(version) = version_str.trim().parse::<i64>() {
+                    let _ = sqlx::query(
+                        "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (?, 'hotfix_reconciled', datetime('now'), 1, X'00', 0)"
+                    )
+                    .bind(version)
+                    .execute(&pool)
+                    .await;
+                    hotfix_applied = true;
+                }
+            }
+        }
+
+        // Hotfix: version mismatch from DB restored from a different timeline
+        if err_str.contains("VersionMismatch") {
+            tracing::info!("🔧 [db] Detected version mismatch. Resetting dirty migration flag...");
+            let _ = sqlx::query("DELETE FROM _sqlx_migrations WHERE success = 0")
+                .execute(&pool)
+                .await;
+            hotfix_applied = true;
+        }
+
+        if hotfix_applied {
+            // Retry migrations after hotfix
+            if let Err(retry_err) = migrator.run(&pool).await {
+                tracing::error!("❌ Critical failure during database migrations (post-hotfix): {}", retry_err);
+                return Err(anyhow::anyhow!("Database migration failure (post-hotfix): {}", retry_err));
+            }
+            tracing::info!("✅ Database migrations applied successfully after self-annealing hotfix");
+        } else {
+            tracing::error!("❌ Critical failure during database migrations (no hotfix available): {}", e);
+            return Err(anyhow::anyhow!("Database migration failure: {}", e));
+        }
+    } else {
+        tracing::info!("✅ Database migrations applied successfully");
+    }
 
     // Create fallback_memories table if not exists for non-vector-memory builds
     sqlx::query(

@@ -182,6 +182,20 @@ impl ScriptSkillsRegistry {
         self.state.read().clone()
     }
 
+    /// Spawns a background hot-reload loop that periodically scans for newly synthesized skills/directives
+    /// and performs zero-downtime atomic state reloads.
+    pub fn spawn_hot_reload_loop(registry: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                if let Err(e) = registry.reload_all().await {
+                    tracing::warn!("⚠️ [ScriptSkillsRegistry] Hot-reload scan error: {}", e);
+                }
+            }
+        })
+    }
+
     /// ### 📡 Synchronization: reload_all
     /// Scans all directories concurrently and atomically swaps the registry state.
     pub async fn reload_all(&self) -> Result<(), AppError> {

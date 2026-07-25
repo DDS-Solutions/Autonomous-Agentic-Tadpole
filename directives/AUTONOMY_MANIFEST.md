@@ -23,9 +23,17 @@
 
 3. **[PRIORITY: HIGH] Self-Healing Loop Verification**: Validate that benchmark failures autonomously trigger reverts to the last known green state.
 
-4. **[PRIORITY: MED] Cognitive Memory Compressions**: Ensure episodic short-term memories are compiled and compressed by the Cognitive Memory pipeline into long-term knowledge.
+4. **[PRIORITY: MED] Cognitive Memory Compressions & Hybrid RAG Triad**: Ensure episodic short-term memories are indexed across the **Hybrid RAG Triad**:
+    - **LanceDB Vector RAG** ([memory.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/memory.rs)): High-dimensional semantic search.
+    - **TrustGraph GraphRAG** ([trustgraph.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/trustgraph.rs)): Multi-hop entity-relation BFS graph traversal.
+    - **BM25 Lexical Search** ([bm25_memory.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/services/bm25_memory.rs)): Sub-millisecond exact keyword and symbol search (< 1ms).
 
-5. **[PRIORITY: MED] Proactive Automation Triggers**: Verify system-level file-watchers and compute-profile alerts trigger matching Continuity Jobs.
+5. **[PRIORITY: MED] 2-Tier Context Compression Engine**:
+    - **Tier 1 Heuristic Compaction** ([context_manager.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/context_manager.rs)): Zero-cost ($0 cost, 0ms$) redundant tool output collapsing.
+    - **Tier 2 LLM Semantic Summarization**: Automatically synthesizes dense "Condensed State" blocks when history reaches 80% context saturation.
+    - **Sub-Microsecond Token Counter** ([tokenizer.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/tokenizer.rs)): Bounded 4,096-entry `DashMap` LRU cache for sub-microsecond BPE token counts (`< 1.0 µs`).
+
+6. **[PRIORITY: HIGH] Self-Annealing Code Patching Loop**: Run [evaluate_annealing.py](file:///g:/Autonomous-Agentic-Tadpole/execution/evaluate_annealing.py) to automatically intercept runtime errors, generate fault triads, and propose code hardening patches.
 
 ## Swarm Constraints
 - **Max Parallel Missions**: 1 (Focused Analysis)

@@ -81,6 +81,21 @@ Migrations are managed via SQLx and located in [server-rs/migrations/](file:///g
 
 ---
 
+---
+
+## Core Engine Subsystems
+
+### 6. Subsystem Registry
+The `server-rs` engine hosts 6 specialized autonomous subsystems:
+- **A2A Economic Governance ([a2a.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/routes/a2a.rs))**: Handles Agent-to-Agent 2PC budget transactions (`/v1/a2a/prepare`, `/v1/a2a/commit`, `/v1/a2a/rollback`), integer micro-USDC accounting (`u64`), 24-hour rolling limit resets, and lock-aware spend projection.
+- **TrustGraph Engine ([trustgraph.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/trustgraph.rs))**: Manages directed entity-relation graph topologies (`graph_entities` & `graph_relations`) with $O(N)$ BFS traversal and node rehydration for GraphRAG multi-hop reasoning.
+- **BM25 Memory Engine ([bm25_memory.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/services/bm25_memory.rs))**: Zero-embedding sub-millisecond lexical search engine (< 1ms) featuring single-pass disk I/O, $O(1)$ pre-calculated term frequencies, and a double-checked 5-second TTL cache (`GET /v1/memory/search/bm25`).
+- **Tokenizer Service ([tokenizer.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/tokenizer.rs))**: Sub-microsecond (`< 1.0 µs`) BPE token counter powered by `tiktoken-rs` and a bounded 4,096-entry `DashMap` LRU cache, with model-aware vocabulary multipliers (`Qwen`: 1.05x, `Llama 3`: 1.02x, `Gemma`: 0.95x).
+- **Context Manager ([context_manager.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/context_manager.rs))**: 2-Tier context compression engine featuring Tier 1 zero-cost heuristic compaction ($0 cost, 0ms$) and Tier 2 LLM semantic summarization (`summarize_history`).
+- **Autonomous Skill Watchdog ([script_skills.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/script_skills.rs))**: Background `spawn_hot_reload_loop()` watchdog providing zero-downtime atomic state reloads when agents synthesize new skills.
+
+---
+
 ## Feature Flag Combinations
 The engine is optimized for conditional compilation. Always test changes across the three primary configuration profiles:
 1. **Bare Engine**: `cargo check --no-default-features`

@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 /// Represents a single entry in the tamper-evident audit ledger.
 ///
@@ -83,8 +84,12 @@ impl MerkleAuditTrail {
     /// * `AUDIT_PRIVATE_KEY`: Hex-encoded 32-byte Ed25519 secret key.
     pub fn new(pool: SqlitePool) -> Self {
         let signing_key = std::env::var("AUDIT_PRIVATE_KEY").ok().and_then(|key| {
-            let bytes = hex::decode(key).ok()?;
-            let bytes: [u8; 32] = bytes.try_into().ok()?;
+            // SEC: Wrap hex source and decoded bytes in Zeroizing to scrub from memory on drop
+            let hex_source = Zeroizing::new(key);
+            let mut decoded = Zeroizing::new(hex::decode(hex_source.as_str()).ok()?);
+            let bytes: [u8; 32] = decoded.as_slice().try_into().ok()?;
+            // Explicit zeroize of the decoded Vec before it drops
+            decoded.iter_mut().for_each(|b| *b = 0);
             Some(SigningKey::from_bytes(&bytes))
         });
 

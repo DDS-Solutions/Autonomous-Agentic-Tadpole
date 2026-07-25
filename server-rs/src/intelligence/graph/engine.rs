@@ -235,9 +235,11 @@ impl CodeSymbolGraph {
                 }
             }
 
-            // Single contiguous clone to avoid traversal allocation pressure
+            // Single contiguous clone with node_weight bounds protection
             for idx in affected_indices {
-                affected.push(self.graph[idx].clone());
+                if let Some(node) = self.graph.node_weight(idx) {
+                    affected.push(node.clone());
+                }
             }
         }
 
@@ -263,7 +265,10 @@ impl CodeSymbolGraph {
         let mut accumulated_tokens = 0;
 
         if let Some(&start_idx) = self.index.get(&key) {
-            let start_node = &self.graph[start_idx];
+            let start_node = match self.graph.node_weight(start_idx) {
+                Some(n) => n,
+                None => return results,
+            };
             let start_tokens = start_node.tokens;
 
             let mut start_clone = start_node.clone();
@@ -280,8 +285,10 @@ impl CodeSymbolGraph {
                 } else {
                     let budget_chars = budget * 4;
                     if start_clone.signature.len() > budget_chars {
+                        // SEC: Safe truncation at char boundary to prevent panics on multi-byte UTF-8
+                        let safe_bound = start_clone.signature.floor_char_boundary(budget_chars);
                         start_clone.signature =
-                            format!("{}...", &start_clone.signature[..budget_chars]);
+                            format!("{}...", &start_clone.signature[..safe_bound]);
                     }
                 }
                 results.push(start_clone);
@@ -308,7 +315,10 @@ impl CodeSymbolGraph {
                 {
                     let neighbor_idx = edge.source();
                     if visited.insert(neighbor_idx) {
-                        let node = &self.graph[neighbor_idx];
+                        let node = match self.graph.node_weight(neighbor_idx) {
+                            Some(n) => n,
+                            None => continue,
+                        };
                         let node_tokens = node.tokens;
 
                         if accumulated_tokens + node_tokens <= budget {

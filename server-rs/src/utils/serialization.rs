@@ -34,8 +34,11 @@ pub fn prune_large_strings(value: &mut Value, limit: usize) {
     match value {
         Value::String(s) if s.len() > limit => {
             let original_len = s.len();
-            s.truncate(limit);
-            s.push_str(&format!("... [TRUNCATED {} bytes]", original_len - limit));
+            // SEC: Find a safe char boundary at or before `limit` to prevent
+            // panics on multi-byte UTF-8 sequences (CJK, emoji, etc.)
+            let safe_limit = s.floor_char_boundary(limit);
+            s.truncate(safe_limit);
+            s.push_str(&format!("... [TRUNCATED {} bytes]", original_len - safe_limit));
         }
         Value::Array(arr) => {
             for v in arr {

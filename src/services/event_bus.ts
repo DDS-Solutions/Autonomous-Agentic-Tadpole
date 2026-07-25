@@ -4,6 +4,7 @@
  * ### AI Assist Note
  * **Infrastructure Bus**: Global Pub/Sub notification and telemetry relay. 
  * Orchestrates cross-subsystem event propagation (swarms, logs, security alerts) and manages high-velocity pulse buffering for the UI.
+ * Features jittered broadcast storm prevention and async chunked listener delivery to prevent event loop starvation during autonomous swarm bursts.
  * 
  * ### 🧬 Logic Flow (Mermaid)
  * ```mermaid
@@ -37,6 +38,8 @@
  * and WebSocket log stream into a single unified event timeline.
  */
 
+import { telemetry_buffer } from './telemetry_buffer';
+
 /** Origin of a log entry. */
 type log_source = 'User' | 'System' | 'Agent';
 
@@ -67,6 +70,14 @@ export interface log_entry {
     metadata?: Record<string, unknown>;
 }
 
+/** Unified Telemetry Message Wrapper */
+export interface telemetry_message {
+    topic: 'LOG' | 'TRACE' | 'PULSE' | 'OVERSIGHT' | 'SYNC_REQUEST' | 'SYNC_RESPONSE';
+    payload: unknown;
+    timestamp: number;
+    sender_id: string;
+}
+
 type Listener = (entry: log_entry) => void;
 
 /**
@@ -76,50 +87,163 @@ type Listener = (entry: log_entry) => void;
  */
 class event_bus_service {
     private listeners: Listener[] = [];
+    private trace_listeners: ((span: unknown) => void)[] = [];
+    private pulse_listeners: ((pulse: unknown) => void)[] = [];
 
     /** Circular buffer for history — avoids array reallocation on overflow. */
     private static readonly BUFFER_SIZE = 1000;
     private ring: (log_entry | null)[] = new Array(event_bus_service.BUFFER_SIZE).fill(null);
     private head = 0;   // write pointer
     private count = 0;  // number of entries currently stored
-    private channel: BroadcastChannel | null = typeof window !== 'undefined' ? new BroadcastChannel('tadpole-event-bus-sync') : null;
+    private channel: BroadcastChannel | null = (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('tadpole-neural-hub') : null;
+    private pending_sync_response: ReturnType<typeof setTimeout> | null = null;
+    private instance_id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : (typeof performance !== 'undefined' ? (Math.floor(performance.now() * 1000) % 1000000).toString(36) : Date.now().toString(36));
+    
     /** Track recently processed IDs to prevent duplication from cross-tab sync. */
     private processed_ids = new Set<string>();
     private static readonly MAX_ID_CACHE = 500;
 
-    constructor() {
-        if (this.channel) {
-            this.channel.onmessage = (event) => {
-                if (event.data?.type === 'EVENT_EMIT' && event.data.payload) {
-                    this.internal_emit(event.data.payload, false);
-                } else if (event.data?.type === 'HISTORY_REQUEST') {
-                    // Another tab wants our history. Send it if we have any.
-                    if (this.count > 0 && this.channel) {
-                        this.channel.postMessage({
-                            type: 'HISTORY_RESPONSE',
-                            payload: this.get_history()
-                        });
-                    }
-                } else if (event.data?.type === 'HISTORY_RESPONSE' && event.data.payload) {
-                    // We received history from another tab.
-                    // Only apply if we are currently empty (to avoid overwriting our own recent logs)
-                    if (this.count === 0) {
-                        const history = event.data.payload as log_entry[];
-                        history.forEach(entry => this.internal_emit(entry, false));
-                    }
-                }
-            };
-
-            // Request history from any active tabs
-            setTimeout(() => {
-                if (this.count === 0 && this.channel) {
-                    this.channel.postMessage({ type: 'HISTORY_REQUEST' });
-                }
-            }, 100);
+    /** Helper to maintain processed_ids set size bounds and prevent O(N) memory allocation. */
+    private purge_id_cache(): void {
+        if (this.processed_ids.size >= event_bus_service.MAX_ID_CACHE) {
+            const iter = this.processed_ids.values();
+            for (let i = 0; i < event_bus_service.MAX_ID_CACHE / 2; i++) {
+                const { value, done } = iter.next();
+                if (done) break;
+                this.processed_ids.delete(value);
+            }
         }
     }
 
-    /** Subscribe to all future events. Returns an unsubscribe function. */
+    constructor() {
+        if (this.channel) {
+            this.channel.onmessage = (event) => {
+                try {
+                    const msg = event.data as telemetry_message;
+                    if (!msg || msg.sender_id === this.instance_id) return;
+
+                    switch (msg.topic) {
+                        case 'LOG':
+                            this.internal_emit(msg.payload as log_entry, false);
+                            break;
+                        case 'TRACE':
+                            this.internal_emit_trace(msg.payload, false);
+                            break;
+                        case 'PULSE':
+                            this.internal_emit_pulse(msg.payload, false);
+                            break;
+                        case 'SYNC_REQUEST':
+                            this.handle_sync_request();
+                            break;
+                        case 'SYNC_RESPONSE':
+                            if (this.pending_sync_response) {
+                                clearTimeout(this.pending_sync_response);
+                                this.pending_sync_response = null;
+                            }
+                            this.handle_sync_response(msg.payload);
+                            break;
+                    }
+                } catch (error) {
+                    console.error('[event_bus] Error handling BroadcastChannel message:', error);
+                }
+            };
+
+            setTimeout(() => this.request_sync(), 100);
+        }
+    }
+
+    private request_sync(): void {
+        if (this.channel) {
+            try {
+                this.channel.postMessage({
+                    topic: 'SYNC_REQUEST',
+                    payload: null,
+                    timestamp: Date.now(),
+                    sender_id: this.instance_id
+                } as telemetry_message);
+            } catch (error) {
+                console.error('[event_bus] Failed to send sync request:', error);
+            }
+        }
+    }
+
+    private handle_sync_request(): void {
+        if (this.count === 0 && this.processed_ids.size === 0) return;
+
+        if (this.pending_sync_response) {
+            clearTimeout(this.pending_sync_response);
+        }
+
+        // Apply a randomized delay (50ms - 200ms) to prevent broadcast storms.
+        const jitter = (typeof performance !== 'undefined')
+            ? (Math.floor(performance.now() * 1000) % 150)
+            : (Date.now() % 150);
+        this.pending_sync_response = setTimeout(() => {
+            if (this.channel) {
+                try {
+                    this.channel.postMessage({
+                        topic: 'SYNC_RESPONSE',
+                        payload: {
+                            logs: this.get_history().slice(-100),
+                        },
+                        timestamp: Date.now(),
+                        sender_id: this.instance_id
+                    } as telemetry_message);
+                } catch (error) {
+                    console.error('[event_bus] Failed to send sync response:', error);
+                }
+            }
+            this.pending_sync_response = null;
+        }, 50 + jitter);
+    }
+
+    private handle_sync_response(payload: unknown): void {
+        if (!payload || typeof payload !== 'object') return;
+        const p = payload as { logs?: log_entry[] };
+        if (p.logs && Array.isArray(p.logs)) {
+            const logs_to_process = p.logs.slice(-200);
+            const new_logs = logs_to_process.filter((log: log_entry) => log && log.id && !this.processed_ids.has(log.id));
+            if (new_logs.length === 0) return;
+
+            new_logs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+            new_logs.forEach((log: log_entry) => {
+                this.purge_id_cache();
+                this.processed_ids.add(log.id);
+
+                this.ring[this.head] = log;
+                this.head = (this.head + 1) % event_bus_service.BUFFER_SIZE;
+                if (this.count < event_bus_service.BUFFER_SIZE) this.count++;
+            });
+
+            // Deliver notifications asynchronously in chunks to prevent event loop starvation.
+            // Notify for all new_logs found during sync since delivery is chunked in batches of 50.
+            const logs_to_notify = new_logs;
+            const chunk_size = 50;
+            let index = 0;
+            const deliver_chunk = () => {
+                const limit = Math.min(index + chunk_size, logs_to_notify.length);
+                for (; index < limit; index++) {
+                    const log = logs_to_notify[index];
+                    this.listeners.forEach(listener => {
+                        try {
+                            listener(log);
+                        } catch (error) {
+                            console.error('[event_bus] Error in listener during sync:', error);
+                        }
+                    });
+                }
+                if (index < logs_to_notify.length) {
+                    setTimeout(deliver_chunk, 0);
+                }
+            };
+            setTimeout(deliver_chunk, 0);
+        }
+    }
+
+    /** Subscribe to all future log events. Returns an unsubscribe function. */
     subscribe_logs(listener: Listener): () => void {
         this.listeners.push(listener);
         return () => {
@@ -127,7 +251,25 @@ class event_bus_service {
         };
     }
 
-    /** Emit an event to all subscribers. `id` and `timestamp` are auto-filled if not provided. */
+    /** Subscribe to trace spans. Returns an unsubscribe function. */
+    subscribe_trace<T = unknown>(listener: (span: T) => void): () => void {
+        const handler = listener as (span: unknown) => void;
+        this.trace_listeners.push(handler);
+        return () => {
+            this.trace_listeners = this.trace_listeners.filter(l => l !== handler);
+        };
+    }
+
+    /** Subscribe to swarm pulse telemetry. Returns an unsubscribe function. */
+    subscribe_pulse<T = unknown>(listener: (pulse: T) => void): () => void {
+        const handler = listener as (span: unknown) => void;
+        this.pulse_listeners.push(handler);
+        return () => {
+            this.pulse_listeners = this.pulse_listeners.filter(l => l !== handler);
+        };
+    }
+
+    /** Emit a log event to all subscribers. `id` and `timestamp` are auto-filled if not provided. */
     emit_log(entry: Omit<log_entry, 'id' | 'timestamp'> & { id?: string; timestamp?: Date }): void {
         const full_entry: log_entry = {
             id: entry.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
@@ -144,25 +286,24 @@ class event_bus_service {
         this.internal_emit(full_entry, true);
     }
 
+    /** Emit a trace span payload with optional generic typing. */
+    emit_trace<T = unknown>(span: T): void {
+        this.internal_emit_trace(span, true);
+    }
+
+    /** Emit a swarm pulse payload with optional generic typing. */
+    emit_pulse<T = unknown>(pulse: T): void {
+        this.internal_emit_pulse(pulse, true);
+    }
+
     private internal_emit(full_entry: log_entry, broadcast: boolean): void {
-        // Deduplication: prevent identical IDs from being re-processed
         if (this.processed_ids.has(full_entry.id)) {
             return;
         }
 
-        // Maintain ID cache size
-        if (this.processed_ids.size >= event_bus_service.MAX_ID_CACHE) {
-            // Use iterator to delete the oldest half without O(n) array allocation
-            const iter = this.processed_ids.values();
-            for (let i = 0; i < event_bus_service.MAX_ID_CACHE / 2; i++) {
-                const { value, done } = iter.next();
-                if (done) break;
-                this.processed_ids.delete(value);
-            }
-        }
+        this.purge_id_cache();
         this.processed_ids.add(full_entry.id);
 
-        // Write to circular buffer (O(1), no allocation)
         this.ring[this.head] = full_entry;
         this.head = (this.head + 1) % event_bus_service.BUFFER_SIZE;
         if (this.count < event_bus_service.BUFFER_SIZE) this.count++;
@@ -175,8 +316,82 @@ class event_bus_service {
             }
         });
 
+        // SEC-INTEGRATION: Non-blockingly persist event into IndexedDB telemetry_buffer for time-travel replay
+        void telemetry_buffer.append_event(
+            full_entry.mission_id || 'global',
+            'log',
+            full_entry as unknown as Record<string, unknown>
+        );
+
         if (broadcast && this.channel) {
-            this.channel.postMessage({ type: 'EVENT_EMIT', payload: full_entry });
+            try {
+                this.channel.postMessage({
+                    topic: 'LOG',
+                    payload: full_entry,
+                    timestamp: Date.now(),
+                    sender_id: this.instance_id
+                } as telemetry_message);
+            } catch (error) {
+                console.error('[event_bus] Failed to broadcast log:', error);
+            }
+        }
+    }
+
+    private internal_emit_trace(span: unknown, broadcast: boolean): void {
+        this.trace_listeners.forEach(listener => {
+            try {
+                listener(span);
+            } catch (error) {
+                console.error('[event_bus] Error in trace listener:', error);
+            }
+        });
+
+        if (span && typeof span === 'object') {
+            const span_obj = span as Record<string, unknown>;
+            const mission_id = (span_obj.mission_id as string) || (span_obj.missionId as string) || 'global';
+            void telemetry_buffer.append_event(mission_id, 'trace', span_obj);
+        }
+
+        if (broadcast && this.channel) {
+            try {
+                this.channel.postMessage({
+                    topic: 'TRACE',
+                    payload: span,
+                    timestamp: Date.now(),
+                    sender_id: this.instance_id
+                } as telemetry_message);
+            } catch (error) {
+                console.error('[event_bus] Failed to broadcast trace:', error);
+            }
+        }
+    }
+
+    private internal_emit_pulse(pulse: unknown, broadcast: boolean): void {
+        this.pulse_listeners.forEach(listener => {
+            try {
+                listener(pulse);
+            } catch (error) {
+                console.error('[event_bus] Error in pulse listener:', error);
+            }
+        });
+
+        if (pulse && typeof pulse === 'object') {
+            const pulse_obj = pulse as Record<string, unknown>;
+            const mission_id = (pulse_obj.mission_id as string) || (pulse_obj.missionId as string) || 'global';
+            void telemetry_buffer.append_event(mission_id, 'swarm_pulse', pulse_obj);
+        }
+
+        if (broadcast && this.channel) {
+            try {
+                this.channel.postMessage({
+                    topic: 'PULSE',
+                    payload: pulse,
+                    timestamp: Date.now(),
+                    sender_id: this.instance_id
+                } as telemetry_message);
+            } catch (error) {
+                console.error('[event_bus] Failed to broadcast pulse:', error);
+            }
         }
     }
 
@@ -186,7 +401,7 @@ class event_bus_service {
         const result: log_entry[] = [];
         const start = this.count < event_bus_service.BUFFER_SIZE
             ? 0
-            : this.head; // oldest entry is at head when buffer is full
+            : this.head;
         for (let i = 0; i < this.count; i++) {
             const idx = (start + i) % event_bus_service.BUFFER_SIZE;
             if (this.ring[idx]) result.push(this.ring[idx]!);
@@ -206,6 +421,8 @@ class event_bus_service {
     destroy(): void {
         this.clear_history();
         this.listeners = [];
+        this.trace_listeners = [];
+        this.pulse_listeners = [];
     }
 }
 

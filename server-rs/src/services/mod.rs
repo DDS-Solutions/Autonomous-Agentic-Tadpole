@@ -20,6 +20,7 @@ pub mod discovery;
 pub mod privacy;
 pub mod acl_service;
 pub mod parser;
+pub mod bm25_memory;
 
 #[cfg(test)]
 mod tests;

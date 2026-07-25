@@ -18,6 +18,7 @@
 //!   `tracing` logs for request lifecycle benchmarks.
 //! - **Trace Scope**: `server-rs::routes`
 
+pub mod a2a;
 pub mod agent;
 pub mod audio;
 pub mod benchmarks;

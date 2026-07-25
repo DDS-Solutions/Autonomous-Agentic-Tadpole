@@ -104,8 +104,14 @@ impl IntelligenceService {
 
             use petgraph::visit::EdgeRef;
             for edge in guard.graph.edge_references() {
-                let source = &guard.graph[edge.source()];
-                let target = &guard.graph[edge.target()];
+                let source = match guard.graph.node_weight(edge.source()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let target = match guard.graph.node_weight(edge.target()) {
+                    Some(t) => t,
+                    None => continue,
+                };
                 let src_key = format!("{}:{}", source.path, source.name);
                 let tgt_key = format!("{}:{}", target.path, target.name);
 

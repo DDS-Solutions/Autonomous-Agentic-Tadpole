@@ -24,7 +24,12 @@ All autonomous actions must pass through the triple-gate verification loop:
 *   **Max Budget**: $5.00 per mission unless explicitly overridden by Entity 0.
 *   **Max Swarm Depth**: 5 levels of sub-agent recruitment.
 *   **Safety Mode**: "Hardened" — Any shell command containing `rm -rf /` or equivalent destructives triggers an immediate emergency shutdown of the agent task.
-*   **IACP Peer Hiring**: Agents may autonomously hire sibling agents for sub-tasks. The hiring agent must transfer the agreed micro-budget from its own allocated budget. Total delegated budget cannot exceed the parent task's remaining budget.
+*   **A2E-01 Peer Hiring & 2PC Ledger**: Agents may autonomously hire sibling agents for sub-tasks via Two-Phase Commit (`/v1/a2a/prepare`, `/v1/a2a/commit`, `/v1/a2a/rollback`).
+*   **24-Hour Rolling Spend Caps**: Tracked in `agent_economics_meta` with automated 24-hour resets. Default agent daily cap is $10.00 (10,000,000 micro-USDC).
+*   **Lock-Aware Spend Projection**: Before approving a 2PC lock, the router calculates Total Projected Spend:
+    $$\text{Projected} = \text{Spent Today} + \sum \text{Pending Prepared Locks} + \text{New Amount}$$
+    If projected spend exceeds the daily limit, the transaction is rejected (`400 Bad Request`).
+*   **Zero-Drift Micro-USDC Accounting**: All financial amounts are integer micro-units (`u64` micro-USDC: $1.00 = 1,000,000 micros) to eliminate IEEE-754 floating-point rounding errors in audit hash chains.
 
 ## 3. Data Integrity & State Healing
 *   **Non-Repudiation**: Every tool call MUST be recorded in the `AuditActor` hash chain. Failure to log is a fatal error.

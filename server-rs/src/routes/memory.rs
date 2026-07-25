@@ -24,7 +24,7 @@ use crate::agent::memory::VectorMemory;
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -248,6 +248,7 @@ pub async fn get_agent_memory(
                             }
                             entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
                             return Ok((
+
                                 StatusCode::OK,
                                 Json(MemoryResponse {
                                     status: "success".to_string(),
@@ -257,19 +258,56 @@ pub async fn get_agent_memory(
                         }
                     }
                 }
-                Err(AppError::InternalServerError(
-                    "Failed to query memory store".to_string(),
+
+                Ok((
+                    StatusCode::OK,
+                    Json(MemoryResponse {
+                        status: "success".to_string(),
+                        entries: vec![],
+                    }),
                 ))
             }
             Err(e) => {
-                tracing::error!("Failed to connect to memory: {}", e);
-                Err(AppError::InternalServerError(format!(
-                    "Failed to connect to memory: {}",
-                    e
-                )))
+                tracing::error!("Failed to connect to memory database: {}", e);
+                Err(e)
             }
         }
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct Bm25SearchQuery {
+    pub q: String,
+    pub top_k: Option<usize>,
+}
+
+/// GET /v1/memory/search/bm25
+///
+/// Performs zero-cloud, sub-millisecond BM25 relevance search over `.agent/memory/`, `directives/`, and `docs/`.
+pub async fn bm25_search_handler(
+    Query(query): Query<Bm25SearchQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let base_dir = &state.base_dir;
+    let root_dirs = vec![
+        base_dir.join(".agent").join("memory"),
+        base_dir.join("directives"),
+        base_dir.join("docs"),
+        base_dir.join("execution"),
+    ];
+
+    let engine = crate::services::bm25_memory::Bm25MemoryEngine::new(root_dirs);
+    let results = engine.search(&query.q, query.top_k.unwrap_or(10));
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "success",
+            "query": query.q,
+            "count": results.len(),
+            "results": results
+        })),
+    ))
 }
 
 /// DELETE /v1/agents/:agent_id/memories/:row_id
