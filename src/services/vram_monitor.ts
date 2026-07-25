@@ -23,6 +23,8 @@ export interface Memory_Status {
     vram_bytes_total?: number;
     is_throttled: boolean;
     severity: MemorySeverity;
+    is_webgpu_supported?: boolean;
+    device_loss_count?: number;
 }
 
 const WARNING_THRESHOLD = 0.85;  // Warn at 85%
@@ -32,7 +34,27 @@ const POLL_INTERVAL_MS = 5000;
 
 class VramMonitor {
     private interval: number | null = null;
-    private current_status: Memory_Status = { pressure: 0, is_throttled: false, severity: 'normal' };
+    private device_loss_count = 0;
+    private current_status: Memory_Status = {
+        pressure: 0,
+        is_throttled: false,
+        severity: 'normal',
+        is_webgpu_supported: typeof navigator !== 'undefined' && 'gpu' in navigator,
+        device_loss_count: 0
+    };
+
+    /**
+     * Record a WebGPU device loss event for observability.
+     */
+    public record_device_loss(reason: string, message: string): void {
+        this.device_loss_count += 1;
+        this.current_status.device_loss_count = this.device_loss_count;
+        event_bus.emit_log({
+            source: 'System',
+            text: `⚠️ [WebGPU:DeviceLost] GPU reset detected (${reason}): ${message}. Device loss count: ${this.device_loss_count}`,
+            severity: 'warning'
+        });
+    }
 
     /**
      * start

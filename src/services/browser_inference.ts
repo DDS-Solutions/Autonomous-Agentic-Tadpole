@@ -87,6 +87,25 @@ class BrowserInferenceService {
             const device_chain: Array<'webgpu' | 'wasm'> = ['webgpu', 'wasm'];
             let last_err: unknown;
 
+            // Register WebGPU device loss monitor if supported by browser
+            if (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu) {
+                try {
+                    navigator.gpu.requestAdapter().then(adapter => {
+                        adapter?.requestDevice().then(device => {
+                            device.lost.then(info => {
+                                console.warn(`⚠️ [WebGPU] Device lost (${info.reason}): ${info.message}. Resetting WebGPU pipelines.`);
+                                vram_monitor_service.record_device_loss(info.reason, info.message);
+                                this.pipe = null;
+                                this.embedding_pipe = null;
+                                this.init_promise = null;
+                            });
+                        }).catch(() => {/* Ignore headless adapter request errors */});
+                    }).catch(() => {/* Ignore headless adapter request errors */});
+                } catch {
+                    /* WebGPU feature detection fallback */
+                }
+            }
+
             for (const device of device_chain) {
                 try {
                     console.debug(`🧠 [BrowserSpecialist] Trying device: ${device}`);
@@ -193,9 +212,17 @@ ASSISTANT:`;
                 console.warn('🧠 [BrowserSpecialist] INFERENCE WARNING: High VRAM pressure detected. Performance may be degraded.');
             }
 
+            // Dynamic KV-Cache & Token Trimming based on VRAM pressure (Google WebGPU Best Practice)
+            let max_new_tokens = 128;
+            if (memory_status.pressure >= 0.80) {
+                max_new_tokens = 32; // Conserved KV-cache under high pressure
+            } else if (memory_status.pressure >= 0.50) {
+                max_new_tokens = 64; // Balanced KV-cache
+            }
+
             // Non-null assertion: init_specialist() above guarantees pipe is set, or it throws.
             const output = await this.pipe!(input, {
-                max_new_tokens: 256,
+                max_new_tokens,
                 temperature: 0.2, // Lower temp for more deterministic analysis
             });
             this.status = 'idle';
