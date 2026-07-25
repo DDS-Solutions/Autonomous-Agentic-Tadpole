@@ -160,6 +160,7 @@ Primary API groups:
 - `/v1/oversight`
 - `/v1/governance`
 - `/v1/sovereign`
+- `/v1/a2a`
 
 Operational capabilities include:
 
@@ -174,6 +175,10 @@ Operational capabilities include:
 - governance blueprints
 - sovereign manifest
 - mission session history and branch state
+- **A2E-01 Two-Phase Commit (2PC) Budget Ledger** (`/v1/a2a/prepare`, `/v1/a2a/commit`, `/v1/a2a/rollback`)
+- **24-Hour Rolling Budget Resets** (`agent_economics_meta` table with automatic 24h reset checks)
+- **Lock-Aware Projected Spend Calculation**: Evaluates $\text{Projected} = \text{Spent Today} + \sum \text{Pending Locks} + \text{New Amount}$ before issuing locks to prevent sub-agent overruns
+- **Zero-Drift Micro-USDC Integer Accounting**: Integer arithmetic (`u64`) in micro-USDC ($1.00 = 1,000,000 micros) eliminating floating-point rounding errors
 
 ## Model And Provider Management
 
@@ -190,7 +195,15 @@ Capabilities include:
 
 Provider keys are read from `.env` and supported by `.env.example`.
 
-## Skills, MCP, And Execution
+### Token & Context Optimization Engines (`GTK-01`)
+
+The engine integrates two high-performance token optimization modules to accelerate monologue turns and prevent context window overflows:
+1. **Model-Aware `TokenizerService`** (`server-rs/src/agent/tokenizer.rs`): Sub-microsecond (`< 1.0 µs`) BPE token counter powered by `tiktoken-rs` and a bounded 4,096-entry `DashMap` LRU cache. Adjusts counts using model-aware multipliers (`Qwen`: 1.05x, `Llama 3`/`DeepSeek`: 1.02x, `Gemma`: 0.95x, `OpenAI`: 1.0x).
+2. **2-Tier `ContextManager`** (`server-rs/src/agent/context_manager.rs`):
+   - **Tier 1 (Zero-Cost Heuristic Compaction)**: Automatically collapses redundant CLI output and consecutive success logs (`tool_result: Success`) at **$0 cost and 0ms latency** with fact-preservation guards.
+   - **Tier 2 (Semantic LLM Summarization)**: Automatically synthesizes a dense "Condensed State" when history reaches 80% context window saturation.
+
+## Skills, Hybrid RAG, And Execution
 
 Primary API group: `/v1/skills`.
 
@@ -200,6 +213,9 @@ Execution layer paths:
 - `execution/core/`
 - `execution/skills/`
 - `execution/tadpole_mcp_server.py`
+- `execution/tool_loop_guard.py` (10-iteration ceiling & 3-repetition circuit breaker)
+- `execution/evaluate_annealing.py` (Fault registry analyzer & self-annealing proposer)
+- `execution/cargo_fast_check.py` (Fast background compiler checker)
 
 Capabilities include:
 
@@ -210,6 +226,10 @@ Capabilities include:
 - scan workspace skills
 - manage scripts, workflows, and hooks
 - resolve capability proposals
+- **Hybrid RAG Triad**:
+  - **LanceDB Vector RAG** (`server-rs/src/agent/memory.rs`): High-dimensional semantic search.
+  - **TrustGraph GraphRAG** (`server-rs/src/agent/trustgraph.rs`): Directed entity-relation graph engine with $O(N)$ BFS multi-hop context traversal.
+  - **BM25 Lexical Search** (`server-rs/src/services/bm25_memory.rs`): Sub-millisecond exact keyword and symbol search (< 1ms) via `GET /v1/memory/search/bm25`.
 
 MCP bridge endpoints:
 
