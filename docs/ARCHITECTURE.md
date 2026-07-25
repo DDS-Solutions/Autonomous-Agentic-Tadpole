@@ -36,10 +36,12 @@ flowchart TD
 
 | Layer | Paths | Responsibilities |
 | --- | --- | --- |
-| Interface | `src/` | Dashboard pages, layout, stores, hooks, API clients, browser inference, visual monitoring, and detached windows. |
+| Interface | `src/`, `src/services/telemetry_buffer.ts` | Dashboard pages, layout, stores, hooks, API clients, IndexedDB rolling telemetry cache (7-day TTL), and detached windows. |
 | Engine | `server-rs/src/` | HTTP/WebSocket API, AppState, agent runner, providers, middleware, security, telemetry, actors, and background workers. |
-| Execution | `execution/` | Python tools, JSON skill manifests, MCP host, verification utilities, skill templates, and modular skill framework. |
-| Persistence | `data/`, `server-rs/migrations/` | SQLite database, migration scripts, runtime registries, and cache files. |
+| Token & Context | `server-rs/src/agent/tokenizer.rs`, `context_manager.rs` | Model-aware BPE token counting (< 1µs DashMap LRU cache) and 2-Tier context compression. |
+| Subsystems | `server-rs/src/agent/trustgraph.rs`, `server-rs/src/services/bm25_memory.rs`, `routes/a2a.rs` | TrustGraph GraphRAG entity traversal, BM25 Lexical search engine (< 1ms), and A2A 2PC budget ledger. |
+| Execution | `execution/` | Python tools, JSON skill manifests, MCP host, `tool_loop_guard.py` circuit breaker, `evaluate_annealing.py`, and skill framework. |
+| Persistence | `data/`, `server-rs/migrations/` | SQLite database, migration scripts (`20260725000100`–`20260725000300`), runtime registries, and cache files. |
 | Directives and docs | `directives/`, `docs/` | Governance documents, operating directives, API reference, OpenAPI, and operations documentation. |
 
 ## Engine Boot Sequence

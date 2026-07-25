@@ -40,13 +40,18 @@ This runbook directory guides engineers and automated agents in resolving common
 | Symptom | Script / Command | Description |
 |---------|------------------|-------------|
 | **Budget exhausted** | `python execution/quick_run.py --audit-budget` | Audits daily spent metrics against configured quotas. |
-| **Cost spike** | `python execution/parity_guard.py --check=budget` | Verifies cost aggregation and billing limits. |
+| **Cost spike / 2PC Lock Limit** | `python execution/parity_guard.py --check=budget` | Verifies A2A 2PC budget locks and 24h rolling spend limits. |
 | **Merkle integrity error** | `python execution/sovereign_audit.py` | Audits Merkle chain signature hashes for tampering. |
 
-## Execution Safety
+## Execution Safety & Context Optimization
 
 | Symptom | Script / Command | Description |
 |---------|------------------|-------------|
+| **Agent Tool Infinite Loop** | `python execution/tool_loop_guard.py` | Enforces 10-iteration ceiling & 3-repetition circuit breaker. |
+| **Runtime Execution Errors** | `python execution/evaluate_annealing.py` | Analyzes fault registry and generates self-patching proposals. |
+| **Fast Compiler Verification** | `python execution/cargo_fast_check.py` | Fast background Rust compilation check. |
+| **BM25 Lexical Search** | `GET /v1/memory/search/bm25?q=<query>` | Sub-millisecond exact keyword/symbol search (< 1ms). |
+| **Monologue Context Saturation** | `ContextManager::summarize_history()` | 2-Tier context compression (heuristic compaction & LLM summarizer). |
 | **Suspect MCP tool** | `python execution/mcp_audit.py --skill=<name>` | Scans the manifest parameter types and permissions. |
 | **AI Context Drift** | `python execution/verify_ai_context.py` | Validates file assist notes and trace scopes. |
 | **Broken File Links** | `python execution/verify_ai_context.py --fix` | Auto-heals broken references and missing docs blocks. |

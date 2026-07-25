@@ -211,6 +211,21 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `GET` | `/v1/sovereign/missions/{id}/nodes/{leaf_id}/history` | `routes::sovereign_state::get_session_history` | Protected |
 | `POST` | `/v1/sovereign/missions/{id}/nodes/{node_id}/revert` | `routes::sovereign_state::revert_to_node` | Protected |
 
+## A2A Economic Ledger (A2E-01)
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/v1/a2a/prepare` | `routes::a2a::prepare_transaction` | Protected; 2PC lock issue & projected spend cap check. |
+| `POST` | `/v1/a2a/commit` | `routes::a2a::commit_transaction` | Protected; Commits 2PC lock & accumulates spend. |
+| `POST` | `/v1/a2a/rollback` | `routes::a2a::rollback_transaction` | Protected; Cancels prepared 2PC lock. |
+
+## Memory & Lexical Search
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/search/memory` | `routes::memory::search_memory` | Protected; LanceDB Vector RAG search. |
+| `GET` | `/v1/memory/search/bm25` | `routes::memory::bm25_search_handler` | Protected; Zero-cloud sub-millisecond BM25 lexical search (< 1ms). |
+
 ## System
 
 | Method | Path | Handler | Notes |

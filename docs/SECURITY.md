@@ -52,6 +52,18 @@ Public bypasses currently exist for:
 
 Route protection is applied in `server-rs/src/router.rs`.
 
+## Cryptographic & Financial Security Controls
+
+1. **Zeroized In-Memory Key Material (`server-rs/src/security/audit.rs`)**:
+   - Staged Ed25519 audit signing key material and hex-decoded private key buffers implement `Zeroize` and `Secrecy`. Memory buffers are wiped automatically upon `Drop`, preventing cold-boot and process memory dump key extraction.
+
+2. **A2E-01 Financial Ledger Risk Containment (`server-rs/src/routes/a2a.rs`)**:
+   - **24-Hour Rolling Spend Limits**: Tracked in `agent_economics_meta` table (default $10.00 cap / 10,000,000 micros) with automatic 24-hour resets.
+   - **Lock-Aware Spend Projection**: Before issuing a Two-Phase Commit (2PC) lock, the router calculates Total Projected Spend:
+     $$\text{Projected} = \text{Spent Today} + \sum \text{Pending Prepared Locks} + \text{New Amount}$$
+     If projected spend exceeds the daily limit, the transaction is rejected (`400 Bad Request`).
+   - **Zero-Drift Micro-USDC Integer Arithmetic**: Integer amounts (`u64` micro-USDC: $1.00 = 1,000,000 micros) eliminate IEEE-754 floating-point rounding errors in cryptographic audit chains.
+
 ## Middleware Controls
 
 The router applies these controls:
