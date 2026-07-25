@@ -37,15 +37,19 @@ This map reflects the current code layout and should be used as the first orient
 | --- | --- | --- |
 | Frontend shell | `src/layouts/`, `src/components/`, `src/pages/` | Dashboard navigation, operations views, detached windows, visualizations, and forms. |
 | Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, and telemetry. |
-| Frontend services | `src/services/` | API clients, sockets, model/provider services, browser inference, VRAM monitoring, governance, and mission services. |
+| Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
 | Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
-| Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, oversight, model manager, skills, docs, governance, system, and engine control. |
+| Token & Context Engine | `server-rs/src/agent/tokenizer.rs`, `context_manager.rs` | Model-aware BPE token counting (< 1µs DashMap LRU cache) and 2-Tier context compression. |
+| TrustGraph GraphRAG | `server-rs/src/agent/trustgraph.rs` | Directed entity-relation graph engine for O(N) BFS multi-hop GraphRAG context traversal. |
+| BM25 Lexical Search | `server-rs/src/services/bm25_memory.rs` | Zero-embedding sub-millisecond lexical search engine (< 1ms) with 5s TTL double-checked cache. |
+| A2A Economic Governance | `server-rs/src/routes/a2a.rs` | Agent-to-Agent 2PC budget transactions, integer micro-USDC accounting, and 24h rolling limit resets. |
+| Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, A2A budget, oversight, model manager, skills, docs, governance, and engine control. |
 | Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, and downstream blast-radius analysis. |
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure. |
-| Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, rate limiting, security headers, scanner, permissions, privacy, audit, budget guard, and redaction. |
-| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations, local runtime data, and registry persistence. |
-| Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, BaseSkill framework, and skill templates. |
+| Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
+| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260725000100`–`20260725000300`), local data, and registry persistence. |
+| Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |
 
 ## API Boundary
@@ -59,6 +63,7 @@ Public routes:
 Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
 
 - `/v1/agents`
+- `/v1/a2a/*` 2PC budget ledger routes (`prepare`, `commit`, `rollback`)
 - `/v1/oversight`
 - `/v1/infra`
 - `/v1/model-manager`
@@ -71,6 +76,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
 - `/v1/sovereign`
 - `/v1/intelligence/*` symbol graph and blast radius APIs
 - `/v1/search/memory`
+- `/v1/memory/search/bm25` zero-cloud sub-millisecond lexical search
 - `/v1/env-schema`
 - `/v1/engine/*` management routes
 - `/v1/mcp/*`

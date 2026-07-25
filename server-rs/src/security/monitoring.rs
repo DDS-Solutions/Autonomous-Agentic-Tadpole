@@ -60,6 +60,12 @@ pub struct SecurityMonitor {
     sys: Arc<RwLock<System>>,
 }
 
+impl Default for SecurityMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SecurityMonitor {
     pub fn new() -> Self {
         let mut sys = System::new_all();

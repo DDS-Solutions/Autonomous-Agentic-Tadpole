@@ -275,7 +275,7 @@ impl CodeSymbolGraph {
 
             if start_tokens > budget {
                 // Truncate signature to fit budget using BPE tokenizer if available
-                if let Some(ref tokenizer) = bpe {
+                if let Some(tokenizer) = bpe {
                     let tokens = tokenizer.encode_with_special_tokens(&start_clone.signature);
                     if tokens.len() > budget {
                         if let Ok(truncated_text) = tokenizer.decode(&tokens[..budget]) {

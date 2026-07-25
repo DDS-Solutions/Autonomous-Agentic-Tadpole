@@ -298,7 +298,7 @@ impl IntelligenceService {
                 return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
             }
 
-            let bpe_ref = bpe_arc.as_ref().map(|arc| &**arc);
+            let bpe_ref = bpe_arc.as_deref();
             let symbols = guard.resolve_context(&query_name, raw_path, budget, bpe_ref);
             
             // Calculate accumulated tokens

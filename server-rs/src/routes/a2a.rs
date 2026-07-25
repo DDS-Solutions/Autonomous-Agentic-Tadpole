@@ -199,6 +199,7 @@ pub async fn rollback_transaction(
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     async fn setup_test_pool() -> sqlx::SqlitePool {

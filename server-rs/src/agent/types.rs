@@ -54,6 +54,7 @@ pub enum ModelProvider {
 }
 
 impl ModelProvider {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "openai" | "open-ai" => Some(Self::Openai),

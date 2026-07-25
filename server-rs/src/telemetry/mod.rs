@@ -62,6 +62,12 @@ pub struct TelemetryLayer {
     redactor: SecretRedactor,
 }
 
+impl Default for TelemetryLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TelemetryLayer {
     /// Initializes a new telemetry layer.
     pub fn new() -> Self {

@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   RUST_VERSION: 'stable'
 
 permissions:
@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        node: [20]
+        node: [22]
 
     steps:
       - uses: actions/checkout@v4

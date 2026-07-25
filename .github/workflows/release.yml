@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-type: '18'
+          node-version: '22'
 
       - name: Compile Backend Release
         run: |

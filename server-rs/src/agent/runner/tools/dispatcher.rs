@@ -28,6 +28,12 @@ pub struct Dispatcher {
     pub registry: ToolRegistry,
 }
 
+impl Default for Dispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Dispatcher {
     pub fn new() -> Self {
         let mut registry = ToolRegistry::new();

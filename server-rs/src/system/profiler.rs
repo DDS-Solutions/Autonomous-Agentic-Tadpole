@@ -28,6 +28,12 @@ pub struct HardwareProfiler {
     pub last_inference_latency: std::sync::atomic::AtomicUsize, // ms
 }
 
+impl Default for HardwareProfiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HardwareProfiler {
     pub fn new() -> Self {
         let mut sys = System::new_all();

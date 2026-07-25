@@ -65,6 +65,12 @@ pub struct SymbolExtractor {
     ts_parser: Parser,
 }
 
+impl Default for SymbolExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolExtractor {
     pub fn new() -> Self {
         let mut rust_parser = Parser::new();

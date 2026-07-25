@@ -144,6 +144,12 @@ pub struct SkillRegistry {
     pub manifests: DashMap<String, SkillManifest>,
 }
 
+impl Default for SkillRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SkillRegistry {
     pub fn new() -> Self {
         Self {

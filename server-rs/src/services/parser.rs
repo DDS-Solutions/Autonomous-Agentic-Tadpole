@@ -33,6 +33,12 @@ pub struct ParsedSymbol {
     pub body: String,
 }
 
+impl Default for SymbolParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolParser {
     pub fn new() -> Self {
         Self {
