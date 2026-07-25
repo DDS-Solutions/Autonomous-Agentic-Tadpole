@@ -41,6 +41,7 @@ class Route:
 
 NESTS = {
     "build_agent_routes": "/agents",
+    "build_a2a_routes": "/a2a",
     "build_intelligence_routes": "/intelligence",
     "build_oversight_routes": "/oversight",
     "build_infra_routes": "/infra",
@@ -67,12 +68,16 @@ METHOD_ROUTER_MAP = {
     "build_search_memory_route": [
         ("GET", "routes::memory::global_search", "Requires Cargo feature vector-memory; otherwise returns 501."),
     ],
+    "build_bm25_search_route": [
+        ("GET", "routes::memory::bm25_search_handler", "Zero-cloud sub-millisecond BM25 lexical search."),
+    ],
 }
 
 TAG_BY_PREFIX = [
     ("/v1/engine", "engine"),
     ("/v1/intelligence", "intelligence"),
     ("/v1/agents", "agents"),
+    ("/v1/a2a", "governance"),
     ("/v1/oversight", "oversight"),
     ("/v1/infra", "infra"),
     ("/v1/model-manager", "model-manager"),
@@ -84,6 +89,7 @@ TAG_BY_PREFIX = [
     ("/v1/governance", "governance"),
     ("/v1/sovereign", "sovereign"),
     ("/v1/search/memory", "memory"),
+    ("/v1/memory/search/bm25", "memory"),
     ("/v1/mcp", "mcp"),
     ("/v1/env-schema", "system"),
     ("/v1/api/pull", "model-manager"),

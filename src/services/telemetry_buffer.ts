@@ -204,3 +204,7 @@ class TelemetryBufferService {
 export const telemetry_buffer = new TelemetryBufferService();
 export const telemetryBuffer = telemetry_buffer;
 // Metadata: [TelemetryBuffer]
+
+// Metadata: [telemetry_buffer]
+
+// Metadata: [telemetry_buffer]

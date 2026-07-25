@@ -287,3 +287,5 @@ export const system_api_service = {
         return data.manifest;
     }
 };
+
+// Metadata: [system_api_service]

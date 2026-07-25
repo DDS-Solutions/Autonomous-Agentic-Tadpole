@@ -199,9 +199,6 @@ pub async fn rollback_transaction(
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
-    use super::*;
-
     async fn setup_test_pool() -> sqlx::SqlitePool {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
         
@@ -272,5 +269,7 @@ mod tests {
         assert!(spent + locked_sum.0 + new_amount > limit);
     }
 }
+
+// Metadata: [a2a]
 
 // Metadata: [a2a]

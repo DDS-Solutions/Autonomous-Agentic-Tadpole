@@ -136,7 +136,7 @@ export const engine_api_service = {
                 throw new Error(`[engine_api_service] Invalid protocol: ${parsed_url.protocol}. Protocol must be http, https, or git.`);
             }
         } catch (e) {
-            throw new Error(`[engine_api_service] Invalid repository URL: ${(e as Error).message}`);
+            throw new Error(`[engine_api_service] Invalid repository URL: ${(e as Error).message}`, { cause: e });
         }
 
         // Validate path traversal attempts

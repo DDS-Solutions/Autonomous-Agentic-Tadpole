@@ -75,3 +75,5 @@ export type ClaimResponse = { status: string; agentId: string; taskId: string; c
 export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
 
 // Metadata: [generated]
+
+// Metadata: [generated]

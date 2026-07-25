@@ -39,7 +39,7 @@ This map reflects the current code layout and should be used as the first orient
 | Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, and telemetry. |
 | Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
 | Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
-| Token & Context Engine | `server-rs/src/agent/tokenizer.rs`, `context_manager.rs` | Model-aware BPE token counting (< 1µs DashMap LRU cache) and 2-Tier context compression. |
+| Token & Context Engine | `server-rs/src/agent/tokenizer.rs`, `server-rs/src/agent/context_manager.rs` | Model-aware BPE token counting (< 1µs DashMap LRU cache) and 2-Tier context compression. |
 | TrustGraph GraphRAG | `server-rs/src/agent/trustgraph.rs` | Directed entity-relation graph engine for O(N) BFS multi-hop GraphRAG context traversal. |
 | BM25 Lexical Search | `server-rs/src/services/bm25_memory.rs` | Zero-embedding sub-millisecond lexical search engine (< 1ms) with 5s TTL double-checked cache. |
 | A2A Economic Governance | `server-rs/src/routes/a2a.rs` | Agent-to-Agent 2PC budget transactions, integer micro-USDC accounting, and 24h rolling limit resets. |

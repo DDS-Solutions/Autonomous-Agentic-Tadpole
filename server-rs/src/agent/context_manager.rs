@@ -131,3 +131,5 @@ mod tests {
 }
 
 // Metadata: [context_manager]
+
+// Metadata: [context_manager]

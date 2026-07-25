@@ -61,3 +61,7 @@ async fn test_intelligence_path_validation_boundaries() {
         other => panic!("Expected AppError::IntelPathUnknown, got: {:?}", other),
     }
 }
+
+// Metadata: [intelligence_routes]
+
+// Metadata: [intelligence_routes]

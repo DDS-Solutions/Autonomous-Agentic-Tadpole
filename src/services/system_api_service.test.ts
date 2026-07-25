@@ -28,7 +28,6 @@
  * - AI awakening notes confirmed.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { system_api_service } from './system_api_service';
 import { api_request } from './base_api_service';
 
 vi.mock('./base_api_service', () => ({
@@ -36,9 +35,11 @@ vi.mock('./base_api_service', () => ({
     DEPLOY_TIMEOUT: 60000,
 }));
 
+import { system_api_service } from './system_api_service';
+
 describe('system_api_service', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        vi.mocked(api_request).mockReset();
     });
 
     describe('check_health', () => {
@@ -76,13 +77,13 @@ describe('system_api_service', () => {
 
     it('kill_agents', async () => {
         vi.mocked(api_request).mockResolvedValueOnce({});
-        await system_api_service.kill_agents();
+        await system_api_service.kill_agents({ confirm: true });
         expect(api_request).toHaveBeenCalledWith('/v1/engine/kill', { method: 'POST' });
     });
 
     it('shutdown_engine', async () => {
         vi.mocked(api_request).mockResolvedValueOnce({});
-        await system_api_service.shutdown_engine();
+        await system_api_service.shutdown_engine({ confirm: true });
         expect(api_request).toHaveBeenCalledWith('/v1/engine/shutdown', { method: 'POST' });
     });
 
@@ -315,7 +316,7 @@ describe('system_api_service', () => {
 
         it('delete_continuity_workflows', async () => {
             vi.mocked(api_request).mockResolvedValueOnce({});
-            await system_api_service.delete_continuity_workflows('w1');
+            await system_api_service.delete_continuity_workflows('w1', { confirm: true });
             expect(api_request).toHaveBeenCalledWith('/v1/continuity/workflows/w1', expect.objectContaining({ method: 'DELETE' }));
         });
     });

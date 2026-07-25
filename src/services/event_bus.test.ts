@@ -93,7 +93,7 @@ describe('event_bus', () => {
     it('broadcasts events to other tabs', () => {
         event_bus.emit_log({ source: 'System', text: 'Sync this', severity: 'info' });
         expect(mockPostMessage).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'EVENT_EMIT',
+            topic: 'LOG',
             payload: expect.objectContaining({ text: 'Sync this' })
         }));
     });

@@ -300,3 +300,5 @@ mod tests {
 }
 
 // Metadata: [trustgraph]
+
+// Metadata: [trustgraph]
