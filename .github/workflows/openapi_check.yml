@@ -1,0 +1,32 @@
+name: OpenAPI Parity Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-openapi-parity:
+    name: Verify OpenAPI & Route Parity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Regenerate OpenAPI Specification
+        run: python execution/generate_api_reference.py
+
+      - name: Check for Uncommitted OpenAPI Drift
+        run: |
+          git diff --exit-code docs/openapi.yaml docs/API_REFERENCE.md || ( \
+            echo "❌ CRITICAL: docs/openapi.yaml or docs/API_REFERENCE.md is out of sync with backend routes!" && \
+            echo "Run 'python execution/generate_api_reference.py' locally and commit the updated documentation." && \
+            exit 1 \
+          )

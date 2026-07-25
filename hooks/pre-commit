@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Tadpole OS Pre-Commit Hook: Automated OpenAPI & API Reference Generator
+# ==============================================================================
+# Triggers whenever Rust backend router files change to ensure openapi.yaml
+# and API_REFERENCE.md are 100% in sync before committing.
+
+ROUTER_CHANGED=$(git diff --cached --name-only | grep -E "server-rs/src/router\.rs|server-rs/src/routes/")
+
+if [ -n "$ROUTER_CHANGED" ]; then
+    echo "🔄 [Pre-Commit] Backend route definition changed. Regenerating OpenAPI specification..."
+    python execution/generate_api_reference.py
+    if [ $? -eq 0 ]; then
+        git add docs/openapi.yaml docs/API_REFERENCE.md
+        echo "✅ [Pre-Commit] OpenAPI spec & API Reference updated and staged successfully."
+    else
+        echo "❌ [Pre-Commit] Failed to generate API reference!"
+        exit 1
+    fi
+fi

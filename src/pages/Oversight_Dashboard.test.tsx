@@ -120,7 +120,7 @@ describe('Oversight_Dashboard Page', () => {
     it('approves an action', async () => {
         (tadpole_os_service.decide_oversight as Mock).mockResolvedValue({ status: 'success' });
         render(<MemoryRouter><Oversight_Dashboard /></MemoryRouter>);
-        const btn = await screen.findByRole('button', { name: /Approve/i });
+        const btn = await screen.findByRole('button', { name: /^Approve$/i });
         fireEvent.click(btn);
         await waitFor(() => {
             expect(tadpole_os_service.decide_oversight).toHaveBeenCalledWith('p1', 'approved');

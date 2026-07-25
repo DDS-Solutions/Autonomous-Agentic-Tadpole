@@ -34,7 +34,11 @@ export interface OversightEntry extends Partial<Omit<ToolCall, 'id'>> {
 export interface LedgerEntry extends Partial<Omit<ToolCall, 'id'>> {
     id: string;
     tool_call?: ToolCall;
-    decision: 'approved' | 'rejected';
+    decision: 'approved' | 'rejected' | 'auto_approved';
+    decided_by?: string;
+    auto_approved?: boolean;
+    approval_type?: 'hitl' | 'auto';
+    requires_oversight?: boolean;
     result?: {
         success: boolean;
         output: string;
@@ -43,6 +47,9 @@ export interface LedgerEntry extends Partial<Omit<ToolCall, 'id'>> {
     };
     is_verified?: boolean;
     timestamp: string;
+    decided_at?: string;
+    mission_id?: string;
+    cluster_id?: string;
 }
 
 export const MOCK_PENDING: OversightEntry[] = [
@@ -86,6 +93,8 @@ export const MOCK_LEDGER: LedgerEntry[] = [
             timestamp: new Date(Date.now() - 500000).toISOString()
         },
         decision: 'approved',
+        decided_by: 'human',
+        approval_type: 'hitl',
         is_verified: true,
         result: {
             success: true,
@@ -105,8 +114,56 @@ export const MOCK_LEDGER: LedgerEntry[] = [
             timestamp: new Date(Date.now() - 300000).toISOString()
         },
         decision: 'rejected',
+        decided_by: 'human',
+        approval_type: 'hitl',
         is_verified: true,
         timestamp: new Date(Date.now() - 290000).toISOString()
+    },
+    {
+        id: 'le-auto-1',
+        tool_call: {
+            id: 'tc-auto-1',
+            agent_id: '2',
+            skill: 'verify_ai_context',
+            description: 'Auto-approved diagnostic: AI context alignment check across all 1,064 files.',
+            params: { path: 'G:/Autonomous-Agentic-Tadpole' },
+            timestamp: new Date(Date.now() - 60000).toISOString()
+        },
+        decision: 'auto_approved',
+        decided_by: 'auto_policy',
+        auto_approved: true,
+        approval_type: 'auto',
+        requires_oversight: false,
+        is_verified: true,
+        result: {
+            success: true,
+            output: '1063 files scanned. 0 alignment failures.',
+            duration_ms: 2140
+        },
+        timestamp: new Date(Date.now() - 58000).toISOString()
+    },
+    {
+        id: 'le-auto-2',
+        tool_call: {
+            id: 'tc-auto-2',
+            agent_id: '2',
+            skill: 'parity_guard',
+            description: 'Auto-approved diagnostic: OpenAPI + route parity verification.',
+            params: { fix: false },
+            timestamp: new Date(Date.now() - 30000).toISOString()
+        },
+        decision: 'auto_approved',
+        decided_by: 'auto_policy',
+        auto_approved: true,
+        approval_type: 'auto',
+        requires_oversight: false,
+        is_verified: true,
+        result: {
+            success: true,
+            output: '114 routes verified. Parity 100%.',
+            duration_ms: 890
+        },
+        timestamp: new Date(Date.now() - 28000).toISOString()
     }
 ];
 

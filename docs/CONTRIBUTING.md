@@ -57,7 +57,18 @@ API routes are registered within [router.rs](file:///g:/Autonomous-Agentic-Tadpo
    ```rust
    Router::new().route("/custom-path", get(routes::custom_module::handle_custom_route))
    ```
-4. **Important**: Document the new route in `docs/openapi.yaml` and run `python execution/parity_guard.py` to verify documentation alignment.
+4. **Important**: Document the new route in `docs/openapi.yaml` (or run `python execution/generate_api_reference.py`) and run `python execution/parity_guard.py` to verify documentation alignment.
+
+---
+
+### ⚓ Pre-Commit Hook Setup
+
+To automatically keep `docs/openapi.yaml` and `docs/API_REFERENCE.md` in sync whenever backend route definitions change, install the pre-commit hook:
+
+```bash
+cp hooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
 
 ---
 

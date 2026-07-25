@@ -172,11 +172,18 @@ pub async fn send_task(
         }
     }
 
-    // Auth & Existence Check
+    // Auth & Existence Check & Auto-Wakeup
     match state.registry.agents.get(&agent_id) {
         None => return Err(AppError::NotFound(format!("Agent '{}' not found", agent_id))),
         Some(agent) if agent.health.status == "suspended" => {
             return Err(AppError::BadRequest(format!("Agent '{}' is currently suspended.", agent_id)));
+        },
+        Some(agent) if agent.health.status == "offline" => {
+            drop(agent);
+            tracing::info!("🔋 [AgentDispatch] Agent {} auto-awakened from offline state", agent_id);
+            let _ = update_and_persist_agent(&state, &agent_id, |a| {
+                a.health.status = "active".to_string();
+            }).await;
         },
         Some(_) => {} // All systems go
     }

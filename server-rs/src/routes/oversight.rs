@@ -153,6 +153,12 @@ pub async fn get_ledger(
             serde_json::Value::Null
         };
 
+        let decision_val = row.get::<Option<String>, _>("decision");
+        let decided_by_val = row.get::<Option<String>, _>("decided_by");
+        let is_auto = decided_by_val.as_deref() == Some("auto_policy")
+            || decided_by_val.as_deref() == Some("system")
+            || decision_val.as_deref() == Some("auto_approved");
+
         let mut entry_obj = serde_json::json!({
             "id": row.get::<String, _>("id"),
             "mission_id": row.get::<Option<String>, _>("mission_id"),
@@ -166,9 +172,12 @@ pub async fn get_ledger(
             },
             "type": row.get::<String, _>("entry_type"),
             "status": row.get::<String, _>("status"),
-            "decision": row.get::<Option<String>, _>("decision"),
+            "decision": decision_val,
             "decided_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at"),
-            "decided_by": row.get::<Option<String>, _>("decided_by"),
+            "decided_by": decided_by_val,
+            "auto_approved": is_auto,
+            "approval_type": if is_auto { "auto" } else { "hitl" },
+            "requires_oversight": !is_auto,
             "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("payload")).unwrap_or_default(),
         });
