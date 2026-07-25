@@ -88,11 +88,12 @@ class BrowserInferenceService {
             let last_err: unknown;
 
             // Register WebGPU device loss monitor if supported by browser
-            if (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu) {
+            const nav_gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ requestDevice(): Promise<{ lost: Promise<{ reason: string; message: string }> }> } | null> } }).gpu;
+            if (nav_gpu) {
                 try {
-                    navigator.gpu.requestAdapter().then(adapter => {
-                        adapter?.requestDevice().then(device => {
-                            device.lost.then(info => {
+                    nav_gpu.requestAdapter().then((adapter) => {
+                        adapter?.requestDevice().then((device) => {
+                            device.lost.then((info) => {
                                 console.warn(`⚠️ [WebGPU] Device lost (${info.reason}): ${info.message}. Resetting WebGPU pipelines.`);
                                 vram_monitor_service.record_device_loss(info.reason, info.message);
                                 this.pipe = null;
