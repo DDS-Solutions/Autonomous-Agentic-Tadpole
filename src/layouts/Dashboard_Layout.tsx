@@ -56,7 +56,10 @@ export default function Dashboard_Layout() {
     const is_lineage_stream_detached = use_tab_store(s => s.is_lineage_stream_detached);
     const toggle_lineage_stream_detachment = use_tab_store(s => s.toggle_lineage_stream_detachment);
 
+    const visited_tab_ids = use_tab_store(s => s.visited_tab_ids);
+
     const [is_command_palette_open, set_is_command_palette_open] = useState(false);
+
     const tab_snapshot = (
         tabs &&
         typeof tabs === 'object' &&
@@ -88,6 +91,8 @@ export default function Dashboard_Layout() {
     const safe_is_lineage_stream_detached = typeof is_lineage_stream_detached === 'boolean'
         ? is_lineage_stream_detached
         : tab_snapshot?.is_lineage_stream_detached === true;
+
+
 
     // Synchronize tab store with URL on first load and browser navigation
     useEffect(() => {
@@ -259,7 +264,8 @@ export default function Dashboard_Layout() {
                             const Component = route.component;
                             const is_detached = tab.is_detached;
                             const is_active = tab.id === safe_active_tab_id;
-                            if (!is_active && !is_detached) {
+                            const is_mounted = is_active || is_detached || (Array.isArray(visited_tab_ids) && visited_tab_ids.includes(tab.id));
+                            if (!is_mounted) {
                                 return null;
                             }
 

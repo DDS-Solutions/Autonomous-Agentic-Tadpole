@@ -15,7 +15,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'r
 import { use_provider_store } from './stores/provider_store';
 import { get_settings } from './stores/settings_store';
 import { use_tab_store } from './stores/tab_store';
-import { get_route_by_path } from './constants/routes';
+import { get_route_by_path, preload_all_routes } from './constants/routes';
 import Dashboard_Layout from './layouts/Dashboard_Layout';
 import Error_Boundary from './components/Error_Boundary';
 import { lazy } from 'react';
@@ -135,6 +135,11 @@ export default function App(): React.ReactElement {
         const { use_agent_registry_store } = await import('./stores/agent_store');
         void use_agent_registry_store.getState().fetch_agents();
         console.debug('[AppKernel] Agent registry hydration initiated.');
+
+        // --- Phase 6: Background Route Pre-Loading ---
+        // Pre-fetch all route chunks during idle cycles so screen switching is instantaneous (0ms).
+        preload_all_routes();
+        console.debug('[AppKernel] Route pre-fetching initiated.');
       } catch (err) {
         console.error('[AppKernel] Critical Initialization Failure:', err);
       }

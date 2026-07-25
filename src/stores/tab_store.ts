@@ -27,6 +27,7 @@ interface Tab_State {
     tabs: Tab[];
     active_tab_id: string | null;
     active_tab_sync_source: 'url' | 'ui' | 'sync' | null;
+    visited_tab_ids: string[];
 
     // Actions
     open_tab: (tab: Omit<Tab, 'id' | 'is_detached'>) => void;
@@ -62,23 +63,31 @@ export const use_tab_store = create<Tab_State>()(
             ],
             active_tab_id: 'initial-ops',
             active_tab_sync_source: null,
+            visited_tab_ids: ['initial-ops'],
 
             open_tab: (tab_data) => {
                 const tabs = get().tabs || [];
+                const visited = get().visited_tab_ids || [];
                 const normalized_goal = normalize_path(tab_data.path);
                 
                 // Check if tab already exists for this path
                 const existing_tab = tabs.find(t => normalize_path(t.path) === normalized_goal);
                 
                 if (existing_tab) {
+                    const next_visited = visited.includes(existing_tab.id) ? visited : [...visited, existing_tab.id];
                     if (existing_tab.title !== tab_data.title || existing_tab.icon !== tab_data.icon) {
                         set({ 
                             tabs: (tabs || []).map(t => t.id === existing_tab.id ? { ...t, title: tab_data.title, icon: tab_data.icon } : t),
                             active_tab_id: existing_tab.id,
-                            active_tab_sync_source: 'url'
+                            active_tab_sync_source: 'url',
+                            visited_tab_ids: next_visited
                         });
                     } else if (get().active_tab_id !== existing_tab.id) {
-                        set({ active_tab_id: existing_tab.id, active_tab_sync_source: 'url' });
+                        set({
+                            active_tab_id: existing_tab.id,
+                            active_tab_sync_source: 'url',
+                            visited_tab_ids: next_visited
+                        });
                     }
                     return;
                 }
@@ -92,17 +101,19 @@ export const use_tab_store = create<Tab_State>()(
                 set({
                     tabs: [...tabs, new_tab],
                     active_tab_id: new_id,
-                    active_tab_sync_source: 'url'
+                    active_tab_sync_source: 'url',
+                    visited_tab_ids: [...visited, new_id]
                 });
             },
 
             close_tab: (id) => {
-                const { tabs, active_tab_id } = get();
+                const { tabs, active_tab_id, visited_tab_ids } = get();
                 
                 // Don't close the last tab
                 if (tabs.length <= 1) return;
 
                 const filtered_tabs = (tabs || []).filter(t => t.id !== id);
+                const filtered_visited = (visited_tab_ids || []).filter(v => v !== id);
                 
                 let next_active_id = active_tab_id;
                 if (active_tab_id === id) {
@@ -114,15 +125,22 @@ export const use_tab_store = create<Tab_State>()(
 
                 set({
                     tabs: filtered_tabs,
-                    active_tab_id: next_active_id
+                    active_tab_id: next_active_id,
+                    visited_tab_ids: filtered_visited
                 });
             },
 
             set_active_tab: (id) => {
                 const tabs = (get().tabs || []);
+                const visited = (get().visited_tab_ids || []);
                 const tab = tabs.find(t => t.id === id);
                 if (tab) {
-                    set({ active_tab_id: id, active_tab_sync_source: 'ui' });
+                    const next_visited = visited.includes(id) ? visited : [...visited, id];
+                    set({
+                        active_tab_id: id,
+                        active_tab_sync_source: 'ui',
+                        visited_tab_ids: next_visited
+                    });
                 }
             },
 
