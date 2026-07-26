@@ -35,12 +35,12 @@ impl KnowledgeStore {
         #[cfg(feature = "vector-memory")]
         {
             let query_vector = {
-                let api_key = std::env::var("GOOGLE_API_KEY").map_err(|_| {
+                let api_key = self.google_api_key.as_deref().ok_or_else(|| {
                     AppError::InternalServerError(
                         "[IKS] GOOGLE_API_KEY required for embedding. Set it in .env.".to_string(),
                     )
                 })?;
-                crate::agent::memory::get_gemini_embedding(&http_client, &api_key, &req.query)
+                crate::agent::memory::get_gemini_embedding(&http_client, api_key, &req.query)
                     .await?
             };
 
@@ -82,50 +82,40 @@ impl KnowledgeStore {
                 r#"SELECT id, text, content_hash, topic, cluster_id, source_node_id,
                           source_agent_id, confidence, ttl, human_confirmed,
                           created_at, access_count,
-                          concept_type, title, description, resource_uri, tags
+                          concept_type, title, description, resource_uri, tags,
+                          constraints_json, provenance_chain
                    FROM knowledge_store_meta
                    WHERE id IN ({})
-                     AND confidence >= {}
-                     AND (ttl IS NULL OR ttl > {})
-                     {}
-                     {}
+                     AND confidence >= ?
+                     AND (ttl IS NULL OR ttl > ?)
+                     AND (? IS NULL OR cluster_id = ? OR cluster_id IS NULL)
+                     AND (? IS NULL OR concept_type = ?)
                    ORDER BY confidence DESC"#,
-                placeholders,
-                min_confidence,
-                now_unix,
-                req.cluster_id
-                    .as_deref()
-                    .map(|c| format!(
-                        "AND (cluster_id = '{}' OR cluster_id IS NULL)",
-                        c.replace('\'', "''")
-                    ))
-                    .unwrap_or_default(),
-                req.concept_type
-                    .as_deref()
-                    .map(|ct| format!(
-                        "AND concept_type = '{}'",
-                        ct.replace('\'', "''")
-                    ))
-                    .unwrap_or_default(),
+                placeholders
             );
             let mut q = sqlx::query(&hydrate_sql);
             for id in &hit_ids {
                 q = q.bind(id);
             }
+            q = q
+                .bind(min_confidence)
+                .bind(now_unix)
+                .bind(req.cluster_id.as_deref())
+                .bind(req.cluster_id.as_deref())
+                .bind(req.concept_type.as_deref())
+                .bind(req.concept_type.as_deref());
+
             let rows = q.fetch_all(&self.pool).await.map_err(|e| {
                 AppError::InternalServerError(format!("[IKS] search hydration failed: {}", e))
             })?;
 
-            // Build a text map from vector hits for entries whose SQLite text may be
-            // empty (pre-migration entries). LanceDB text is the source of truth for
-            // entries written before migration 20260601000101.
+            // Build a text map from vector hits for entries whose SQLite text may be empty
             let hit_text: std::collections::HashMap<String, String> =
                 hits.into_iter().map(|h| (h.id, h.text)).collect();
 
             let mut results: Vec<KnowledgeEntry> = rows
                 .into_iter()
                 .map(|r| {
-                    // Prefer SQLite text; fall back to LanceDB hit text for pre-migration rows.
                     let sqlite_text: String = r.try_get("text").unwrap_or_default();
                     let text = if sqlite_text.is_empty() {
                         hit_text
@@ -153,6 +143,8 @@ impl KnowledgeStore {
                         description: r.try_get("description").ok(),
                         resource_uri: r.try_get("resource_uri").ok(),
                         tags: r.try_get("tags").ok(),
+                        constraints_json: r.try_get("constraints_json").ok().flatten(),
+                        provenance_chain: r.try_get("provenance_chain").ok().flatten(),
                     }
                 })
                 .collect();
@@ -177,7 +169,8 @@ impl KnowledgeStore {
                 r#"SELECT id, text, content_hash, topic, cluster_id, source_node_id,
                           source_agent_id, confidence, ttl, human_confirmed,
                           created_at, access_count,
-                          concept_type, title, description, resource_uri, tags
+                          concept_type, title, description, resource_uri, tags,
+                          constraints_json, provenance_chain
                    FROM knowledge_store_meta
                    WHERE (? IS NULL OR topic = ?)
                      AND (? IS NULL OR cluster_id = ? OR cluster_id IS NULL)

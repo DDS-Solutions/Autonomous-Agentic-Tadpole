@@ -503,6 +503,11 @@ fn build_knowledge_routes() -> Router<Arc<AppState>> {
             post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
         )
         .route("/search", get(routes::knowledge::search_knowledge))
+        .route(
+            "/edges",
+            post(routes::knowledge::add_knowledge_edge).get(routes::knowledge::list_knowledge_edges),
+        )
+        .route("/synthesize", post(routes::knowledge::synthesize_knowledge))
         .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
         .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
         .route(
@@ -510,12 +515,22 @@ fn build_knowledge_routes() -> Router<Arc<AppState>> {
             axum::routing::delete(routes::knowledge::delete_knowledge),
         );
     #[cfg(not(feature = "vector-memory"))]
-    return Router::new().fallback(|| async {
-        (
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Vector memory feature disabled",
+    return Router::new()
+        .route(
+            "/",
+            post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
         )
-    });
+        .route(
+            "/edges",
+            post(routes::knowledge::add_knowledge_edge).get(routes::knowledge::list_knowledge_edges),
+        )
+        .route("/synthesize", post(routes::knowledge::synthesize_knowledge))
+        .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
+        .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
+        .route(
+            "/{id}",
+            axum::routing::delete(routes::knowledge::delete_knowledge),
+        );
 }
 
 fn build_iacp_routes() -> Router<Arc<AppState>> {

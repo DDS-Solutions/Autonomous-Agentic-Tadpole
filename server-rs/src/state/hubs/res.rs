@@ -76,7 +76,6 @@ pub struct ResourceHub {
     /// Persistent cross-cluster Institutional Knowledge Store.
     /// Durable, curated facts that survive restarts and cluster migrations.
     /// @state: Deferred
-    #[cfg(feature = "vector-memory")]
     pub knowledge_store: OnceCell<Arc<crate::agent::knowledge_store::KnowledgeStore>>,
     /// Cached rate limiters partitioned by model and provider.
     pub rate_limiters: DashMap<String, Arc<RateLimiter>>,
@@ -263,7 +262,6 @@ impl ResourceHub {
     }
 
     /// Lazily initializes and returns the Institutional Knowledge Store.
-    #[cfg(feature = "vector-memory")]
     pub async fn get_knowledge_store(
         &self,
     ) -> Result<Arc<crate::agent::knowledge_store::KnowledgeStore>, crate::error::AppError> {

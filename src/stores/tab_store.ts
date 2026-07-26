@@ -69,14 +69,14 @@ export const use_tab_store = create<Tab_State>()(
                 const tabs = get().tabs || [];
                 const visited = get().visited_tab_ids || [];
                 const normalized_goal = normalize_path(tab_data.path);
-                
+
                 // Check if tab already exists for this path
                 const existing_tab = tabs.find(t => normalize_path(t.path) === normalized_goal);
-                
+
                 if (existing_tab) {
                     const next_visited = visited.includes(existing_tab.id) ? visited : [...visited, existing_tab.id];
                     if (existing_tab.title !== tab_data.title || existing_tab.icon !== tab_data.icon) {
-                        set({ 
+                        set({
                             tabs: (tabs || []).map(t => t.id === existing_tab.id ? { ...t, title: tab_data.title, icon: tab_data.icon } : t),
                             active_tab_id: existing_tab.id,
                             active_tab_sync_source: 'url',
@@ -93,11 +93,11 @@ export const use_tab_store = create<Tab_State>()(
                 }
 
                 // Add new tab
-                const new_id = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-                    ? crypto.randomUUID() 
+                const new_id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
                     : `tab-${Math.random().toString(36).substring(2, 11)}`;
                 const new_tab: Tab = { ...tab_data, id: new_id };
-                
+
                 set({
                     tabs: [...tabs, new_tab],
                     active_tab_id: new_id,
@@ -108,13 +108,13 @@ export const use_tab_store = create<Tab_State>()(
 
             close_tab: (id) => {
                 const { tabs, active_tab_id, visited_tab_ids } = get();
-                
+
                 // Don't close the last tab
                 if (tabs.length <= 1) return;
 
                 const filtered_tabs = (tabs || []).filter(t => t.id !== id);
                 const filtered_visited = (visited_tab_ids || []).filter(v => v !== id);
-                
+
                 let next_active_id = active_tab_id;
                 if (active_tab_id === id) {
                     // Switch to the tab to the left, or the first one available
@@ -147,7 +147,7 @@ export const use_tab_store = create<Tab_State>()(
             update_tab_title: (path, title) => {
                 const normalized_goal = normalize_path(path);
                 set(state => ({
-                    tabs: (state.tabs || []).map(t => 
+                    tabs: (state.tabs || []).map(t =>
                         normalize_path(t.path) === normalized_goal ? { ...t, title } : t
                     )
                 }));
@@ -227,7 +227,7 @@ if (sync_channel) {
 
             if (current_fingerprint !== next_fingerprint && tabs && Array.isArray(tabs)) {
                 last_broadcast = next_fingerprint; // Update fingerprint BEFORE setting state
-                use_tab_store.setState({ tabs, active_tab_id, active_tab_sync_source: 'sync' }); 
+                use_tab_store.setState({ tabs, active_tab_id, active_tab_sync_source: 'sync' });
             }
         }
     };
@@ -238,12 +238,12 @@ if (sync_channel) {
         const current = get_sync_fingerprint(state);
         if (current !== last_broadcast) {
             last_broadcast = current;
-            
+
             if (sync_timeout) clearTimeout(sync_timeout);
             sync_timeout = setTimeout(() => {
-                sync_channel.postMessage({ 
-                    type: 'SYNC_STATE_TABS', 
-                    payload: { tabs: state.tabs, active_tab_id: state.active_tab_id } 
+                sync_channel.postMessage({
+                    type: 'SYNC_STATE_TABS',
+                    payload: { tabs: state.tabs, active_tab_id: state.active_tab_id }
                 });
             }, 100); // 100ms debounce to prevent broadcast storms
         }

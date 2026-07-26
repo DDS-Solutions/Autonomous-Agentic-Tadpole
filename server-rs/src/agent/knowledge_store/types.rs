@@ -27,12 +27,14 @@ pub struct KnowledgeEntry {
     pub ttl: Option<i64>,
     pub created_at: i64,
     pub access_count: i64,
-    // --- OKF Extensions ---
+    // --- OKF v0.2/v0.3 Extensions ---
     pub concept_type: String,
     pub title: Option<String>,
     pub description: Option<String>,
     pub resource_uri: Option<String>,
     pub tags: Option<String>,
+    pub constraints_json: Option<String>,
+    pub provenance_chain: Option<String>,
 }
 
 /// Parameters for writing a new knowledge entry.
@@ -57,6 +59,8 @@ pub struct AddKnowledgeRequest {
     pub description: Option<String>,
     pub resource_uri: Option<String>,
     pub tags: Option<String>,
+    pub constraints_json: Option<String>,
+    pub provenance_chain: Option<String>,
 }
 
 /// Search parameters for semantic retrieval.
@@ -75,7 +79,45 @@ pub struct KnowledgeSearchRequest {
     pub concept_type: Option<String>,
 }
 
+/// A typed directed edge between two OKF knowledge nodes (OKF v0.3).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KnowledgeEdge {
+    pub id: String,
+    pub source_id: String,
+    pub target_id: String,
+    pub relation_type: String,
+    pub weight: f32,
+    pub created_at: i64,
+}
+
+/// Request to create a typed relational edge between two knowledge entries.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AddKnowledgeEdgeRequest {
+    pub source_id: String,
+    pub target_id: String,
+    pub relation_type: String, // 'depends_on' | 'implements' | 'refutes' | 'replaces' | 'derives_from'
+    pub weight: Option<f32>,
+}
+
+/// Request to synthesize multiple knowledge entries into a consolidated node.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct KnowledgeSynthesizeRequest {
+    pub source_ids: Vec<String>,
+    pub topic: String,
+    pub title: String,
+    pub concept_type: Option<String>,
+}
+
+/// Result of synthesizing cross-agent knowledge entries.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KnowledgeSynthesisResponse {
+    pub synthesized_entry: KnowledgeEntry,
+    pub edges_created: usize,
+    pub contradiction_warning: Option<String>,
+}
+
 /// Default TTL for agent-written entries (Q3 decision: 90 days).
 pub const DEFAULT_TTL_DAYS: i64 = 90;
 
 // Telemetry Tag duplicate reference: [types]
+

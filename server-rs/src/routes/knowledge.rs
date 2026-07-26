@@ -20,7 +20,9 @@
 //!   SQLite UNIQUE constraint hit on dedup (returns 200, not 409).
 //! - **Trace Scope**: `server-rs::routes::knowledge` (Search `[IKS]`)
 
-use crate::agent::knowledge_store::{AddKnowledgeRequest, KnowledgeSearchRequest};
+use crate::agent::knowledge_store::{
+    AddKnowledgeRequest, KnowledgeSearchRequest, AddKnowledgeEdgeRequest, KnowledgeSynthesizeRequest,
+};
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
@@ -171,6 +173,45 @@ pub async fn get_knowledge_peers(
         .get_peers(&id, limit, state.resources.http_client.as_ref().clone())
         .await?;
     Ok(Json(peers))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListKnowledgeEdgesParams {
+    pub source_id: Option<String>,
+    pub target_id: Option<String>,
+}
+
+/// POST /knowledge/edges
+/// Creates a typed relational graph edge between two knowledge entries (OKF v0.3).
+pub async fn add_knowledge_edge(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AddKnowledgeEdgeRequest>,
+) -> Result<(StatusCode, Json<crate::agent::knowledge_store::KnowledgeEdge>), AppError> {
+    let ks = state.resources.get_knowledge_store().await?;
+    let edge = ks.add_edge(req).await?;
+    Ok((StatusCode::CREATED, Json(edge)))
+}
+
+/// GET /knowledge/edges
+/// Lists typed relational graph edges.
+pub async fn list_knowledge_edges(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ListKnowledgeEdgesParams>,
+) -> Result<Json<Vec<crate::agent::knowledge_store::KnowledgeEdge>>, AppError> {
+    let ks = state.resources.get_knowledge_store().await?;
+    let edges = ks.list_edges(params.source_id.as_deref(), params.target_id.as_deref()).await?;
+    Ok(Json(edges))
+}
+
+/// POST /knowledge/synthesize
+/// Synthesizes cross-agent knowledge entries using Ollama backend (OKF v0.3).
+pub async fn synthesize_knowledge(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<KnowledgeSynthesizeRequest>,
+) -> Result<(StatusCode, Json<crate::agent::knowledge_store::KnowledgeSynthesisResponse>), AppError> {
+    let ks = state.resources.get_knowledge_store().await?;
+    let res = ks.synthesize(req, state.resources.http_client.as_ref().clone()).await?;
+    Ok((StatusCode::CREATED, Json(res)))
 }
 
 

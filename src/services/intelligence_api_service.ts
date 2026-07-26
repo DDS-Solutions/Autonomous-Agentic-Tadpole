@@ -44,6 +44,17 @@ export interface KnowledgeEntry {
     description: string | null;
     resource_uri: string | null;
     tags: string | null;
+    constraints_json?: string | null;
+    provenance_chain?: string | null;
+}
+
+export interface KnowledgeEdge {
+    id: string;
+    source_id: string;
+    target_id: string;
+    relation_type: string;
+    weight: number;
+    created_at: number;
 }
 
 class IntelligenceApiService {
@@ -91,6 +102,31 @@ class IntelligenceApiService {
         if (limit !== undefined) query_params.append('limit', limit.toString());
         const query_str = query_params.toString();
         return api_request<KnowledgeEntry[]>(`/v1/knowledge/${id}/peers?${query_str}`, { signal });
+    }
+
+    /**
+     * Fetches typed relational edges (OKF v0.3).
+     */
+    async get_knowledge_edges(params?: { source_id?: string; target_id?: string }, signal?: AbortSignal): Promise<KnowledgeEdge[]> {
+        const query_params = new URLSearchParams();
+        if (params?.source_id) query_params.append('source_id', params.source_id);
+        if (params?.target_id) query_params.append('target_id', params.target_id);
+        const query_str = query_params.toString();
+        return api_request<KnowledgeEdge[]>(`/v1/knowledge/edges?${query_str}`, { signal });
+    }
+
+    /**
+     * Synthesizes cross-agent knowledge entries using Ollama (OKF v0.3).
+     */
+    async synthesize_knowledge(req: { source_ids: string[]; topic: string; title: string; concept_type?: string }): Promise<{
+        synthesized_entry: KnowledgeEntry;
+        edges_created: number;
+        contradiction_warning?: string;
+    }> {
+        return api_request('/v1/knowledge/synthesize', {
+            method: 'POST',
+            body: JSON.stringify(req),
+        });
     }
 }
 

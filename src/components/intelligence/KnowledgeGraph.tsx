@@ -69,8 +69,12 @@ export const KnowledgeGraph: React.FC = () => {
                 const graph = await intelligence_api_service.get_graph();
                 set_data(graph);
             } else {
-                // Fetch OKF knowledge entries from IKS (limit 200)
-                const entries = await intelligence_api_service.get_knowledge({ limit: 200 });
+                // Fetch OKF knowledge entries & explicit edges from IKS (OKF v0.3)
+                const [entries, explicitEdges] = await Promise.all([
+                    intelligence_api_service.get_knowledge({ limit: 200 }),
+                    intelligence_api_service.get_knowledge_edges().catch(() => []),
+                ]);
+
                 const nodeIds = new Set(entries.map(e => e.id));
                 const nodes = entries.map(e => ({
                     id: e.id,
@@ -89,11 +93,26 @@ export const KnowledgeGraph: React.FC = () => {
                     confidence: e.confidence,
                     human_confirmed: e.human_confirmed,
                     text: e.text,
+                    constraints_json: e.constraints_json || undefined,
+                    provenance_chain: e.provenance_chain || undefined,
                 }));
 
                 const links: { source: string; target: string }[] = [];
                 const processedLinks = new Set<string>();
 
+                // Add explicit OKF v0.3 graph edges
+                for (const edge of explicitEdges) {
+                    const linkKey = `${edge.source_id}->${edge.target_id}`;
+                    if (!processedLinks.has(linkKey)) {
+                        links.push({
+                            source: edge.source_id,
+                            target: edge.target_id,
+                        });
+                        processedLinks.add(linkKey);
+                    }
+                }
+
+                // Add extracted markdown link targets
                 for (const entry of entries) {
                     const targets = extractLinks(entry.text, nodeIds);
                     for (const target of targets) {

@@ -68,7 +68,7 @@ pub async fn validate_environments(
     }
 
     let rows = sqlx::query(
-        "SELECT text FROM knowledge_store_meta WHERE cluster_id = ? AND concept_type = 'playbook'"
+        "SELECT text, constraints_json FROM knowledge_store_meta WHERE cluster_id = ? AND concept_type = 'playbook'"
     )
     .bind(cluster_id)
     .fetch_all(pool)
@@ -78,14 +78,33 @@ pub async fn validate_environments(
     for row in rows {
         use sqlx::Row;
         let text: String = row.try_get("text")?;
+        let constraints_opt: Option<String> = row.try_get("constraints_json").ok().flatten();
         let text_lower = text.to_lowercase();
+
+        // Check structured JSON constraints if present
+        if let Some(json_str) = constraints_opt {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                if let Some(req_envs) = parsed.get("required_envs").and_then(|v| v.as_array()) {
+                    for env_val in req_envs {
+                        if let Some(env_str) = env_val.as_str() {
+                            if !detected_envs.contains(&env_str.to_string()) {
+                                return Ok(OkfValidationResult {
+                                    status: "warning".to_string(),
+                                    message: Some(format!("OKF Gate: Mounted playbook requires environment '{}' which was not detected. Awaiting HITL oversight approval before execution.", env_str)),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if (text_lower.contains("requires: docker") || text_lower.contains("requires docker"))
             && !detected_envs.contains(&"docker".to_string())
         {
             return Ok(OkfValidationResult {
                 status: "warning".to_string(),
-                message: Some("Active OKF playbooks require a Docker container sandbox, but no Docker daemon was detected on the host.".to_string()),
+                message: Some("Active OKF playbooks require a Docker container sandbox, but no Docker daemon was detected on the host. Non-blocking warning: await HITL prompt.".to_string()),
             });
         }
 
@@ -94,7 +113,7 @@ pub async fn validate_environments(
         {
             return Ok(OkfValidationResult {
                 status: "critical".to_string(),
-                message: Some("Critical: OKF playbooks require a Kubernetes cluster environment, but the application is running outside Kubernetes.".to_string()),
+                message: Some("Critical: OKF playbooks require a Kubernetes cluster environment, but the application is running outside Kubernetes. Non-blocking warning: human-in-the-loop oversight prompt triggered.".to_string()),
             });
         }
 
@@ -189,7 +208,9 @@ mod tests {
                 title TEXT,
                 description TEXT,
                 resource_uri TEXT,
-                tags TEXT
+                tags TEXT,
+                constraints_json TEXT,
+                provenance_chain TEXT
             )"#
         )
         .execute(&pool)

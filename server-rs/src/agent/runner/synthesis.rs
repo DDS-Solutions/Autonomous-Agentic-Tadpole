@@ -1148,6 +1148,7 @@ mod tests {
                 tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
+                knowledge_store: tokio::sync::OnceCell::new(),
                 rate_limiters: dashmap::DashMap::new(),
                 initialization_registry: dashmap::DashMap::new(),
                 hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),

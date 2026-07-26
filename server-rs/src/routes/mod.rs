@@ -41,7 +41,6 @@ pub mod templates;
 pub mod ws;
 pub mod system;
 pub mod governance;
-#[cfg(feature = "vector-memory")]
 pub mod knowledge;
 pub mod sovereign_state;
 pub mod agentic_engine;

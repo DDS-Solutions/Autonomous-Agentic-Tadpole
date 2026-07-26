@@ -177,6 +177,7 @@ impl AppState {
                 tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
+                knowledge_store: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -313,6 +314,7 @@ impl AppState {
                 tokenizer_bpe: tokio::sync::OnceCell::new(),
                 identity_context: tokio::sync::OnceCell::new(),
                 memory_context: tokio::sync::OnceCell::new(),
+                knowledge_store: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -625,6 +627,7 @@ impl AppState {
                 tokenizer_bpe: OnceCell::new(),
                 identity_context: OnceCell::new(),
                 memory_context: OnceCell::new(),
+                knowledge_store: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
@@ -1245,6 +1248,7 @@ impl Default for AppState {
             tokenizer_bpe: OnceCell::new(),
             identity_context: OnceCell::new(),
             memory_context: OnceCell::new(),
+            knowledge_store: OnceCell::new(),
             #[cfg(feature = "vector-memory")]
             vector_memory: OnceCell::new(),
             #[cfg(feature = "vector-memory")]

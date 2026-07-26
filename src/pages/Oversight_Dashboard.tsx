@@ -38,9 +38,8 @@ import { Action_Ledger } from '../components/oversight/Action_Ledger';
 import { i18n } from '../i18n';
 import { LD_Json } from '../components/ui/LD_Json';
 import { get_safe_date } from '../utils/date_utils';
-
-// Types mirrored from server/types.ts
-// Types are now imported from ../data/mockOversight
+import type { OversightEntry, LedgerEntry } from '../data/mock_oversight';
+import { MOCK_PENDING, MOCK_LEDGER } from '../data/mock_oversight';
 
 export default function Oversight_Dashboard() {
     const navigate = useNavigate();
