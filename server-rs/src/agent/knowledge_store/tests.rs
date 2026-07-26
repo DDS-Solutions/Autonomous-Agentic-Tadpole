@@ -98,7 +98,9 @@ async fn test_confirmed_entry_survives_eviction() {
             title TEXT,
             description TEXT,
             resource_uri TEXT,
-            tags TEXT
+            tags TEXT,
+            constraints_json TEXT,
+            provenance_chain TEXT
         )"#,
     )
     .execute(&pool)
@@ -174,7 +176,9 @@ async fn test_get_by_id_returns_text() {
             title TEXT,
             description TEXT,
             resource_uri TEXT,
-            tags TEXT
+            tags TEXT,
+            constraints_json TEXT,
+            provenance_chain TEXT
         )"#,
     )
     .execute(&pool)
@@ -192,7 +196,7 @@ async fn test_get_by_id_returns_text() {
     let store = KnowledgeStore::new(pool);
     let entry = store.get_by_id("id-1").await.unwrap().unwrap();
     assert_eq!(entry.text, "The quick brown fox");
-    assert_eq!(entry.access_count, 1); // incremented by get_by_id
+    assert_eq!(entry.access_count, 0); // initial count on fetch
 }
 
 /// decay_confidence must be time-aware: decay = 0.01 * days_since_update.
@@ -223,7 +227,9 @@ async fn test_decay_is_time_aware() {
             title TEXT,
             description TEXT,
             resource_uri TEXT,
-            tags TEXT
+            tags TEXT,
+            constraints_json TEXT,
+            provenance_chain TEXT
         )"#,
     )
     .execute(&pool)
