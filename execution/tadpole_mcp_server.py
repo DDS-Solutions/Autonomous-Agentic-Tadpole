@@ -204,7 +204,12 @@ async def handle_call_tool(
             return [types.TextContent(type="text", text=f"Execution Failed (Code {process.returncode}):\n{stdout_str}\n{stderr_str}")]
 
     except asyncio.TimeoutError:
-        return [types.TextContent(type="text", text="Execution timed out after 30 seconds.")]
+        try:
+            process.kill()
+            await process.wait()
+        except Exception:
+            pass
+        return [types.TextContent(type="text", text="Execution timed out after 30 seconds (subprocess terminated).")]
     except Exception as e:
         return [types.TextContent(type="text", text=f"Execution Error: {str(e)}")]
 

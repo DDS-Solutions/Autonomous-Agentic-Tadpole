@@ -70,6 +70,8 @@ pub struct BudgetGuard {
     pool: SqlitePool,
     /// Thread-safe buffer for debounced agent usage updates (entity_id -> accumulated_cost).
     buffer: DashMap<String, f64>,
+    /// Thread-safe buffer for reserved in-flight cost allocations (A2E-01 2PC lock).
+    reserved_buffer: DashMap<String, f64>,
     /// Thread-safe buffer for debounced mission usage updates (cluster_id -> accumulated_cost).
     mission_buffer: DashMap<String, f64>,
 }
@@ -79,6 +81,7 @@ impl BudgetGuard {
         Self {
             pool,
             buffer: DashMap::new(),
+            reserved_buffer: DashMap::new(),
             mission_buffer: DashMap::new(),
         }
     }
@@ -86,12 +89,17 @@ impl BudgetGuard {
     /// Verifies if an entity has sufficient remaining budget to perform a task.
     ///
     /// If the reset time has passed, this method triggers an automatic reset
-    /// before performing the check. Returns `true` if (used + estimated) <= budget.
+    /// before performing the check. Returns `true` if (used + buffered + reserved + estimated) <= budget.
     #[tracing::instrument(skip(self), fields(entity_id = %entity_id, cost = estimated_cost), name = "security::budget_check")]
     pub async fn check_budget(&self, entity_id: &str, estimated_cost: f64) -> Result<bool> {
         let quota = self.get_or_create_quota(entity_id).await?;
         let buffered = self
             .buffer
+            .get(entity_id)
+            .map(|v| *v.value())
+            .unwrap_or(0.0);
+        let reserved = self
+            .reserved_buffer
             .get(entity_id)
             .map(|v| *v.value())
             .unwrap_or(0.0);
@@ -101,16 +109,46 @@ impl BudgetGuard {
             self.reset_quota(&quota.id, quota.reset_period).await?;
             // Refresh quota after reset
             let refreshed = self.get_or_create_quota(entity_id).await?;
-            return Ok(refreshed.used_usd + buffered + estimated_cost <= refreshed.budget_usd);
+            return Ok(refreshed.used_usd + buffered + reserved + estimated_cost <= refreshed.budget_usd);
         }
 
-        Ok(quota.used_usd + buffered + estimated_cost <= quota.budget_usd)
+        Ok(quota.used_usd + buffered + reserved + estimated_cost <= quota.budget_usd)
     }
 
-    /// Records actual cost after an operation completes (Debounced).
+    /// Atomically checks and reserves estimated cost for an in-flight LLM call (A2E-01 2PC Lock).
+    pub async fn check_and_reserve_budget(&self, entity_id: &str, estimated_cost: f64) -> Result<bool> {
+        let quota = self.get_or_create_quota(entity_id).await?;
+        let buffered = self
+            .buffer
+            .get(entity_id)
+            .map(|v| *v.value())
+            .unwrap_or(0.0);
+
+        let mut reserved_entry = self.reserved_buffer.entry(entity_id.to_string()).or_insert(0.0);
+        let current_reserved = *reserved_entry;
+
+        if quota.used_usd + buffered + current_reserved + estimated_cost <= quota.budget_usd {
+            *reserved_entry += estimated_cost;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Releases a previously reserved cost allocation without committing usage.
+    pub fn release_reservation(&self, entity_id: &str, reserved_cost: f64) {
+        if let Some(mut entry) = self.reserved_buffer.get_mut(entity_id) {
+            *entry.value_mut() = (*entry.value() - reserved_cost).max(0.0);
+        }
+    }
+
+    /// Records actual cost after an operation completes (Debounced) and releases matching reservation.
     #[tracing::instrument(skip(self), fields(entity_id = %entity_id, cost = cost_usd), name = "security::budget_record")]
     pub async fn record_usage(&self, entity_id: &str, cost_usd: f64) -> Result<()> {
         *self.buffer.entry(entity_id.to_string()).or_insert(0.0) += cost_usd;
+        if let Some(mut entry) = self.reserved_buffer.get_mut(entity_id) {
+            *entry.value_mut() = (*entry.value() - cost_usd).max(0.0);
+        }
         Ok(())
     }
 
@@ -312,6 +350,7 @@ impl BudgetGuard {
         Self {
             pool: sqlx::SqlitePool::connect_lazy("sqlite::memory:").expect("Tadpole OS Metering: Failed to connect to in-memory database for mock BudgetGuard."),
             buffer: DashMap::new(),
+            reserved_buffer: DashMap::new(),
             mission_buffer: DashMap::new(),
         }
     }

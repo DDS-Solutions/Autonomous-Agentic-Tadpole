@@ -137,15 +137,15 @@ pub async fn execute_hire(
         )));
     }
 
-    // Transfer budget: subtract from hiring, add to target
-    sqlx::query("UPDATE agents SET budget_usd = budget_usd - ? WHERE id = ?")
+    // Transfer budget in DB: subtract from hiring, add to target (bump version to sync with optimistic locking)
+    sqlx::query("UPDATE agents SET budget_usd = budget_usd - ?, version = version + 1 WHERE id = ?")
         .bind(payload.budget)
         .bind(&payload.hiring_agent_id)
         .execute(&mut *tx)
         .await
         .map_err(AppError::Sqlx)?;
 
-    sqlx::query("UPDATE agents SET budget_usd = budget_usd + ? WHERE id = ?")
+    sqlx::query("UPDATE agents SET budget_usd = budget_usd + ?, version = version + 1 WHERE id = ?")
         .bind(payload.budget)
         .bind(&payload.target_agent_id)
         .execute(&mut *tx)
@@ -167,6 +167,16 @@ pub async fn execute_hire(
     .map_err(AppError::Sqlx)?;
 
     tx.commit().await.map_err(AppError::Sqlx)?;
+
+    // 🛡️ Sync in-memory Agent.economics struct in AgentRegistry to prevent post-turn persistence rollback
+    if let Some(mut hiring_agent) = state.registry.agents.get_mut(&payload.hiring_agent_id) {
+        hiring_agent.economics.budget_usd = (hiring_agent.economics.budget_usd - payload.budget).max(0.0);
+        hiring_agent.version += 1;
+    }
+    if let Some(mut target_agent) = state.registry.agents.get_mut(&payload.target_agent_id) {
+        target_agent.economics.budget_usd += payload.budget;
+        target_agent.version += 1;
+    }
 
     state.broadcast_sys(
         &format!(

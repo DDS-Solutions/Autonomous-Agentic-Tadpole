@@ -343,6 +343,7 @@ impl ScriptSkillsRegistry {
     /// Persists a skill by writing to a temporary file and performing a 
     /// rename, ensuring disk integrity even on power failure or crash.
     pub async fn save_skill(&self, skill: SkillDefinition) -> Result<(), AppError> {
+        crate::utils::security::validate_shell_command(&skill.execution_command)?;
         let safe_name = crate::utils::security::sanitize_id(&skill.name);
         let filename = format!("{}.json", safe_name);
         let path = crate::utils::security::validate_path(&self.skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
@@ -356,6 +357,7 @@ impl ScriptSkillsRegistry {
     }
 
     pub async fn save_agent_skill(&self, mut skill: SkillDefinition) -> Result<(), AppError> {
+        crate::utils::security::validate_shell_command(&skill.execution_command)?;
         let safe_name = crate::utils::security::sanitize_id(&skill.name);
         let filename = format!("{}.json", safe_name);
         let path = crate::utils::security::validate_path(&self.agent_skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;

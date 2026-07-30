@@ -75,8 +75,8 @@ pub async fn validate_token(
         }
     }
 
-    // Fallback: check query parameter ?Authorization=Bearer%20<token>
-    if token_opt.is_none() {
+    // Fallback: check query parameter ?Authorization=Bearer%20<token> strictly for WS/live-voice endpoints
+    if token_opt.is_none() && (path == "/v1/engine/ws" || path == "/v1/engine/live-voice") {
         if let Some(query) = req.uri().query() {
             for pair in query.split('&') {
                 if let Some(val) = pair.strip_prefix("Authorization=") {

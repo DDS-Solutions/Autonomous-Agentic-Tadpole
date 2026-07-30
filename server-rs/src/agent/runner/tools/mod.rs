@@ -229,6 +229,32 @@ impl AgentRunner {
         skill: &crate::agent::script_skills::SkillDefinition,
         _usage: &mut Option<crate::agent::types::TokenUsage>,
     ) -> Result<(), AppError> {
+        // 🛡️ [Governance] Check Permission Policy & Oversight requirement
+        let perm_mode = self
+            .state
+            .security
+            .permission_policy
+            .get_mode(&skill.name, &ctx.agent_id)
+            .await;
+
+        if perm_mode == crate::security::permissions::PermissionMode::Deny {
+            *output_text = format!(
+                "Execution of skill '{}' is explicitly denied by governance policy.",
+                skill.name
+            );
+            return Ok(());
+        }
+
+        if skill.oversight_required || perm_mode == crate::security::permissions::PermissionMode::Prompt {
+            if perm_mode != crate::security::permissions::PermissionMode::Allow {
+                *output_text = format!(
+                    "Skill '{}' requires explicit human oversight approval or 'Allow' permission mode.",
+                    skill.name
+                );
+                return Ok(());
+            }
+        }
+
         let snapshot = self.state.registry.skills.snapshot();
         let tool_ctx = ToolContext {
             mission_id: ctx.mission_id.clone(),
