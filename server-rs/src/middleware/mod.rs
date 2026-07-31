@@ -48,28 +48,33 @@ use std::net::SocketAddr;
 ///
 /// Falls back to "unknown" if no IP can be resolved.
 pub fn extract_client_ip(req: &Request<Body>) -> String {
-    // 1. Check Cloudflare specific header
-    if let Some(ip) = req
-        .headers()
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-    {
-        return ip.trim().to_string();
-    }
+    let trust_proxy = std::env::var("TRUST_PROXY_HEADERS")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+        .unwrap_or(false);
 
-    // 2. Check X-Forwarded-For (Standard Proxy)
-    if let Some(forwarded) = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-    {
-        // X-Forwarded-For can be a comma-separated list; the first one is the client
-        if let Some(ip) = forwarded.split(',').next() {
+    if trust_proxy {
+        // 1. Check Cloudflare specific header
+        if let Some(ip) = req
+            .headers()
+            .get("cf-connecting-ip")
+            .and_then(|v| v.to_str().ok())
+        {
             return ip.trim().to_string();
+        }
+
+        // 2. Check X-Forwarded-For (Standard Proxy)
+        if let Some(forwarded) = req
+            .headers()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+        {
+            if let Some(ip) = forwarded.split(',').next() {
+                return ip.trim().to_string();
+            }
         }
     }
 
-    // 3. Fallback to direct connection info
+    // 3. Socket-level connection info (unspoofable direct source IP)
     req.extensions()
         .get::<axum::extract::ConnectInfo<SocketAddr>>()
         .map(|addr| addr.0.ip().to_string())

@@ -61,7 +61,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .route("/metrics", get(routes::health::metrics_handler))
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
-        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             crate::middleware::boot::wait_for_system_ready,
@@ -450,12 +450,12 @@ fn build_docs_routes() -> Router<Arc<AppState>> {
 fn build_engine_public_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/engine/health", get(routes::health::health_check))
-        .route("/engine/ws", get(routes::ws::ws_handler))
-        .route("/engine/live-voice", get(routes::ws::live_voice_handler))
 }
 
 fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
+        .route("/engine/ws", get(routes::ws::ws_handler))
+        .route("/engine/live-voice", get(routes::ws::live_voice_handler))
         .route("/engine/deploy", post(routes::deploy::trigger_deploy))
         .route("/engine/pre-pr", post(routes::deploy::trigger_pre_pr))
         .route("/engine/kill", post(routes::engine_control::kill_agents))

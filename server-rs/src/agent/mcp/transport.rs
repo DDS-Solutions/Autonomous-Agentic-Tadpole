@@ -54,8 +54,19 @@ pub async fn mcp_sse_handler(
     let endpoint_url = format!("/v1/mcp/message?session_id={}", session_id);
     let _ = tx.send(Event::default().event("endpoint").data(endpoint_url)).await;
 
-    let stream = futures::stream::unfold(rx, |mut rx| async move {
-        rx.recv().await.map(|event| (Ok::<_, Infallible>(event), rx))
+    let session_id_cleanup = session_id.clone();
+    let stream = futures::stream::unfold(rx, move |mut rx| {
+        let sid = session_id_cleanup.clone();
+        async move {
+            match rx.recv().await {
+                Some(event) => Some((Ok::<_, Infallible>(event), rx)),
+                None => {
+                    SSE_SESSIONS.remove(&sid);
+                    info!("🔗 [MCP Bridge] SSE session closed and pruned: {}", sid);
+                    None
+                }
+            }
+        }
     });
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new())
 }
@@ -124,6 +135,19 @@ pub async fn mcp_message_handler(
             let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
             
+            // 🛡️ [Governance] Enforce Permission Policy for External MCP Clients
+            let mode = state.security.permission_policy.get_mode(tool_name, "mcp-client").await;
+            if mode != crate::security::permissions::PermissionMode::Allow {
+                return Ok(Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32601,
+                        "message": format!("Tool '{}' requires explicit 'Allow' governance status for external MCP client execution.", tool_name)
+                    }
+                })));
+            }
+
             // Define standard external debug workspace
             let workspace_root = std::path::PathBuf::from("data/workspaces/api_debug");
             if !workspace_root.exists() {

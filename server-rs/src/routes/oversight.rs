@@ -604,20 +604,32 @@ pub async fn get_integrity_status(
         .await
         .unwrap_or((0, 50));
 
+    let is_signing_configured = std::env::var("AUDIT_PRIVATE_KEY").map(|v| !v.trim().is_empty()).unwrap_or(false);
     let is_secure = verified_count == total_count && total_count > 0;
-    let score = if total_count > 0 {
+    
+    let status = if !is_secure && total_count > 0 {
+        "TAMPERED".to_string()
+    } else if is_signing_configured {
+        "SECURE".to_string()
+    } else {
+        "UNSIGNED_CHAIN".to_string()
+    };
+
+    let base_score = if total_count > 0 {
         verified_count as f64 / total_count as f64
     } else {
-        1.0 // Empty ledger is conceptually intact
+        1.0
+    };
+
+    let score = if is_signing_configured {
+        base_score
+    } else {
+        base_score * 0.5 // Cap unsigned chain score to signal missing signature verification key
     };
 
     Ok(Json(SecurityIntegrityResponse {
         integrity_score: score,
-        status: if is_secure || total_count == 0 {
-            "SECURE".to_string()
-        } else {
-            "TAMPERED".to_string()
-        },
+        status,
         verified_count,
         total_count,
     }))

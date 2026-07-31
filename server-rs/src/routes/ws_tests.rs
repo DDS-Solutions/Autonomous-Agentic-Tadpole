@@ -34,6 +34,10 @@ async fn spawn_app() -> (String, Arc<AppState>) {
 
     let app = Router::new()
         .route("/engine/ws", get(ws_handler))
+        .route_layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            crate::middleware::auth::validate_token,
+        ))
         .with_state(app_state.clone());
 
     // Bind to a random local port with fallback for CI environments

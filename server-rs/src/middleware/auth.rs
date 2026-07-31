@@ -55,9 +55,8 @@ pub async fn validate_token(
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
 
-    // PUBLIC BYPASS: Allow health and engine telemetry to bypass global auth 
-    // to prevent handshake failures on browser WebSocket upgrades.
-    if path == "/v1/engine/health" || path == "/v1/engine/ws" || path == "/v1/engine/live-voice" {
+    // PUBLIC BYPASS: Allow health endpoint to bypass global auth.
+    if path == "/v1/engine/health" {
         return Ok(next.run(req).await);
     }
 

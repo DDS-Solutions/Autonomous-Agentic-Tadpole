@@ -248,7 +248,7 @@ where
                 .cloned()
         });
 
-    sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version, runner_policy)
+    let res = sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version, runner_policy)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
@@ -292,7 +292,8 @@ where
             stt_engine = excluded.stt_engine,
             version = agents.version + 1,
             runner_policy = excluded.runner_policy
-            WHERE agents.id = excluded.id AND agents.version = ?")
+            WHERE agents.id = excluded.id AND agents.version = ?"
+    )
     .bind(&agent.identity.id)
     .bind(&agent.identity.name)
     .bind(&agent.identity.role)
@@ -338,6 +339,13 @@ where
     .bind(agent.version as i64)
     .execute(executor)
     .await?;
+
+    if res.rows_affected() == 0 {
+        return Err(AppError::Conflict(format!(
+            "Optimistic concurrency lock failed for agent '{}' (version mismatch)",
+            agent.identity.id
+        )));
+    }
 
     Ok(())
 }

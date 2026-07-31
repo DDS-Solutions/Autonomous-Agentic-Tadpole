@@ -52,8 +52,9 @@ impl KnowledgeStore {
                 format!("(ttl IS NULL OR ttl > {})", now_unix),
             ];
             if let Some(topic) = &req.topic {
-                // topic is lowercased on write, enforce here too.
-                predicates.push(format!("mission_id = '{}'", topic.to_lowercase()));
+                // topic is lowercased on write, enforce here too; escape single quotes for predicate safety.
+                let safe_topic = topic.to_lowercase().replace('\'', "''");
+                predicates.push(format!("mission_id = '{}'", safe_topic));
             }
             if let Some(cluster) = &req.cluster_id {
                 // cluster_id is not in LanceDB schema — this filter is applied in SQLite

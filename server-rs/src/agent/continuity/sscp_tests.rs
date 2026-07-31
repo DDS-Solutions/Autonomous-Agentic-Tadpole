@@ -23,7 +23,8 @@ mod tests {
     const CACHE_ROOT: &str = r"G:\Tadpole_Intelligence_Cache";
 
     fn test_ssd(name: &str) -> (SSDManager, std::path::PathBuf) {
-        let path = std::path::PathBuf::from(CACHE_ROOT).join(format!("test-{}", name));
+        let base_dir = std::env::temp_dir().join("tadpole-sscp-cache");
+        let path = base_dir.join(format!("test-{}", name));
         (SSDManager::new(&path), path)
     }
 

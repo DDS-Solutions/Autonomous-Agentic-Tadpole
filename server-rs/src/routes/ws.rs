@@ -228,6 +228,31 @@ pub async fn live_voice_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
+    // CSRF protection: verify the Origin header for Live Voice upgrades
+    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+        let allowed_env = std::env::var("ALLOWED_ORIGINS").unwrap_or_default();
+        let allowed: Vec<&str> = allowed_env.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        
+        let defaults = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+        ];
+        
+        let mut is_allowed = defaults.contains(&origin);
+        if !is_allowed && !allowed.is_empty() {
+            is_allowed = allowed.contains(&origin);
+        }
+
+        if !is_allowed {
+            tracing::warn!("🚫 Live Voice WS upgrade rejected: unexpected Origin '{}'", origin);
+            return Ok(StatusCode::FORBIDDEN.into_response());
+        }
+    }
+
     let protocol = headers
         .get("sec-websocket-protocol")
         .and_then(|v| v.to_str().ok())

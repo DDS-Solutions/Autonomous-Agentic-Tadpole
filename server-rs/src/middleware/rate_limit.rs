@@ -134,6 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiting_full_flow() {
+        std::env::set_var("TRUST_PROXY_HEADERS", "true");
         let app = Router::new()
             .route("/", get(dummy_handler))
             .layer(axum::middleware::from_fn(inject_rate_limit_headers));
@@ -167,6 +168,7 @@ mod tests {
 
         // Cleanup
         RATE_BUCKETS.invalidate_all();
+        std::env::remove_var("TRUST_PROXY_HEADERS");
     }
 }
 
