@@ -213,6 +213,22 @@ mod tests {
         assert!(summary.contains("unicode_key"));
         assert!(summary.contains("..."));
     }
+
+    #[test]
+    fn test_blackboard_clear_and_isolation() {
+        let bb = SharedBlackboard::new();
+        bb.set("m_1", "k1", serde_json::json!("v1"), "agent_1", Vec::<String>::new());
+        bb.set("m_2", "k2", serde_json::json!("v2"), "agent_2", Vec::<String>::new());
+
+        assert!(bb.get("m_1", "k1").is_some());
+        assert!(bb.get("m_2", "k2").is_some());
+
+        // Clear mission 1 only
+        bb.clear_mission("m_1");
+
+        assert!(bb.get("m_1", "k1").is_none());
+        assert!(bb.get("m_2", "k2").is_some(), "Mission 2 entries must remain unaffected");
+    }
 }
 
 // Metadata: [blackboard]

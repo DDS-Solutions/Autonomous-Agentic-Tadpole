@@ -260,6 +260,31 @@ mod tests {
         let assembled = slicer.assemble_prompt(anchor, &rag, &history);
         assert!(assembled.contains("System: Agent"));
     }
+
+    #[test]
+    fn test_context_slicer_safe_utf8_char_boundary_truncation() {
+        let slicer = ContextSlicer::default();
+        let multibyte_content = "🛡️ Tadpole OS: 日本語と🦀絵文字のテスト文字列が正しく処理されることを確認します。";
+        let history = vec![ConversationTurn {
+            turn_index: 1,
+            role: "user".to_string(),
+            content: multibyte_content.to_string(),
+            tool_calls_summary: None,
+        }];
+
+        let assembled = slicer.assemble_prompt("# System", &[], &history);
+        assert!(assembled.contains("🛡️"));
+        assert!(assembled.contains("日本語"));
+    }
+
+    #[test]
+    fn test_context_slicer_empty_history_and_rag() {
+        let slicer = ContextSlicer::default();
+        let assembled = slicer.assemble_prompt("# System: Alpha", &[], &[]);
+        assert!(assembled.contains("# System: Alpha"));
+        assert!(!assembled.contains("<grounded_context>"));
+        assert!(!assembled.contains("<historical_context_summary>"));
+    }
 }
 
 // Metadata: [context_slicer]

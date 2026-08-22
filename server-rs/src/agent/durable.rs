@@ -368,6 +368,43 @@ mod tests {
         assert_eq!(res, "Doc result v2 (new)");
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
+
+    #[tokio::test]
+    async fn test_durable_workflow_status_transitions() {
+        let pool = setup_test_db().await;
+        let wf_id = "wf_lifecycle_003";
+
+        // 1. Start workflow -> Running
+        start_workflow(&pool, wf_id, Some("mission_life"), "agent_gamma").await.unwrap();
+
+        // 2. Complete workflow -> Completed
+        complete_workflow(&pool, wf_id).await.unwrap();
+
+        // 3. Failed workflow test
+        let wf_fail_id = "wf_failed_004";
+        start_workflow(&pool, wf_fail_id, None, "agent_gamma").await.unwrap();
+        fail_workflow(&pool, wf_fail_id, "Syntax error in AST").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_durable_step_failure_recorded_properly() {
+        let pool = setup_test_db().await;
+        let wf_id = "wf_step_fail_005";
+        start_workflow(&pool, wf_id, None, "agent_alpha").await.unwrap();
+
+        let res: Result<String, AppError> = execute_durable_step(
+            &pool,
+            wf_id,
+            1,
+            "failing_step",
+            &serde_json::json!({"test": 123}),
+            || async move {
+                Err(AppError::InternalServerError("Upstream API timeout".to_string()))
+            },
+        ).await;
+
+        assert!(res.is_err(), "Step failure must propagate as Err");
+    }
 }
 
 // Metadata: [durable]

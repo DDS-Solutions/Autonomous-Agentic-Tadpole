@@ -232,6 +232,42 @@ mod tests {
         let auth_esc = router.should_escalate_after_failure(1, "HTTP 401 Unauthorized: Invalid API Key");
         assert!(auth_esc.is_none());
     }
+
+    #[test]
+    fn test_cascade_token_threshold_escalation() {
+        let router = CascadeRouter::default();
+        // Over 12,000 prompt tokens -> Medium complexity -> Tier 1 Fast (large context)
+        let decision = router.route_turn(
+            "Summarize large code context",
+            15_000,
+            false,
+            false,
+        );
+        assert_eq!(decision.complexity, TaskComplexity::Medium);
+        assert_eq!(decision.tier, ModelTier::Tier1Fast);
+        assert_eq!(decision.model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn test_cascade_retry_count_escalation() {
+        let router = CascadeRouter::default();
+        // Generic error on attempt 2+ -> Escalates to Tier 2
+        let retry_esc = router.should_escalate_after_failure(2, "Unknown transient failure");
+        assert!(retry_esc.is_some());
+        let (prov, model) = retry_esc.unwrap();
+        assert_eq!(prov, "gemini");
+        assert_eq!(model, "gemini-2.0-pro");
+    }
+
+    #[test]
+    fn test_cascade_rate_limit_and_quota_non_escalation() {
+        let router = CascadeRouter::default();
+        let quota_esc = router.should_escalate_after_failure(1, "HTTP 429: Resource has been exhausted (e.g. check quota)");
+        assert!(quota_esc.is_none(), "Quota/rate limit errors should not trigger model escalation");
+
+        let credit_esc = router.should_escalate_after_failure(1, "Insufficient credit balance in account");
+        assert!(credit_esc.is_none(), "Credit errors should not trigger model escalation");
+    }
 }
 
 // Metadata: [cascade_router]
