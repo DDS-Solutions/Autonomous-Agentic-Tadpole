@@ -77,26 +77,34 @@ export const KnowledgeGraph: React.FC = () => {
                 const graph = await intelligence_api_service.get_graph();
                 set_data(graph);
             } else {
+                type UnifiedKnowledgeItem = {
+                    id: string;
+                    title?: string;
+                    topic?: string;
+                    concept_type?: string;
+                    confidence?: number;
+                    human_confirmed?: boolean;
+                    text?: string;
+                    resource_uri?: string;
+                    description?: string;
+                };
+
                 // Fetch OKF knowledge entries & explicit edges from IKS (OKF v0.3)
-                let [entries, explicitEdges] = await Promise.all([
+                const [rawEntries, explicitEdges] = await Promise.all([
                     intelligence_api_service.get_knowledge({ limit: 200 }).catch(() => []),
                     intelligence_api_service.get_knowledge_edges().catch(() => []),
                 ]);
+                let entries: UnifiedKnowledgeItem[] = rawEntries;
 
                 // Fallback to Curated System Knowledge Documents if IKS is empty
                 if (!entries || entries.length === 0) {
                     try {
                         const docs = await system_api_service.get_knowledge_docs();
                         if (docs && docs.length > 0) {
-                            const docEntries = await Promise.all(
+                            const docEntries: UnifiedKnowledgeItem[] = await Promise.all(
                                 docs.map(async (doc) => {
                                     const docId = doc.name.replace(/\.md$/, '');
-                                    let content = '';
-                                    try {
-                                        content = await system_api_service.get_knowledge_doc(doc.category, doc.name);
-                                    } catch {
-                                        content = '';
-                                    }
+                                    const content = await system_api_service.get_knowledge_doc(doc.category, doc.name).catch(() => '');
                                     return {
                                         id: docId,
                                         title: doc.title,
@@ -110,7 +118,7 @@ export const KnowledgeGraph: React.FC = () => {
                                     };
                                 })
                             );
-                            entries = docEntries as any[];
+                            entries = docEntries;
                         }
                     } catch (docErr) {
                         console.warn('[KnowledgeGraph] Fallback knowledge fetch failed:', docErr);

@@ -58,7 +58,7 @@ interface TOptions {
  */
 class I18n {
   private data: LocaleData = en;
-  private cache = new Map<string, any>();
+  private cache = new Map<string, unknown>();
   private warned_keys = new Set<string>();
 
   _reset_for_testing(): void {
@@ -78,15 +78,14 @@ class I18n {
   t(key: string, params?: Record<string, string | number> | TOptions): any {
     if (!key) return '';
 
-    let result: any;
-    let found = false;
+    let result: unknown;
+    let found: boolean;
 
     if (this.cache.has(key)) {
       result = this.cache.get(key);
       found = result !== undefined && result !== key;
     } else {
       const keys = key.split('.');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       result = this.data;
       found = true;
       
