@@ -86,7 +86,21 @@ Migrations are managed via SQLx and located in [server-rs/migrations/](file:///g
 ## Core Engine Subsystems
 
 ### 6. Subsystem Registry
-The `server-rs` engine hosts 6 specialized autonomous subsystems:
+The `server-rs` engine hosts 14 specialized autonomous subsystems:
+
+**Kernel Foundation (Phases 1–3):**
+- **OTP Actor Supervision Tree ([supervisor.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/system/actors/supervisor.rs))**: Erlang/OTP-style supervision engine supporting `OneForOne` (restart individual) and `OneForAll` (cascade restart siblings) strategies, `AbortHandle` deterministic hard shutdown, stability-based exponential backoff reset, and lockless `DashMap` child registry.
+- **Hybrid RAG Triad Fusion ([rag_fusion.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/services/rag_fusion.rs))**: Reciprocal Rank Fusion (RRF) combining LanceDB Vector (w=0.40), BM25 Lexical (w=0.35), and TrustGraph Entity (w=0.25) with multi-engine deduplication and intersection boosting. Exposed via `GET /v1/memory/search/hybrid`.
+- **Durable Workflow Engine ([durable.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/durable.rs))**: SQLite-native step memoization with SHA-256 parameter hashing. Crash-resilient: on engine restart, completed steps are fast-forwarded from SQLite cache with zero token waste. Automatically re-executes steps when input parameters change.
+
+**Swarm Orchestration (Upgrades 1–5):**
+- **Swarm Shared Blackboard ([blackboard.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/blackboard.rs))**: High-performance in-memory scratchpad partitioned per `mission_id` (`DashMap` + `Arc<BlackboardEntry>`). O(1) pointer sharing, UTF-8 safe truncation, and generic tag filtering.
+- **Dynamic DAG Task Engine ([dag.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/dag.rs))**: Directed task dependency graph built on `petgraph::StableDiGraph` with topological cycle rejection, parallel ready-queue extraction, state transition validation, and deadlock-free failure cascading via BFS `Skipped` propagation.
+- **Tiered Model Cascade Router ([cascade_router.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/cascade_router.rs))**: Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Gemini Flash) and Tier 2 Frontier Reasoning (Gemini Pro/Claude 3.7/GPT-4o). Externalized `critical_keywords` in `CascadePolicy`. Capability-aware error escalation (skips auth errors, escalates on JSON/format failures).
+- **Aletheia Verification Gate ([verification_gate.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/verification_gate.rs))**: Zero-trust Generator→Verifier triad for high-impact mutations. O(1) `HashSet` sensitive skill gating, independent Verifier blast-radius evaluation (mitigates "Honesty Problem"), and calibrated threshold (default: 15 symbols).
+- **Adaptive Context Slicer ([context_slicer.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/context_slicer.rs))**: Cognitive 3-zone prompt assembly (Pinned Anchors, `<grounded_context>` XML RAG, Sliding Active Window) with strict `tiktoken` BPE token budget enforcement and pre-allocated heap buffers via `std::fmt::Write`.
+
+**Original Subsystems:**
 - **A2A Economic Governance ([a2a.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/routes/a2a.rs))**: Handles Agent-to-Agent 2PC budget transactions (`/v1/a2a/prepare`, `/v1/a2a/commit`, `/v1/a2a/rollback`), integer micro-USDC accounting (`u64`), 24-hour rolling limit resets, and lock-aware spend projection.
 - **TrustGraph Engine ([trustgraph.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/trustgraph.rs))**: Manages directed entity-relation graph topologies (`graph_entities` & `graph_relations`) with $O(N)$ BFS traversal and node rehydration for GraphRAG multi-hop reasoning.
 - **BM25 Memory Engine ([bm25_memory.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/services/bm25_memory.rs))**: Zero-embedding sub-millisecond lexical search engine (< 1ms) featuring single-pass disk I/O, $O(1)$ pre-calculated term frequencies, and a double-checked 5-second TTL cache (`GET /v1/memory/search/bm25`).

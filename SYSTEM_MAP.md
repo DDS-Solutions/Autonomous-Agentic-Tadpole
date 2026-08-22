@@ -39,6 +39,14 @@ This map reflects the current code layout and should be used as the first orient
 | Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, and telemetry. |
 | Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
 | Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
+| OTP Actor Supervision | `server-rs/src/system/actors/supervisor.rs` | Erlang/OTP supervision tree engine (`OneForOne`, `OneForAll`, `AbortHandle` hard shutdown, stability backoff reset, and `DashMap` registry). |
+| Hybrid RAG Triad Fusion | `server-rs/src/services/rag_fusion.rs` | Reciprocal Rank Fusion (RRF) combining LanceDB Vector, BM25 Lexical, and TrustGraph Entity subgraphs. |
+| Durable Workflow Engine | `server-rs/src/agent/durable.rs` | SQLite-native step memoization with SHA-256 parameter hashing, crash fast-forwarding, and mutation re-execution. |
+| Swarm Shared Blackboard | `server-rs/src/agent/blackboard.rs` | High-performance in-memory scratchpad per mission (`DashMap` + `Arc<BlackboardEntry>`), UTF-8 safe truncation, and tag filtering. |
+| Dynamic DAG Task Engine | `server-rs/src/agent/dag.rs` | Directed task graph with petgraph `StableDiGraph`, topological cycle rejection, state transition guards, and deadlock-free failure cascading. |
+| Tiered Model Cascade Router | `server-rs/src/agent/cascade_router.rs` | Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Flash) and Tier 2 Frontier (Gemini Pro/Claude/GPT) with capability-aware error escalation. |
+| Aletheia Verification Gate | `server-rs/src/agent/verification_gate.rs` | Zero-trust cryptographic verification gate (Generator -> Verifier -> Reviser) with independent blast-radius evaluation. |
+| Adaptive Context Slicer | `server-rs/src/agent/context_slicer.rs` | Cognitive 3-zone context assembly (Anchors, Grounded XML RAG, Sliding History) strictly enforcing `tiktoken` token budgets. |
 | Token & Context Engine | `server-rs/src/agent/tokenizer.rs`, `server-rs/src/agent/context_manager.rs` | Model-aware BPE token counting (< 1µs DashMap LRU cache) and 2-Tier context compression. |
 | TrustGraph GraphRAG | `server-rs/src/agent/trustgraph.rs` | Directed entity-relation graph engine for O(N) BFS multi-hop GraphRAG context traversal. |
 | BM25 Lexical Search | `server-rs/src/services/bm25_memory.rs` | Zero-embedding sub-millisecond lexical search engine (< 1ms) with 5s TTL double-checked cache. |
@@ -46,9 +54,9 @@ This map reflects the current code layout and should be used as the first orient
 | Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, A2A budget, oversight, model manager, skills, docs, governance, and engine control. |
 | Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, and downstream blast-radius analysis. |
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
-| Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure. |
+| Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
-| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260725000100`–`20260725000300`), local data, and registry persistence. |
+| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260725000100`–`20260822000100`), local data, and registry persistence. |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |
 
@@ -77,6 +85,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
 - `/v1/intelligence/*` symbol graph and blast radius APIs
 - `/v1/search/memory`
 - `/v1/memory/search/bm25` zero-cloud sub-millisecond lexical search
+- `/v1/memory/search/hybrid` unified Triad Reciprocal Rank Fusion search
 - `/v1/env-schema`
 - `/v1/engine/*` management routes
 - `/v1/mcp/*`
@@ -86,7 +95,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
 | Data | Current path/default | Notes |
 | --- | --- | --- |
 | Main SQLite database | `data/tadpole.db` | Default from `AppState::new` when `DATABASE_URL` is unset. |
-| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db.rs`. |
+| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db.rs`. Includes `20260822000100_durable_workflows.sql`. |
 | Agent registry data | SQLite plus `data/agents.json` where present | Agent records are loaded from SQLite; JSON files remain part of registry/runtime data. |
 | Audio cache | `data/audio_cache.db` | Initialized by AppState, falls back to no-op if unavailable. |
 | Built dashboard | `dist/` | Served by the Rust router when present. |
@@ -98,9 +107,3 @@ Default Cargo features are empty. These features are opt-in:
 
 - `vector-memory`: enables LanceDB/Arrow-backed memory routes.
 - `neural-audio`: enables optional audio dependencies.
-
-Without `vector-memory`, memory routes intentionally return `501 Not Implemented`.
-
-
-
-[//]: # (Metadata: [SYSTEM_MAP])

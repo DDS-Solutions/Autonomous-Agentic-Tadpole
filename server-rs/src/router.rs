@@ -159,6 +159,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/iacp", build_iacp_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/memory/search/bm25", get(routes::memory::bm25_search_handler))
+        .route("/memory/search/hybrid", get(routes::memory::hybrid_rag_search_handler))
         .route("/env-schema", get(routes::env_schema::get_env_schema))
         .route_layer(axum::middleware::from_fn_with_state(
             app_state,

@@ -21,6 +21,7 @@ pub mod privacy;
 pub mod acl_service;
 pub mod parser;
 pub mod bm25_memory;
+pub mod rag_fusion;
 
 #[cfg(test)]
 mod tests;

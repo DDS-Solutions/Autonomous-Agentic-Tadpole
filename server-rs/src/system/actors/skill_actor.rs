@@ -27,17 +27,22 @@ use walkdir::WalkDir;
 
 pub struct SkillScannerActor {
     app_state: Arc<AppState>,
-    receiver: mpsc::Receiver<SystemMessage>,
+    receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>,
 }
 
 impl SkillScannerActor {
-    pub fn new(app_state: Arc<AppState>, receiver: mpsc::Receiver<SystemMessage>) -> Self {
+    pub fn new(app_state: Arc<AppState>, receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>) -> Self {
         Self { app_state, receiver }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         tracing::info!("[SkillScanner] Actor lifecycle initialized.");
-        while let Some(msg) = self.receiver.recv().await {
+        loop {
+            let msg = {
+                let mut rx = self.receiver.lock().await;
+                rx.recv().await
+            };
+            let Some(msg) = msg else { break; };
             match msg {
                 SystemMessage::SkillScan { path, resp } => {
                     let result = self.handle_scan(&path).await;

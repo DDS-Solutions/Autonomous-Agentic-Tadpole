@@ -310,6 +310,132 @@ pub async fn bm25_search_handler(
     ))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct HybridSearchQuery {
+    pub q: String,
+    pub top_k: Option<usize>,
+    pub mission_id: Option<String>,
+}
+
+/// GET /v1/memory/search/hybrid
+///
+/// Executes concurrent Hybrid RAG Triad retrieval (BM25 + TrustGraph + Vector/Fallback)
+/// and fuses results via Reciprocal Rank Fusion (RRF).
+pub async fn hybrid_rag_search_handler(
+    Query(query): Query<HybridSearchQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    use crate::services::rag_fusion::{RagCandidate, RagEngineWeights, fuse_search_results};
+    let top_k = query.top_k.unwrap_or(10);
+    let weights = RagEngineWeights::default();
+
+    if query.q.trim().is_empty() {
+        return Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "query": query.q,
+                "count": 0,
+                "results": []
+            })),
+        ));
+    }
+
+    // 1. BM25 Retrieval
+    let base_dir = &state.base_dir;
+    let root_dirs = vec![
+        base_dir.join(".agent").join("memory"),
+        base_dir.join("directives"),
+        base_dir.join("docs"),
+        base_dir.join("execution"),
+    ];
+    let bm25_engine = crate::services::bm25_memory::Bm25MemoryEngine::new(root_dirs);
+    let bm25_hits = bm25_engine.search(&query.q, top_k * 2);
+    let bm25_candidates: Vec<RagCandidate> = bm25_hits
+        .into_iter()
+        .map(|hit| RagCandidate {
+            id: hit.file_path,
+            title: hit.title,
+            content: hit.snippet,
+            relative_path: Some(hit.relative_path),
+            source: "bm25".to_string(),
+            metadata: None,
+        })
+        .collect();
+
+    // 2. TrustGraph Retrieval
+    let search_pattern = format!("%{}%", query.q);
+    let graph_rows = sqlx::query(
+        "SELECT id, name, type, description FROM trustgraph_nodes WHERE name LIKE ? OR description LIKE ? LIMIT ?"
+    )
+    .bind(&search_pattern)
+    .bind(&search_pattern)
+    .bind((top_k * 2) as i64)
+    .fetch_all(&state.resources.pool)
+    .await
+    .unwrap_or_default();
+
+    let graph_candidates: Vec<RagCandidate> = graph_rows
+        .into_iter()
+        .map(|row| {
+            use sqlx::Row;
+            let id: String = row.get("id");
+            let name: String = row.get("name");
+            let node_type: String = row.get("type");
+            let desc: Option<String> = row.get("description");
+            RagCandidate {
+                id: id.clone(),
+                title: format!("[{}] {}", node_type, name),
+                content: desc.unwrap_or_default(),
+                relative_path: None,
+                source: "trustgraph".to_string(),
+                metadata: Some(serde_json::json!({"type": node_type})),
+            }
+        })
+        .collect();
+
+    // 3. Fallback / Vector Memories Retrieval
+    let mem_rows = sqlx::query(
+        "SELECT id, text, mission_id FROM fallback_memories WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?"
+    )
+    .bind(&search_pattern)
+    .bind((top_k * 2) as i64)
+    .fetch_all(&state.resources.pool)
+    .await
+    .unwrap_or_default();
+
+    let vector_candidates: Vec<RagCandidate> = mem_rows
+        .into_iter()
+        .map(|row| {
+            use sqlx::Row;
+            let id: String = row.get("id");
+            let text: String = row.get("text");
+            let mission_id: Option<String> = row.get("mission_id");
+            RagCandidate {
+                id,
+                title: "Memory Record".to_string(),
+                content: text,
+                relative_path: None,
+                source: "vector".to_string(),
+                metadata: mission_id.map(|m| serde_json::json!({"mission_id": m})),
+            }
+        })
+        .collect();
+
+    // 4. Fuse with Reciprocal Rank Fusion
+    let fused = fuse_search_results(&vector_candidates, &bm25_candidates, &graph_candidates, &weights, top_k);
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "success",
+            "query": query.q,
+            "count": fused.len(),
+            "results": fused
+        })),
+    ))
+}
+
 /// DELETE /v1/agents/:agent_id/memories/:row_id
 pub async fn delete_agent_memory(
     Path((_agent_id, row_id)): Path<(String, String)>,

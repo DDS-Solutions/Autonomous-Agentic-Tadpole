@@ -23,6 +23,7 @@ use crate::error::AppError;
 use tokio::sync::oneshot;
 
 pub mod manager;
+pub mod supervisor;
 pub mod audit_actor;
 pub mod memory_actor;
 pub mod security_actor;

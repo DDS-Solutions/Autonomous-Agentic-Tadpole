@@ -32,14 +32,14 @@ static SSN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b"
 static CC_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{4}-\d{4}-\d{4}-\d{4}\b").unwrap());
 
 pub struct SecurityActor {
-    receiver: mpsc::Receiver<SystemMessage>,
+    receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>,
     budget_guard: Arc<BudgetGuard>,
     shell_scanner: Arc<ShellScanner>,
 }
 
 impl SecurityActor {
     pub fn new(
-        receiver: mpsc::Receiver<SystemMessage>,
+        receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>,
         budget_guard: Arc<BudgetGuard>,
         shell_scanner: Arc<ShellScanner>,
     ) -> Self {
@@ -50,10 +50,15 @@ impl SecurityActor {
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         info!("🛡️ [SecurityActor] Governance loop active. Zero-Trust gates armed.");
 
-        while let Some(msg) = self.receiver.recv().await {
+        loop {
+            let msg = {
+                let mut rx = self.receiver.lock().await;
+                rx.recv().await
+            };
+            let Some(msg) = msg else { break; };
             match msg {
                 SystemMessage::SecurityCheck { agent_id, action, resp } => {
                     let budget_guard = self.budget_guard.clone();

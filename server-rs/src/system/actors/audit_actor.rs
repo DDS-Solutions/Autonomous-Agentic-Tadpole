@@ -19,16 +19,18 @@
 
 use crate::security::audit::MerkleAuditTrail;
 use crate::system::actors::SystemMessage;
+use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::Mutex;
 use tracing::info;
 
 pub struct AuditActor {
-    receiver: Receiver<SystemMessage>,
+    receiver: Arc<Mutex<Receiver<SystemMessage>>>,
     audit_trail: MerkleAuditTrail,
 }
 
 impl AuditActor {
-    pub fn new(receiver: Receiver<SystemMessage>, audit_trail: MerkleAuditTrail) -> Self {
+    pub fn new(receiver: Arc<Mutex<Receiver<SystemMessage>>>, audit_trail: MerkleAuditTrail) -> Self {
         Self {
             receiver,
             audit_trail,
@@ -36,10 +38,15 @@ impl AuditActor {
     }
 
     /// Primary execution loop for the Audit Actor.
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         info!("🛡️ [AuditActor] Initialized and listening for events.");
 
-        while let Some(msg) = self.receiver.recv().await {
+        loop {
+            let msg = {
+                let mut rx = self.receiver.lock().await;
+                rx.recv().await
+            };
+            let Some(msg) = msg else { break; };
             match msg {
                 SystemMessage::AuditRecord { 
                     agent_id, 

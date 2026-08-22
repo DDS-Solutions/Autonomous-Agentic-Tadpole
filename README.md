@@ -43,8 +43,13 @@ The result is a desktop-ready agent operations platform that can run missions, m
 |---|---|---|---|
 | **Core Kernel** | Python / Node.js (Interpreted, GIL locks) | **Compiled Rust (`server-rs`) + Axum + Tokio** | **10x – 100x Throughput & Sub-ms Latency** |
 | **Token Optimization** | Naive string counts / uncached BPE | **Model-Aware `TokenizerService` (< 1µs DashMap LRU)** | **Sub-Microsecond Zero-Allocation Token Tracking** |
-| **Context Compression** | Truncation or basic sliding window | **2-Tier `ContextManager` (Heuristic + LLM Summarizer)** | **30% – 50% Token Cost Reduction** |
-| **RAG Architecture** | Single Naive Vector DB (Chroma/Pinecone) | **Hybrid RAG Triad (Vector + TrustGraph + BM25 Lexical)** | **Sub-ms Exact Code Symbol & Multi-Hop RAG** |
+| **Context Compression** | Truncation or basic sliding window | **3-Zone Adaptive Context Slicer + 2-Tier Compressor** | **30% – 50% Token Cost Reduction with Strict Budget Enforcement** |
+| **RAG Architecture** | Single Naive Vector DB (Chroma/Pinecone) | **Hybrid RAG Triad RRF (Vector + TrustGraph + BM25)** | **Sub-ms Exact Code Symbol & Multi-Hop RAG with Fusion Scoring** |
+| **Workflow Durability** | Stateless re-execution on crash | **SQLite-Native Durable Step Memoization (SHA-256)** | **Zero Token Waste on Engine Restart** |
+| **Task Orchestration** | Linear chains or flat fan-out | **Dynamic DAG Engine (`petgraph`) + Shared Blackboard** | **Parallel Task Execution with Deadlock-Free Failure Cascading** |
+| **Actor Supervision** | No supervision / manual restart | **OTP-Style Supervision Tree (OneForOne / OneForAll)** | **Erlang-Grade Fault Isolation & Auto-Recovery** |
+| **Model Routing** | Single model per request | **Tiered Cascade Router (Flash → Reasoning Escalation)** | **2x–5x Cost Reduction on Routine Turns** |
+| **Mutation Safety** | Trust-the-agent / no verification | **Aletheia Zero-Trust Verification Gate** | **Independent Verifier Blast-Radius Audit** |
 | **Financial Safety** | Loose per-call limits / unconstrained loops | **A2E-01 2PC Ledger + 24h Rolling Cap + Lock Awareness** | **Zero Risk of Runaway API Overruns** |
 | **Self-Healing** | Uncaught exceptions / endless loops | **`tool_loop_guard.py` + Boot DB Reconciler + Annealing** | **Deterministic Circuit Breakers** |
 
@@ -58,6 +63,14 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Streams telemetry live** through WebSocket routes, heartbeat events, system logs, and dashboard health panels.
 - **Enforces governance and security controls** through bearer-token auth, request middleware, shell scanning, audit trails, quotas, oversight queues, and privacy-mode behavior.
 - **Visualizes codebase interdependencies** with an interactive 2D Force-Directed Knowledge Graph and down-stream blast-radius impact analysis.
+- **OTP Actor Supervision Tree**: Erlang/OTP-style supervisor with `OneForOne` and `OneForAll` restart strategies, `AbortHandle` deterministic shutdown, and stability-based exponential backoff.
+- **Hybrid RAG Triad Fusion**: Reciprocal Rank Fusion (RRF) combining LanceDB Vector, BM25 Lexical, and TrustGraph Entity search via `GET /v1/memory/search/hybrid`.
+- **Durable Workflow Step Memoization**: SQLite-native crash-resilient workflow engine with SHA-256 parameter hashing; completed steps fast-forward on restart with zero token waste.
+- **Dynamic DAG Task Engine**: Directed task dependency graph (`petgraph::StableDiGraph`) with topological cycle rejection, parallel ready-queue extraction, and deadlock-free failure cascading via BFS `Skipped` propagation.
+- **Shared Mission Blackboard**: High-performance `DashMap` + `Arc<BlackboardEntry>` in-memory scratchpad for multi-agent data exchange, replacing prompt string passing with O(1) key pointers.
+- **Tiered Model Cascade Router**: Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Gemini Flash) and Tier 2 Frontier Reasoning (Gemini Pro/Claude/GPT-4o) with capability-aware error escalation.
+- **Aletheia Verification Gate**: Zero-trust dual-agent verification for high-impact mutations with independent Verifier blast-radius calculation and O(1) `HashSet` sensitive skill gating.
+- **Adaptive Context Slicer**: Cognitive 3-zone prompt assembly (Pinned Anchors, `<grounded_context>` RAG, Sliding Active Window) with strict `tiktoken` BPE token budget enforcement.
 - **Institutional Knowledge Store (IKS)**: Provides cross-cluster, persistent semantic memory backed by local SQLite databases and optional LanceDB vectors, complete with TTL evictions and time-aware confidence decay.
 - **Unified Graph Analysis**: Implements off-thread, lock-protected codebase dependency tracking with O(1) reverse-obfuscated path lookup for secure blast-radius calculations.
 - **Modular Sovereign UI Layouts**: Refactored the monolithic chat console into highly cohesive frontend sub-components and specialized React hooks.
@@ -75,8 +88,17 @@ flowchart LR
   Dashboard["React + TypeScript Dashboard"] --> API["/v1 REST + WebSocket API"]
   API --> Engine["Rust Axum Engine"]
   Engine --> State["AppState Hubs"]
-  State --> DB["SQLite + SQLx Migrations"]
+  State --> DB["SQLite + SQLx Migrations + Durable Steps"]
   State --> Actors["Audit, Memory, Security, Skill Actors"]
+  Engine --> Supervisor["OTP Supervisor Tree"]
+  Supervisor --> Actors
+  Engine --> Orchestration["DAG + Blackboard + Cascade Router"]
+  Orchestration --> Gate["Aletheia Verification Gate"]
+  Orchestration --> Slicer["Adaptive Context Slicer"]
+  Engine --> RAG["Hybrid RAG Triad RRF"]
+  RAG --> VectorDB["LanceDB Vector"]
+  RAG --> BM25["BM25 Lexical"]
+  RAG --> TrustGraph["TrustGraph Entity"]
   Engine --> Workers["Telemetry, Scheduler, Discovery, Reaper"]
   Engine --> MCP["MCP Host + Skill Registry"]
   MCP --> Execution["Python Scripts + JSON Skill Manifests"]
@@ -136,15 +158,18 @@ On Windows, these helpers wrap the same flow:
 
 ## Architecture
 
-Autonomous Agentic Tadpole has three practical runtime layers.
+Autonomous Agentic Tadpole has six practical runtime layers.
 
 | Layer | Code | Responsibility |
 | --- | --- | --- |
 | Interface | `src/` | Dashboard shell, pages, stores, services, browser monitoring, provider sync, detached views |
 | Engine | `server-rs/src/` | Axum routes, AppState, actors, middleware, telemetry, agent runner, security, startup workers |
+| Token & Context | `server-rs/src/agent/tokenizer.rs`, `context_manager.rs`, `context_slicer.rs` | Model-aware BPE counting (< 1µs), 2-Tier compression, adaptive 3-zone context slicing |
+| Supervision & Durability | `server-rs/src/system/actors/supervisor.rs`, `server-rs/src/agent/durable.rs` | OTP supervision tree, crash-resilient step memoization |
+| Swarm Orchestration | `server-rs/src/agent/dag.rs`, `blackboard.rs`, `cascade_router.rs`, `verification_gate.rs` | DAG parallelism, shared blackboard, tiered model routing, zero-trust verification |
 | Execution | `execution/` | Python tools, MCP server, JSON skill definitions, verification scripts, modular skill framework |
 
-The engine boot path starts in `server-rs/src/main.rs`, initializes environment and tracing, creates `AppState`, starts background workers, spawns system actors, launches the orchestrator, and binds Axum on `127.0.0.1:8000` unless configured otherwise.
+The engine boot path starts in `server-rs/src/main.rs`, initializes environment and tracing, creates `AppState`, starts background workers, spawns system actors under the OTP supervisor tree, launches the orchestrator, and binds Axum on `127.0.0.1:8000` unless configured otherwise.
 
 `server-rs/src/router.rs` assembles all `/v1` API routes. Public engine health and WebSocket routes remain open; management routes require `Authorization: Bearer <NEURAL_TOKEN>`. When `dist/` exists, the same Rust process serves the built React app with SPA fallback.
 
@@ -219,6 +244,7 @@ Protected route groups:
 | `/v1/sovereign` | Mission session tree and branch state |
 | `/v1/intelligence` | High-fidelity symbol graph mapping and dependent blast-radius analytics |
 | `/v1/search/memory` | Global memory search |
+| `/v1/memory/search/hybrid` | Hybrid RAG Triad RRF fusion (Vector + BM25 + TrustGraph) |
 | `/v1/env-schema` | Runtime environment schema |
 | `/v1/engine/*` | Deploy, kill, shutdown, transcribe, speak, template install |
 | `/v1/mcp/*` | MCP SSE and message bridge |
@@ -391,7 +417,19 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 | [💻 Development Guide](wiki/Development-Guide.md) | Local dev setup, conventions, adding endpoints, migrations |
 | [🔧 Troubleshooting](wiki/Troubleshooting.md) | 12 common issues with exact step-by-step fixes |
 
-## Recent Upgrades (v1.1.58) — Operational Hardening
+## Recent Upgrades (v1.1.58) — Next-Gen Orchestration Engine
+
+### ⚡ Kernel Foundation (Phases 1–3)
+- **OTP Actor Supervision Tree** (`server-rs/src/system/actors/supervisor.rs`): Erlang/OTP-style supervision engine supporting `OneForOne` (restart individual) and `OneForAll` (cascade restart all siblings) strategies, `AbortHandle` deterministic hard shutdown, stability-based exponential backoff with auto-reset, and lockless `DashMap` child registry.
+- **Hybrid RAG Triad Fusion** (`server-rs/src/services/rag_fusion.rs`): Reciprocal Rank Fusion (RRF) combining LanceDB Vector (w=0.40), BM25 Lexical (w=0.35), and TrustGraph Entity (w=0.25) with deduplication and multi-engine intersection boosting. Exposed via `GET /v1/memory/search/hybrid`.
+- **Durable Workflow Step Memoization** (`server-rs/src/agent/durable.rs`): SQLite-native crash-resilient execution engine. Completed workflow steps are SHA-256 hashed and cached; on engine restart, previously completed steps are fast-forwarded from SQLite with zero token waste. Mutation-aware: automatically re-executes when input parameters change.
+
+### 🧠 Swarm Orchestration (Upgrades 1–5)
+- **Shared Mission Blackboard** (`server-rs/src/agent/blackboard.rs`): High-performance thread-safe in-memory scratchpad (`DashMap` + `Arc<BlackboardEntry>`) for multi-agent data exchange, replacing large prompt string passing with lightweight O(1) key pointers. UTF-8 safe truncation and generic tag filtering.
+- **Dynamic DAG Task Engine** (`server-rs/src/agent/dag.rs`): Directed task dependency graph built on `petgraph::StableDiGraph` with topological cycle rejection, parallel ready-queue extraction, state transition validation, and deadlock-free failure cascading via BFS `Skipped` propagation.
+- **Tiered Model Cascade Router** (`server-rs/src/agent/cascade_router.rs`): Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Gemini Flash) and Tier 2 Frontier Reasoning (Gemini Pro/Claude/GPT-4o). Externalized `critical_keywords` in `CascadePolicy`. Capability-aware error escalation (skips auth errors, escalates on JSON/format failures). Structured `RoutingDecision` return type.
+- **Aletheia Verification Gate** (`server-rs/src/agent/verification_gate.rs`): Zero-trust Generator→Verifier triad for high-impact mutations. O(1) `HashSet` sensitive skill gating, independent Verifier blast-radius evaluation (mitigates the "Honesty Problem" of generator self-reporting), and calibrated threshold (default: 15 symbols).
+- **Adaptive Context Slicer** (`server-rs/src/agent/context_slicer.rs`): Cognitive 3-zone prompt assembly (Pinned Anchors, `<grounded_context>` XML RAG, Sliding Active Window) with strict `tiktoken` BPE token budget enforcement and pre-allocated heap buffers via `std::fmt::Write`.
 
 ### 🔒 Security & Credential Management
 - **Zero-Downtime Token Rotation**: Auth middleware now supports dual-token validation via `NEURAL_TOKEN_OLD` / `NEURAL_TOKEN_NEW` env vars, enabling safe production token rotation with a configurable grace window. Documented in `docs/SECURITY.md`.
@@ -409,6 +447,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 ### 🗄️ Database Reliability
 - **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-mode-safe `VACUUM INTO` hot backups, SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
 - **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db.rs` for programmatic backup orchestration.
+- **Durable Workflow Migration**: Added `server-rs/migrations/20260822000100_durable_workflows.sql` for step memoization table.
 
 ### 📊 Observability & Health
 - **Extended Health Endpoint**: `GET /v1/engine/health` now returns structured `database` (WAL size, pool stats), `budget` (spend, limit), `swarm` (agent count, status), and `uptime_seconds` fields.
@@ -427,6 +466,10 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 ### 📖 Documentation
 - **`docs/OPERATIONS_MANUAL.md`**: Added Token Rotation Runbook, Database Backup/Restore procedure, Sandbox Snapshotting guide, MCP Security Hardening details, Prometheus/Grafana alerting setup, and GDPR cascading deletion runbook.
 - **`docs/SECURITY.md`**: Updated with dual-token rotation mechanism, MCP subprocess boundary hardening, and RCE mitigation details.
+- **`docs/ARCHITECTURE.md`**: Added Swarm Orchestration Engine, Hybrid RAG Triad Fusion, and Sovereign Engine Hardening sections.
+- **`SYSTEM_MAP.md`**: Registered all 8 new subsystems in the subsystem table.
+- **`directives/rust_engine.md`**: Expanded Subsystem Registry from 6 to 14 subsystems.
+- **`directives/AUTONOMY_MANIFEST.md`**: Added Priority 7 (Swarm Orchestration Engine verification).
 
 ### 🔧 Infrastructure
 - **CI Pipeline Fix**: Corrected missing `uses:` keyword in `.github/workflows/ci.yml` that caused workflow parse failures.

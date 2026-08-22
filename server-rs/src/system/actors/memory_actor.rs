@@ -25,8 +25,10 @@ use tokio::sync::mpsc;
 use tracing::{info, debug};
 use sqlx::SqlitePool;
 
+use std::sync::Arc;
+
 pub struct MemoryActor {
-    receiver: mpsc::Receiver<SystemMessage>,
+    receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>,
     vector_memory: VectorMemory,
     pool: SqlitePool,
 }
@@ -34,7 +36,7 @@ pub struct MemoryActor {
 impl MemoryActor {
     /// Connects to the LanceDB storage and returns a new MemoryActor.
     pub async fn new(
-        receiver: mpsc::Receiver<SystemMessage>,
+        receiver: Arc<tokio::sync::Mutex<mpsc::Receiver<SystemMessage>>>,
         base_dir: &std::path::Path,
         pool: SqlitePool,
     ) -> Result<Self, AppError> {
@@ -54,10 +56,15 @@ impl MemoryActor {
     }
 
     /// Primary execution loop for the MemoryActor.
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         info!("🧠 [MemoryActor] Logic loop active. Multiversal Session Tree online.");
 
-        while let Some(msg) = self.receiver.recv().await {
+        loop {
+            let msg = {
+                let mut rx = self.receiver.lock().await;
+                rx.recv().await
+            };
+            let Some(msg) = msg else { break; };
             match msg {
                 SystemMessage::MemoryQuery { query: _, limit: _, resp } => {
                     let _ = resp.send(Err(AppError::InternalServerError("MemoryQuery via Actor not yet fully implemented".to_string())));
@@ -230,6 +237,7 @@ mod tests {
         ).execute(&pool).await.unwrap();
 
         let (_tx, rx) = mpsc::channel(10);
+        let rx = Arc::new(tokio::sync::Mutex::new(rx));
         let base_dir = std::env::temp_dir();
         let actor = MemoryActor::new(rx, &base_dir, pool.clone()).await.unwrap();
 
