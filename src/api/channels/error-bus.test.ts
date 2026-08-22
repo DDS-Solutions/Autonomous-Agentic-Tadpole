@@ -35,7 +35,7 @@ describe('ErrorBus', () => {
 
         expect(bus.size).toBe(1);
 
-        const error = new ApiError('Test error', 500);
+        const error = new ApiError('Test error', 'network', 500);
         bus.emit(error);
 
         expect(listener).toHaveBeenCalledWith(error);
@@ -57,7 +57,7 @@ describe('ErrorBus', () => {
         bus.subscribe(badListener);
         bus.subscribe(goodListener);
 
-        const error = new ApiError('Critical error', 503);
+        const error = new ApiError('Critical error', 'server', 503);
         expect(() => bus.emit(error)).not.toThrow();
 
         expect(badListener).toHaveBeenCalledWith(error);
