@@ -1,0 +1,17 @@
+{
+  "name": "verify_ai_context",
+  "description": "Verifies that all source files in the Tadpole OS codebase contain the required AI Assist Note and Debugging & Observability context headers. Reports any drift or missing annotations.",
+  "execution_command": "python execution/verify_ai_context.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Root path of the project to verify. Default: workspace root."
+      }
+    }
+  },
+  "oversight_required": true,
+  "tags": ["audit", "context", "verification", "operations"],
+  "category": "operations"
+}

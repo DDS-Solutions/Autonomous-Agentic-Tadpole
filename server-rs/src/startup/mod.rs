@@ -44,6 +44,35 @@ pub fn init_tracing(disable_otel: bool) {
     // Always initialize Prometheus gauges
     crate::telemetry::init_prometheus_metrics();
 
+    // 0. Set up rolling file appender (daily rotation in logs/ directory)
+    let log_dir = std::env::var("WORKSPACE_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            if std::env::current_dir()
+                .unwrap_or_default()
+                .ends_with("server-rs")
+            {
+                std::path::PathBuf::from("..")
+            } else {
+                std::path::PathBuf::from(".")
+            }
+        })
+        .join("logs");
+
+    // Create logs directory if it doesn't exist
+    let _ = std::fs::create_dir_all(&log_dir);
+
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "server.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Leak the guard so it lives for the entire process lifetime.
+    // Without this, the non-blocking writer would be dropped and logs would stop.
+    std::mem::forget(_guard);
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking)
+        .with_ansi(false); // No ANSI colors in log files
+
     // 1. Core Layers (Always active)
     let fmt_layer = tracing_subscriber::fmt::layer();
     let env_filter = tracing_subscriber::EnvFilter::from_default_env();
@@ -95,6 +124,7 @@ pub fn init_tracing(disable_otel: bool) {
         let registry = tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
+            .with(file_layer)
             .with(telemetry_layer)
             .with(otel_layer);
 
@@ -106,8 +136,18 @@ pub fn init_tracing(disable_otel: bool) {
     }
 
     // Fallback or Explicitly Disabled: Initialize without OTel
+    // Re-create file layer for fallback path (layers are consumed by .with())
+    let fallback_file_appender = tracing_appender::rolling::daily(&log_dir, "server.log");
+    let (fallback_nb, _fallback_guard) = tracing_appender::non_blocking(fallback_file_appender);
+    std::mem::forget(_fallback_guard);
+
+    let fallback_file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(fallback_nb)
+        .with_ansi(false);
+
     let _ = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
+        .with(fallback_file_layer)
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(crate::telemetry::TelemetryLayer::new())
         .try_init();

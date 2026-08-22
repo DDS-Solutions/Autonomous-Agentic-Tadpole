@@ -345,18 +345,33 @@ def analyze_ledger(ledger_data: Any) -> Dict[str, Any]:
 
 
 def check_log_freshness(workspace_root: str) -> Dict[str, Any]:
-    """Check if server.log exists and how fresh it is."""
-    log_path = os.path.join(workspace_root, SERVER_LOG_FILENAME)
-    if not os.path.exists(log_path):
-        return {"exists": False, "path": log_path}
+    """Check if server logs exist (in logs/ dir or workspace root) and how fresh they are."""
+    candidate_paths: List[str] = []
+    
+    # Check logs/ directory first
+    logs_dir = os.path.join(workspace_root, "logs")
+    if os.path.isdir(logs_dir):
+        for f in os.listdir(logs_dir):
+            if f.startswith("server.log") or f.endswith(".log"):
+                candidate_paths.append(os.path.join(logs_dir, f))
 
-    stat = os.stat(log_path)
+    # Check root directory fallback
+    root_log = os.path.join(workspace_root, SERVER_LOG_FILENAME)
+    if os.path.exists(root_log):
+        candidate_paths.append(root_log)
+
+    if not candidate_paths:
+        return {"exists": False, "path": os.path.join(logs_dir, "server.log")}
+
+    # Find the most recently modified log file
+    best_path = max(candidate_paths, key=lambda p: os.stat(p).st_mtime)
+    stat = os.stat(best_path)
     mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
     age_hours = (datetime.now(timezone.utc) - mtime).total_seconds() / 3600
 
     return {
         "exists": True,
-        "path": log_path,
+        "path": best_path,
         "size_bytes": stat.st_size,
         "size_mb": round(stat.st_size / (1024 * 1024), 2),
         "last_modified": mtime.isoformat(),
@@ -407,7 +422,7 @@ def run_diagnostic(host: str, port: int, workspace_root: str,
         report["verdicts"] = {
             "status": "OFFLINE",
             "good": [],
-            "bad": ["Server is not reachable on {host}:{port}"],
+            "bad": [f"Server is not reachable on {host}:{port}"],
             "needs_improvement": [],
         }
         return report

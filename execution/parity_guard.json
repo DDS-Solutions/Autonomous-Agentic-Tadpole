@@ -1,0 +1,17 @@
+{
+  "name": "parity_guard",
+  "description": "Runs the parity guard audit to verify documentation-to-code synchronization across the Tadpole OS codebase. Checks API reference alignment and reports drift.",
+  "execution_command": "python execution/parity_guard.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "fix": {
+        "type": "boolean",
+        "description": "If true, attempt to auto-fix detected parity drift. Default: false."
+      }
+    }
+  },
+  "oversight_required": true,
+  "tags": ["audit", "documentation", "parity", "operations"],
+  "category": "operations"
+}

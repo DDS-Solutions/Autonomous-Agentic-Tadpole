@@ -1,0 +1,22 @@
+{
+  "name": "security_scan",
+  "description": "Runs a comprehensive security scan of the Tadpole OS project. Checks for credential exposure, dependency vulnerabilities, and code security patterns.",
+  "execution_command": "python execution/security_scan.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "project_path": {
+        "type": "string",
+        "description": "Root path of the project to scan."
+      },
+      "scan_type": {
+        "type": "string",
+        "description": "Type of scan: 'all', 'credentials', 'dependencies', or 'code'. Default: 'all'."
+      }
+    },
+    "required": ["project_path"]
+  },
+  "oversight_required": true,
+  "tags": ["security", "audit", "scan", "operations"],
+  "category": "operations"
+}

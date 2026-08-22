@@ -67,8 +67,15 @@ def run_security_scan(root_path):
         return False
 
 if __name__ == "__main__":
-    root = sys.argv[1] if len(sys.argv) > 1 else "."
-    success = run_security_scan(root)
+    import argparse
+    parser = argparse.ArgumentParser(description="Tadpole OS Security Scan")
+    parser.add_argument("path", nargs="?", default=".", help="Root path to scan")
+    parser.add_argument("--project-path", "-p", dest="project_path", default=None, help="Root path to scan")
+    parser.add_argument("--scan-type", "-t", dest="scan_type", default="all", help="Scan scope")
+    args = parser.parse_args()
+    
+    target_root = args.project_path or args.path
+    success = run_security_scan(target_root)
     sys.exit(0 if success else 1)
 
 # Metadata: [security_scan]
