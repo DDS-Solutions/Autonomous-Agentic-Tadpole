@@ -57,10 +57,8 @@ pub struct ValidationResult {
 }
 
 impl EnvSchema {
-    /// Parse the `.env.schema` file using a lightweight line-based parser.
-    /// Understands `@required`, `@sensitive`, `@type=...`, `@default=...` decorators.
-    pub fn load(path: &Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
+    /// Parse schema from a string.
+    pub fn parse_str(content: &str) -> Self {
         let mut entries = Vec::new();
 
         let mut current_decorators: Vec<String> = Vec::new();
@@ -145,7 +143,14 @@ impl EnvSchema {
             }
         }
 
-        Ok(Self { entries })
+        Self { entries }
+    }
+
+    /// Parse the `.env.schema` file using a lightweight line-based parser.
+    /// Understands `@required`, `@sensitive`, `@type=...`, `@default=...` decorators.
+    pub fn load(path: &Path) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        Ok(Self::parse_str(&content))
     }
 
     /// Validate all schema entries against the current environment.
@@ -262,6 +267,86 @@ pub fn validate_and_report(schema_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_env_schema_parse_all_decorators() {
+        let schema_raw = r#"
+# Global configuration
+# @defaultSensitive=true
+
+# Port for the server
+# @type=int @default=3000
+SERVER_PORT=3000
+
+# Primary authentication token
+# @required @sensitive @type=string
+NEURAL_TOKEN=
+
+# Telemetry bridge URL
+# @type=url @sensitive=false
+TELEMETRY_ENDPOINT=https://telemetry.tadpole.internal
+"#;
+
+        let schema = EnvSchema::parse_str(schema_raw);
+        assert_eq!(schema.entries.len(), 3);
+
+        // Entry 1: SERVER_PORT
+        let port_entry = &schema.entries[0];
+        assert_eq!(port_entry.name, "SERVER_PORT");
+        assert!(!port_entry.required);
+        assert!(port_entry.sensitive); // inherited from @defaultSensitive=true
+        assert_eq!(port_entry.var_type.as_deref(), Some("int"));
+        assert_eq!(port_entry.default.as_deref(), Some("3000"));
+        assert_eq!(port_entry.description, "Port for the server");
+
+        // Entry 2: NEURAL_TOKEN
+        let token_entry = &schema.entries[1];
+        assert_eq!(token_entry.name, "NEURAL_TOKEN");
+        assert!(token_entry.required);
+        assert!(token_entry.sensitive);
+        assert_eq!(token_entry.var_type.as_deref(), Some("string"));
+
+        // Entry 3: TELEMETRY_ENDPOINT
+        let telem_entry = &schema.entries[2];
+        assert_eq!(telem_entry.name, "TELEMETRY_ENDPOINT");
+        assert!(!telem_entry.required);
+        assert!(!telem_entry.sensitive); // overridden by @sensitive=false
+        assert_eq!(telem_entry.var_type.as_deref(), Some("url"));
+    }
+
+    #[test]
+    fn test_env_schema_validation_detects_missing_required() {
+        let schema_raw = r#"
+# @required
+TEST_UNSET_CRITICAL_VAR_123=
+"#;
+        let schema = EnvSchema::parse_str(schema_raw);
+        let results = schema.validate();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "TEST_UNSET_CRITICAL_VAR_123");
+        assert!(results[0].required);
+        assert!(!results[0].is_set);
+    }
+
+    #[test]
+    fn test_env_schema_validation_recognizes_set_variables() {
+        std::env::set_var("TEST_SET_SCHEMA_VAR_456", "active_value");
+        let schema_raw = r#"
+# @required
+TEST_SET_SCHEMA_VAR_456=
+"#;
+        let schema = EnvSchema::parse_str(schema_raw);
+        let results = schema.validate();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "TEST_SET_SCHEMA_VAR_456");
+        assert!(results[0].is_set);
+        std::env::remove_var("TEST_SET_SCHEMA_VAR_456");
+    }
+}
 
 // Metadata: [env_schema]

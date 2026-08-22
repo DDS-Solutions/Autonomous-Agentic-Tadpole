@@ -23,6 +23,38 @@ use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
 
+pub async fn check_canaries_and_report(
+    client: &reqwest::Client,
+    app_state: &AppState,
+    canaries: &[&str],
+) -> bool {
+    let mut breach = false;
+
+    for canary in canaries {
+        match client.head(*canary).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                breach = true;
+                break;
+            }
+            _ => continue,
+        }
+    }
+
+    if breach {
+        tracing::warn!("🚨 [PrivacyGuard] BREACH: External network reachable while Privacy Mode is ON!");
+        app_state.emit_event(json!({
+            "type": "engine:privacy_breach",
+            "severity": "CRITICAL",
+            "message": "Shield Compromised: External internet access detected during Air-Gap mode.",
+            "timestamp": Utc::now().to_rfc3339()
+        }));
+    } else {
+        tracing::debug!("[PrivacyGuard] Air-Gap verified.");
+    }
+
+    breach
+}
+
 pub async fn start_privacy_guard(app_state: Arc<AppState>) {
     tracing::info!("🛡️ [PrivacyGuard] Air-Gap Monitor Active.");
 
@@ -53,35 +85,41 @@ pub async fn start_privacy_guard(app_state: Arc<AppState>) {
                 "https://1.1.1.1",
                 "https://8.8.8.8",
             ];
-            let mut breach = false;
-
-            for canary in canaries {
-                match client.head(canary).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        breach = true;
-                        break;
-                    }
-                    _ => continue,
-                }
-            }
-
-            if breach {
-                tracing::warn!("🚨 [PrivacyGuard] BREACH: External network reachable while Privacy Mode is ON!");
-                app_state.emit_event(json!({
-                    "type": "engine:privacy_breach",
-                    "severity": "CRITICAL",
-                    "message": "Shield Compromised: External internet access detected during Air-Gap mode.",
-                    "timestamp": Utc::now().to_rfc3339()
-                }));
-            } else {
-                tracing::debug!("[PrivacyGuard] Air-Gap verified.");
-            }
+            check_canaries_and_report(&client, &app_state, &canaries).await;
         }
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
 
+    #[tokio::test]
+    async fn test_privacy_mode_atomic_toggle() {
+        let app_state = AppState::new_mock().await;
+        assert!(!app_state.governance.privacy_mode.load(Ordering::Relaxed));
 
+        app_state.governance.privacy_mode.store(true, Ordering::Relaxed);
+        assert!(app_state.governance.privacy_mode.load(Ordering::Relaxed));
 
+        app_state.governance.privacy_mode.store(false, Ordering::Relaxed);
+        assert!(!app_state.governance.privacy_mode.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_check_canaries_unreachable_returns_no_breach() {
+        let app_state = AppState::new_mock().await;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(100))
+            .build()
+            .unwrap();
+
+        // 192.0.2.1 is TEST-NET-1 (RFC 5737), guaranteed non-routable
+        let dummy_canaries = ["http://192.0.2.1:65534"];
+        let is_breached = check_canaries_and_report(&client, &app_state, &dummy_canaries).await;
+        assert!(!is_breached, "Unreachable canary must not trigger a breach");
+    }
+}
 
 // Metadata: [privacy]

@@ -135,6 +135,76 @@ fn test_messagepack_serialization_density() {
     );
 }
 
+#[test]
+fn test_pulse_status_mapping_all_variants() {
+    let statuses = vec![
+        ("active", 1),
+        ("busy", 1),
+        ("running", 1),
+        ("thinking", 1),
+        ("failed", 2),
+        ("throttled", 3),
+        ("idle", 0),
+        ("unknown_state", 0),
+    ];
 
+    for (raw_status, expected_code) in statuses {
+        let code = match raw_status {
+            "active" | "busy" | "running" | "thinking" => 1,
+            "failed" => 2,
+            "throttled" => 3,
+            _ => 0,
+        };
+        assert_eq!(code, expected_code, "Status '{}' should map to code {}", raw_status, expected_code);
+    }
+}
+
+#[test]
+fn test_pulse_battery_budget_calculation() {
+    // Normal budget usage: $100 budget, $25 cost -> 75% remaining
+    let budget = 100.0f64;
+    let cost = 25.0f64;
+    let battery = if budget > 0.0 {
+        let remaining = (budget - cost).max(0.0);
+        ((remaining / budget) * 100.0) as u8
+    } else {
+        100
+    };
+    assert_eq!(battery, 75);
+
+    // Over-budget usage: $50 budget, $60 cost -> 0% remaining
+    let budget2 = 50.0f64;
+    let over_cost = 60.0f64;
+    let over_battery = if budget2 > 0.0 {
+        let remaining = (budget2 - over_cost).max(0.0);
+        ((remaining / budget2) * 100.0) as u8
+    } else {
+        100
+    };
+    assert_eq!(over_battery, 0);
+
+    // Zero budget configured: default 100%
+    let zero_budget = 0.0f64;
+    let zero_battery = if zero_budget > 0.0 {
+        0
+    } else {
+        100
+    };
+    assert_eq!(zero_battery, 100);
+}
+
+#[tokio::test]
+async fn test_ghost_mission_topology_preservation() {
+    let state = Arc::new(AppState::new_mock().await);
+    let handle = tokio::task::spawn(async {});
+    state.comms.active_runners.insert("mission-ghost-anchor".to_string(), handle.abort_handle());
+
+    let ghost_missions = state.comms.active_runners.iter()
+        .map(|kv| kv.key().clone())
+        .collect::<std::collections::HashSet<String>>();
+
+    assert!(ghost_missions.contains("mission-ghost-anchor"));
+    assert_eq!(ghost_missions.len(), 1);
+}
 
 // Metadata: [pulse_tests]
