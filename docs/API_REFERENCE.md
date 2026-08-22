@@ -217,6 +217,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/v1/env-schema` | `routes::env_schema::get_env_schema` | Protected |
+| `GET` | `/v1/memory/search/hybrid` | `routes::memory::hybrid_rag_search_handler` | Protected |
 | `GET` | `/v1/system/compute-profile` | `routes::system::get_compute_profile` | Protected |
 | `GET` | `/v1/system/debug/queues` | `routes::system::debug_queues` | Protected |
 | `GET` | `/v1/system/debug/services` | `routes::system::debug_services` | Protected |

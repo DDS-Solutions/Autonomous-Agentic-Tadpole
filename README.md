@@ -164,9 +164,9 @@ Autonomous Agentic Tadpole has six practical runtime layers.
 | --- | --- | --- |
 | Interface | `src/` | Dashboard shell, pages, stores, services, browser monitoring, provider sync, detached views |
 | Engine | `server-rs/src/` | Axum routes, AppState, actors, middleware, telemetry, agent runner, security, startup workers |
-| Token & Context | `server-rs/src/agent/tokenizer.rs`, `context_manager.rs`, `context_slicer.rs` | Model-aware BPE counting (< 1µs), 2-Tier compression, adaptive 3-zone context slicing |
+| Token & Context | `server-rs/src/agent/tokenizer.rs`, `server-rs/src/agent/context_manager.rs`, `server-rs/src/agent/context_slicer.rs` | Model-aware BPE counting (< 1µs), 2-Tier compression, adaptive 3-zone context slicing |
 | Supervision & Durability | `server-rs/src/system/actors/supervisor.rs`, `server-rs/src/agent/durable.rs` | OTP supervision tree, crash-resilient step memoization |
-| Swarm Orchestration | `server-rs/src/agent/dag.rs`, `blackboard.rs`, `cascade_router.rs`, `verification_gate.rs` | DAG parallelism, shared blackboard, tiered model routing, zero-trust verification |
+| Swarm Orchestration | `server-rs/src/agent/dag.rs`, `server-rs/src/agent/blackboard.rs`, `server-rs/src/agent/cascade_router.rs`, `server-rs/src/agent/verification_gate.rs` | DAG parallelism, shared blackboard, tiered model routing, zero-trust verification |
 | Execution | `execution/` | Python tools, MCP server, JSON skill definitions, verification scripts, modular skill framework |
 
 The engine boot path starts in `server-rs/src/main.rs`, initializes environment and tracing, creates `AppState`, starts background workers, spawns system actors under the OTP supervisor tree, launches the orchestrator, and binds Axum on `127.0.0.1:8000` unless configured otherwise.
