@@ -1162,6 +1162,7 @@ mod tests {
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
+                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]

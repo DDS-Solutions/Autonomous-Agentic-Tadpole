@@ -149,6 +149,24 @@ impl IntelligenceService {
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn rebuild_graph(&self, dry_run: bool) -> Result<GraphRebuildResponse, AppError> {
+        // Atomic concurrency gate: reject concurrent rebuild requests with 409 Conflict
+        if self.state.resources.is_rebuilding_symbol_graph.compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        ).is_err() {
+            return Err(AppError::Conflict("A symbol graph rebuild is already in progress".to_string()));
+        }
+
+        struct RebuildGuard<'a>(&'a std::sync::atomic::AtomicBool);
+        impl<'a> Drop for RebuildGuard<'a> {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let _guard = RebuildGuard(&self.state.resources.is_rebuilding_symbol_graph);
+
         let graph_swap = self.state.resources.get_symbol_graph().await;
         let salt = self.state.resources.obfuscation_salt.clone();
         let swap_clone = Arc::clone(&graph_swap);
@@ -217,6 +235,19 @@ impl IntelligenceService {
         })
         .await
         .map_err(|e| AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e)))??;
+
+        // P2: Trigger non-blocking SQLite graph sync on successful full rebuild
+        if success {
+            let db_root = self.state.resources.base_dir.clone();
+            let db_path = db_root.join(".code-review-graph").join("graph.db");
+            let bg_salt = self.state.resources.obfuscation_salt.clone();
+            let git_path = self.state.resources.git_path.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::intelligence::graph_store::refresh_code_review_graph_db(db_root, db_path, bg_salt, git_path).await {
+                    tracing::warn!("[graph_store] Background SQLite graph sync failed: {}", e);
+                }
+            });
+        }
 
         Ok(GraphRebuildResponse {
             status: if success { "success".to_string() } else { "warning".to_string() },

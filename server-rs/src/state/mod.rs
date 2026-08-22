@@ -195,6 +195,7 @@ impl AppState {
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
+                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -332,6 +333,7 @@ impl AppState {
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
+                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -650,6 +652,7 @@ impl AppState {
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
+                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -1266,6 +1269,7 @@ impl Default for AppState {
             parser: Arc::new(SymbolParser::new()),
             obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             git_path: which::which("git").ok(),
+            is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

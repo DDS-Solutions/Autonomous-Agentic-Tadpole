@@ -100,6 +100,8 @@ pub struct ResourceHub {
     pub obfuscation_salt: String,
     /// Absolute path to git binary, resolved at boot.
     pub git_path: Option<std::path::PathBuf>,
+    /// Atomic concurrency gate to prevent simultaneous symbol graph rebuilds.
+    pub is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool,
 }
 
 impl ResourceHub {

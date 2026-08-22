@@ -23,6 +23,12 @@ pub struct GraphConfig {
     /// Path components that mark an entire subtree as excluded
     /// (e.g., `"server-rs"`, `"tests"`, `"generated"`).
     pub excluded_paths: Vec<String>,
+    /// File extension or suffix patterns excluded from anomaly scans.
+    pub excluded_file_patterns: Vec<String>,
+    /// Path segments that indicate framework/entrypoint directories.
+    pub excluded_path_segments: Vec<String>,
+    /// Case-insensitive keywords for symbols that should not be flagged as dead code.
+    pub ignored_symbol_keywords: Vec<String>,
 }
 
 impl Default for GraphConfig {
@@ -54,7 +60,69 @@ impl Default for GraphConfig {
                 "tests".to_string(),
                 "__tests__".to_string(),
             ],
+            excluded_file_patterns: vec![
+                ".d.ts".to_string(),
+                "vite.config.ts".to_string(),
+                "playwright.config.ts".to_string(),
+                ".test.ts".to_string(),
+                ".test.tsx".to_string(),
+                ".spec.ts".to_string(),
+                ".spec.tsx".to_string(),
+                "App.tsx".to_string(),
+                "main.tsx".to_string(),
+            ],
+            excluded_path_segments: vec![
+                "pages/".to_string(),
+                "components/ui/".to_string(),
+            ],
+            ignored_symbol_keywords: vec![
+                "main".to_string(),
+                "app".to_string(),
+                "test".to_string(),
+                "route".to_string(),
+                "handler".to_string(),
+                "register".to_string(),
+                "force_".to_string(),
+                "invalidate_".to_string(),
+                "persist_".to_string(),
+                "breaker".to_string(),
+            ],
         }
+    }
+}
+
+impl GraphConfig {
+    /// Determines whether a given file path should be excluded from anomaly scanning.
+    pub fn is_path_excluded(&self, real_path: &str) -> bool {
+        for pattern in &self.excluded_file_patterns {
+            if real_path.ends_with(pattern) {
+                return true;
+            }
+        }
+        for segment in &self.excluded_path_segments {
+            if real_path.contains(segment) {
+                return true;
+            }
+        }
+        let path_obj = std::path::Path::new(real_path);
+        path_obj.components().any(|c| {
+            let name = c.as_os_str().to_string_lossy();
+            self.excluded_paths.iter().any(|p| name == *p)
+        })
+    }
+
+    /// Determines whether a symbol should be excluded from anomaly detection.
+    pub fn is_symbol_excluded(&self, name: &str, kind: &str) -> bool {
+        if kind == "module" || name == "__module__" {
+            return true;
+        }
+        if self.excluded_symbols.iter().any(|s| s == name) {
+            return true;
+        }
+        let name_lower = name.to_lowercase();
+        self.ignored_symbol_keywords.iter().any(|kw| {
+            name_lower == *kw || name_lower.contains(kw)
+        })
     }
 }
 

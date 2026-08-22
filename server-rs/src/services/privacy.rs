@@ -30,6 +30,7 @@ pub async fn check_canaries_and_report(
 ) -> bool {
     let mut breach = false;
 
+    // 1. Check HTTP/HTTPS endpoints
     for canary in canaries {
         match client.head(*canary).send().await {
             Ok(resp) if resp.status().is_success() => {
@@ -37,6 +38,26 @@ pub async fn check_canaries_and_report(
                 break;
             }
             _ => continue,
+        }
+    }
+
+    // 2. Non-HTTP socket reachability probe for active air-gap verification (P1 Hardening)
+    if !breach {
+        for canary in canaries {
+            if let Some(host) = canary.strip_prefix("https://").or_else(|| canary.strip_prefix("http://")) {
+                let target = if host.contains(':') {
+                    host.to_string()
+                } else {
+                    format!("{}:53", host)
+                };
+                if let Ok(Ok(_)) = tokio::time::timeout(
+                    std::time::Duration::from_millis(300),
+                    tokio::net::TcpStream::connect(&target),
+                ).await {
+                    breach = true;
+                    break;
+                }
+            }
         }
     }
 

@@ -388,7 +388,7 @@ pub async fn list_capability_proposals(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     let rows = sqlx::query(
-        "SELECT id, mission_id, agent_id, cap_type, name, description, payload, created_at, status 
+        "SELECT id, mission_id, agent_id, cap_type, name, description, content, created_at, status 
          FROM capability_proposals 
          WHERE status = 'pending' 
          ORDER BY created_at DESC",
@@ -400,13 +400,13 @@ pub async fn list_capability_proposals(
     let proposals: Vec<serde_json::Value> = rows.into_iter().map(|row| {
         use sqlx::Row;
         serde_json::json!({
-            "id": row.get::<i64, _>("id"),
+            "id": row.get::<String, _>("id"),
             "mission_id": row.get::<Option<String>, _>("mission_id"),
             "agent_id": row.get::<String, _>("agent_id"),
             "type": row.get::<String, _>("cap_type"),
             "name": row.get::<String, _>("name"),
             "description": row.get::<String, _>("description"),
-            "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("payload")).unwrap_or_default(),
+            "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("content")).unwrap_or_default(),
             "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "status": row.get::<String, _>("status"),
         })
@@ -425,7 +425,7 @@ pub struct ResolveProposalPayload {
 /// Finalizes a capability proposal. If approved, it is physically written to the agent_generated directory.
 #[tracing::instrument(skip(state, payload), fields(proposal_id = %proposal_id, decision = %payload.decision), name = "capability_registry::resolve_proposal")]
 pub async fn resolve_capability_proposal(
-    Path(proposal_id): Path<i64>,
+    Path(proposal_id): Path<String>,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ResolveProposalPayload>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -433,9 +433,9 @@ pub async fn resolve_capability_proposal(
 
     // 1. Fetch proposal
     let row: (String, String, String, String) = sqlx::query_as(
-        "SELECT cap_type, name, payload, agent_id FROM capability_proposals WHERE id = ?",
+        "SELECT cap_type, name, content, agent_id FROM capability_proposals WHERE id = ?",
     )
-    .bind(proposal_id)
+    .bind(&proposal_id)
     .fetch_one(&state.resources.pool)
     .await
     .map_err(|_| AppError::NotFound("Proposal not found".to_string()))?;
@@ -465,7 +465,7 @@ pub async fn resolve_capability_proposal(
     // 3. Update status in DB
     sqlx::query("UPDATE capability_proposals SET status = ? WHERE id = ?")
         .bind(if approved { "approved" } else { "rejected" })
-        .bind(proposal_id)
+        .bind(&proposal_id)
         .execute(&state.resources.pool)
         .await
         .map_err(AppError::Sqlx)?;
@@ -552,9 +552,70 @@ pub async fn promote_artifact(
     ))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_capability_proposal_lifecycle() {
+        let state = Arc::new(AppState::new_mock().await);
 
+        // 1. Promote an artifact
+        let promote_payload = PromotePayload {
+            name: "test_auto_skill".to_string(),
+            description: "An automated skill created by an agent".to_string(),
+            cap_type: "skill".to_string(),
+            content: "print('hello from proposed skill')".to_string(),
+            agent_id: "agent-001".to_string(),
+            mission_id: Some("mission-alpha".to_string()),
+        };
 
+        let promote_res = promote_artifact(
+            axum::extract::State(state.clone()),
+            Json(promote_payload),
+        ).await;
+        assert!(promote_res.is_ok(), "Promote artifact must succeed");
 
+        // 2. List pending proposals
+        let list_res = list_capability_proposals(
+            axum::extract::State(state.clone()),
+        ).await;
+        assert!(list_res.is_ok(), "List proposals must succeed without SQL or type decode error");
+
+        // 3. Query proposals from DB to verify id is string UUID and content is stored
+        let row: Option<(String, String, String)> = sqlx::query_as(
+            "SELECT id, name, status FROM capability_proposals WHERE name = 'test_auto_skill'",
+        )
+        .fetch_optional(&state.resources.pool)
+        .await
+        .unwrap();
+
+        assert!(row.is_some(), "Proposal must exist in database");
+        let (proposal_id, name, status) = row.unwrap();
+        assert_eq!(name, "test_auto_skill");
+        assert_eq!(status, "pending");
+
+        // 4. Resolve proposal (Approve)
+        let resolve_res = resolve_capability_proposal(
+            axum::extract::Path(proposal_id.clone()),
+            axum::extract::State(state.clone()),
+            Json(ResolveProposalPayload {
+                decision: "approved".to_string(),
+            }),
+        ).await;
+        assert!(resolve_res.is_ok(), "Resolve capability proposal must succeed");
+
+        // Verify status is approved
+        let updated_status: (String,) = sqlx::query_as(
+            "SELECT status FROM capability_proposals WHERE id = ?",
+        )
+        .bind(&proposal_id)
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(updated_status.0, "approved");
+    }
+}
 
 // Metadata: [skills]
