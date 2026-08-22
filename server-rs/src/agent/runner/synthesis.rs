@@ -25,42 +25,60 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 
 // External Crates
+// External Crates
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use tiktoken_rs::cl100k_base;
 
 // Internal Modules
 use super::{AgentRunner, RunContext};
 use crate::agent::constants::*;
 use crate::agent::types::{FunctionDeclaration, ToolDefinition};
 
+/// Global, zero-reinitialization BPE tokenizer cache
+static BPE_TOKENIZER: Lazy<Option<tiktoken_rs::CoreBPE>> = Lazy::new(|| {
+    tiktoken_rs::cl100k_base().ok()
+});
+
+/// Fast token counting helper using the shared cached BPE instance
+pub fn count_tokens_fast(text: &str) -> usize {
+    if let Some(ref bpe) = *BPE_TOKENIZER {
+        bpe.encode_with_special_tokens(text).len()
+    } else {
+        text.len() / 4
+    }
+}
+
+/// Static lookup table for token compression to eliminate per-turn HashMap allocations
+static SYSTEM_TOKEN_REPLACEMENTS: &[(&str, &str)] = &[
+    ("STATUS: ok", "*ok*"),
+    ("STATUS: success", "*ok*"),
+    ("STATUS: failed", "*err*"),
+    ("STATUS: error", "*err*"),
+    ("RESULT:", "RES:"),
+    ("FINDING:", "FND:"),
+    ("SOURCE:", "SRC:"),
+    ("Location:", "LOC:"),
+    ("Primary Goal:", "GOAL:"),
+    ("Weather for zip", "WTR|"),
+    ("degrees", "deg"),
+    ("temperature", "temp"),
+    ("Finding for mission", "FND|"),
+    ("Strategic Intent:", "INT:"),
+    ("Mission Complete", "*done*"),
+    ("Task in progress", "*busy*"),
+];
+
 impl AgentRunner {
     /// 📟 [Token Compression]
     /// Shortens system tokens by replacing common verbose status strings
-    /// with concise aliases to increase context fidelity.
+    /// with concise aliases to increase context fidelity without reallocating maps.
     fn shorten_system_tokens(&self, text: &str) -> String {
-        let mut replacements = HashMap::new();
-        replacements.insert("STATUS: ok", "*ok*");
-        replacements.insert("STATUS: success", "*ok*");
-        replacements.insert("STATUS: failed", "*err*");
-        replacements.insert("STATUS: error", "*err*");
-        replacements.insert("RESULT:", "RES:");
-        replacements.insert("FINDING:", "FND:");
-        replacements.insert("SOURCE:", "SRC:");
-        replacements.insert("Location:", "LOC:");
-        replacements.insert("Primary Goal:", "GOAL:");
-        replacements.insert("Weather for zip", "WTR|");
-        replacements.insert("degrees", "deg");
-        replacements.insert("temperature", "temp");
-        replacements.insert("Finding for mission", "FND|");
-        replacements.insert("Strategic Intent:", "INT:");
-        replacements.insert("Mission Complete", "*done*");
-        replacements.insert("Task in progress", "*busy*");
-
         let mut encoded = text.to_string();
-        for (pattern, replacement) in replacements {
-            encoded = encoded.replace(pattern, replacement);
+        for (pattern, replacement) in SYSTEM_TOKEN_REPLACEMENTS {
+            if encoded.contains(pattern) {
+                encoded = encoded.replace(pattern, replacement);
+            }
         }
         encoded
     }
@@ -146,8 +164,14 @@ impl AgentRunner {
 
         let system_prompt = self.state.resources.renderer.render(self.state.resources.renderer.default_system_template(), &vars);
 
-        let _ = std::fs::create_dir_all(".tmp");
-        let _ = std::fs::write(".tmp/system_prompt.txt", &system_prompt);
+        #[cfg(debug_assertions)]
+        {
+            let _ = std::fs::create_dir_all(".tmp");
+            let safe_mission = ctx.mission_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
+            let safe_agent = ctx.agent_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
+            let _ = std::fs::write(format!(".tmp/prompt_{}_{}.txt", safe_mission, safe_agent), &system_prompt);
+            let _ = std::fs::write(".tmp/system_prompt.txt", &system_prompt);
+        }
 
         tracing::info!(
             "🏁 [Runner] Synthesizing system prompt for mission: {} (Depth: {})",
@@ -169,11 +193,8 @@ impl AgentRunner {
             .await
             .unwrap_or_default();
 
-        let count_tokens = |text: &str| -> usize {
-            tiktoken_rs::cl100k_base()
-                .map(|bpe| bpe.encode_with_special_tokens(text).len())
-                .unwrap_or_else(|_| text.len() / 4)
-        };
+        let tpm = ctx.model_config.tpm.unwrap_or(100_000);
+        let dynamic_budget = ((tpm as f32) * 0.01).clamp(500.0, 4000.0) as usize;
 
         let mut directives_vec = Vec::new();
         let mut directives_tokens = 0;
@@ -181,8 +202,8 @@ impl AgentRunner {
         
         for d in pending_directives {
             let line = format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction);
-            let tokens = count_tokens(&line);
-            if directives_tokens + tokens <= 1000 {
+            let tokens = count_tokens_fast(&line);
+            if directives_tokens + tokens <= dynamic_budget {
                 directives_vec.push(line);
                 directives_tokens += tokens;
             } else {
@@ -206,8 +227,8 @@ impl AgentRunner {
 
         for r in pending_reviews {
             let line = format!("- [Review Task] Target: {}. Requirement: {}", r.requester_id, r.content_to_review);
-            let tokens = count_tokens(&line);
-            if reviews_tokens + tokens <= 1000 {
+            let tokens = count_tokens_fast(&line);
+            if reviews_tokens + tokens <= dynamic_budget {
                 reviews_vec.push(line);
                 reviews_tokens += tokens;
             } else {
@@ -277,6 +298,26 @@ impl AgentRunner {
             }
         }
 
+        // Include indexed dynamic skills and Layer-3 execution scripts
+        let snapshot = self.state.registry.skills.snapshot();
+        for entry in snapshot.skills.iter() {
+            let skill = entry.value();
+            if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &skill.name) {
+                let has_skill = ctx.skills.is_empty()
+                    || ctx.skills.contains(&skill.name)
+                    || ctx.skills.contains(&"all".to_string())
+                    || ctx.skills.contains(&"execution".to_string())
+                    || ctx.skills.contains(&"operations".to_string());
+                if has_skill && !allowed_tools.iter().any(|t| t.name == skill.name) {
+                    allowed_tools.push(crate::agent::runner::tools::trait_tool::ToolDefinitionData {
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        parameters: skill.schema.clone(),
+                    });
+                }
+            }
+        }
+
         if allowed_tools.is_empty() {
             return "No tools are currently authorized or available for your security clearance/skills.".to_string();
         }
@@ -335,14 +376,8 @@ impl AgentRunner {
 
         let working_memory_str = serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string());
         
-        let count_tokens = |text: &str| -> usize {
-            tiktoken_rs::cl100k_base()
-                .map(|bpe| bpe.encode_with_special_tokens(text).len())
-                .unwrap_or_else(|_| text.len() / 4)
-        };
-
         let mut final_safe_mode_prefix = safe_mode_prefix.clone();
-        if count_tokens(&working_memory_str) > 1000 {
+        if count_tokens_fast(&working_memory_str) > 1000 {
             final_safe_mode_prefix.push_str("\n⚠️ SYSTEM WARNING: Your working_memory JSON block is large (>1,000 tokens). Please clean up or summarize old keys in your working memory to avoid prompt bloat.\n");
         }
 
@@ -429,13 +464,6 @@ impl AgentRunner {
         repo_map: &str,
         swarm_context_str: &str,
     ) -> (String, String) {
-        let bpe = match cl100k_base() {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::error!("🚨 [Pruning] Failed to initialize tokenizer: {:?}. Skipping pruning.", e);
-                return (repo_map.to_string(), swarm_context_str.to_string());
-            }
-        };
         let tpm_limit = ctx.model_config.tpm.unwrap_or(100_000);
         let safe_limit = (tpm_limit as f32 * 0.85) as usize;
 
@@ -448,7 +476,7 @@ impl AgentRunner {
 
         let get_total_tokens = |repo: &str, swarm: &str| {
             let combined = format!("{}{}{}{}", identity, memory, repo, swarm);
-            bpe.encode_with_special_tokens(&combined).len()
+            count_tokens_fast(&combined)
         };
 
         let mut current_tokens = get_total_tokens(&pruned_repo_map, &pruned_swarm_context);
@@ -822,11 +850,16 @@ impl AgentRunner {
 
         let mut sorted_skills = ctx.skills.clone();
         sorted_skills.sort();
+        let effective_agent_id = match ctx.agent_id.as_str() {
+            AGENT_CEO => AGENT_CEO,
+            AGENT_COO => AGENT_COO,
+            _ => "specialist",
+        };
         let cache_key = format!(
             "{}:{}:{}:{:?}:{}",
             sorted_skills.join(","),
             ctx.safe_mode,
-            ctx.agent_id,
+            effective_agent_id,
             ctx.authority_level,
             ctx.role
         );

@@ -38,6 +38,7 @@ interface CognitionSidebarProps {
     affected_nodes: Set<string>;
     total_nodes_count: number;
     on_close: () => void;
+    view_mode?: 'symbols' | 'okf';
 }
 
 export const CognitionSidebar: React.FC<CognitionSidebarProps> = ({
@@ -47,7 +48,8 @@ export const CognitionSidebar: React.FC<CognitionSidebarProps> = ({
     set_active_info_tab,
     affected_nodes,
     total_nodes_count,
-    on_close
+    on_close,
+    view_mode = 'symbols'
 }) => {
     const {
         agents,
@@ -72,16 +74,25 @@ export const CognitionSidebar: React.FC<CognitionSidebarProps> = ({
     const total_nodes = total_nodes_count || 1;
     const progress_percent = Math.min(100, (affected_nodes.size / total_nodes) * 100);
 
+    const is_okf_mode = view_mode === 'okf' || !!selected_node.concept_type;
+
     return (
-        <div className={`absolute bottom-6 left-6 ${is_memory_node && active_info_tab === 'memory' ? 'w-[400px]' : 'w-80'} bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 p-5 rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all z-50 shadow-2xl`}>
+        <div className={`absolute bottom-6 left-6 ${is_memory_node && active_info_tab === 'memory' ? 'w-[400px]' : 'w-84'} bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 p-5 rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all z-50 shadow-2xl`}>
             <div className="flex flex-col gap-4">
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col gap-1 min-w-0">
-                        <span className="text-[8px] font-black text-cyan-400 uppercase tracking-[0.2em]">
-                            {get_kind_display(selected_node.kind)}
-                        </span>
-                        <h3 className="text-sm font-bold text-white truncate pr-2 font-mono" title={selected_node.name}>
-                            {selected_node.name}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-black text-cyan-400 uppercase tracking-[0.2em]">
+                                {is_okf_mode ? (selected_node.concept_type || 'Concept') : get_kind_display(selected_node.kind)}
+                            </span>
+                            {is_okf_mode && selected_node.human_confirmed && (
+                                <span className="text-[7px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+                                    Confirmed
+                                </span>
+                            )}
+                        </div>
+                        <h3 className="text-sm font-bold text-white truncate pr-2 font-mono" title={selected_node.title || selected_node.name}>
+                            {selected_node.title || selected_node.name}
                         </h3>
                     </div>
                     <button 
@@ -123,21 +134,35 @@ export const CognitionSidebar: React.FC<CognitionSidebarProps> = ({
                         <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-2 bg-zinc-950/50 p-2.5 rounded-lg border border-zinc-800/50">
                                 <Info size={12} className="text-zinc-500 shrink-0" />
-                                <span className="text-[10px] text-zinc-400 font-mono truncate" title={selected_node.path}>
-                                    {selected_node.path}
+                                <span className="text-[10px] text-zinc-400 font-mono truncate" title={selected_node.resource_uri || selected_node.path}>
+                                    {selected_node.resource_uri || selected_node.path}
                                 </span>
                             </div>
+
+                            {is_okf_mode && selected_node.description && (
+                                <div className="text-[10px] text-zinc-300 bg-zinc-950/30 border border-zinc-800/40 p-2.5 rounded-lg line-clamp-3 leading-relaxed">
+                                    {selected_node.description}
+                                </div>
+                            )}
                              
                             <div className="mt-2 flex flex-col gap-2">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Blast Radius</span>
-                                    <span className="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-md">
-                                        +{Math.max(0, affected_nodes.size - 1)} dependents
+                                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                                        {is_okf_mode ? 'Semantic Peers / Linkages' : 'Blast Radius'}
+                                    </span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                                        is_okf_mode 
+                                            ? 'text-cyan-400 bg-cyan-500/10' 
+                                            : 'text-rose-500 bg-rose-500/10'
+                                    }`}>
+                                        {is_okf_mode 
+                                            ? `${Math.max(0, affected_nodes.size)} peers` 
+                                            : `+${Math.max(0, affected_nodes.size - 1)} dependents`}
                                     </span>
                                 </div>
                                 <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
                                     <div 
-                                        className="h-full bg-rose-500 transition-all duration-500" 
+                                        className={`h-full transition-all duration-500 ${is_okf_mode ? 'bg-cyan-400' : 'bg-rose-500'}`} 
                                         style={{ width: `${progress_percent}%` }} 
                                     />
                                 </div>
@@ -147,11 +172,15 @@ export const CognitionSidebar: React.FC<CognitionSidebarProps> = ({
                         <div className="grid grid-cols-2 gap-2 mt-2">
                             <button className="flex items-center justify-center gap-2 px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700/80 text-white rounded-xl transition-all group cursor-pointer border border-zinc-700/30">
                                 <Search size={12} className="text-cyan-400 group-hover:scale-110 transition-transform" />
-                                <span className="text-[9px] font-bold uppercase tracking-widest">Explore</span>
+                                <span className="text-[9px] font-bold uppercase tracking-widest">
+                                    {is_okf_mode ? 'Doc View' : 'Explore'}
+                                </span>
                             </button>
                             <button className="flex items-center justify-center gap-2 px-3 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-xl transition-all group cursor-pointer">
                                 <Target size={12} className="group-hover:scale-110 transition-transform" />
-                                <span className="text-[9px] font-bold uppercase tracking-widest">Analyze</span>
+                                <span className="text-[9px] font-bold uppercase tracking-widest">
+                                    {is_okf_mode ? 'Inspect' : 'Analyze'}
+                                </span>
                             </button>
                         </div>
                     </div>

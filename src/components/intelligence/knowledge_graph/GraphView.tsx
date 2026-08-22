@@ -23,6 +23,7 @@ interface GraphViewProps {
     affected_nodes: Set<string>;
     on_node_click: (node: ExtendedGraphNode) => void;
     fg_ref: React.MutableRefObject<ForceGraphMethods<ExtendedGraphNode, ForceGraphLink> | undefined>;
+    view_mode?: 'symbols' | 'okf';
 }
 
 export const GraphView: React.FC<GraphViewProps> = ({
@@ -32,7 +33,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
     set_hover_node,
     affected_nodes,
     on_node_click,
-    fg_ref
+    fg_ref,
+    view_mode = 'symbols'
 }) => {
 
     const get_link_source_id = (link: ForceGraphLink): string => {
@@ -49,29 +51,56 @@ export const GraphView: React.FC<GraphViewProps> = ({
     const node_canvas_object = useMemo(() => (node: ExtendedGraphNode, ctx: CanvasRenderingContext2D, global_scale: number) => {
         ctx.save();
         
-        const label = node.name;
+        const label = node.title || node.name;
         const font_size = 10 / global_scale;
         const radius = GRAPH_THEME.NODE_RADIUS * (node.is_affected ? 1.5 : 1);
         
         const x = node.x ?? 0;
         const y = node.y ?? 0;
 
-        // Color based on Symbol Kind
+        // Color based on Mode & Kind / Status
         let kind_color = THEME_COLORS.IDLE;
-        const normalized_kind = (node.kind || '').toLowerCase();
-        if (normalized_kind === 'func' || normalized_kind === 'function' || normalized_kind === 'method') kind_color = THEME_COLORS.BUSY;
-        if (normalized_kind === 'struct' || normalized_kind === 'class') kind_color = THEME_COLORS.SUCCESS;
-        if (normalized_kind === 'trait' || normalized_kind === 'interface') kind_color = THEME_COLORS.DEGRADED;
-        if (normalized_kind === 'enum') kind_color = '#06b6d4'; // Cyan
-
-        // Override if affected
-        if (node.is_affected) kind_color = THEME_COLORS.ERROR;
+        
+        if (view_mode === 'okf') {
+            if (node.is_affected) {
+                kind_color = THEME_COLORS.ERROR;
+            } else if (node.confidence !== undefined && node.confidence < 0.3) {
+                kind_color = THEME_COLORS.ERROR; // Broken / Invalid
+            } else if (node.confidence !== undefined && node.confidence < 0.7) {
+                kind_color = THEME_COLORS.DEGRADED; // Expiring / Low Confidence
+            } else if (node.human_confirmed) {
+                kind_color = THEME_COLORS.SUCCESS; // Confirmed
+            } else {
+                const norm_concept = (node.concept_type || node.kind || '').toLowerCase();
+                if (norm_concept === 'core' || norm_concept === 'architecture') {
+                    kind_color = '#10b981'; // Emerald
+                } else if (norm_concept === 'engineering' || norm_concept === 'playbook' || norm_concept === 'subsystem') {
+                    kind_color = '#06b6d4'; // Cyan
+                } else if (norm_concept === 'executive' || norm_concept === 'governance') {
+                    kind_color = '#a855f7'; // Purple
+                } else if (norm_concept === 'product') {
+                    kind_color = '#f59e0b'; // Amber
+                } else {
+                    kind_color = THEME_COLORS.IDLE; // Base
+                }
+            }
+        } else {
+            const normalized_kind = (node.kind || '').toLowerCase();
+            if (normalized_kind === 'func' || normalized_kind === 'function' || normalized_kind === 'method') kind_color = THEME_COLORS.BUSY;
+            if (normalized_kind === 'struct' || normalized_kind === 'class') kind_color = THEME_COLORS.SUCCESS;
+            if (normalized_kind === 'trait' || normalized_kind === 'interface') kind_color = THEME_COLORS.DEGRADED;
+            if (normalized_kind === 'enum') kind_color = '#06b6d4'; // Cyan
+            if (node.is_affected) kind_color = THEME_COLORS.ERROR;
+        }
 
         // 1. Glow Halo
-        if (node.is_affected || (selected_node && selected_node.id === node.id)) {
+        const is_selected = selected_node && selected_node.id === node.id;
+        if (node.is_affected || is_selected || (view_mode === 'okf' && node.human_confirmed)) {
             ctx.beginPath();
             ctx.arc(x, y, radius * 1.8, 0, 2 * Math.PI, false);
-            ctx.fillStyle = node.is_affected ? THEME_COLORS.GLOW_ROSE : THEME_COLORS.GLOW_CYAN;
+            ctx.fillStyle = node.is_affected 
+                ? THEME_COLORS.GLOW_ROSE 
+                : (view_mode === 'okf' && node.human_confirmed ? 'rgba(16, 185, 129, 0.35)' : THEME_COLORS.GLOW_CYAN);
             ctx.fill();
         }
 
@@ -82,14 +111,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
         ctx.fill();
 
         // 3. Highlight Border
-        if ((hover_node && hover_node.id === node.id) || (selected_node && selected_node.id === node.id)) {
+        if ((hover_node && hover_node.id === node.id) || is_selected) {
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 1 / global_scale;
             ctx.stroke();
         }
 
         // 4. Label (Zoom Dependent)
-        if (global_scale > 1.2 || (selected_node && selected_node.id === node.id) || node.is_affected) {
+        if (global_scale > 1.2 || is_selected || node.is_affected || view_mode === 'okf') {
             ctx.font = `${font_size}px ${GRAPH_THEME.LABEL_FONT}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
@@ -98,7 +127,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         }
 
         ctx.restore();
-    }, [selected_node, hover_node]);
+    }, [selected_node, hover_node, view_mode]);
 
     return (
         <ForceGraph2D

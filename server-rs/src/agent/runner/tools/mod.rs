@@ -33,6 +33,53 @@ pub use capability::{CapabilityToken, ZeroTrustGuard};
 use super::{AgentRunner, RunContext};
 use error::ToolExecutionError;
 
+/// Normalizes raw tool names passed by LLMs by stripping path prefixes and script extensions.
+pub fn normalize_tool_name(raw: &str) -> String {
+    static PREFIXES: &[&str] = &[
+        "./",
+        "execution/",
+        "execution\\",
+        "agent_generated/skills/",
+        "agent_generated\\skills\\",
+        "skills/",
+        "skills\\",
+        "directives/",
+        "directives\\",
+    ];
+    static SUFFIXES: &[&str] = &[".py", ".sh", ".ps1", ".bat", ".exe"];
+
+    let mut s = raw.trim();
+    for prefix in PREFIXES {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest;
+        }
+    }
+    for suffix in SUFFIXES {
+        if let Some(rest) = s.strip_suffix(suffix) {
+            s = rest;
+        }
+    }
+    s.to_string()
+}
+
+/// Recursively merges a patch JSON object into a target JSON value.
+pub fn recursive_merge_json(target: &mut serde_json::Value, patch: &serde_json::Value) {
+    match (target, patch) {
+        (serde_json::Value::Object(target_obj), serde_json::Value::Object(patch_obj)) => {
+            for (key, val) in patch_obj {
+                if let Some(existing) = target_obj.get_mut(key) {
+                    recursive_merge_json(existing, val);
+                } else {
+                    target_obj.insert(key.clone(), val.clone());
+                }
+            }
+        }
+        (target_val, patch_val) => {
+            *target_val = patch_val.clone();
+        }
+    }
+}
+
 impl AgentRunner {
     /// Dispatches a function call to the appropriate tool handler.
     /// Orchestrates the Zero-Trust pipeline: WAL -> CBS -> Audit -> Execute.
@@ -64,19 +111,35 @@ impl AgentRunner {
         }
     }
 
-    /// Manages the Zero-Trust sequence (WAL -> CBS -> Execute)
+    /// Manages the Zero-Trust sequence (Budget Check -> Token Validation -> WAL -> CBS -> Oversight -> Execute)
     async fn run_zero_trust_pipeline(
         &self,
         ctx: &RunContext,
         fc: &crate::agent::types::ToolCall,
         usage: &mut Option<crate::agent::types::TokenUsage>,
         _user_message: &str,
-        _token: CapabilityToken,
+        token: CapabilityToken,
     ) -> Result<String, ToolExecutionError> {
+        // 0. Fast-Path Budget Check (Fail fast before WAL and Oversight)
+        if ctx.current_cost_usd >= ctx.budget_limit_usd {
+            return Err(ToolExecutionError::SecurityBlocked(format!(
+                "Budget exhausted: Current ${:.4} >= Limit ${:.2}",
+                ctx.current_cost_usd, ctx.budget_limit_usd
+            )));
+        }
+
+        // 1. Capability-Based Security (CBS) Token Validation
+        if token.agent_id != ctx.agent_id || chrono::Utc::now() > token.expires_at {
+            return Err(ToolExecutionError::SecurityBlocked(format!(
+                "Invalid or expired CapabilityToken '{}' for agent '{}'",
+                token.id, ctx.agent_id
+            )));
+        }
+
         let args_str = serde_json::to_string(&fc.args).unwrap_or_default();
         let mission_id_opt = Some(ctx.mission_id.clone());
 
-        // 1. Write-Ahead Log (WAL)
+        // 2. Write-Ahead Log (WAL)
         // We MUST record the intent before execution.
         let _log_id = uuid::Uuid::new_v4().to_string();
         self.state.record_audit(
@@ -86,10 +149,6 @@ impl AgentRunner {
             &format!("[INTENT] {}", fc.name),
             &self.state.security.secret_redactor.redact(&args_str),
         ).await.map_err(|e| ToolExecutionError::AppError(e))?;
-
-        // 2. Capability Check (CBS)
-        // Here we'd check if 'token' has the specific permission for 'fc.name'
-        // For brevity, we assume the dispatcher/handler checks specific permissions.
 
         // 3. Security Manager (Hierarchy & Policy)
         let sec_mgr = DefaultSecurityManager;
@@ -122,15 +181,7 @@ impl AgentRunner {
             }
         }
 
-        // 5. Budget Check
-        if ctx.current_cost_usd >= ctx.budget_limit_usd {
-            return Err(ToolExecutionError::SecurityBlocked(format!(
-                "Budget exhausted: Current ${:.4} >= Limit ${:.2}",
-                ctx.current_cost_usd, ctx.budget_limit_usd
-            )));
-        }
-
-        // 6. Execute with Isolated Context
+        // 5. Execute with Isolated Context
         let tool_ctx = ToolContext {
             mission_id: ctx.mission_id.clone(),
             agent_id: ctx.agent_id.clone(),
@@ -147,10 +198,12 @@ impl AgentRunner {
         // Execution Loop with Self-Annealing
         let mut retry_count = 0;
         let max_retries = 2;
+        let normalized_name = normalize_tool_name(&fc.name);
 
         loop {
             let span = tracing::info_span!("ToolExecution", 
                 tool = %fc.name,
+                normalized_tool = %normalized_name,
                 trace_id = %ctx.trace_id,
                 agent_id = %ctx.agent_id,
                 mission_id = %ctx.mission_id
@@ -158,7 +211,8 @@ impl AgentRunner {
             let _enter = span.enter();
 
             // Wrap tool execution in a hard timeout to prevent "Silent Hangs" (INFRA-05)
-            let result = if let Some(handler) = self.state.registry.tool_registry.get(&fc.name) {
+            // Multi-tiered lookup: exact tool_registry -> normalized tool_registry -> exact skills -> normalized skills -> on-disk deterministic script trapping
+            let result = if let Some(handler) = self.state.registry.tool_registry.get(&fc.name).or_else(|| self.state.registry.tool_registry.get(&normalized_name)) {
                 match tokio::time::timeout(std::time::Duration::from_secs(60), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
                     Ok(res) => res,
                     Err(_) => {
@@ -168,14 +222,69 @@ impl AgentRunner {
                 }
             } else {
                 let snapshot = self.state.registry.skills.snapshot();
-                if let Some(skill) = snapshot.skills.get(&fc.name).map(|r| r.value().clone()) {
+                if let Some(skill) = snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|r| r.value().clone()) {
                     let mut out = String::new();
                     match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage).await {
                         Ok(()) => Ok(out),
                         Err(e) => Err(ToolExecutionError::AppError(e)),
                     }
                 } else {
-                    Err(ToolExecutionError::ExecutionFailed(format!("Unknown tool '{}'", fc.name)))
+                    // Fallback: Deterministic Execution Script Trapping on disk (async I/O)
+                    let ws_root = &ctx.workspace_root;
+                    let script_candidates = [
+                        ws_root.join("execution").join(format!("{}.py", normalized_name)),
+                        ws_root.join("execution").join(format!("{}.sh", normalized_name)),
+                        ws_root.join("execution").join(format!("{}.ps1", normalized_name)),
+                        ws_root.join("execution").join("agent_generated").join("skills").join(format!("{}.py", normalized_name)),
+                    ];
+
+                    let mut existing_candidate = None;
+                    for cand in &script_candidates {
+                        if tokio::fs::metadata(cand).await.is_ok() {
+                            existing_candidate = Some(cand.clone());
+                            break;
+                        }
+                    }
+
+                    if let Some(candidate) = existing_candidate {
+                        let ext = candidate.extension().and_then(|e| e.to_str()).unwrap_or("py");
+                        let rel_path = if candidate.to_string_lossy().contains("agent_generated") {
+                            format!("execution/agent_generated/skills/{}.{}", normalized_name, ext)
+                        } else {
+                            format!("execution/{}.{}", normalized_name, ext)
+                        };
+                        let exec_cmd = match ext {
+                            "sh" => format!("bash {}", rel_path),
+                            "ps1" => format!("powershell {}", rel_path),
+                            _ => format!("python {}", rel_path),
+                        };
+
+                        let synthesized_skill = crate::agent::script_skills::SkillDefinition {
+                            id: None,
+                            name: normalized_name.clone(),
+                            description: format!("Deterministic execution script '{}'", normalized_name),
+                            execution_command: exec_cmd,
+                            schema: serde_json::json!({"type": "object", "properties": {}}),
+                            oversight_required: true,
+                            doc_url: None,
+                            tags: Some(vec!["execution".to_string(), "deterministic".to_string()]),
+                            full_instructions: None,
+                            negative_constraints: None,
+                            verification_script: None,
+                            category: "execution".to_string(),
+                        };
+
+                        let mut out = String::new();
+                        match self.handle_dynamic_skill(ctx, fc, &mut out, &synthesized_skill, usage).await {
+                            Ok(()) => Ok(out),
+                            Err(e) => Err(ToolExecutionError::AppError(e)),
+                        }
+                    } else {
+                        Err(ToolExecutionError::ExecutionFailed(format!(
+                            "Unknown tool '{}' (normalized: '{}'). If this is a deterministic script, ensure it exists in execution/ or invoke it via 'execute_shell'.",
+                            fc.name, normalized_name
+                        )))
+                    }
                 }
             };
 
@@ -373,16 +482,8 @@ impl AgentRunner {
         if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
             let agent = entry.value_mut();
 
-            // If both are objects, we perform a shallow merge. Otherwise, full overwrite.
-            if let (Some(old_obj), Some(new_obj)) =
-                (agent.state.working_memory.as_object_mut(), new_memory.as_object())
-            {
-                for (k, v) in new_obj {
-                    old_obj.insert(k.clone(), v.clone());
-                }
-            } else {
-                agent.state.working_memory = new_memory;
-            }
+            // Deep recursive JSON merge to preserve nested properties
+            recursive_merge_json(&mut agent.state.working_memory, &new_memory);
 
             let agent_data = agent.clone();
             drop(entry); // Release DashMap lock
@@ -678,6 +779,45 @@ mod tests {
         assert!(result.is_ok());
         let agent = state.registry.agents.get(&ctx.agent_id).unwrap();
         assert_eq!(agent.state.working_memory["last_step"], "initialized");
+    }
+
+    #[test]
+    fn test_normalize_tool_name() {
+        assert_eq!(normalize_tool_name("parity_guard"), "parity_guard");
+        assert_eq!(normalize_tool_name("execution/parity_guard.py"), "parity_guard");
+        assert_eq!(normalize_tool_name("./execution/security_scan.py"), "security_scan");
+        assert_eq!(normalize_tool_name("execution\\verify_ai_context.py"), "verify_ai_context");
+        assert_eq!(normalize_tool_name("agent_generated/skills/custom_task.py"), "custom_task");
+        assert_eq!(normalize_tool_name("skills/auto_clean.sh"), "auto_clean");
+        assert_eq!(normalize_tool_name("db_health_check.ps1"), "db_health_check");
+    }
+
+    #[test]
+    fn test_recursive_merge_json() {
+        let mut base = serde_json::json!({
+            "nested": {
+                "key1": "val1",
+                "key2": 42
+            },
+            "array": [1, 2],
+            "unchanged": true
+        });
+
+        let patch = serde_json::json!({
+            "nested": {
+                "key2": 100,
+                "key3": "new_val"
+            },
+            "new_top": "hello"
+        });
+
+        recursive_merge_json(&mut base, &patch);
+
+        assert_eq!(base["nested"]["key1"], "val1");
+        assert_eq!(base["nested"]["key2"], 100);
+        assert_eq!(base["nested"]["key3"], "new_val");
+        assert_eq!(base["unchanged"], true);
+        assert_eq!(base["new_top"], "hello");
     }
 }
 

@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { intelligence_api_service } from '../../services/intelligence_api_service';
+import { system_api_service } from '../../services/system_api_service';
 
 // Mock react-force-graph-2d
 vi.mock('react-force-graph-2d', () => {
@@ -35,6 +36,15 @@ vi.mock('../../services/intelligence_api_service', () => ({
         get_knowledge: vi.fn(),
         get_knowledge_edges: vi.fn(),
         get_blast_radius: vi.fn(),
+        get_knowledge_peers: vi.fn(),
+    },
+}));
+
+// Mock system_api_service
+vi.mock('../../services/system_api_service', () => ({
+    system_api_service: {
+        get_knowledge_docs: vi.fn(),
+        get_knowledge_doc: vi.fn(),
     },
 }));
 
@@ -98,7 +108,18 @@ describe('KnowledgeGraph Component', () => {
         vi.mocked(intelligence_api_service.get_knowledge).mockResolvedValue(mockOkfEntries as any);
         vi.mocked(intelligence_api_service.get_knowledge_edges).mockResolvedValue([
             { source_id: 'okf-concept-001', target_id: 'okf-concept-002' } as any,
+            { source_id: 'okf-concept-001', target_id: 'non-existent-node' } as any,
         ]);
+        vi.mocked(system_api_service.get_knowledge_docs).mockResolvedValue([
+            { category: 'engineering', name: 'debugging.md', title: 'Debugging Guide' },
+            { category: 'engineering', name: 'incident-response.md', title: 'Incident Response' },
+        ]);
+        vi.mocked(system_api_service.get_knowledge_doc).mockImplementation(async (_cat, name) => {
+            if (name === 'incident-response.md') {
+                return 'Read the guide on [debugging](debugging.md) for root cause analysis.';
+            }
+            return 'Debugging instructions and protocols.';
+        });
     });
 
     it('renders symbols mode by default and loads graph data', async () => {
@@ -114,7 +135,7 @@ describe('KnowledgeGraph Component', () => {
         expect(intelligence_api_service.get_graph).toHaveBeenCalled();
     });
 
-    it('toggles to Knowledge Mode and fetches OKF entries', async () => {
+    it('toggles to Knowledge Mode and fetches OKF entries with edge filtering', async () => {
         render(<KnowledgeGraph />);
 
         await waitFor(() => {
@@ -127,12 +148,33 @@ describe('KnowledgeGraph Component', () => {
         await waitFor(() => {
             expect(screen.getByText('OKF Knowledge Graph')).toBeInTheDocument();
             expect(screen.getByText(/2 Concepts/i)).toBeInTheDocument();
+            // 1 valid explicit edge + 1 extracted markdown edge = 2 edges (invalid edge filtered out)
+            expect(screen.getByText(/1 Edges|2 Edges/i)).toBeInTheDocument();
         });
 
         expect(intelligence_api_service.get_knowledge).toHaveBeenCalledWith({ limit: 200 });
     });
 
-    it('renders the legend elements correctly for Symbols mode', async () => {
+    it('falls back to curated system knowledge docs when IKS returns empty', async () => {
+        vi.mocked(intelligence_api_service.get_knowledge).mockResolvedValue([]);
+        vi.mocked(intelligence_api_service.get_knowledge_edges).mockResolvedValue([]);
+
+        render(<KnowledgeGraph />);
+
+        const knowledgeModeBtn = screen.getByRole('button', { name: /Knowledge Mode/i });
+        fireEvent.click(knowledgeModeBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('OKF Knowledge Graph')).toBeInTheDocument();
+            expect(screen.getByText(/2 Concepts/i)).toBeInTheDocument();
+            expect(screen.getByText('Debugging Guide')).toBeInTheDocument();
+            expect(screen.getByText('Incident Response')).toBeInTheDocument();
+        });
+
+        expect(system_api_service.get_knowledge_docs).toHaveBeenCalled();
+    });
+
+    it('renders the legend elements correctly for Symbols mode and Knowledge mode', async () => {
         render(<KnowledgeGraph />);
 
         await waitFor(() => {
@@ -140,6 +182,16 @@ describe('KnowledgeGraph Component', () => {
             expect(screen.getByText('Struct / Class')).toBeInTheDocument();
             expect(screen.getByText('Trait / Interface')).toBeInTheDocument();
             expect(screen.getByText('Enum')).toBeInTheDocument();
+        });
+
+        const knowledgeModeBtn = screen.getByRole('button', { name: /Knowledge Mode/i });
+        fireEvent.click(knowledgeModeBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirmed')).toBeInTheDocument();
+            expect(screen.getByText('Expiring')).toBeInTheDocument();
+            expect(screen.getByText('Broken')).toBeInTheDocument();
+            expect(screen.getByText('Base')).toBeInTheDocument();
         });
     });
 });

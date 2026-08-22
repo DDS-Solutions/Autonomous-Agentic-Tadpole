@@ -15,6 +15,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import type { ForceGraphMethods } from 'react-force-graph-2d';
 import { Target, Zap, RefreshCw } from 'lucide-react';
 import { intelligence_api_service, type CodeGraphData } from '../../services/intelligence_api_service';
+import { system_api_service } from '../../services/system_api_service';
 import type { ExtendedGraphNode, ForceGraphLink } from './knowledge_graph/types';
 import { GraphView } from './knowledge_graph/GraphView';
 import { CognitionSidebar } from './knowledge_graph/CognitionSidebar';
@@ -28,12 +29,19 @@ const extractLinks = (text: string, nodeIds: Set<string>): string[] => {
     let match;
     while ((match = linkRegex.exec(text)) !== null) {
         const targetUrl = match[2];
-        const cleanTarget = targetUrl.replace(/^\//, '').replace(/\.md$/, '').trim();
-        if (nodeIds.has(cleanTarget)) {
+        const cleanTarget = targetUrl
+            .replace(/^file:\/\/\/[^\s]+?\//, '')
+            .replace(/^\/?(docs\/knowledge\/)?/, '')
+            .split('/')
+            .pop()
+            ?.replace(/\.md$/, '')
+            .trim() || '';
+            
+        if (cleanTarget && nodeIds.has(cleanTarget)) {
             targets.push(cleanTarget);
-        } else {
+        } else if (cleanTarget) {
             for (const id of nodeIds) {
-                if (id.endsWith(cleanTarget) || cleanTarget.endsWith(id)) {
+                if (id === cleanTarget || id.endsWith(cleanTarget) || cleanTarget.endsWith(id)) {
                     targets.push(id);
                     break;
                 }
@@ -70,17 +78,51 @@ export const KnowledgeGraph: React.FC = () => {
                 set_data(graph);
             } else {
                 // Fetch OKF knowledge entries & explicit edges from IKS (OKF v0.3)
-                const [entries, explicitEdges] = await Promise.all([
-                    intelligence_api_service.get_knowledge({ limit: 200 }),
+                let [entries, explicitEdges] = await Promise.all([
+                    intelligence_api_service.get_knowledge({ limit: 200 }).catch(() => []),
                     intelligence_api_service.get_knowledge_edges().catch(() => []),
                 ]);
 
-                const nodeIds = new Set(entries.map(e => e.id));
-                const nodes = entries.map(e => ({
+                // Fallback to Curated System Knowledge Documents if IKS is empty
+                if (!entries || entries.length === 0) {
+                    try {
+                        const docs = await system_api_service.get_knowledge_docs();
+                        if (docs && docs.length > 0) {
+                            const docEntries = await Promise.all(
+                                docs.map(async (doc) => {
+                                    const docId = doc.name.replace(/\.md$/, '');
+                                    let content = '';
+                                    try {
+                                        content = await system_api_service.get_knowledge_doc(doc.category, doc.name);
+                                    } catch {
+                                        content = '';
+                                    }
+                                    return {
+                                        id: docId,
+                                        title: doc.title,
+                                        topic: doc.category,
+                                        concept_type: doc.category,
+                                        confidence: 1.0,
+                                        human_confirmed: true,
+                                        text: content || doc.title,
+                                        resource_uri: `src/data/knowledge/${doc.category}/${doc.name}`,
+                                        description: `Curated knowledge for ${doc.title} (${doc.category})`,
+                                    };
+                                })
+                            );
+                            entries = docEntries as any[];
+                        }
+                    } catch (docErr) {
+                        console.warn('[KnowledgeGraph] Fallback knowledge fetch failed:', docErr);
+                    }
+                }
+
+                const nodeIds = new Set((entries || []).map(e => e.id));
+                const nodes = (entries || []).map(e => ({
                     id: e.id,
                     name: e.title || e.id,
-                    path: e.topic,
-                    kind: e.concept_type,
+                    path: e.topic || 'general',
+                    kind: e.concept_type || 'concept',
                     signature: e.resource_uri || '',
                     start_line: 0,
                     end_line: 0,
@@ -100,29 +142,33 @@ export const KnowledgeGraph: React.FC = () => {
                 const links: { source: string; target: string }[] = [];
                 const processedLinks = new Set<string>();
 
-                // Add explicit OKF v0.3 graph edges
-                for (const edge of explicitEdges) {
-                    const linkKey = `${edge.source_id}->${edge.target_id}`;
-                    if (!processedLinks.has(linkKey)) {
-                        links.push({
-                            source: edge.source_id,
-                            target: edge.target_id,
-                        });
-                        processedLinks.add(linkKey);
+                // Add explicit OKF v0.3 graph edges (strictly validating node existence)
+                for (const edge of (explicitEdges || [])) {
+                    if (nodeIds.has(edge.source_id) && nodeIds.has(edge.target_id)) {
+                        const linkKey = `${edge.source_id}->${edge.target_id}`;
+                        if (!processedLinks.has(linkKey)) {
+                            links.push({
+                                source: edge.source_id,
+                                target: edge.target_id,
+                            });
+                            processedLinks.add(linkKey);
+                        }
                     }
                 }
 
                 // Add extracted markdown link targets
-                for (const entry of entries) {
+                for (const entry of (entries || [])) {
                     const targets = extractLinks(entry.text, nodeIds);
                     for (const target of targets) {
-                        const linkKey = `${entry.id}->${target}`;
-                        if (!processedLinks.has(linkKey)) {
-                            links.push({
-                                source: entry.id,
-                                target: target,
-                            });
-                            processedLinks.add(linkKey);
+                        if (nodeIds.has(target) && target !== entry.id) {
+                            const linkKey = `${entry.id}->${target}`;
+                            if (!processedLinks.has(linkKey)) {
+                                links.push({
+                                    source: entry.id,
+                                    target: target,
+                                });
+                                processedLinks.add(linkKey);
+                            }
                         }
                     }
                 }
@@ -215,6 +261,7 @@ export const KnowledgeGraph: React.FC = () => {
                     affected_nodes={affected_nodes}
                     on_node_click={handle_node_click}
                     fg_ref={fg_ref}
+                    view_mode={view_mode}
                 />
             )}
 
@@ -277,6 +324,7 @@ export const KnowledgeGraph: React.FC = () => {
                     affected_nodes={affected_nodes}
                     total_nodes_count={data?.nodes.length || 0}
                     on_close={handle_close_sidebar}
+                    view_mode={view_mode}
                 />
             )}
 

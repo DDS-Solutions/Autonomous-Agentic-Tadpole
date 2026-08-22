@@ -1,8 +1,11 @@
 # Rust build artifacts
 target/
+target_*/
 debug/
 release/
 server-rs/target/
+server-rs/target_*/
+logs/
 
 # Node.js dependencies
 node_modules/

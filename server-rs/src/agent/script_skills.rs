@@ -90,6 +90,7 @@ pub struct HookDefinition {
 
 /// The Skills registry holding in-memory maps of skills and workflows.
 pub struct ScriptSkillsRegistry {
+    base_dir: PathBuf,
     skills_dir: PathBuf,
     workflows_dir: PathBuf,
     hooks_dir: PathBuf,
@@ -135,6 +136,7 @@ impl ScriptSkillsRegistry {
         fs::create_dir_all(&agent_hooks_dir).await.map_err(AppError::Io)?;
 
         let registry = Self {
+            base_dir,
             skills_dir,
             workflows_dir,
             hooks_dir,
@@ -167,6 +169,7 @@ impl ScriptSkillsRegistry {
         std::fs::create_dir_all(&agent_hooks_dir).ok();
 
         Self {
+            base_dir,
             skills_dir,
             workflows_dir,
             hooks_dir,
@@ -199,21 +202,8 @@ impl ScriptSkillsRegistry {
     /// ### 📡 Synchronization: reload_all
     /// Scans all directories concurrently and atomically swaps the registry state.
     pub async fn reload_all(&self) -> Result<(), AppError> {
-        let base_dir = std::env::var("WORKSPACE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                if std::env::current_dir()
-                    .unwrap_or_default()
-                    .ends_with("server-rs")
-                {
-                    PathBuf::from("..")
-                } else {
-                    PathBuf::from(".")
-                }
-            });
-
-        let built_in_agent_skills_dir = base_dir.join(".agent").join("skills");
-        let built_in_agent_workflows_dir = base_dir.join(".agent").join("workflows");
+        let built_in_agent_skills_dir = self.base_dir.join(".agent").join("skills");
+        let built_in_agent_workflows_dir = self.base_dir.join(".agent").join("workflows");
 
         let next_state = RegistryState::default();
 
@@ -230,8 +220,8 @@ impl ScriptSkillsRegistry {
             std_hooks, 
             gen_hooks
         ) = tokio::join!(
-            Self::load_skills_from_dir(&self.skills_dir, "user"),
-            Self::load_skills_from_dir(&self.agent_skills_dir, "ai"),
+            Self::load_skills_from_dir(&self.skills_dir, "user", false),
+            Self::load_skills_from_dir(&self.agent_skills_dir, "ai", true),
             Self::load_built_in_skills(&built_in_agent_skills_dir),
             Self::load_workflows_from_dir(&self.workflows_dir, "user"),
             Self::load_workflows_from_dir(&built_in_agent_workflows_dir, "ai"),
@@ -239,6 +229,10 @@ impl ScriptSkillsRegistry {
             Self::load_hooks_from_dir(&self.hooks_dir, "user"),
             Self::load_hooks_from_dir(&self.agent_hooks_dir, "ai")
         );
+
+        let total_skills = std_skills.len() + gen_skills.len() + built_in_skills.len();
+        let total_workflows = std_wf.len() + built_in_wf.len() + gen_wf.len();
+        let total_hooks = std_hooks.len() + gen_hooks.len();
 
         // Merge results into the next state
         for (k, v) in std_skills { next_state.skills.insert(k, v); }
@@ -254,24 +248,85 @@ impl ScriptSkillsRegistry {
         let mut write_guard = self.state.write();
         *write_guard = Arc::new(next_state);
 
+        tracing::info!(
+            "[ScriptSkillsRegistry] Hot-reload complete: {} skills, {} workflows, {} hooks loaded.",
+            total_skills, total_workflows, total_hooks
+        );
+
         Ok(())
     }
 
-    async fn load_skills_from_dir(dir: &Path, category: &str) -> Vec<(String, SkillDefinition)> {
+    async fn load_skills_from_dir(dir: &Path, category: &str, is_agent_dir: bool) -> Vec<(String, SkillDefinition)> {
         let mut results = Vec::new();
+        let mut pending_scripts = Vec::new();
+
         if let Ok(mut entries) = fs::read_dir(dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+                if ext == "json" {
                     if let Ok(content) = read_file_bounded(&path, 5_000_000).await {
                         if let Ok(mut skill) = serde_json::from_str::<SkillDefinition>(&content) {
                             skill.category = category.to_string();
                             results.push((skill.name.clone(), skill));
                         }
                     }
+                } else if ext == "py" || ext == "sh" || ext == "ps1" {
+                    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    if !stem.is_empty() && !stem.starts_with("__") {
+                        pending_scripts.push((stem, ext.to_string(), path));
+                    }
                 }
             }
         }
+
+        // Auto-synthesize skill definitions for scripts without explicit .json manifests
+        for (stem, ext, path) in pending_scripts {
+            if results.iter().any(|(n, _)| n == &stem) {
+                continue;
+            }
+
+            let mut description = format!("Deterministic execution script '{}'", stem);
+            if let Ok(content) = read_file_bounded(&path, 4096).await {
+                if let Some(doc) = extract_script_docstring(&content) {
+                    description = doc;
+                }
+            }
+
+            let rel_path = if is_agent_dir {
+                format!("execution/agent_generated/skills/{}.{}", stem, ext)
+            } else {
+                format!("execution/{}.{}", stem, ext)
+            };
+
+            let execution_command = match ext.as_str() {
+                "sh" => format!("bash {}", rel_path),
+                "ps1" => format!("powershell {}", rel_path),
+                _ => format!("python {}", rel_path),
+            };
+
+            let skill = SkillDefinition {
+                id: None,
+                name: stem.clone(),
+                description,
+                execution_command,
+                schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+                oversight_required: true,
+                doc_url: None,
+                tags: Some(vec!["execution".to_string(), "deterministic".to_string()]),
+                full_instructions: None,
+                negative_constraints: None,
+                verification_script: None,
+                category: category.to_string(),
+            };
+
+            results.push((stem, skill));
+        }
+
         results
     }
 
@@ -573,9 +628,88 @@ pub fn parse_skill_md(content: &str) -> Option<SkillDefinition> {
     })
 }
 
+/// Extracts the top-level docstring or initial comment summary from a script file.
+pub fn extract_script_docstring(content: &str) -> Option<String> {
+    let trimmed = content.trim_start();
+    if trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
+        let quote = &trimmed[..3];
+        if let Some(end_idx) = trimmed[3..].find(quote) {
+            let doc = trimmed[3..3 + end_idx].trim();
+            let first_line = doc.lines()
+                .find(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.starts_with("@docs") && !t.starts_with("#")
+                })
+                .unwrap_or(doc);
+            let cleaned = first_line.trim().to_string();
+            if !cleaned.is_empty() {
+                return Some(cleaned);
+            }
+        }
+    } else if trimmed.starts_with("/**") {
+        if let Some(end_idx) = trimmed[3..].find("*/") {
+            let doc = trimmed[3..3 + end_idx].trim();
+            let first_line = doc.lines()
+                .find(|l| {
+                    let t = l.trim().trim_start_matches('*').trim();
+                    !t.is_empty() && !t.starts_with("@docs")
+                })
+                .unwrap_or(doc);
+            let cleaned = first_line.trim().trim_start_matches('*').trim().to_string();
+            if !cleaned.is_empty() {
+                return Some(cleaned);
+            }
+        }
+    } else if trimmed.starts_with("#") || trimmed.starts_with("//") {
+        let first_line = trimmed.lines()
+            .find(|l| {
+                let t = l.trim();
+                (t.starts_with("#") || t.starts_with("//")) 
+                    && !t.starts_with("#!") 
+                    && !t.starts_with("# @docs")
+                    && !t.starts_with("// @docs")
+            });
+        if let Some(line) = first_line {
+            let cleaned = line.trim()
+                .trim_start_matches('#')
+                .trim_start_matches("//")
+                .trim()
+                .to_string();
+            if !cleaned.is_empty() {
+                return Some(cleaned);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_extract_script_docstring() {
+        let py_content = r#""""
+@docs ARCHITECTURE:Core
+Runs the database health check suite across SQLite and LanceDB.
+"""
+import sys
+"#;
+        let doc = extract_script_docstring(py_content).expect("Should extract docstring");
+        assert_eq!(doc, "Runs the database health check suite across SQLite and LanceDB.");
+
+        let sh_content = "#!/bin/bash\n# Clean up old telemetry logs from disk\nrm -rf /tmp/logs\n";
+        let doc_sh = extract_script_docstring(sh_content).expect("Should extract shell comment");
+        assert_eq!(doc_sh, "Clean up old telemetry logs from disk");
+
+        let js_content = "/**\n * @docs ARCHITECTURE:UI\n * Synchronizes client state with server\n */\nexport function sync() {}";
+        let doc_js = extract_script_docstring(js_content).expect("Should extract JSDoc");
+        assert_eq!(doc_js, "Synchronizes client state with server");
+
+        let ts_line = "// Verifies neural network weights\nexport const verify = () => {};";
+        let doc_ts = extract_script_docstring(ts_line).expect("Should extract line comment");
+        assert_eq!(doc_ts, "Verifies neural network weights");
+    }
 
     #[test]
     fn test_parse_skill_md_basic() {

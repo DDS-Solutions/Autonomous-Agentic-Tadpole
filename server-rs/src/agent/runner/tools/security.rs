@@ -31,15 +31,21 @@ impl SecurityManager for DefaultSecurityManager {
     async fn pre_validate(&self, runner: &AgentRunner, ctx: &RunContext, fc: &ToolCall) -> Result<ValidationResult, ToolExecutionError> {
         let mut trigger_oversight = false;
         let mut oversight_reason = String::new();
+        let normalized_name = super::normalize_tool_name(&fc.name);
 
         // 1. [CBS] Skill-Based Security Allowlist
         if let Some(agent) = runner.state.registry.agents.get(&ctx.agent_id) {
             let allowed_skills = &agent.value().capabilities.skills;
-            let is_builtin = super::registry::BUILTIN_TOOLS.contains(&fc.name.as_str());
+            let is_builtin = super::registry::BUILTIN_TOOLS.contains(&fc.name.as_str()) || super::registry::BUILTIN_TOOLS.contains(&normalized_name.as_str());
             let is_orchestrator = ctx.agent_id == crate::agent::constants::AGENT_CEO || ctx.agent_id == crate::agent::constants::AGENT_COO;
 
-            if !is_orchestrator && !is_builtin && !allowed_skills.is_empty() && !allowed_skills.contains(&fc.name) {
-                tracing::warn!("🛡️ [CBS] Agent {} attempted unauthorized skill: {}", ctx.agent_id, fc.name);
+            let is_allowed = allowed_skills.is_empty() 
+                || allowed_skills.contains(&fc.name) 
+                || allowed_skills.contains(&normalized_name)
+                || allowed_skills.iter().any(|s| s == "all" || s == "execution" || s == "*");
+
+            if !is_orchestrator && !is_builtin && !is_allowed {
+                tracing::warn!("🛡️ [CBS] Agent {} attempted unauthorized skill: {} (normalized: {})", ctx.agent_id, fc.name, normalized_name);
                 runner.broadcast_sys(
                     &format!("🛡️ CBS: {} attempted unauthorized skill: {}", ctx.name, fc.name),
                     "error",
@@ -49,7 +55,7 @@ impl SecurityManager for DefaultSecurityManager {
             }
 
             // 2. [Hierarchy Guard] Enforce strategic delegation for CEO/COO
-            if matches!(fc.name.as_str(), "spawn_subagent" | "recruit_specialist") {
+            if matches!(fc.name.as_str(), "spawn_subagent" | "recruit_specialist") || matches!(normalized_name.as_str(), "spawn_subagent" | "recruit_specialist") {
                 if ctx.agent_id == crate::agent::constants::AGENT_CEO {
                     tracing::warn!("🛡️ [Hierarchy Guard] CEO (ID: {}) blocked from spawning specialists directly.", crate::agent::constants::AGENT_CEO);
                     runner.broadcast_sys("🛡️ Hierarchy Guard: CEO blocked from direct worker recruitment. Use 'issue_alpha_directive' instead.", "warning", Some(ctx.mission_id.clone()));
@@ -66,8 +72,21 @@ impl SecurityManager for DefaultSecurityManager {
             }
         }
 
-        // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy first
-        let policy_mode = runner.state.security.permission_policy.get_mode(&fc.name, &ctx.agent_id).await;
+        // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy
+        let policy_mode = {
+            let mode = runner.state.security.permission_policy.get_mode(&fc.name, &ctx.agent_id).await;
+            if mode == crate::security::permissions::PermissionMode::Prompt && normalized_name != fc.name {
+                let norm_mode = runner.state.security.permission_policy.get_mode(&normalized_name, &ctx.agent_id).await;
+                if norm_mode != crate::security::permissions::PermissionMode::Prompt {
+                    norm_mode
+                } else {
+                    mode
+                }
+            } else {
+                mode
+            }
+        };
+
         match policy_mode {
             crate::security::permissions::PermissionMode::Deny => {
                 return Err(ToolExecutionError::SecurityBlocked(format!("Policy for '{}' is set to DENY", fc.name)));
@@ -83,7 +102,7 @@ impl SecurityManager for DefaultSecurityManager {
             // 4. [Security Gate] Skill Manifest Validation
             let mut manifest_requires = false;
 
-            if let Some(manifest) = runner.state.registry.skill_registry.get(&fc.name) {
+            if let Some(manifest) = runner.state.registry.skill_registry.get(&fc.name).or_else(|| runner.state.registry.skill_registry.get(&normalized_name)) {
                 if manifest.requires_oversight {
                     manifest_requires = true;
                 }
@@ -91,7 +110,7 @@ impl SecurityManager for DefaultSecurityManager {
             if !manifest_requires {
                 let requires_oversight = {
                     let snapshot = runner.state.registry.skills.snapshot();
-                    snapshot.skills.get(&fc.name).map(|s| s.oversight_required).unwrap_or(false)
+                    snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|s| s.oversight_required).unwrap_or(false)
                 };
                 if requires_oversight {
                     manifest_requires = true;
