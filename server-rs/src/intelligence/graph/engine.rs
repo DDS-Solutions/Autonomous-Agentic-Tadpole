@@ -691,8 +691,40 @@ mod tests {
         let resolved_small = graph.resolve_context("helper", "main.rs", 2, None);
         assert!(resolved_small[0].signature.ends_with("..."));
     }
+
+    #[test]
+    fn test_blast_radius_bounded_limits_and_truncation_flag() {
+        let mut graph = CodeSymbolGraph::new(std::path::PathBuf::from("/workspace"));
+        
+        let root_idx = graph.graph.add_node(SymbolNode {
+            name: "CoreHub".into(),
+            path: "src/core.rs".into(),
+            ..Default::default()
+        });
+        graph.index.insert(index_key("src/core.rs", "CoreHub"), root_idx);
+
+        // Add 10 caller nodes depending on CoreHub
+        for i in 1..=10 {
+            let caller_idx = graph.graph.add_node(SymbolNode {
+                name: format!("Caller_{}", i),
+                path: format!("src/caller_{}.rs", i),
+                ..Default::default()
+            });
+            graph.index.insert(index_key(&format!("src/caller_{}.rs", i), &format!("Caller_{}", i)), caller_idx);
+            // caller calls CoreHub (incoming to CoreHub)
+            graph.graph.add_edge(caller_idx, root_idx, SymbolEdge { kind: "call".into() });
+        }
+
+        // Test with limit 4: must return 4 nodes and truncated = true
+        let (affected, is_truncated) = graph.calculate_blast_radius_bounded("CoreHub", "src/core.rs", Some(4));
+        assert_eq!(affected.len(), 4, "Must cap at requested limit");
+        assert!(is_truncated, "Truncation flag must be true when callers exceed limit");
+
+        // Test with limit 20: must return all 11 nodes (root + 10 callers) and truncated = false
+        let (all_affected, not_truncated) = graph.calculate_blast_radius_bounded("CoreHub", "src/core.rs", Some(20));
+        assert_eq!(all_affected.len(), 11, "Must return all 11 nodes");
+        assert!(!not_truncated, "Truncation flag must be false when limit is not exceeded");
+    }
 }
-
-
 
 // Metadata: [engine]

@@ -20,7 +20,7 @@ use std::path::PathBuf;
 
 /// A node in the knowledge graph representing a code symbol
 /// (function, struct, trait, interface, etc.).
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
 pub struct SymbolNode {
     pub name: String,
     pub path: String,
@@ -33,7 +33,7 @@ pub struct SymbolNode {
 }
 
 /// An edge in the knowledge graph representing a dependency between symbols.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
 pub struct SymbolEdge {
     pub kind: String,
 }

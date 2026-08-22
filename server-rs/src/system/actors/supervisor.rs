@@ -455,6 +455,44 @@ mod tests {
         assert_eq!(metrics.len(), 1);
         assert!(!metrics[0].is_alive, "Task should be immediately aborted and marked not alive");
     }
+
+    #[tokio::test]
+    async fn test_supervisor_max_restarts_exhaustion() {
+        let supervisor = Supervisor::new(
+            "test_exhaustion",
+            SupervisorStrategy::OneForOne,
+            RestartPolicy {
+                max_restarts: 2,
+                window_duration: Duration::from_secs(5),
+                initial_backoff: Duration::from_millis(5),
+                max_backoff: Duration::from_millis(15),
+                backoff_factor: 1.5,
+            },
+        );
+
+        let execution_count = Arc::new(AtomicUsize::new(0));
+        let count_clone = execution_count.clone();
+
+        supervisor.supervise("crashing_child", move || {
+            let c = count_clone.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                panic!("Child crashing intentionally!");
+            }
+        });
+
+        // Wait for restarts to exhaust
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let total_executions = execution_count.load(Ordering::SeqCst);
+        // Initial spawn (1) + max_restarts (2) = 3 total executions
+        assert_eq!(total_executions, 3, "Child must execute initial run + 2 restarts and then cease");
+
+        let metrics = supervisor.handle().get_metrics();
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].restart_count, 2);
+        assert!(!metrics[0].is_alive, "Child must be marked dead after exhausting restart quota");
+    }
 }
 
 // Metadata: [supervisor]

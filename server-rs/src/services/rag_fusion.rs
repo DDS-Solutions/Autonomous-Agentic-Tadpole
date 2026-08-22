@@ -223,6 +223,94 @@ mod tests {
         assert_eq!(results[1].id, "doc_2");
         assert_eq!(results[2].id, "doc_3");
     }
+
+    #[test]
+    fn test_rrf_triad_three_way_fusion_precedence() {
+        let weights = RagEngineWeights::default();
+
+        let triad_item = RagCandidate {
+            id: "triad_doc".to_string(),
+            title: "Triad Architecture".to_string(),
+            content: "Complete 3-way match".to_string(),
+            relative_path: Some("docs/TRIAD.md".to_string()),
+            source: "".to_string(),
+            metadata: Some(serde_json::json!({"triad": true})),
+        };
+
+        let vector_only = RagCandidate {
+            id: "vector_doc".to_string(),
+            title: "Vector Only".to_string(),
+            content: "Vector match only".to_string(),
+            relative_path: None,
+            source: "".to_string(),
+            metadata: None,
+        };
+
+        let bm25_only = RagCandidate {
+            id: "bm25_doc".to_string(),
+            title: "BM25 Only".to_string(),
+            content: "BM25 match only".to_string(),
+            relative_path: None,
+            source: "".to_string(),
+            metadata: None,
+        };
+
+        let vector_list = vec![vector_only, triad_item.clone()];
+        let bm25_list = vec![bm25_only, triad_item.clone()];
+        let graph_list = vec![triad_item];
+
+        let results = fuse_search_results(&vector_list, &bm25_list, &graph_list, &weights, 5);
+
+        assert_eq!(results.len(), 3);
+        // triad_doc appears in all 3 engines, scoring highest
+        assert_eq!(results[0].id, "triad_doc");
+        assert_eq!(results[0].sources.len(), 3);
+        assert!(results[0].sources.contains(&"vector".to_string()));
+        assert!(results[0].sources.contains(&"bm25".to_string()));
+        assert!(results[0].sources.contains(&"trustgraph".to_string()));
+        assert_eq!(results[0].metadata, Some(serde_json::json!({"triad": true})));
+    }
+
+    #[test]
+    fn test_rrf_empty_inputs_returns_empty() {
+        let weights = RagEngineWeights::default();
+        let results = fuse_search_results(&[], &[], &[], &weights, 10);
+        assert!(results.is_empty(), "Empty input lists must return empty results");
+    }
+
+    #[test]
+    fn test_rrf_custom_weights_influences_ranking() {
+        let lexical_heavy = RagEngineWeights {
+            vector_weight: 0.10,
+            bm25_weight: 0.80,
+            trustgraph_weight: 0.10,
+            k_constant: 60.0,
+        };
+
+        let vec_doc = RagCandidate {
+            id: "vec_doc".to_string(),
+            title: "Vector Doc".to_string(),
+            content: "Vec".to_string(),
+            relative_path: None,
+            source: "vector".to_string(),
+            metadata: None,
+        };
+
+        let bm25_doc = RagCandidate {
+            id: "bm25_doc".to_string(),
+            title: "BM25 Doc".to_string(),
+            content: "BM25".to_string(),
+            relative_path: None,
+            source: "bm25".to_string(),
+            metadata: None,
+        };
+
+        let results = fuse_search_results(&[vec_doc], &[bm25_doc], &[], &lexical_heavy, 5);
+        assert_eq!(results.len(), 2);
+        // With 80% BM25 weight vs 10% Vector weight, bm25_doc must be ranked first
+        assert_eq!(results[0].id, "bm25_doc");
+        assert_eq!(results[1].id, "vec_doc");
+    }
 }
 
 // Metadata: [rag_fusion]
