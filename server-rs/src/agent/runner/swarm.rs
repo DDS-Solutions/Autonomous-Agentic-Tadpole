@@ -162,17 +162,11 @@ impl AgentRunner {
                     )
                 };
 
-                let sub_agent_name = match runner.state.registry.agents.get(&sub_id_clone) {
-                    Some(a) => a.identity.name.clone(),
-                    None => sub_id_clone.clone(),
-                };
-                let sub_agent_role = match runner.state.registry.agents.get(&sub_id_clone) {
-                    Some(a) => a.identity.role.clone(),
-                    None => "specialist".to_string(),
-                };
-                let budget_cap = runner.state.registry.agents.get(&sub_id_clone)
-                    .map(|a| a.economics.budget_usd)
-                    .filter(|&b| b > 0.0);
+                let sub_agent = runner.state.registry.agents.get(&sub_id_clone);
+                let sub_agent_name = sub_agent.as_ref().map(|a| a.identity.name.clone()).unwrap_or_else(|| sub_id_clone.clone());
+                let sub_agent_role = sub_agent.as_ref().map(|a| a.identity.role.clone()).unwrap_or_else(|| "specialist".to_string());
+                let sub_slot = sub_agent.as_ref().and_then(|a| a.models.active_model_slot).map(|s| s as u8).or(Some(2));
+                let budget_cap = sub_agent.as_ref().map(|a| a.economics.budget_usd).filter(|&b| b > 0.0);
                 let is_privacy = runner.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed);
                 let socratic = crate::agent::socratic::SocraticContextEnvelope::compile(
                     &sub_id_clone,
@@ -181,7 +175,7 @@ impl AgentRunner {
                     ctx_clone.primary_goal.as_deref().unwrap_or("Task Execution"),
                     None,
                     budget_cap,
-                    Some(2),
+                    sub_slot,
                     is_privacy,
                 );
                 let injected_instruction = socratic.inject_into_prompt(&final_instruction).into_owned();
@@ -204,8 +198,27 @@ impl AgentRunner {
              return Ok("ERROR: No sub-agents were spawned (Protocol Violation or empty IDs).".to_string());
         }
 
-        // Feed pooled results back for synthesis
-        let pooled_results = results.join("\n\n---\n\n");
+        // Feed pooled results back for synthesis with length guarding
+        const MAX_SYNTHESIS_PAYLOAD_CHARS: usize = 12000; // ~3,000 tokens safe budget
+        let total_len: usize = results.iter().map(|r| r.len()).sum();
+        let pooled_results = if total_len > MAX_SYNTHESIS_PAYLOAD_CHARS {
+            tracing::info!("✂️ [Swarm] Pooled results exceed safe synthesis budget ({} chars). Compressing results.", total_len);
+            let per_agent_limit = (MAX_SYNTHESIS_PAYLOAD_CHARS / results.len().max(1)).max(500);
+            results
+                .iter()
+                .map(|r| {
+                    if r.len() > per_agent_limit {
+                        let slice_end = r.floor_char_boundary(per_agent_limit);
+                        format!("{}\n... [Result truncated for synthesis context]", &r[..slice_end])
+                    } else {
+                        r.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n---\n\n")
+        } else {
+            results.join("\n\n---\n\n")
+        };
         let synthesis_prompt = format!(
             "Your swarm reported back with these pooled results:\n\n{}\n\nPlease synthesize this data and provide your final response or take next steps.",
             pooled_results
@@ -245,6 +258,11 @@ impl AgentRunner {
         conn: &mut sqlx::SqliteConnection,
         opts: SubAgentOptions<'_>,
     ) -> Result<String, ToolExecutionError> {
+        // Fast-path: If the agent already exists in the memory registry and no new capabilities are provided, return immediately
+        if opts.extra_skills.is_none() && opts.extra_workflows.is_none() && self.state.registry.agents.contains_key(opts.agent_id) {
+            return Ok(opts.agent_id.to_string());
+        }
+
         // Register any new unique capabilities into AI Services registry
         if let Some(skills) = opts.extra_skills {
             for s in skills {
@@ -339,7 +357,7 @@ impl AgentRunner {
         }
 
         if self.state.registry.agents.contains_key(&target_id) {
-            return Ok("".to_string());
+            return Ok(target_id);
         }
 
         tracing::info!("🛠️ [Swarm] Registering missing sub-agent: {}", target_id);
@@ -356,7 +374,7 @@ impl AgentRunner {
             "complete_mission".to_string(),
         ];
 
-        // ... discovered skills logic ...
+        // Discovered skills logic
         if let Some(skills) = opts.extra_skills {
             for s in skills {
                 if let Some(name) = s.get("name").and_then(|v| v.as_str()) {
@@ -367,20 +385,25 @@ impl AgentRunner {
             }
         }
 
+        let target_lower = target_id.to_lowercase();
         let (initial_role, initial_dept, initial_desc) = if let Some(r) = opts.role_override {
             (
                 r.to_string(),
                 "Tactical Operations".to_string(),
                 format!("Specialized agent with role override: {}", r),
             )
+        } else if target_lower.contains("research") || target_lower.contains("search") || target_lower.contains("scout") || target_lower.contains("recon") {
+            ("Swarm Research Specialist".to_string(), "Intelligence".to_string(), "Expert in web discovery, data extraction, and information synthesis.".to_string())
+        } else if target_lower.contains("code") || target_lower.contains("dev") || target_lower.contains("rust") || target_lower.contains("py") || target_lower.contains("engineer") || target_lower.contains("script") {
+            ("Swarm Code Specialist".to_string(), "Engineering".to_string(), "Expert in Rust, TypeScript, and system architecture.".to_string())
+        } else if target_lower.contains("audit") || target_lower.contains("complian") || target_lower.contains("sec") || target_lower.contains("qa") || target_lower.contains("test") {
+            ("Swarm Security Auditor".to_string(), "Compliance".to_string(), "Expert in vulnerability scanning, budget enforcement, and protocol verification.".to_string())
+        } else if target_lower.contains("alpha") || target_lower.contains("lead") || target_lower.contains("commander") || target_lower.contains("coord") {
+            ("Swarm Mission Commander".to_string(), "Operations".to_string(), "The Alpha Node, responsible for coordinating multi-agent missions.".to_string())
+        } else if target_lower.contains("arch") || target_lower.contains("design") {
+            ("Swarm Systems Architect".to_string(), "Architecture".to_string(), "Expert in high-level system design and component decomposition.".to_string())
         } else {
-            match target_id.to_lowercase().as_str() {
-                "researcher" | "searcher" => ("Swarm Research Specialist".to_string(), "Intelligence".to_string(), "Expert in web discovery, data extraction, and information synthesis.".to_string()),
-                "coder" | "developer" => ("Swarm Code Specialist".to_string(), "Engineering".to_string(), "Expert in Rust, TypeScript, and system architecture.".to_string()),
-                "auditor" | "compliance" => ("Swarm Security Auditor".to_string(), "Compliance".to_string(), "Expert in vulnerability scanning, budget enforcement, and protocol verification.".to_string()),
-                "alpha" => ("Swarm Mission Commander".to_string(), "Operations".to_string(), "The Alpha Node, responsible for coordinating multi-agent missions.".to_string()),
-                _ => (format!("AI-{}", "General Intelligence Node"), "Swarm Core".to_string(), "Autonomous sub-agent spawned for specific task resolution.".to_string())
-            }
+            (format!("AI-{}", "General Intelligence Node"), "Swarm Core".to_string(), "Autonomous sub-agent spawned for specific task resolution.".to_string())
         };
 
         let sub_agent = crate::agent::types::EngineAgent {
