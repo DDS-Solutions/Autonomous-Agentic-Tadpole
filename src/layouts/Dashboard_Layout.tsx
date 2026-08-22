@@ -75,13 +75,19 @@ export default function Dashboard_Layout() {
         }
         : null;
     const safe_tabs = React.useMemo(() => {
-        return Array.isArray(tabs)
+        const raw = Array.isArray(tabs)
             ? tabs
             : (Array.isArray(tab_snapshot?.tabs) ? tab_snapshot.tabs : []);
+        if (raw.length === 0) {
+            return [{ id: 'initial-ops', title: 'Operations', path: '/dashboard', icon: 'LayoutDashboard' }];
+        }
+        return raw;
     }, [tabs, tab_snapshot?.tabs]);
-    const safe_active_tab_id = typeof active_tab_id === 'string'
+
+    const safe_active_tab_id = typeof active_tab_id === 'string' && safe_tabs.some(t => t.id === active_tab_id)
         ? active_tab_id
-        : (typeof tab_snapshot?.active_tab_id === 'string' ? tab_snapshot.active_tab_id : null);
+        : (safe_tabs[0]?.id || 'initial-ops');
+
     const safe_is_system_log_detached = typeof is_system_log_detached === 'boolean'
         ? is_system_log_detached
         : tab_snapshot?.is_system_log_detached === true;
@@ -92,9 +98,7 @@ export default function Dashboard_Layout() {
         ? is_lineage_stream_detached
         : tab_snapshot?.is_lineage_stream_detached === true;
 
-
-
-    // Synchronize tab store with URL on first load and browser navigation
+    // Synchronize navigation when tab selection changes via UI or remote sync
     useEffect(() => {
         // Guard: Detached windows should never trigger a navigation update
         if (location.pathname.startsWith('/detached')) {
@@ -116,35 +120,6 @@ export default function Dashboard_Layout() {
             }
         }
     }, [safe_active_tab_id, location.pathname, navigate, safe_tabs, active_tab_sync_source]);
-
-    // Synchronize Tab Store with URL (URL -> Tab)
-    useEffect(() => {
-        // Guard: Detached windows should never trigger a store update from URL
-        if (location.pathname.startsWith('/detached')) {
-            return;
-        }
-
-        const normalized_path = location.pathname === '/' ? '/dashboard' : location.pathname.replace(/\/$/, '');
-        const route = APP_ROUTES.find(r => r.path === normalized_path);
-        
-        if (route) {
-            if (typeof use_tab_store.getState !== 'function') {
-                return;
-            }
-            const { tabs: current_tabs, active_tab_id: current_active_id, open_tab } = use_tab_store.getState();
-            const active_tab = (Array.isArray(current_tabs) ? current_tabs : []).find(t => t.id === current_active_id);
-            
-            // Only open/switch tab if the URL doesn't match the current active tab
-            if (!active_tab || active_tab.path !== normalized_path) {
-                console.debug('[DashboardLayout] URL changed, updating tab state for:', normalized_path);
-                open_tab({
-                    title: i18n.t(route.label) || route.label,
-                    path: normalized_path,
-                    icon: route.icon
-                });
-            }
-        }
-    }, [location.pathname]);
 
     // ── Connection Status ──────────────────────────────────
     useEffect(() => {

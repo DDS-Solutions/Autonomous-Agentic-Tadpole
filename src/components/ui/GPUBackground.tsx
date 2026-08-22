@@ -23,33 +23,70 @@ const BACKDROP_THEMES: Record<string, { colorA: string, colorB: string }> = {
     amber: { colorA: THEME_COLORS.DARK_BG, colorB: '#2d1500' },   // Sunset amber/copper
 };
 
+interface SafeShaderProps {
+    colorA: string;
+    colorB: string;
+}
+
+class SafeShader extends React.Component<SafeShaderProps, { hasError: boolean }> {
+    state = { hasError: false };
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    componentDidCatch(err: Error) {
+        console.warn('[GPUBackground] Shader initialization fallback to CSS:', err);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return null;
+        }
+        try {
+            return (
+                <Shader 
+                    className="w-full h-full"
+                    colorSpace="srgb"
+                    toneMapping="neutral"
+                >
+                    <LinearGradient 
+                        colorA={this.props.colorA} 
+                        colorB={this.props.colorB} 
+                        angle={45} 
+                    />
+                </Shader>
+            );
+        } catch {
+            return null;
+        }
+    }
+}
+
 /**
  * GPUBackground
- * Renders a high-performance WebGPU/WebGL2 dynamic background.
- * Uses a smooth dynamic gradient transition backdrop.
+ * Renders a high-performance WebGPU/WebGL2 dynamic background with CSS fallback.
  */
 export const GPUBackground: React.FC = () => {
     const backdrop_theme = use_settings_store(s => s.settings.backdrop_theme || 'cyan');
     const colors = BACKDROP_THEMES[backdrop_theme] || BACKDROP_THEMES.cyan;
 
     return (
-        <div className="absolute inset-0 w-full h-full -z-50 pointer-events-none select-none overflow-hidden">
-            <Shader 
-                className="w-full h-full"
-                colorSpace="srgb"
-                toneMapping="neutral"
-            >
-                {/* Smooth base gradient pulsing between dark zinc/slate and selected theme accent */}
-                <LinearGradient 
-                    colorA={colors.colorA} 
-                    colorB={colors.colorB} 
-                    angle={45} 
-                />
-            </Shader>
+        <div className="absolute inset-0 w-full h-full -z-50 pointer-events-none select-none overflow-hidden bg-zinc-950">
+            {/* Pure CSS background fallback always present underneath */}
+            <div 
+                className="absolute inset-0 w-full h-full"
+                style={{
+                    background: `radial-gradient(ellipse at 50% 0%, ${colors.colorB} 0%, ${colors.colorA} 75%)`
+                }}
+            />
+
+            {/* GPU Dynamic Shader Layer */}
+            <SafeShader colorA={colors.colorA} colorB={colors.colorB} />
             
             {/* Overlay grid motif for texture depth, aligned with standard theme variables */}
             <div 
-                className="absolute inset-0 opacity-[0.015] pointer-events-none"
+                className="absolute inset-0 opacity-[0.02] pointer-events-none"
                 style={{
                     backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)',
                     backgroundSize: '24px 24px'

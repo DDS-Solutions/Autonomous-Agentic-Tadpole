@@ -163,23 +163,16 @@ export default function App(): React.ReactElement {
       <Error_Boundary name="Global OS Hub">
         <Suspense fallback={<RouteLoading />}>
           <Routes>
-            {/* Main Application Layout */}
-            <Route path="/*" element={<Dashboard_Layout />}>
-              {/* 
-                We redirect / to /dashboard specifically.
-                All other paths (e.g. /agents, /telemetry) are handled 
-                by Dashboard_Layout's custom tab system. 
-              */}
-              <Route index element={<Navigate to="/dashboard" replace />} />
-            </Route>
+            {/* Root Redirect to default sector */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Detached Windows (No Layout) */}
             <Route path="/detached-view" element={<Detached_Shell />} />
             <Route path="/detached/swarm-pulse" element={<Detached_Swarm_Pulse />} />
             <Route path="/detached/chat" element={<SovereignChat isDetachedView={true} />} />
 
-            {/* Error Fallback */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {/* Main Application Layout for all workspace sectors */}
+            <Route path="/*" element={<Dashboard_Layout />} />
           </Routes>
         </Suspense>
       </Error_Boundary>
