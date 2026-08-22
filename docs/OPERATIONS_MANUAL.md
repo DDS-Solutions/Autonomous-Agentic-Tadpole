@@ -101,11 +101,20 @@ This will automatically:
 3. Set the previous token as `NEURAL_TOKEN_OLD`.
 4. During this rotation grace period, the engine accepts requests with any of these three tokens (using constant-time timing-attack proof comparison).
 
-After all clients are successfully migrated, revoke the old tokens and close the grace period:
+### Model Slot Routing & Local Privacy Optimizer Runbook
+
+To audit and optimize all registered agent model slots for local air-gapped inference:
 
 ```bash
-python execution/rotate_token.py --confirm
+python execution/optimize_local_slot_routing.py
 ```
+
+This utility performs the following operations:
+1. Validates `PRIVACY_MODE` from `.env`. If disabled, it safely skips local overwrites to protect cloud provider routing.
+2. Queries the local Ollama daemon for installed models.
+3. Dynamically identifies strategic leads (CEO, Architect, Commander, Lead) and assigns them **Slot 1** (`gemma4:12b` or high-capacity reasoning model).
+4. Assigns fast sub-worker specialists to **Slot 2** (`phi3.5-safe:latest` / `gemma4:e4b` for sub-second execution).
+5. Performs a **non-destructive** database update modifying only model configurations while preserving agent health, failure counters, and active statuses.
 
 ## Dashboard Operations
 

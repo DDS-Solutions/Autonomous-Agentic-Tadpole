@@ -114,15 +114,16 @@ When an agent executes a mission:
 ```
 AgentRunner::run()
   │
-  ├── 1. context.rs       Build prompt context (memory, skills, identity)
-  ├── 2. intelligence.rs  Resolve knowledge graph + blast-radius
-  ├── 3. provider.rs      Select LLM provider (Ollama, OpenAI, Anthropic, etc.)
-  ├── 4. synthesis.rs     Generate response via LLM
-  ├── 5. tools/mod.rs     Execute tool calls (MCP, Python, WASM, Docker)
-  ├── 6. oversight.rs     Check governance gates (budget, approval queue)
-  ├── 7. refinement.rs    Quality gate + retry logic
-  ├── 8. lifecycle.rs     Update agent state and health
-  └── 9. finalize.rs      Persist results, emit telemetry
+  ├── 1. socratic.rs      Auto-inject 0-turn Socratic Context Contract (Scope, Threshold, Mode, Failure Policies)
+  ├── 2. context.rs       Build prompt context (memory, skills, identity)
+  ├── 3. intelligence.rs  Resolve knowledge graph + blast-radius
+  ├── 4. provider.rs      Select LLM provider (Ollama, OpenAI, Anthropic, etc.)
+  ├── 5. synthesis.rs     Generate response via LLM
+  ├── 6. tools/mod.rs     Execute tool calls (MCP, Python, WASM, Docker)
+  ├── 7. oversight.rs     Check governance gates (budget, approval queue)
+  ├── 8. refinement.rs    Quality gate + retry logic
+  ├── 9. lifecycle.rs     Update agent state and health
+  └── 10. finalize.rs     Persist results, emit telemetry
 ```
 
 ---
@@ -194,6 +195,7 @@ Autonomous-Agentic-Tadpole/
 │   ├── src/
 │   │   ├── agent/                Agent runner, MCP host, knowledge store
 │   │   │   ├── runner/           Execution pipeline (10 stages)
+│   │   │   ├── socratic.rs       0-Turn Socratic Context Contracts
 │   │   │   ├── knowledge_store/  IKS — durable semantic memory
 │   │   │   └── mcp/              MCP host and tool registry
 │   │   ├── intelligence/graph/   Symbol graph + blast-radius engine
@@ -210,6 +212,7 @@ Autonomous-Agentic-Tadpole/
 │
 ├── execution/                    Python execution layer
 │   ├── tadpole_mcp_server.py     MCP server (sandboxed subprocess host)
+│   ├── optimize_local_slot_routing.py Model slot routing optimizer (Ollama)
 │   ├── backup_sqlite.py          WAL-safe hot backup utility
 │   ├── restore_sqlite.py         Backup restoration + integrity check
 │   ├── rotate_token.py           Zero-downtime token rotation

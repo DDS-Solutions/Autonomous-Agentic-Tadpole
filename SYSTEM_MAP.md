@@ -42,6 +42,8 @@ This map reflects the current code layout and should be used as the first orient
 | OTP Actor Supervision | `server-rs/src/system/actors/supervisor.rs` | Erlang/OTP supervision tree engine (`OneForOne`, `OneForAll`, `AbortHandle` hard shutdown, stability backoff reset, and `DashMap` registry). |
 | Hybrid RAG Triad Fusion | `server-rs/src/services/rag_fusion.rs` | Reciprocal Rank Fusion (RRF) combining LanceDB Vector, BM25 Lexical, and TrustGraph Entity subgraphs. |
 | Durable Workflow Engine | `server-rs/src/agent/durable.rs` | SQLite-native step memoization with SHA-256 parameter hashing, crash fast-forwarding, and mutation re-execution. |
+| Socratic Context Engine | `server-rs/src/agent/socratic.rs` | 0-Turn Socratic contract envelope auto-injection (Scope, Performance Threshold, Architecture Mode, Pre-Cleared Failure Policies) with typed `BlastRadiusLevel` and zero-allocation `Cow<str>`. |
+| Swarm Pulse Telemetry | `server-rs/src/telemetry/pulse.rs` | Real-time MessagePack pulse stream with dynamic turn progress calculation (`progress: f32`) and auto-constructed parent-child hierarchical edges (`PulseConnection`). |
 | Swarm Shared Blackboard | `server-rs/src/agent/blackboard.rs` | High-performance in-memory scratchpad per mission (`DashMap` + `Arc<BlackboardEntry>`), UTF-8 safe truncation, and tag filtering. |
 | Dynamic DAG Task Engine | `server-rs/src/agent/dag.rs` | Directed task graph with petgraph `StableDiGraph`, topological cycle rejection, state transition guards, and deadlock-free failure cascading. |
 | Tiered Model Cascade Router | `server-rs/src/agent/cascade_router.rs` | Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Flash) and Tier 2 Frontier (Gemini Pro/Claude/GPT) with capability-aware error escalation. |

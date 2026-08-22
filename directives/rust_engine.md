@@ -86,14 +86,16 @@ Migrations are managed via SQLx and located in [server-rs/migrations/](file:///g
 ## Core Engine Subsystems
 
 ### 6. Subsystem Registry
-The `server-rs` engine hosts 14 specialized autonomous subsystems:
+The `server-rs` engine hosts 16 specialized autonomous subsystems:
 
 **Kernel Foundation (Phases 1–3):**
 - **OTP Actor Supervision Tree ([supervisor.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/system/actors/supervisor.rs))**: Erlang/OTP-style supervision engine supporting `OneForOne` (restart individual) and `OneForAll` (cascade restart siblings) strategies, `AbortHandle` deterministic hard shutdown, stability-based exponential backoff reset, and lockless `DashMap` child registry.
 - **Hybrid RAG Triad Fusion ([rag_fusion.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/services/rag_fusion.rs))**: Reciprocal Rank Fusion (RRF) combining LanceDB Vector (w=0.40), BM25 Lexical (w=0.35), and TrustGraph Entity (w=0.25) with multi-engine deduplication and intersection boosting. Exposed via `GET /v1/memory/search/hybrid`.
 - **Durable Workflow Engine ([durable.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/durable.rs))**: SQLite-native step memoization with SHA-256 parameter hashing. Crash-resilient: on engine restart, completed steps are fast-forwarded from SQLite cache with zero token waste. Automatically re-executes steps when input parameters change.
 
-**Swarm Orchestration (Upgrades 1–5):**
+**Swarm Orchestration & Telemetry (Upgrades 1–7):**
+- **Socratic Context Contract Engine ([socratic.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/socratic.rs))**: 0-Turn Socratic contract envelope compiler and injector with typed `BlastRadiusLevel` (Level1ReadOnly, Level2WorkspaceLocal, Level3SystemWide), configurable policy profiles (`SocraticDefaults`), micro-cent budget precision (`budget_cents_cap`), and zero-allocation `Cow<'a, str>` prompt injection.
+- **Swarm Pulse Telemetry ([pulse.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/telemetry/pulse.rs))**: Real-time MessagePack pulse stream with dynamic reasoning turn progress calculation (`progress: f32`) and auto-constructed parent-child hierarchical edges (`PulseConnection`).
 - **Swarm Shared Blackboard ([blackboard.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/blackboard.rs))**: High-performance in-memory scratchpad partitioned per `mission_id` (`DashMap` + `Arc<BlackboardEntry>`). O(1) pointer sharing, UTF-8 safe truncation, and generic tag filtering.
 - **Dynamic DAG Task Engine ([dag.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/dag.rs))**: Directed task dependency graph built on `petgraph::StableDiGraph` with topological cycle rejection, parallel ready-queue extraction, state transition validation, and deadlock-free failure cascading via BFS `Skipped` propagation.
 - **Tiered Model Cascade Router ([cascade_router.rs](file:///g:/Autonomous-Agentic-Tadpole/server-rs/src/agent/cascade_router.rs))**: Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Gemini Flash) and Tier 2 Frontier Reasoning (Gemini Pro/Claude 3.7/GPT-4o). Externalized `critical_keywords` in `CascadePolicy`. Capability-aware error escalation (skips auth errors, escalates on JSON/format failures).
