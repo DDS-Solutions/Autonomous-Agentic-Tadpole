@@ -79,14 +79,17 @@ export const KnowledgeGraph: React.FC = () => {
             } else {
                 type UnifiedKnowledgeItem = {
                     id: string;
-                    title?: string;
+                    title?: string | null;
                     topic?: string;
                     concept_type?: string;
                     confidence?: number;
                     human_confirmed?: boolean;
                     text?: string;
-                    resource_uri?: string;
-                    description?: string;
+                    resource_uri?: string | null;
+                    description?: string | null;
+                    tags?: string | null;
+                    constraints_json?: string | null;
+                    provenance_chain?: string | null;
                 };
 
                 // Fetch OKF knowledge entries & explicit edges from IKS (OKF v0.3)
@@ -166,7 +169,7 @@ export const KnowledgeGraph: React.FC = () => {
 
                 // Add extracted markdown link targets
                 for (const entry of (entries || [])) {
-                    const targets = extractLinks(entry.text, nodeIds);
+                    const targets = extractLinks(entry.text || '', nodeIds);
                     for (const target of targets) {
                         if (nodeIds.has(target) && target !== entry.id) {
                             const linkKey = `${entry.id}->${target}`;

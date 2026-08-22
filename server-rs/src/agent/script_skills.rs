@@ -631,10 +631,9 @@ pub fn parse_skill_md(content: &str) -> Option<SkillDefinition> {
 /// Extracts the top-level docstring or initial comment summary from a script file.
 pub fn extract_script_docstring(content: &str) -> Option<String> {
     let trimmed = content.trim_start();
-    if trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
-        let quote = &trimmed[..3];
-        if let Some(end_idx) = trimmed[3..].find(quote) {
-            let doc = trimmed[3..3 + end_idx].trim();
+    if let Some(rest) = trimmed.strip_prefix("\"\"\"") {
+        if let Some(end_idx) = rest.find("\"\"\"") {
+            let doc = rest[..end_idx].trim();
             let first_line = doc.lines()
                 .find(|l| {
                     let t = l.trim();
@@ -646,9 +645,23 @@ pub fn extract_script_docstring(content: &str) -> Option<String> {
                 return Some(cleaned);
             }
         }
-    } else if trimmed.starts_with("/**") {
-        if let Some(end_idx) = trimmed[3..].find("*/") {
-            let doc = trimmed[3..3 + end_idx].trim();
+    } else if let Some(rest) = trimmed.strip_prefix("'''") {
+        if let Some(end_idx) = rest.find("'''") {
+            let doc = rest[..end_idx].trim();
+            let first_line = doc.lines()
+                .find(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.starts_with("@docs") && !t.starts_with("#")
+                })
+                .unwrap_or(doc);
+            let cleaned = first_line.trim().to_string();
+            if !cleaned.is_empty() {
+                return Some(cleaned);
+            }
+        }
+    } else if let Some(rest) = trimmed.strip_prefix("/**") {
+        if let Some(end_idx) = rest.find("*/") {
+            let doc = rest[..end_idx].trim();
             let first_line = doc.lines()
                 .find(|l| {
                     let t = l.trim().trim_start_matches('*').trim();
@@ -660,11 +673,11 @@ pub fn extract_script_docstring(content: &str) -> Option<String> {
                 return Some(cleaned);
             }
         }
-    } else if trimmed.starts_with("#") || trimmed.starts_with("//") {
+    } else if trimmed.starts_with('#') || trimmed.starts_with("//") {
         let first_line = trimmed.lines()
             .find(|l| {
                 let t = l.trim();
-                (t.starts_with("#") || t.starts_with("//")) 
+                (t.starts_with('#') || t.starts_with("//")) 
                     && !t.starts_with("#!") 
                     && !t.starts_with("# @docs")
                     && !t.starts_with("// @docs")
