@@ -162,7 +162,31 @@ impl AgentRunner {
                     )
                 };
 
-                let payload = ctx_clone.derive_subtask_payload(final_instruction);
+                let sub_agent_name = match runner.state.registry.agents.get(&sub_id_clone) {
+                    Some(a) => a.identity.name.clone(),
+                    None => sub_id_clone.clone(),
+                };
+                let sub_agent_role = match runner.state.registry.agents.get(&sub_id_clone) {
+                    Some(a) => a.identity.role.clone(),
+                    None => "specialist".to_string(),
+                };
+                let budget_cap = runner.state.registry.agents.get(&sub_id_clone)
+                    .map(|a| a.economics.budget_usd)
+                    .filter(|&b| b > 0.0);
+                let is_privacy = runner.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed);
+                let socratic = crate::agent::socratic::SocraticContextEnvelope::compile(
+                    &sub_id_clone,
+                    &sub_agent_name,
+                    &sub_agent_role,
+                    ctx_clone.primary_goal.as_deref().unwrap_or("Task Execution"),
+                    None,
+                    budget_cap,
+                    Some(2),
+                    is_privacy,
+                );
+                let injected_instruction = socratic.inject_into_prompt(&final_instruction).into_owned();
+
+                let payload = ctx_clone.derive_subtask_payload(injected_instruction);
                 let res = match Box::pin(runner.run(sub_id_clone.clone(), payload)).await {
                     Ok(r) => r,
                     Err(e) => format!("SUB-AGENT EXECUTION ERROR: {}", e),

@@ -76,6 +76,23 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
                 100
             };
 
+            // Calculate progress dynamically based on agent reasoning status and turn depth
+            let progress = match agent.health.status.as_str() {
+                "thinking" => {
+                    let turn = agent.state.current_reasoning_turn.max(1) as f32;
+                    (turn / 4.0).clamp(0.15, 0.90)
+                }
+                "working" | "running" | "active" | "busy" => {
+                    if agent.state.current_reasoning_turn > 0 {
+                        (agent.state.current_reasoning_turn as f32 / 3.0).clamp(0.20, 0.95)
+                    } else {
+                        0.50
+                    }
+                }
+                "completed" | "done" => 1.0,
+                _ => 0.0,
+            };
+
             pulse.nodes.push(PulseNode {
                 id: agent.identity.id.clone(),
                 x: 0.0, // Layout handled by frontend ForceGraph
@@ -83,17 +100,36 @@ pub async fn spawn_pulse_loop(state: Arc<AppState>) {
                 status,
                 battery,
                 signal,
-                progress: 0.0,
+                progress,
             });
 
-            // 3. Map Connections (Active Mission Relationships)
+            // 3. Map Connections (Hierarchical Swarm + Active Mission Relationships)
             if let Some(mission) = &agent.state.active_mission {
-                if let Some(mission_id) = mission.get("id").and_then(|v: &serde_json::Value| v.as_str()) {
-                    active_missions.insert(mission_id.to_string());
-                    pulse.edges.push(PulseConnection {
-                        source: agent.identity.id.clone(),
-                        target: mission_id.to_string(),
-                    });
+                let parent_id_opt = mission
+                    .get("parent_agent_id")
+                    .or_else(|| mission.get("lead_agent_id"))
+                    .or_else(|| agent.metadata.get("parent_agent_id"))
+                    .and_then(|v: &serde_json::Value| v.as_str());
+
+                let mut linked_to_parent = false;
+                if let Some(parent_id) = parent_id_opt {
+                    if parent_id != agent.identity.id && state.registry.agents.contains_key(parent_id) {
+                        pulse.edges.push(PulseConnection {
+                            source: parent_id.to_string(),
+                            target: agent.identity.id.clone(),
+                        });
+                        linked_to_parent = true;
+                    }
+                }
+
+                if !linked_to_parent {
+                    if let Some(mission_id) = mission.get("id").and_then(|v: &serde_json::Value| v.as_str()) {
+                        active_missions.insert(mission_id.to_string());
+                        pulse.edges.push(PulseConnection {
+                            source: agent.identity.id.clone(),
+                            target: mission_id.to_string(),
+                        });
+                    }
                 }
             }
         }

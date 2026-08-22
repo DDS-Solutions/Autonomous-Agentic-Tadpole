@@ -59,6 +59,8 @@ pub mod types;
 pub mod workflows;
 
 pub mod knowledge_store;
+pub mod socratic;
+pub use socratic::SocraticContextEnvelope;
 #[cfg(test)]
 mod mcp_tests;
 
