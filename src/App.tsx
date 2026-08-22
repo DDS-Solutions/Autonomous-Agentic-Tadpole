@@ -28,7 +28,7 @@ import { i18n } from './i18n';
 
 function RouteLoading(): React.ReactElement {
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-4 p-8">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-4 p-8 bg-zinc-950 text-zinc-300">
       <div className="w-full max-w-2xl space-y-3">
         <div className="h-6 w-48 bg-zinc-800 rounded animate-pulse" />
         <div className="h-4 w-full bg-zinc-800/60 rounded animate-pulse" />
@@ -40,7 +40,7 @@ function RouteLoading(): React.ReactElement {
         </div>
       </div>
       <span className="text-zinc-600 animate-pulse font-mono text-xs uppercase tracking-widest mt-4">
-        {i18n.t('common.loading')}
+        {i18n.t('common.loading') || 'Loading Sector...'}
       </span>
     </div>
   );

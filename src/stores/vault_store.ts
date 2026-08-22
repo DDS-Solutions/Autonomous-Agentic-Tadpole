@@ -46,7 +46,7 @@ interface Vault_State {
 const SYNC_CHANNEL = 'tadpole-vault-sync';
 const SESSION_KEY = 'tadpole-vault-master-key';
 const DEFAULT_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const TAB_ID = typeof window !== 'undefined' ? crypto.randomUUID() : 'server';
+const TAB_ID = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `vault-tab-${Date.now()}`;
 
 let vault_channel_instance: BroadcastChannel | null = null;
 const get_vault_channel = () => {
