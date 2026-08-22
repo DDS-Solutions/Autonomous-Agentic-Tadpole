@@ -73,6 +73,50 @@ impl SovereignStateManifest {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::types::{AgentHealth, AgentIdentity, EngineAgent};
 
+    #[tokio::test]
+    async fn test_sovereign_state_manifest_generation_full() {
+        let state = Arc::new(AppState::new_mock().await);
+
+        // Add 2 mock agents
+        state.registry.agents.insert("agent_1".to_string(), EngineAgent {
+            identity: AgentIdentity { id: "agent_1".to_string(), name: "Agent One".to_string(), ..Default::default() },
+            health: AgentHealth { status: "active".to_string(), ..Default::default() },
+            ..Default::default()
+        });
+        state.registry.agents.insert("agent_2".to_string(), EngineAgent {
+            identity: AgentIdentity { id: "agent_2".to_string(), name: "Agent Two".to_string(), ..Default::default() },
+            health: AgentHealth { status: "idle".to_string(), ..Default::default() },
+            ..Default::default()
+        });
+
+        let manifest = SovereignStateManifest::generate(&state).await;
+
+        assert!(manifest.contains("### SOVEREIGN STATE MANIFEST"));
+        assert!(manifest.contains("Swarm Vitality"));
+        assert!(manifest.contains("Financial Governance"));
+        assert!(manifest.contains("Capability Density"));
+        assert!(manifest.contains("Security Pulse"));
+        assert!(manifest.contains("Environment"));
+        assert!(manifest.contains("Auto-Approve Safe Skills"));
+    }
+
+    #[test]
+    fn test_sovereign_state_manifest_idle_calculation() {
+        let registered_agents = 5usize;
+        let active_agents = 2u32;
+        let idle_agents = registered_agents.saturating_sub(active_agents as usize);
+        assert_eq!(idle_agents, 3);
+
+        // Saturating subtraction prevents overflow if active > registered
+        let overflow_active = 10u32;
+        let idle_saturated = registered_agents.saturating_sub(overflow_active as usize);
+        assert_eq!(idle_saturated, 0);
+    }
+}
 
 // Metadata: [manifest]

@@ -157,4 +157,18 @@ impl Orchestrator {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_orchestrator_initialization_and_scan() {
+        let state = Arc::new(AppState::new_mock().await);
+        let orchestrator = Orchestrator::new(state);
+
+        let result = orchestrator.scan_and_act().await;
+        assert!(result.is_ok(), "Orchestrator scan_and_act should succeed on clean mock state");
+    }
+}
+
 // Metadata: [mod]

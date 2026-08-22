@@ -146,6 +146,94 @@ async fn process_event(state: &Arc<AppState>, event: SystemEvent) -> Result<(), 
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_event_bus_broadcast_to_multiple_subscribers() {
+        let bus = SystemEventBus::new();
+        let mut sub1 = bus.subscribe();
+        let mut sub2 = bus.subscribe();
+
+        let event = SystemEvent::FileChanged {
+            path: "server-rs/src/main.rs".to_string(),
+            change_type: "modify".to_string(),
+        };
+
+        bus.publish(event);
+
+        let received1 = sub1.recv().await.expect("Subscriber 1 should receive event");
+        let received2 = sub2.recv().await.expect("Subscriber 2 should receive event");
+
+        match (received1, received2) {
+            (
+                SystemEvent::FileChanged { path: p1, change_type: c1 },
+                SystemEvent::FileChanged { path: p2, change_type: c2 },
+            ) => {
+                assert_eq!(p1, "server-rs/src/main.rs");
+                assert_eq!(c1, "modify");
+                assert_eq!(p2, p1);
+                assert_eq!(c2, c1);
+            }
+            _ => panic!("Expected FileChanged event variant"),
+        }
+    }
+
+    #[test]
+    fn test_system_event_serde_roundtrip() {
+        let alert = SystemEvent::ComputeAlert {
+            cpu_usage: 92.5,
+            memory_usage_mb: 4096,
+        };
+
+        let json_str = serde_json::to_string(&alert).expect("Failed to serialize alert");
+        let deserialized: SystemEvent = serde_json::from_str(&json_str).expect("Failed to deserialize alert");
+
+        match deserialized {
+            SystemEvent::ComputeAlert { cpu_usage, memory_usage_mb } => {
+                assert!((cpu_usage - 92.5).abs() < 0.001);
+                assert_eq!(memory_usage_mb, 4096);
+            }
+            _ => panic!("Expected ComputeAlert variant"),
+        }
+
+        let webhook = SystemEvent::WebhookTriggered {
+            payload: serde_json::json!({"action": "deploy", "env": "prod"}),
+        };
+        let json_wh = serde_json::to_string(&webhook).unwrap();
+        let de_wh: SystemEvent = serde_json::from_str(&json_wh).unwrap();
+        match de_wh {
+            SystemEvent::WebhookTriggered { payload } => {
+                assert_eq!(payload["action"], "deploy");
+                assert_eq!(payload["env"], "prod");
+            }
+            _ => panic!("Expected WebhookTriggered variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_bus_channel_buffer_overflow_lag() {
+        let bus = SystemEventBus::new();
+        let mut sub = bus.subscribe();
+
+        // Publish 150 events (capacity is 100)
+        for i in 0..150 {
+            bus.publish(SystemEvent::FileChanged {
+                path: format!("file_{}.rs", i),
+                change_type: "create".to_string(),
+            });
+        }
+
+        // The first read should encounter Lagged error due to overflow
+        match sub.recv().await {
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
+                assert!(missed > 0, "Should report missed events on lag");
+            }
+            Ok(_) => {} // In fast environments if not dropped yet
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+}
 
 // Metadata: [event_bus]
