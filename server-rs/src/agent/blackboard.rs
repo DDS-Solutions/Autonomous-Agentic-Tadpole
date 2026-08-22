@@ -214,3 +214,5 @@ mod tests {
         assert!(summary.contains("..."));
     }
 }
+
+// Metadata: [blackboard]

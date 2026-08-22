@@ -133,8 +133,7 @@ impl TaskGraph {
 
             // Check if all parent dependencies are COMPLETED
             let mut all_parents_completed = true;
-            let mut parents = self.graph.neighbors_directed(idx, Direction::Incoming);
-            while let Some(parent_idx) = parents.next() {
+            for parent_idx in self.graph.neighbors_directed(idx, Direction::Incoming) {
                 if self.graph[parent_idx].status != TaskNodeStatus::Completed {
                     all_parents_completed = false;
                     break;
@@ -204,8 +203,7 @@ impl TaskGraph {
 
         // 2. Cascade 'Skipped' to all downstream descendants via BFS
         let mut queue = VecDeque::new();
-        let mut children = self.graph.neighbors_directed(origin_idx, Direction::Outgoing);
-        while let Some(child_idx) = children.next() {
+        for child_idx in self.graph.neighbors_directed(origin_idx, Direction::Outgoing) {
             queue.push_back(child_idx);
         }
 
@@ -218,8 +216,7 @@ impl TaskGraph {
                 warn!("⏭️ [TaskGraph] Cascading skip to dependent node '{}': {}", child_node.id, skip_reason);
 
                 // Queue next level children
-                let mut next_children = self.graph.neighbors_directed(current_idx, Direction::Outgoing);
-                while let Some(next_idx) = next_children.next() {
+                for next_idx in self.graph.neighbors_directed(current_idx, Direction::Outgoing) {
                     queue.push_back(next_idx);
                 }
             }
@@ -348,3 +345,5 @@ mod tests {
         assert!(dag.mark_running("Node1").is_ok());
     }
 }
+
+// Metadata: [dag]

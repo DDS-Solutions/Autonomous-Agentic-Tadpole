@@ -224,3 +224,5 @@ mod tests {
         assert_eq!(results[2].id, "doc_3");
     }
 }
+
+// Metadata: [rag_fusion]

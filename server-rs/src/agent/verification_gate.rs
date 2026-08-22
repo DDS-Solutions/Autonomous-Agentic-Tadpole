@@ -199,3 +199,5 @@ mod tests {
         assert_eq!(decision, VerificationDecision::Approved);
     }
 }
+
+// Metadata: [verification_gate]

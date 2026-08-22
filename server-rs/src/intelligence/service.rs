@@ -226,7 +226,7 @@ impl IntelligenceService {
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
-    pub async fn blast_radius(&self, name: &str, path: &str) -> Result<Vec<SymbolNode>, AppError> {
+    pub async fn blast_radius(&self, name: &str, path: &str, max_nodes: Option<usize>) -> Result<Vec<SymbolNode>, AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
         let graph_swap = self.state.resources.get_symbol_graph().await;
         let swap_clone = Arc::clone(&graph_swap);
@@ -242,16 +242,17 @@ impl IntelligenceService {
             tracing::debug!("[intelligence] Calculating blast radius for symbol: {}", query_name);
             let guard = swap_clone.load();
 
-            // Reverse-resolve the physical raw path from the obfuscated path
+            // Reverse-resolve the physical raw path from the obfuscated path, or use directly if valid
             let raw_path = guard.obfuscated_to_real_path.get(&query_path)
-                .ok_or_else(|| AppError::IntelPathUnknown(format!("Path lookup failed for: {}", query_path)))?;
+                .map(|p| p.as_str())
+                .unwrap_or(&query_path);
 
             // Verify resolved path resides within workspace boundary
             if crate::utils::security::validate_path(&workspace_root, raw_path).is_err() {
                 return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
             }
 
-            let affected = guard.calculate_blast_radius(&query_name, raw_path);
+            let (affected, _truncated) = guard.calculate_blast_radius_bounded(&query_name, raw_path, max_nodes);
             Ok::<_, AppError>(affected)
         });
 
@@ -289,9 +290,10 @@ impl IntelligenceService {
             tracing::debug!("[intelligence] Resolving context for symbol: {}", query_name);
             let guard = swap_clone.load();
 
-            // Reverse-resolve the physical raw path from the obfuscated path
+            // Reverse-resolve the physical raw path from the obfuscated path, or use directly if valid
             let raw_path = guard.obfuscated_to_real_path.get(&query_path)
-                .ok_or_else(|| AppError::IntelPathUnknown(format!("Path lookup failed for: {}", query_path)))?;
+                .map(|p| p.as_str())
+                .unwrap_or(&query_path);
 
             // Verify resolved path resides within workspace boundary
             if crate::utils::security::validate_path(&workspace_root, raw_path).is_err() {

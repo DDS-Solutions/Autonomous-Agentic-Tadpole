@@ -198,19 +198,32 @@ impl CodeSymbolGraph {
     /// forward-slash normalisation.
     fn resolve_path(&self, path: &str) -> String {
         let normalized = path.replace('\\', "/");
-        self.obfuscated_to_real_path
-            .get(&normalized)
-            .cloned()
-            .unwrap_or(normalized)
+        if let Some(real) = self.obfuscated_to_real_path.get(&normalized) {
+            return real.clone();
+        }
+        normalized
     }
 
     /// Calculates the "Blast Radius" for a given symbol: the set of symbols
     /// that directly or transitively depend on it (via BFS on incoming edges,
-    /// capped at depth 50 to resist adversarial graph topologies).
+    /// capped at depth 50 and bounded by max_nodes to resist adversarial graph topologies).
     pub fn calculate_blast_radius(&self, symbol_name: &str, path: &str) -> Vec<SymbolNode> {
+        self.calculate_blast_radius_bounded(symbol_name, path, None).0
+    }
+
+    /// Calculates the "Blast Radius" with optional node limit and returns
+    /// `(affected_symbols, was_truncated)`. Default node limit is 500.
+    pub fn calculate_blast_radius_bounded(
+        &self,
+        symbol_name: &str,
+        path: &str,
+        max_nodes: Option<usize>,
+    ) -> (Vec<SymbolNode>, bool) {
         let real_path = self.resolve_path(path);
         let key = index_key(&real_path, symbol_name);
         let mut affected = Vec::new();
+        let limit = max_nodes.unwrap_or(500).clamp(1, 5_000);
+        let mut truncated = false;
 
         if let Some(&start_idx) = self.index.get(&key) {
             let mut visited = std::collections::HashSet::new();
@@ -220,6 +233,10 @@ impl CodeSymbolGraph {
 
             let mut affected_indices = vec![start_idx];
             while let Some((current_idx, depth)) = queue.pop_front() {
+                if affected_indices.len() >= limit {
+                    truncated = true;
+                    break;
+                }
                 if depth >= 50 {
                     continue; // Shield against malicious/adversarial large depth chains
                 }
@@ -230,6 +247,10 @@ impl CodeSymbolGraph {
                     let neighbor_idx = edge.source();
                     if visited.insert(neighbor_idx) {
                         affected_indices.push(neighbor_idx);
+                        if affected_indices.len() >= limit {
+                            truncated = true;
+                            break;
+                        }
                         queue.push_back((neighbor_idx, depth + 1));
                     }
                 }
@@ -243,7 +264,7 @@ impl CodeSymbolGraph {
             }
         }
 
-        affected
+        (affected, truncated)
     }
 
     /// Resolves dependent symbols for a given target within a token `budget`.

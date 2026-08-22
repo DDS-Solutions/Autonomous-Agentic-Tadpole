@@ -36,7 +36,6 @@
     "build:linux:light": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-light.ps1",
     "build:linux:upload": "powershell -ExecutionPolicy Bypass -File scripts/build-linux-light.ps1 -Upload",
     "deploy:linuxlite66": "powershell -ExecutionPolicy Bypass -File scripts/deploy-linuxlite.ps1",
-    "audit:observability": "echo 'verify_observability_sync.cjs not found - script removed'",
     "docs:api": "python execution/generate_api_reference.py",
     "docs:parity": "python execution/parity_guard.py",
     "docs:build": "vitepress build docs",
@@ -44,7 +43,9 @@
     "docs:preview": "vitepress preview docs",
     "version:sync": "python execution/sync_version.py",
     "db:backup": "python execution/backup_sqlite.py",
-    "db:restore": "python execution/restore_sqlite.py"
+    "db:restore": "python execution/restore_sqlite.py",
+    "audit:sovereign": "python execution/sovereign_audit.py",
+    "context:verify": "python execution/verify_ai_context.py ."
   },
   "dependencies": {
     "@emnapi/core": "^1.11.3",

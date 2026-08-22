@@ -233,3 +233,5 @@ mod tests {
         assert!(auth_esc.is_none());
     }
 }
+
+// Metadata: [cascade_router]

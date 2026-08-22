@@ -6,7 +6,7 @@
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[store]` in tracing logs.
+//! - **Telemetry Link**: Search `[mod]` in tracing logs.
 
 pub mod metadata;
 pub mod vector;
@@ -364,3 +364,5 @@ impl KnowledgeStore {
 }
 
 // Telemetry Tag duplicate reference: [store]
+
+// Metadata: [mod]

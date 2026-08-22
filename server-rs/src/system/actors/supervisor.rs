@@ -456,3 +456,5 @@ mod tests {
         assert!(!metrics[0].is_alive, "Task should be immediately aborted and marked not alive");
     }
 }
+
+// Metadata: [supervisor]

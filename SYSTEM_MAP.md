@@ -107,3 +107,5 @@ Default Cargo features are empty. These features are opt-in:
 
 - `vector-memory`: enables LanceDB/Arrow-backed memory routes.
 - `neural-audio`: enables optional audio dependencies.
+
+[//]: # (Metadata: [SYSTEM_MAP])

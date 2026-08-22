@@ -25,6 +25,7 @@ use std::sync::Arc;
 pub struct BlastRadiusQuery {
     pub name: String,
     pub path: String,
+    pub limit: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -65,7 +66,7 @@ pub async fn get_blast_radius(
     Query(query): Query<BlastRadiusQuery>,
 ) -> Result<Json<Vec<SymbolNode>>, AppError> {
     let service = IntelligenceService::new(state);
-    let res = service.blast_radius(&query.name, &query.path).await?;
+    let res = service.blast_radius(&query.name, &query.path, query.limit).await?;
     Ok(Json(res))
 }
 

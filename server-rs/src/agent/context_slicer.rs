@@ -261,3 +261,5 @@ mod tests {
         assert!(assembled.contains("System: Agent"));
     }
 }
+
+// Metadata: [context_slicer]

@@ -23,7 +23,7 @@ async fn test_intelligence_path_validation_boundaries() {
 
     // Case 1: Path Traversal (outside authorized workspace root)
     // Should immediately return AppError::Forbidden (boundary violation)
-    let traversal_res = service.blast_radius("my_symbol", "../../etc/passwd").await;
+    let traversal_res = service.blast_radius("my_symbol", "../../etc/passwd", None).await;
     assert!(traversal_res.is_err(), "Expected boundary violation error");
     match traversal_res.unwrap_err() {
         AppError::Forbidden(msg) => {
@@ -41,25 +41,12 @@ async fn test_intelligence_path_validation_boundaries() {
         other => panic!("Expected AppError::Forbidden, got: {:?}", other),
     }
 
-    // Case 2: Valid path inside workspace, but missing in obfuscated map
-    // Should return AppError::IntelPathUnknown (404) rather than Forbidden
-    let unknown_res = service.blast_radius("my_symbol", "src/valid_but_unknown.rs").await;
-    assert!(unknown_res.is_err(), "Expected unknown path error");
-    match unknown_res.unwrap_err() {
-        AppError::IntelPathUnknown(msg) => {
-            assert!(msg.contains("Path lookup failed"));
-        }
-        other => panic!("Expected AppError::IntelPathUnknown, got: {:?}", other),
-    }
+    // Case 2: Direct workspace path queries execute gracefully
+    let direct_res = service.blast_radius("my_symbol", "src/state.rs", Some(100)).await;
+    assert!(direct_res.is_ok(), "Direct relative workspace path should resolve gracefully");
 
-    let unknown_res_resolve = service.resolve_context("my_symbol", "src/valid_but_unknown.rs", 4000).await;
-    assert!(unknown_res_resolve.is_err(), "Expected unknown path error");
-    match unknown_res_resolve.unwrap_err() {
-        AppError::IntelPathUnknown(msg) => {
-            assert!(msg.contains("Path lookup failed"));
-        }
-        other => panic!("Expected AppError::IntelPathUnknown, got: {:?}", other),
-    }
+    let direct_res_resolve = service.resolve_context("my_symbol", "src/state.rs", 4000).await;
+    assert!(direct_res_resolve.is_ok(), "Direct relative workspace path should resolve gracefully");
 }
 
 // Metadata: [intelligence_routes]
