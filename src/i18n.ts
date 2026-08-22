@@ -58,6 +58,13 @@ interface TOptions {
  */
 class I18n {
   private data: LocaleData = en;
+  private cache = new Map<string, any>();
+  private warned_keys = new Set<string>();
+
+  _reset_for_testing(): void {
+    this.cache.clear();
+    this.warned_keys.clear();
+  }
 
   /**
    * t
@@ -71,54 +78,68 @@ class I18n {
   t(key: string, params?: Record<string, string | number> | TOptions): any {
     if (!key) return '';
 
-    const keys = key.split('.');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let result: any = this.data;
-    let found = true;
-    
-    for (const k of keys) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (result && typeof result === 'object' && k in (result as Record<string, any>)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = (result as Record<string, any>)[k];
-      } else {
-        found = false;
-        break;
-      }
-    }
+    let result: any;
+    let found = false;
 
-    // Defensive legacy fallback: scan modules for the first part of the dot-notation path
-    if (!found) {
-      const fallbackKeys = key.split('.');
-      const firstKey = fallbackKeys[0];
-      for (const [moduleName, moduleContent] of Object.entries(this.data)) {
+    if (this.cache.has(key)) {
+      result = this.cache.get(key);
+      found = result !== undefined && result !== key;
+    } else {
+      const keys = key.split('.');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result = this.data;
+      found = true;
+      
+      for (const k of keys) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (moduleContent && typeof moduleContent === 'object' && firstKey in (moduleContent as Record<string, any>)) {
-          // Try to resolve the full path starting from this module
-          let fallbackResult = moduleContent;
-          let fallbackFound = true;
-          for (const k of fallbackKeys) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if (fallbackResult && typeof fallbackResult === 'object' && k in (fallbackResult as Record<string, any>)) {
+        if (result && typeof result === 'object' && k in (result as Record<string, any>)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          result = (result as Record<string, any>)[k];
+        } else {
+          found = false;
+          break;
+        }
+      }
+
+      // Defensive legacy fallback: scan modules for the first part of the dot-notation path
+      if (!found) {
+        const fallbackKeys = key.split('.');
+        const firstKey = fallbackKeys[0];
+        for (const [moduleName, moduleContent] of Object.entries(this.data)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (moduleContent && typeof moduleContent === 'object' && firstKey in (moduleContent as Record<string, any>)) {
+            // Try to resolve the full path starting from this module
+            let fallbackResult = moduleContent;
+            let fallbackFound = true;
+            for (const k of fallbackKeys) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              fallbackResult = (fallbackResult as Record<string, any>)[k];
-            } else {
-              fallbackFound = false;
+              if (fallbackResult && typeof fallbackResult === 'object' && k in (fallbackResult as Record<string, any>)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                fallbackResult = (fallbackResult as Record<string, any>)[k];
+              } else {
+                fallbackFound = false;
+                break;
+              }
+            }
+            if (fallbackFound) {
+              result = fallbackResult;
+              found = true;
+              if (!this.warned_keys.has(key)) {
+                this.warned_keys.add(key);
+                console.warn(`[I18n Warning] Legacy flat lookup used for "${key}". Please migrate to absolute dot-notation path: "${moduleName}.${key}"`);
+              }
               break;
             }
           }
-          if (fallbackFound) {
-            result = fallbackResult;
-            found = true;
-            console.warn(`[I18n Warning] Legacy flat lookup used for "${key}". Please migrate to absolute dot-notation path: "${moduleName}.${key}"`);
-            break;
-          }
         }
       }
-    }
 
-    if (!found) {
-      result = key;
+      if (found) {
+        this.cache.set(key, result);
+      } else {
+        result = key;
+        this.cache.set(key, key);
+      }
     }
 
     const return_objects = params && (params as TOptions).returnObjects;

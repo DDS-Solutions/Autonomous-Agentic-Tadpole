@@ -16,6 +16,7 @@ import { i18n } from './i18n';
 describe('I18n Engine Hardening & XSS Validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    i18n._reset_for_testing();
   });
 
   describe('Happy Path - Standard Namespaced Lookups', () => {
