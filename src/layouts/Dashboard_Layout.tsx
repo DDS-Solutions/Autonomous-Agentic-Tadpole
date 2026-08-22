@@ -29,7 +29,6 @@ import { i18n } from '../i18n';
 import { use_notification_store } from '../stores/notification_store';
 import { event_bus } from '../services/event_bus';
 import { use_agent_registry_store } from '../stores/agent_store';
-import { APP_ROUTES } from '../constants/routes';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
 const Command_Palette = lazy(() => import('../components/Command_Palette').then(module => ({ default: module.Command_Palette })));
