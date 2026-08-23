@@ -21,6 +21,19 @@ export interface ExtendedGraphNode extends SymbolNode {
     vy?: number;
     fx?: number;
     fy?: number;
+    // OKF / Semantic Knowledge Graph attributes
+    concept_type?: string;
+    title?: string;
+    description?: string;
+    resource_uri?: string;
+    tags?: string;
+    confidence?: number;
+    human_confirmed?: boolean;
+    text?: string;
+    constraints_json?: string;
+    provenance_chain?: string;
+    start_line?: number;
+    end_line?: number;
 }
 
 export interface ForceGraphLink {
