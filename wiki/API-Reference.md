@@ -123,23 +123,30 @@
 
 ---
 
-### `/v1/intelligence` — Knowledge Graph
+### `/v1/intelligence` — Code Intelligence Graph
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/v1/intelligence/graph` | Full symbol dependency graph |
-| `POST` | `/v1/intelligence/resolve` | Resolve file path to symbols |
-| `POST` | `/v1/intelligence/blast-radius` | Calculate change impact radius |
-| `POST` | `/v1/intelligence/refresh` | Rebuild graph from workspace |
+| `GET` | `/v1/intelligence/graph` | Full symbol dependency graph (query: `path_prefix`, `max_nodes`) |
+| `GET` | `/v1/intelligence/blast-radius` | Calculate change impact radius (query: `name`, `path`, `limit`) |
+| `GET` | `/v1/intelligence/resolve` | Resolve dependent symbols for token budget (query: `name`, `path`, `budget`) |
+| `POST` | `/v1/intelligence/graph/rebuild` | Rebuild AST symbol graph from workspace (query: `dry_run`) |
 
-#### Blast Radius Request
+---
 
-```json
-{
-  "path": "server-rs/src/routes/health.rs",
-  "depth": 3
-}
-```
+### `/v1/knowledge` — Integrated Knowledge Store (IKS & OKF v0.3)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/knowledge` | Write new OKF knowledge entry (dedup by content hash) |
+| `GET` | `/v1/knowledge` | List entries (query: `topic`, `cluster_id`, `concept_type`, `limit`, `offset`) |
+| `GET` | `/v1/knowledge/search` | Semantic k-NN vector search (query: `q`, `limit`) |
+| `POST` | `/v1/knowledge/:id/confirm` | Human-confirm knowledge entry |
+| `DELETE` | `/v1/knowledge/:id` | Delete knowledge entry by ID |
+| `GET` | `/v1/knowledge/:id/peers` | Get semantic peer nodes for knowledge entry |
+| `POST` | `/v1/knowledge/edges` | Add typed relational graph edge |
+| `GET` | `/v1/knowledge/edges` | List relational graph edges (query: `source_id`, `target_id`) |
+| `POST` | `/v1/knowledge/synthesize` | Synthesize cross-agent knowledge entries via Ollama |
 
 ---
 

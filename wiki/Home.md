@@ -13,7 +13,7 @@
 
 # 🐸 Autonomous Agentic Tadpole — Wiki
 
-> **Version:** v1.1.59 &nbsp;|&nbsp; **Engine:** Rust 2021 + Axum &nbsp;|&nbsp; **Dashboard:** React 19 + TypeScript &nbsp;|&nbsp; **DB:** SQLite / SQLx
+> **Version:** v1.1.58 &nbsp;|&nbsp; **Engine:** Rust 2021 + Axum &nbsp;|&nbsp; **Dashboard:** React 19 + TypeScript &nbsp;|&nbsp; **DB:** SQLite / SQLx
 
 ---
 
@@ -76,6 +76,6 @@ Open `http://localhost:5173` · Health: `http://127.0.0.1:8000/v1/engine/health`
 5. **Self-Annealing** — Errors update directives; the system grows stronger from every failure
 
 ---
-*Last updated: 2026-06-26 · v1.1.59 Agentic Engine P0 Release*
+*Last updated: 2026-08-22 · v1.1.58 Agentic Engine Release*
 
 [//]: # (Metadata: [Home])

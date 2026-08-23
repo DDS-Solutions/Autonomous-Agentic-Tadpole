@@ -6,7 +6,7 @@
 > - **Telemetry Link**: Search `[Testing_Guide]` in audit logs.
 >
 > ### AI Assist Note
-> /*_tests.rs` |
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
