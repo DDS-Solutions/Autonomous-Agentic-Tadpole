@@ -1167,6 +1167,7 @@ mod tests {
                 secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
                 system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
                 permission_policy,
+                verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
                 deploy_token: "test".to_string(),
                 deploy_token_old: None,
                 deploy_token_new: None,

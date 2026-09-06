@@ -6,6 +6,8 @@ on:
     paths:
       - 'src/**'
       - 'server-rs/**'
+      - 'execution/**'
+      - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
@@ -17,6 +19,8 @@ on:
     paths:
       - 'src/**'
       - 'server-rs/**'
+      - 'execution/**'
+      - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
@@ -109,3 +113,35 @@ jobs:
       - name: Cargo Clippy
         working-directory: server-rs
         run: cargo clippy -- -D warnings
+
+  # ──────────────────────────────────────
+  #  Python: Unit Tests & Hygiene
+  # ──────────────────────────────────────
+  python:
+    name: Python Hygiene & Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify No Tracked .pyc Files
+        run: |
+          TRACKED_PYC=$(git ls-files "*.pyc")
+          if [ -n "$TRACKED_PYC" ]; then
+            echo "Error: Tracked .pyc files found in repository:"
+            echo "$TRACKED_PYC"
+            exit 1
+          fi
+          echo "No tracked .pyc files found."
+
+      - name: Run Python Unit Tests
+        run: python -m unittest discover -s tests/unit
+
+      - name: Verify Parity & AI Context
+        run: |
+          python execution/parity_guard.py
+          python execution/verify_ai_context.py .

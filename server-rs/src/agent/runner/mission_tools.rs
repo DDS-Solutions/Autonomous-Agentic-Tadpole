@@ -505,8 +505,11 @@ impl AgentRunner {
         output: &str,
         cwd: &std::path::Path,
     ) -> Result<String, AppError> {
-        let mut child = tokio::process::Command::new("powershell")
-            .arg("-Command")
+        let shell = if cfg!(windows) { "powershell" } else { "sh" };
+        let flag = if cfg!(windows) { "-Command" } else { "-c" };
+
+        let child = tokio::process::Command::new(shell)
+            .arg(flag)
             .arg(script)
             .env("SKILL_NAME", skill_name)
             .env("SKILL_PARAMS", params.to_string())
@@ -517,16 +520,15 @@ impl AgentRunner {
             .spawn()
             .map_err(|e| AppError::InternalServerError(format!("Failed to spawn verification script: {}", e)))?;
 
-        let status = child.wait().await.map_err(|e: std::io::Error| AppError::Io(e))?;
         let output = child.wait_with_output().await.map_err(|e: std::io::Error| AppError::Io(e))?;
 
-        if status.success() {
+        if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
         } else {
             let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
             Err(AppError::InternalServerError(format!(
                 "Verification script failed ({}): {}",
-                status,
+                output.status,
                 err
             )))
         }

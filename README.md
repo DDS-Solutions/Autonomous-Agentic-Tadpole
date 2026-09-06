@@ -126,10 +126,15 @@ Create local environment config:
 cp .env.example .env
 ```
 
-Set one engine token in `.env`:
+Set engine security and execution parameters in `.env`:
 
 ```ini
 NEURAL_TOKEN=your-secret-token
+
+# Skill Execution Sandboxing (Default-deny bare host execution)
+USE_SANDBOX_DOCKER=true          # Recommended: containerized execution
+# USE_SANDBOX_WASM=true          # Alternative: Wasmtime sandbox
+# ALLOW_HOST_SKILL_EXECUTION=true # Explicitly permit unsandboxed host fallback
 ```
 
 Start the Rust engine:

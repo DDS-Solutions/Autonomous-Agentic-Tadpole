@@ -739,6 +739,7 @@ mod tests {
             secret_redactor: app_state.security.secret_redactor.clone(),
             system_monitor: Arc::new(mock_monitor),
             permission_policy: app_state.security.permission_policy.clone(),
+            verification_gate: app_state.security.verification_gate.clone(),
             deploy_token: app_state.security.deploy_token.clone(),
             deploy_token_old: None,
             deploy_token_new: None,

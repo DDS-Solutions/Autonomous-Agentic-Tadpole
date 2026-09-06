@@ -56,11 +56,23 @@ impl AgentRunner {
         let payload_json = serde_json::to_string(&tool_call).unwrap_or_default();
         let params_json = serde_json::to_string(&tool_call.params).unwrap_or_default();
 
+        // Verify foreign key integrity for mission_id to prevent failure in ad-hoc/test environments
+        let valid_mission_id = if let Some(ref mid) = mission_id {
+            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM mission_history WHERE id = ?)")
+                .bind(mid)
+                .fetch_one(&self.state.resources.pool)
+                .await
+                .unwrap_or(false);
+            if exists { Some(mid.clone()) } else { None }
+        } else {
+            None
+        };
+
         sqlx::query(
             "INSERT INTO oversight_log (id, mission_id, agent_id, entry_type, skill, params, status, payload) VALUES (?, ?, ?, 'tool_call', ?, ?, 'pending', ?)"
         )
         .bind(&entry_id)
-        .bind(&mission_id)
+        .bind(&valid_mission_id)
         .bind(&tool_call.agent_id)
         .bind(&tool_call.skill)
         .bind(params_json)
@@ -74,8 +86,28 @@ impl AgentRunner {
             "entry": entry
         }));
 
-        // 5. Await the user's click in the dashboard
-        Ok(rx.await.unwrap_or_default())
+        // 5. Await the user's click in the dashboard with a bounded timeout
+        let timeout_duration = if cfg!(test) {
+            std::time::Duration::from_millis(250)
+        } else {
+            let secs = std::env::var("OVERSIGHT_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(300);
+            std::time::Duration::from_secs(secs)
+        };
+
+        let approved = match tokio::time::timeout(timeout_duration, rx).await {
+            Ok(Ok(decision)) => decision,
+            Ok(Err(_)) => false,
+            Err(_) => {
+                tracing::warn!("⏱️ Oversight request '{}' timed out", entry_id);
+                self.state.comms.oversight_resolvers.remove(&entry_id);
+                false
+            }
+        };
+
+        Ok(approved)
     }
 
 

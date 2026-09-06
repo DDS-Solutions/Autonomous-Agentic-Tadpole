@@ -82,10 +82,10 @@ The engine accepts either:
 Public routes:
 
 - `GET /v1/engine/health`
-- `GET /v1/engine/ws`
-- `GET /v1/engine/live-voice`
 
-All other operational routes should be treated as protected unless documented otherwise in `server-rs/src/router.rs`.
+WebSocket routes (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) are protected and require token authentication via the `Sec-WebSocket-Protocol: bearer.<token>` subprotocol header.
+
+All other operational routes are protected and require `Authorization: Bearer <token>` unless documented otherwise in `server-rs/src/router.rs`.
 
 ### Token Rotation Runbook
 

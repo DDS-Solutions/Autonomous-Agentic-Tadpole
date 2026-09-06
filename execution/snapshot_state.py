@@ -17,8 +17,16 @@ tests damage database integrity.
 import sys
 import shutil
 import os
+import io
 import argparse
 from pathlib import Path
+
+# Ensure stdout handles UTF-8 on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT_ROOT = ROOT / ".tmp" / "snapshots"

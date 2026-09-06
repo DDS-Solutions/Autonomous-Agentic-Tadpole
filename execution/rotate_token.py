@@ -17,10 +17,18 @@ Once clients are migrated, running with `--confirm` revokes the old tokens.
 
 import os
 import sys
+import io
 import secrets
 import time
 import argparse
 from pathlib import Path
+
+# Ensure stdout handles UTF-8 on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 ENV_FILE = Path(".env")
 

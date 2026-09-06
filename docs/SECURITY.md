@@ -44,13 +44,11 @@ Browser WebSocket upgrades may pass auth through:
 Sec-WebSocket-Protocol: bearer.<token>
 ```
 
-Public bypasses currently exist for:
+Unauthenticated public routes are strictly limited to:
 
 - `GET /v1/engine/health`
-- `GET /v1/engine/ws`
-- `GET /v1/engine/live-voice`
 
-Route protection is applied in `server-rs/src/router.rs`.
+All WebSocket connections (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) are protected and require token authentication via the `Sec-WebSocket-Protocol: bearer.<token>` subprotocol header. Route protection is enforced in `server-rs/src/router.rs`.
 
 ## Cryptographic & Financial Security Controls
 

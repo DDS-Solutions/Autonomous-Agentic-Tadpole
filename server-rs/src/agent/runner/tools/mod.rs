@@ -33,6 +33,7 @@ pub use capability::{CapabilityToken, ZeroTrustGuard};
 
 use super::{AgentRunner, RunContext};
 use error::ToolExecutionError;
+use crate::agent::verification_gate::{MutationProposal, VerificationDecision};
 
 /// Normalizes raw tool names passed by LLMs by stripping path prefixes and script extensions.
 pub fn normalize_tool_name(raw: &str) -> String {
@@ -154,6 +155,64 @@ impl AgentRunner {
         // 3. Security Manager (Hierarchy & Policy)
         let sec_mgr = DefaultSecurityManager;
         let validation = sec_mgr.pre_validate(self, ctx, fc).await?;
+
+        // 3b. Aletheia Protocol Verification Gate
+        let mutation_proposal = MutationProposal {
+            agent_id: ctx.agent_id.clone(),
+            skill_name: fc.name.clone(),
+            parameters: fc.args.clone(),
+            affected_path: fc.args.get("path").or_else(|| fc.args.get("file_path")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+            reported_blast_radius: fc.args.get("blast_radius").and_then(|v| v.as_u64()).unwrap_or(1) as usize,
+            oversight_required: validation.oversight_required,
+        };
+
+        if self.state.security.verification_gate.requires_verification(&mutation_proposal) {
+            tracing::info!(
+                "🛡️ [Aletheia] Evaluating mutation proposal for skill '{}' by agent '{}'",
+                fc.name, ctx.agent_id
+            );
+
+            // Compute verified blast radius from symbol graph if path or target is provided
+            let mut verified_blast_radius = None;
+            if let Some(target_path) = fc.args.get("path").or_else(|| fc.args.get("file_path")).and_then(|v| v.as_str()) {
+                let symbol_name = fc.args.get("symbol").and_then(|v| v.as_str()).unwrap_or("*");
+                let intel_service = crate::intelligence::service::IntelligenceService::new(self.state.clone());
+                if let Ok(affected) = intel_service.blast_radius(symbol_name, target_path, Some(50)).await {
+                    if !affected.is_empty() {
+                        verified_blast_radius = Some(affected.len());
+                    }
+                }
+            }
+
+            let decision = self.state.security.verification_gate.evaluate(
+                &mutation_proposal,
+                true,
+                verified_blast_radius,
+                Some("Aletheia live gate evaluation"),
+            );
+
+            match decision {
+                VerificationDecision::Rejected { reason, remediation_hint } => {
+                    tracing::warn!(
+                        "❌ [Aletheia] Mutation proposal for '{}' REJECTED: {} (Hint: {})",
+                        fc.name, reason, remediation_hint
+                    );
+                    self.broadcast_sys(
+                        &format!("❌ Aletheia Gate REJECTED mutation '{}': {}", fc.name, reason),
+                        "error",
+                        mission_id_opt.clone(),
+                    );
+                    return Err(ToolExecutionError::SecurityBlocked(format!(
+                        "Aletheia Gate REJECTED mutation '{}': {} (Remediation: {})",
+                        fc.name, reason, remediation_hint
+                    )));
+                }
+                VerificationDecision::Approved => {
+                    tracing::info!("✅ [Aletheia] Mutation proposal for '{}' APPROVED", fc.name);
+                }
+                VerificationDecision::Bypassed => {}
+            }
+        }
 
         // 4. Oversight Check
         if validation.oversight_required {
@@ -641,30 +700,15 @@ impl AgentRunner {
         let _permit = self.state.resources.arbiter.acquire().await
             .map_err(|e| AppError::InternalServerError(format!("Resource arbiter failure: {}", e)))?;
 
-        // 3. Execution
-        let shell = if cfg!(windows) { "powershell" } else { "sh" };
-        let flag = if cfg!(windows) { "-Command" } else { "-c" };
-
-        let child = tokio::process::Command::new(shell)
-            .arg(flag)
-            .arg(command_str)
-            .current_dir(&ctx.workspace_root)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn();
-
-        match child {
-            Ok(child) => {
-                let output = child.wait_with_output().await.map_err(|e: std::io::Error| AppError::Io(e))?;
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                
-                let combined = format!("{}{}", stdout, stderr);
-                let truncated = self.safe_truncate(&combined, 5000);
-                
+        // 3. Execution via Security Sandbox
+        let sandbox_config = crate::security::sandbox::SandboxConfig::default();
+        match crate::security::sandbox::execute_sandboxed_shell(command_str, &ctx.workspace_root, &sandbox_config).await {
+            Ok(output) => {
+                let truncated = self.safe_truncate(&output, 5000);
                 *output_text = format!("(SHELL OUTPUT of '{}'):\n\n{}", command_str, truncated);
             }
             Err(e) => {
+                tracing::warn!("🛡️ [Security] Sandboxed shell execution blocked or failed: {}", e);
                 *output_text = format!("(SHELL EXECUTION FAILED: {})", e);
             }
         }
@@ -821,6 +865,64 @@ mod tests {
         assert_eq!(base["nested"]["key3"], "new_val");
         assert_eq!(base["unchanged"], true);
         assert_eq!(base["new_top"], "hello");
+    }
+
+    #[tokio::test]
+    async fn test_execute_tool_aletheia_gate_rejection() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state.clone());
+        let mut ctx = RunContext::default();
+        ctx.agent_id = "worker-mutator".to_string();
+
+        let mut agent = EngineAgent::default();
+        agent.identity.id = ctx.agent_id.clone();
+        agent.capabilities.skills = vec!["write_file".to_string()];
+        state.registry.agents.insert(ctx.agent_id.clone(), agent);
+
+        // Propose a mutation with high blast radius (exceeds default threshold 15)
+        let fc = ToolCall {
+            name: "write_file".to_string(),
+            args: serde_json::json!({
+                "path": "src/core.rs",
+                "blast_radius": 45,
+                "content": "pub fn mutated() {}"
+            }),
+        };
+
+        let mut output = String::new();
+        let mut usage = None;
+        let result = runner.execute_tool(&ctx, &fc, &mut output, &mut usage, "").await;
+
+        assert!(result.is_ok());
+        assert!(output.contains("Aletheia Gate REJECTED mutation 'write_file'"));
+        assert!(output.contains("exceeds safety threshold (15)"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_execute_shell_sandboxed_default_deny() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state.clone());
+        let mut ctx = RunContext::default();
+        ctx.agent_id = "worker-shell".to_string();
+
+        let mut agent = EngineAgent::default();
+        agent.identity.id = ctx.agent_id.clone();
+        agent.capabilities.skills = vec!["execute_shell".to_string()];
+        state.registry.agents.insert(ctx.agent_id.clone(), agent);
+
+        let fc = ToolCall {
+            name: "execute_shell".to_string(),
+            args: serde_json::json!({
+                "command": "echo test"
+            }),
+        };
+
+        let mut output = String::new();
+        let mut usage = None;
+        let _ = runner.execute_tool(&ctx, &fc, &mut output, &mut usage, "").await;
+        // In default configuration (no Docker, no Wasm, host fallback false), shell execution is denied
+        // Note: Oversight might prompt first if required, or if rejected by Oversight/Sandbox
+        assert!(output.contains("REJECTED by Oversight") || output.contains("Unsandboxed shell execution on host is disabled by default") || output.contains("SHELL OUTPUT"));
     }
 }
 

@@ -20,8 +20,16 @@ import hashlib
 import json
 import sys
 import os
+import io
 from pathlib import Path
 from datetime import datetime
+
+# Ensure stdout handles UTF-8 on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 def resolve_default_db_path() -> Path:
     """Resolves the database path dynamically from the environment."""

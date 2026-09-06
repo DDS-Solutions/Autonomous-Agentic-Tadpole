@@ -98,10 +98,8 @@ The engine starts in `server-rs/src/main.rs`.
 Public routes:
 
 - `GET /v1/engine/health`
-- `GET /v1/engine/ws`
-- `GET /v1/engine/live-voice`
 
-Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
+Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>` (or `Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>` for `/v1/engine/ws` and `/v1/engine/live-voice`):
 
 - agents, oversight, infrastructure, model manager, skills, benchmarks, continuity, docs, system, governance, sovereign session state, memory search (including `/v1/memory/search/hybrid` for Triad RRF), engine control, and MCP bridge routes.
 

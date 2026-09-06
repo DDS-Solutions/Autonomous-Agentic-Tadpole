@@ -23,13 +23,17 @@ The Rust engine binds to `127.0.0.1:8000` by default and nests application route
 Public routes:
 
 - `GET /v1/engine/health`
-- `GET /v1/engine/live-voice`
-- `GET /v1/engine/ws`
 
 Protected routes require:
 
 ```http
 Authorization: Bearer <NEURAL_TOKEN>
+```
+
+Protected WebSocket routes (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) require token authentication via the WebSocket subprotocol header:
+
+```http
+Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 ```
 
 ## Agents
@@ -99,13 +103,13 @@ Authorization: Bearer <NEURAL_TOKEN>
 | `POST` | `/v1/engine/deploy` | `routes::deploy::trigger_deploy` | Protected |
 | `GET` | `/v1/engine/health` | `routes::health::health_check` | Public |
 | `POST` | `/v1/engine/kill` | `routes::engine_control::kill_agents` | Protected |
-| `GET` | `/v1/engine/live-voice` | `routes::ws::live_voice_handler` | Public |
+| `GET` | `/v1/engine/live-voice` | `routes::ws::live_voice_handler` | Protected (WS Subprotocol) |
 | `POST` | `/v1/engine/pre-pr` | `routes::deploy::trigger_pre_pr` | Protected |
 | `POST` | `/v1/engine/shutdown` | `routes::engine_control::shutdown_engine` | Protected |
 | `POST` | `/v1/engine/speak` | `routes::audio::text_to_speech` | Protected |
 | `POST` | `/v1/engine/templates/install` | `routes::templates::install_template` | Protected |
 | `POST` | `/v1/engine/transcribe` | `routes::audio::transcribe_audio` | Protected |
-| `GET` | `/v1/engine/ws` | `routes::ws::ws_handler` | Public |
+| `GET` | `/v1/engine/ws` | `routes::ws::ws_handler` | Protected (WS Subprotocol) |
 
 ## Governance
 

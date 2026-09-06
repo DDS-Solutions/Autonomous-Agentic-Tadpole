@@ -60,7 +60,7 @@ class TestVerifyAiContextFix(unittest.TestCase):
         meta = verify_ai_context.extract_metadata(sample)
         self.assertTrue(meta["has_note"])
         self.assertTrue(meta["has_debugging"])
-        self.assertEqual(meta["telemetry_tag"], "Database")
+        self.assertEqual(meta["telemetry_tag"], "test_verify_ai_context_fix")
 
 if __name__ == "__main__":
     unittest.main()

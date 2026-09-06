@@ -15,6 +15,7 @@
 //! - **Trace Scope**: `server-rs::state::hubs::sec`
 
 use crate::agent::runner::service_traits::SystemMonitorTrait;
+use crate::agent::verification_gate::VerificationGate;
 use crate::secret_redactor::SecretRedactor;
 use crate::security::audit::MerkleAuditTrail;
 use crate::security::metering::BudgetGuard;
@@ -36,6 +37,8 @@ pub struct SecurityHub {
     pub system_monitor: Arc<dyn SystemMonitorTrait>,
     /// Dynamic tool permission and governance policy engine.
     pub permission_policy: Arc<PermissionPolicy>,
+    /// Aletheia Protocol Verification Gate for blast-radius mutation gating.
+    pub verification_gate: Arc<VerificationGate>,
     /// Authentication token for administrative/deploy requests.
     pub deploy_token: String,
     /// Old token kept valid during grace period.

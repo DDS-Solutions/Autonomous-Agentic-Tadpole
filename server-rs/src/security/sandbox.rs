@@ -208,6 +208,109 @@ pub async fn execute_sandboxed(
     }
 }
 
+/// Executes a shell command within the configured sandbox (Docker, Wasm, or gated host fallback).
+pub async fn execute_sandboxed_shell(
+    command_str: &str,
+    workspace_root: &Path,
+    config: &SandboxConfig,
+) -> Result<String, AppError> {
+    if command_str.trim().is_empty() {
+        return Err(AppError::BadRequest("Empty shell command".to_string()));
+    }
+
+    if config.use_docker {
+        tracing::info!("[Sandbox] Spawning Docker container for shell execution: {}", command_str);
+
+        if which::which("docker").is_err() {
+            return Err(AppError::InfrastructureError {
+                provider_id: "docker".to_string(),
+                detail: "Docker CLI binary is not installed or not found on PATH.".to_string(),
+                help_link: Some("https://docs.docker.com/get-docker/".to_string()),
+            });
+        }
+
+        let workspace_str = workspace_root.to_string_lossy().to_string();
+        let mut docker_cmd = Command::new("docker");
+        docker_cmd.arg("run")
+            .arg("--rm")
+            .arg("--cap-drop=ALL")
+            .arg("--network=none")
+            .arg("-v")
+            .arg(format!("{}:/workspace", workspace_str))
+            .arg("-w")
+            .arg("/workspace");
+
+        if let Some(mem) = config.memory_limit_mb {
+            docker_cmd.arg("-m").arg(format!("{}m", mem));
+        }
+
+        if let Some(cpu) = config.cpu_limit {
+            docker_cmd.arg("--cpus").arg(cpu.to_string());
+        }
+
+        docker_cmd.arg("tadpole-os:latest");
+        docker_cmd.arg("sh").arg("-c").arg(command_str);
+
+        let output = tokio::time::timeout(std::time::Duration::from_secs(60), docker_cmd.output()).await
+            .map_err(|_| AppError::InfrastructureError {
+                provider_id: "sandboxed_shell".to_string(),
+                detail: "Docker shell execution timed out after 60s".to_string(),
+                help_link: None,
+            })?
+            .map_err(AppError::Io)?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if output.status.success() {
+            Ok(stdout)
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(AppError::InfrastructureError {
+                provider_id: "sandboxed_shell".to_string(),
+                detail: format!("Docker shell execution failed: {}\nstdout: {}", stderr, stdout),
+                help_link: None,
+            })
+        }
+    } else {
+        if !config.allow_host_fallback {
+            tracing::error!(
+                "[Sandbox] Unsandboxed host shell execution denied for: {}. Sandboxing is enforced: enable Docker (USE_SANDBOX_DOCKER=true) or explicitly permit host execution (ALLOW_HOST_SKILL_EXECUTION=true).",
+                command_str
+            );
+            return Err(AppError::Forbidden(
+                "Unsandboxed shell execution on host is disabled by default. Configure USE_SANDBOX_DOCKER=true, or explicitly set ALLOW_HOST_SKILL_EXECUTION=true.".to_string()
+            ));
+        }
+
+        tracing::warn!("[Sandbox] Falling back to host shell execution for: {}", command_str);
+        let shell = if cfg!(windows) { "powershell" } else { "sh" };
+        let flag = if cfg!(windows) { "-Command" } else { "-c" };
+
+        let mut cmd = Command::new(shell);
+        cmd.arg(flag).arg(command_str);
+        cmd.current_dir(workspace_root);
+
+        let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
+            .map_err(|_| AppError::InfrastructureError {
+                provider_id: "host_shell".to_string(),
+                detail: "Host shell execution timed out after 60s".to_string(),
+                help_link: None,
+            })?
+            .map_err(AppError::Io)?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if output.status.success() {
+            Ok(stdout)
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(AppError::InfrastructureError {
+                provider_id: "host_shell".to_string(),
+                detail: format!("Host shell execution failed: {}\nstdout: {}", stderr, stdout),
+                help_link: None,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,9 +335,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_unsandboxed_shell_blocked_by_default() {
+        let config = SandboxConfig {
+            use_docker: false,
+            use_wasm: false,
+            allow_host_fallback: false,
+            cpu_limit: None,
+            memory_limit_mb: None,
+        };
+        let res = execute_sandboxed_shell("echo hello", Path::new("."), &config).await;
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            AppError::Forbidden(msg) => {
+                assert!(msg.contains("Unsandboxed shell execution on host is disabled by default"));
+            }
+            other => panic!("Expected AppError::Forbidden, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
     async fn test_empty_command_rejected() {
         let config = SandboxConfig::default();
         let res = execute_sandboxed("", "{}", Path::new("."), &config).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_empty_shell_command_rejected() {
+        let config = SandboxConfig::default();
+        let res = execute_sandboxed_shell("", Path::new("."), &config).await;
         assert!(res.is_err());
     }
 }

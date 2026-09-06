@@ -67,10 +67,11 @@ This map reflects the current code layout and should be used as the first orient
 Public routes:
 
 - `GET /v1/engine/health`
-- `GET /v1/engine/ws`
-- `GET /v1/engine/live-voice`
 
-Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>`:
+Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>` (or `Sec-WebSocket-Protocol: bearer.<token>` for WebSocket upgrades):
+
+- `/v1/engine/ws` (WebSocket stream)
+- `/v1/engine/live-voice` (Audio WebSocket stream)
 
 - `/v1/agents`
 - `/v1/a2a/*` 2PC budget ledger routes (`prepare`, `commit`, `rollback`)
