@@ -94,8 +94,12 @@ export default function Settings(): React.ReactElement {
 
         // Step 4: Pre-warm sentinel if enabled (local, async side-effect).
         if (settings_state.sentinel_mode) {
-            const { browser_inference_service } = await import('../services/browser_inference');
-            browser_inference_service.pre_warm();
+            try {
+                const { browser_inference_service } = await import('../services/browser_inference');
+                browser_inference_service.pre_warm();
+            } catch (err) {
+                console.warn('[settings] Pre-warming browser inference failed:', err);
+            }
         }
 
         // Step 5: Fire-and-forget backend governance sync.

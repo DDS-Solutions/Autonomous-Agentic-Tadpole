@@ -97,4 +97,18 @@ class MockResizeObserver {
 
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
 
+// Mock @huggingface/transformers for headless node/jsdom test environments
+vi.mock('@huggingface/transformers', () => ({
+  env: {
+    allowLocalModels: false,
+    allowRemoteModels: false,
+    useBrowserCache: false,
+    remoteHost: '',
+    fetch_init: {},
+  },
+  pipeline: vi.fn().mockResolvedValue(vi.fn()),
+  TextGenerationPipeline: class {},
+  FeatureExtractionPipeline: class {},
+}));
+
 // Metadata: [setup]

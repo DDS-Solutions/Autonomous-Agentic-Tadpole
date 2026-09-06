@@ -56,6 +56,14 @@ vi.mock('../services/system_api_service', () => ({
     }
 }));
 
+vi.mock('../services/browser_inference', () => ({
+    browser_inference_service: {
+        pre_warm: vi.fn(),
+        analyze_ui: vi.fn().mockResolvedValue('The UI is healthy.'),
+        init_specialist: vi.fn().mockResolvedValue(undefined),
+    }
+}));
+
 vi.mock('../i18n', () => ({
     i18n: {
         t: (key: string) => key,

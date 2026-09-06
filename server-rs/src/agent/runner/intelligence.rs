@@ -363,7 +363,7 @@ impl AgentRunner {
                         while let Some((name, result, local_text, local_usage)) = futures.next().await {
                             self.accumulate_usage(&mut usage, local_usage);
                             observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
-                            if let Err(e) = result { return Err(e); }
+                            result?;
 
                             if name == "complete_mission" {
                                 mission_completed = true;
