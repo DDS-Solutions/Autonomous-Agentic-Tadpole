@@ -61,16 +61,54 @@ class IntelligenceApiService {
     /**
      * Fetches the full high-fidelity code symbol graph.
      */
-    async get_graph(): Promise<CodeGraphData> {
-        return api_request<CodeGraphData>('/v1/intelligence/graph');
+    async get_graph(params?: { path_prefix?: string; max_nodes?: number }, signal?: AbortSignal): Promise<CodeGraphData> {
+        const query_params = new URLSearchParams();
+        if (params?.path_prefix) query_params.append('path_prefix', params.path_prefix);
+        if (params?.max_nodes !== undefined) query_params.append('max_nodes', params.max_nodes.toString());
+        const query_str = query_params.toString();
+        const url = query_str ? `/v1/intelligence/graph?${query_str}` : '/v1/intelligence/graph';
+        return api_request<CodeGraphData>(url, { signal });
     }
 
     /**
      * Calculates the blast radius (affected symbols) for a target symbol.
      */
-    async get_blast_radius(name: string, path: string, signal?: AbortSignal): Promise<SymbolNode[]> {
-        const query_params = new URLSearchParams({ name, path }).toString();
-        return api_request<SymbolNode[]>(`/v1/intelligence/blast-radius?${query_params}`, { signal });
+    async get_blast_radius(name: string, path: string, limit?: number, signal?: AbortSignal): Promise<SymbolNode[]> {
+        const query_params = new URLSearchParams({ name, path });
+        if (limit !== undefined) query_params.append('limit', limit.toString());
+        return api_request<SymbolNode[]>(`/v1/intelligence/blast-radius?${query_params.toString()}`, { signal });
+    }
+
+    /**
+     * Rebuilds the symbol-level knowledge graph from workspace files.
+     */
+    async rebuild_graph(dry_run = false, signal?: AbortSignal): Promise<{
+        status: string;
+        dry_run: boolean;
+        summary?: { node_count: number; edge_count: number; file_count: number };
+    }> {
+        const query_params = new URLSearchParams({ dry_run: dry_run.toString() }).toString();
+        return api_request(`/v1/intelligence/graph/rebuild?${query_params}`, {
+            method: 'POST',
+            signal,
+        });
+    }
+
+    /**
+     * Resolves dependent symbols for a given symbol within a token budget constraint.
+     */
+    async resolve_code_context(name: string, path: string, budget = 4000, signal?: AbortSignal): Promise<{
+        symbols: SymbolNode[];
+        budget: number;
+        accumulated_tokens: number;
+        truncation_estimate: boolean;
+    }> {
+        const query_params = new URLSearchParams({
+            name,
+            path,
+            budget: budget.toString(),
+        }).toString();
+        return api_request(`/v1/intelligence/resolve?${query_params}`, { signal });
     }
 
     /**

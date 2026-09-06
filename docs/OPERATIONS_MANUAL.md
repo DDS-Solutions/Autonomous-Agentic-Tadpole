@@ -286,6 +286,7 @@ The endpoint `GET /v1/engine/health` returns detailed JSON telemetry for monitor
 *   `budget`: Total daily USD spent by agents, limits, and percentage used.
 *   `swarm`: Total active agents, connected bunkers, and max depth bounds.
 *   `uptime_seconds`: Engine server runtime duration.
+*   `GET /metrics`: Standard Prometheus metrics export (secured via `Authorization: Bearer <NEURAL_TOKEN>`).
 
 ### Alerting & Monitoring Configuration
 
@@ -421,7 +422,7 @@ npm run version:sync
 
 ## Capacity & Threading Planning
 
-The engine uses configurable Tokio runtime thread and stack parameters. See [CAPACITY_PLANNING.md](file:///g:/Autonomous-Agentic-Tadpole/docs/CAPACITY_PLANNING.md) for full capacity limits.
+The engine uses configurable Tokio runtime thread and stack parameters. See [CAPACITY_PLANNING.md](./CAPACITY_PLANNING.md) for full capacity limits.
 
 These parameters can be overridden via environment variables at startup:
 *   `TOKIO_WORKER_THREADS`: Number of OS threads spawned for the multi-threaded event loop.

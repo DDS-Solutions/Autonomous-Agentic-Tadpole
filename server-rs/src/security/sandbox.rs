@@ -20,6 +20,7 @@ use tokio::process::Command;
 pub struct SandboxConfig {
     pub use_docker: bool,
     pub use_wasm: bool,
+    pub allow_host_fallback: bool,
     pub cpu_limit: Option<f32>,
     pub memory_limit_mb: Option<usize>,
 }
@@ -32,6 +33,9 @@ impl Default for SandboxConfig {
         let use_wasm = std::env::var("USE_SANDBOX_WASM")
             .map(|v| v == "true")
             .unwrap_or(false);
+        let allow_host_fallback = std::env::var("ALLOW_HOST_SKILL_EXECUTION")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
         let cpu_limit = std::env::var("SANDBOX_CPU_LIMIT")
             .ok()
             .and_then(|v| v.parse::<f32>().ok());
@@ -42,6 +46,7 @@ impl Default for SandboxConfig {
         Self {
             use_docker,
             use_wasm,
+            allow_host_fallback,
             cpu_limit,
             memory_limit_mb,
         }
@@ -62,10 +67,20 @@ pub async fn execute_sandboxed(
     if config.use_docker {
         tracing::info!("[Sandbox] Spawning Docker container for execution: {}", command_str);
         
+        if which::which("docker").is_err() {
+            return Err(AppError::InfrastructureError {
+                provider_id: "docker".to_string(),
+                detail: "Docker CLI binary is not installed or not found on PATH.".to_string(),
+                help_link: Some("https://docs.docker.com/get-docker/".to_string()),
+            });
+        }
+
         let workspace_str = workspace_root.to_string_lossy().to_string();
         let mut docker_cmd = Command::new("docker");
         docker_cmd.arg("run")
             .arg("--rm")
+            .arg("--cap-drop=ALL")
+            .arg("--network=none")
             .arg("-v")
             .arg(format!("{}:/workspace", workspace_str))
             .arg("-w")
@@ -111,6 +126,14 @@ pub async fn execute_sandboxed(
     } else if config.use_wasm || program.ends_with(".wasm") {
         tracing::info!("[Sandbox] Spawning Wasmtime sandbox for execution: {}", command_str);
 
+        if which::which("wasmtime").is_err() {
+            return Err(AppError::InfrastructureError {
+                provider_id: "wasmtime".to_string(),
+                detail: "Wasmtime executable was not found on PATH. Install wasmtime or verify system PATH to execute WebAssembly skills.".to_string(),
+                help_link: Some("https://wasmtime.dev/".to_string()),
+            });
+        }
+
         let mut wasm_cmd = Command::new("wasmtime");
         wasm_cmd.arg("run")
             .arg("--dir")
@@ -144,7 +167,17 @@ pub async fn execute_sandboxed(
             })
         }
     } else {
-        tracing::info!("[Sandbox] Falling back to standard execution for command: {}", command_str);
+        if !config.allow_host_fallback {
+            tracing::error!(
+                "[Sandbox] Unsandboxed host execution denied for command: {}. Sandboxing is enforced: enable Docker (USE_SANDBOX_DOCKER=true), Wasm (USE_SANDBOX_WASM=true), or explicitly permit host execution (ALLOW_HOST_SKILL_EXECUTION=true).",
+                command_str
+            );
+            return Err(AppError::Forbidden(
+                "Unsandboxed skill execution on host is disabled by default. Configure USE_SANDBOX_DOCKER=true, USE_SANDBOX_WASM=true, or explicitly set ALLOW_HOST_SKILL_EXECUTION=true.".to_string()
+            ));
+        }
+
+        tracing::warn!("[Sandbox] Falling back to standard execution for command: {}", command_str);
         
         let mut cmd = Command::new(program);
         for arg in args {
@@ -175,6 +208,35 @@ pub async fn execute_sandboxed(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_unsandboxed_execution_blocked_by_default() {
+        let config = SandboxConfig {
+            use_docker: false,
+            use_wasm: false,
+            allow_host_fallback: false,
+            cpu_limit: None,
+            memory_limit_mb: None,
+        };
+        let res = execute_sandboxed("echo hello", "{}", Path::new("."), &config).await;
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            AppError::Forbidden(msg) => {
+                assert!(msg.contains("Unsandboxed skill execution"));
+            }
+            other => panic!("Expected AppError::Forbidden, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_empty_command_rejected() {
+        let config = SandboxConfig::default();
+        let res = execute_sandboxed("", "{}", Path::new("."), &config).await;
+        assert!(res.is_err());
+    }
+}
 
 // Metadata: [sandbox]

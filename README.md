@@ -156,6 +156,12 @@ On Windows, these helpers wrap the same flow:
 - `start_frontend.bat`
 - `stop_AAtadpole.bat`
 
+To run the containerized stack (Engine + Prometheus + Grafana + Jaeger):
+
+```bash
+docker compose up --build -d
+```
+
 ## Architecture
 
 Autonomous Agentic Tadpole has six practical runtime layers.
@@ -171,7 +177,7 @@ Autonomous Agentic Tadpole has six practical runtime layers.
 
 The engine boot path starts in `server-rs/src/main.rs`, initializes environment and tracing, creates `AppState`, starts background workers, spawns system actors under the OTP supervisor tree, launches the orchestrator, and binds Axum on `127.0.0.1:8000` unless configured otherwise.
 
-`server-rs/src/router.rs` assembles all `/v1` API routes. Public engine health and WebSocket routes remain open; management routes require `Authorization: Bearer <NEURAL_TOKEN>`. When `dist/` exists, the same Rust process serves the built React app with SPA fallback.
+`server-rs/src/router.rs` assembles all `/v1` API routes. The public engine health route (`GET /v1/engine/health`) remains open; management routes and WebSocket streams require authentication (`Authorization: Bearer <NEURAL_TOKEN>` or `Sec-WebSocket-Protocol: bearer.<token>`). When `dist/` exists, the same Rust process serves the built React app with SPA fallback.
 
 ## Repository Map
 
@@ -223,15 +229,15 @@ Public routes:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/v1/engine/health` | Engine health check |
-| `GET` | `/v1/engine/ws` | Engine WebSocket stream |
-| `GET` | `/v1/engine/live-voice` | Live voice WebSocket stream |
+| `GET` | `/v1/engine/health` | Engine health check (unauthenticated ping) |
 
-Protected route groups:
+Protected route groups and WebSocket streams:
 
-| Prefix | Purpose |
+| Prefix / Route | Purpose |
 | --- | --- |
-| `/v1/agents` | Agent CRUD, graph, tasks, pause/resume, memory |
+| `/v1/engine/ws` | Live mission telemetry WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
+| `/v1/engine/live-voice` | Live voice audio WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
+| `/v1/agents` | Agent CRUD, graph, tasks, pause/resume, memory, ledger, claims, receipts |
 | `/v1/oversight` | Decisions, ledger, quotas, audit trail, health, policy |
 | `/v1/infra` | Node discovery and infrastructure nodes |
 | `/v1/model-manager` | Providers, models, catalog, pulls, provider tests |
@@ -243,7 +249,10 @@ Protected route groups:
 | `/v1/governance` | Blueprints and sovereign manifest |
 | `/v1/sovereign` | Mission session tree and branch state |
 | `/v1/intelligence` | High-fidelity symbol graph mapping and dependent blast-radius analytics |
+| `/v1/knowledge` | Sovereign knowledge base nodes, edges, peers, and synthesis |
+| `/v1/iacp` | Inter-Agent Communication Protocol (negotiate, hire) |
 | `/v1/search/memory` | Global memory search |
+| `/v1/memory/search/bm25` | High-speed BM25 lexical repository and doc search |
 | `/v1/memory/search/hybrid` | Hybrid RAG Triad RRF fusion (Vector + BM25 + TrustGraph) |
 | `/v1/env-schema` | Runtime environment schema |
 | `/v1/engine/*` | Deploy, kill, shutdown, transcribe, speak, template install |
@@ -255,7 +264,13 @@ Protected routes require:
 Authorization: Bearer <NEURAL_TOKEN>
 ```
 
-Memory endpoints return `501 Not Implemented` unless the Rust `vector-memory` feature is enabled.
+For WebSocket connections (`/v1/engine/ws`, `/v1/engine/live-voice`), pass the token via the subprotocol header:
+
+```http
+Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
+```
+
+BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and SQLite fallback memories are active by default. Semantic vector k-NN search and LanceDB embeddings return `501 Not Implemented` unless the Rust `vector-memory` Cargo feature is enabled.
 
 ## Scripts
 
@@ -270,6 +285,10 @@ Memory endpoints return `501 Not Implemented` unless the Rust `vector-memory` fe
 | `npm run preview` | Preview the Vite build |
 | `npm run docs:api` | Regenerate `docs/openapi.yaml` and `docs/API_REFERENCE.md` from `server-rs/src/router.rs` |
 | `npm run docs:parity` | Run documentation/API/version parity checks |
+| `npm run db:backup` | Hot backup SQLite database via WAL-safe `VACUUM INTO` |
+| `npm run db:restore` | Restore SQLite database with SHA-256 verification |
+| `npm run audit:sovereign` | Run 7-pillar sovereign security, memory, and AST audit |
+| `npm run context:verify` | Verify AI assist tags (`@docs`) across entire repository |
 | `npm run tauri:dev` | Start Tauri dev mode |
 | `npm run tauri:build` | Build Tauri app |
 | `npm run docs:dev` | Start VitePress docs |
@@ -296,7 +315,11 @@ Common environment variables:
 | `RESOURCE_ROOT` | Optional | Static/model resource root |
 | `HEARTBEAT_INTERVAL_SECS` | `3` | Engine health heartbeat cadence |
 | `SKIP_DB_SEED` | `false` | Skip baseline database seeding |
-| `PRIVACY_MODE` | `false` | Restrict execution toward local-only providers |
+| `PRIVACY_MODE` | `true` | Restrict execution toward local-only providers (zero-trust sovereign mode) |
+| `AUTO_APPROVE_SAFE_SKILLS` | `false` | When `false`, enforces human oversight for all skill executions |
+| `ALLOW_HOST_SKILL_EXECUTION` | `false` | When `false`, denies bare-metal host execution if container sandboxes are unavailable |
+| `USE_SANDBOX_DOCKER` | `false` | Run dynamic agent skills in isolated Docker micro-containers |
+| `USE_SANDBOX_WASM` | `false` | Run dynamic agent skills in isolated WebAssembly (Wasmtime) sandboxes |
 | `TADPOLE_ALLOW_LOCAL_HTTP` | unset | Allows insecure local HTTP model-provider calls when set |
 | `TADPOLE_NULL_PROVIDERS` | unset | Forces null providers for tests and integration runs |
 | `DISABLE_TELEMETRY` | `false` | Disables OpenTelemetry stdout exporter when `true` |
@@ -445,7 +468,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **Oversight Ledger Pagination Fix**: Resolved a critical double-pagination bug in `/v1/oversight/ledger` and `/v1/oversight/security/audit-trail` that capped the approved card count in the dashboard at 100 entries.
 - **SHA-256 Hashing for Code Review Graph**: Replaced MD5 hashing with SHA-256 in `graph_store::scan_files::file_hash` and bumped the schema version to 10 with a dual-write `file_hash_sha256` migration window.
 - **Git Resolution at Boot**: Cached `git` executable absolute path at boot via `which` to ensure hermetic and safe execution of sub-processes.
-- **Axum Request Limit**: Added a global 16 KiB default request limit in router to prevent Denial-of-Service attacks.
+- **Axum Request Limit**: Added a global 16 MiB default request limit in router (`DefaultBodyLimit::max(16 * 1024 * 1024)`) to safely accommodate large AST code-graph payloads while preventing Denial-of-Service attacks.
 - **Robustness Cap Warning and Truncation**: Demoted `MAX_NODES` and `MAX_EDGES` exceeding checks from fatal errors to early-termination warning logs, leaving the previous graph intact, and resolved workspace-wide file bloat via `MAX_DISCOVERED_FILES` truncation.
 
 ### 🗄️ Database Reliability

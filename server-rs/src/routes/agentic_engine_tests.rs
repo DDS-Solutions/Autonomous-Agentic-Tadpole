@@ -577,10 +577,20 @@ async fn test_token_burn_and_maintenance_report() {
     assert_eq!(data["latency"]["status"], "optimal"); // 10s and 25s latency are both < 60s
     assert_eq!(data["errorRate"]["status"], "optimal"); // 0 failed tasks
 
-    // 4. GET /metrics and verify content format & new gauges exist
+    // 4. GET /metrics without auth returns 401
+    let unauth_req = Request::builder()
+        .method("GET")
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let unauth_res = app.clone().oneshot(unauth_req).await.unwrap();
+    assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+    // 5. GET /metrics with Bearer auth and verify content format & new gauges exist
     let req = Request::builder()
         .method("GET")
         .uri("/metrics")
+        .header(AUTHORIZATION, valid_auth(&state))
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();

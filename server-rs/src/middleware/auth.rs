@@ -74,21 +74,6 @@ pub async fn validate_token(
         }
     }
 
-    // Fallback: check query parameter ?Authorization=Bearer%20<token> strictly for WS/live-voice endpoints
-    if token_opt.is_none() && (path == "/v1/engine/ws" || path == "/v1/engine/live-voice") {
-        if let Some(query) = req.uri().query() {
-            for pair in query.split('&') {
-                if let Some(val) = pair.strip_prefix("Authorization=") {
-                    if let Ok(decoded) = urlencoding::decode(val) {
-                        let token = decoded.strip_prefix("Bearer ").unwrap_or(&decoded).to_string();
-                        token_opt = Some(token);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
     if let Some(ref token) = token_opt {
         let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
             || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)

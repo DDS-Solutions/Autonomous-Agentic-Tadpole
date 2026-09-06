@@ -25,6 +25,7 @@ pub mod trait_tool;
 pub mod capability;
 use crate::error::AppError;
 use security::{SecurityManager, DefaultSecurityManager};
+use tracing::Instrument;
 
 pub use trait_tool::Tool;
 pub use crate::agent::types::ToolContext;
@@ -208,85 +209,87 @@ impl AgentRunner {
                 agent_id = %ctx.agent_id,
                 mission_id = %ctx.mission_id
             );
-            let _enter = span.enter();
-
             // Wrap tool execution in a hard timeout to prevent "Silent Hangs" (INFRA-05)
             // Multi-tiered lookup: exact tool_registry -> normalized tool_registry -> exact skills -> normalized skills -> on-disk deterministic script trapping
-            let result = if let Some(handler) = self.state.registry.tool_registry.get(&fc.name).or_else(|| self.state.registry.tool_registry.get(&normalized_name)) {
-                match tokio::time::timeout(std::time::Duration::from_secs(60), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
-                    Ok(res) => res,
-                    Err(_) => {
-                        tracing::error!("🚨 [Runner] Tool '{}' execution TIMED OUT after 60s", fc.name);
-                        Err(ToolExecutionError::ExecutionFailed(format!("Tool '{}' execution timed out after 60 seconds", fc.name)))
-                    }
-                }
-            } else {
-                let snapshot = self.state.registry.skills.snapshot();
-                if let Some(skill) = snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|r| r.value().clone()) {
-                    let mut out = String::new();
-                    match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage).await {
-                        Ok(()) => Ok(out),
-                        Err(e) => Err(ToolExecutionError::AppError(e)),
-                    }
-                } else {
-                    // Fallback: Deterministic Execution Script Trapping on disk (async I/O)
-                    let ws_root = &ctx.workspace_root;
-                    let script_candidates = [
-                        ws_root.join("execution").join(format!("{}.py", normalized_name)),
-                        ws_root.join("execution").join(format!("{}.sh", normalized_name)),
-                        ws_root.join("execution").join(format!("{}.ps1", normalized_name)),
-                        ws_root.join("execution").join("agent_generated").join("skills").join(format!("{}.py", normalized_name)),
-                    ];
-
-                    let mut existing_candidate = None;
-                    for cand in &script_candidates {
-                        if tokio::fs::metadata(cand).await.is_ok() {
-                            existing_candidate = Some(cand.clone());
-                            break;
+            let result = async {
+                if let Some(handler) = self.state.registry.tool_registry.get(&fc.name).or_else(|| self.state.registry.tool_registry.get(&normalized_name)) {
+                    match tokio::time::timeout(std::time::Duration::from_secs(60), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
+                        Ok(res) => res,
+                        Err(_) => {
+                            tracing::error!("🚨 [Runner] Tool '{}' execution TIMED OUT after 60s", fc.name);
+                            Err(ToolExecutionError::ExecutionFailed(format!("Tool '{}' execution timed out after 60 seconds", fc.name)))
                         }
                     }
-
-                    if let Some(candidate) = existing_candidate {
-                        let ext = candidate.extension().and_then(|e| e.to_str()).unwrap_or("py");
-                        let rel_path = if candidate.to_string_lossy().contains("agent_generated") {
-                            format!("execution/agent_generated/skills/{}.{}", normalized_name, ext)
-                        } else {
-                            format!("execution/{}.{}", normalized_name, ext)
-                        };
-                        let exec_cmd = match ext {
-                            "sh" => format!("bash {}", rel_path),
-                            "ps1" => format!("powershell {}", rel_path),
-                            _ => format!("python {}", rel_path),
-                        };
-
-                        let synthesized_skill = crate::agent::script_skills::SkillDefinition {
-                            id: None,
-                            name: normalized_name.clone(),
-                            description: format!("Deterministic execution script '{}'", normalized_name),
-                            execution_command: exec_cmd,
-                            schema: serde_json::json!({"type": "object", "properties": {}}),
-                            oversight_required: true,
-                            doc_url: None,
-                            tags: Some(vec!["execution".to_string(), "deterministic".to_string()]),
-                            full_instructions: None,
-                            negative_constraints: None,
-                            verification_script: None,
-                            category: "execution".to_string(),
-                        };
-
+                } else {
+                    let snapshot = self.state.registry.skills.snapshot();
+                    if let Some(skill) = snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|r| r.value().clone()) {
                         let mut out = String::new();
-                        match self.handle_dynamic_skill(ctx, fc, &mut out, &synthesized_skill, usage).await {
+                        match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage).await {
                             Ok(()) => Ok(out),
                             Err(e) => Err(ToolExecutionError::AppError(e)),
                         }
                     } else {
-                        Err(ToolExecutionError::ExecutionFailed(format!(
-                            "Unknown tool '{}' (normalized: '{}'). If this is a deterministic script, ensure it exists in execution/ or invoke it via 'execute_shell'.",
-                            fc.name, normalized_name
-                        )))
+                        // Fallback: Deterministic Execution Script Trapping on disk (async I/O)
+                        let ws_root = &ctx.workspace_root;
+                        let script_candidates = [
+                            ws_root.join("execution").join(format!("{}.py", normalized_name)),
+                            ws_root.join("execution").join(format!("{}.sh", normalized_name)),
+                            ws_root.join("execution").join(format!("{}.ps1", normalized_name)),
+                            ws_root.join("execution").join("agent_generated").join("skills").join(format!("{}.py", normalized_name)),
+                        ];
+
+                        let mut existing_candidate = None;
+                        for cand in &script_candidates {
+                            if tokio::fs::metadata(cand).await.is_ok() {
+                                existing_candidate = Some(cand.clone());
+                                break;
+                            }
+                        }
+
+                        if let Some(candidate) = existing_candidate {
+                            let ext = candidate.extension().and_then(|e| e.to_str()).unwrap_or("py");
+                            let rel_path = if candidate.to_string_lossy().contains("agent_generated") {
+                                format!("execution/agent_generated/skills/{}.{}", normalized_name, ext)
+                            } else {
+                                format!("execution/{}.{}", normalized_name, ext)
+                            };
+                            let exec_cmd = match ext {
+                                "sh" => format!("bash {}", rel_path),
+                                "ps1" => format!("powershell {}", rel_path),
+                                _ => format!("python {}", rel_path),
+                            };
+
+                            let synthesized_skill = crate::agent::script_skills::SkillDefinition {
+                                id: None,
+                                name: normalized_name.clone(),
+                                description: format!("Deterministic execution script '{}'", normalized_name),
+                                execution_command: exec_cmd,
+                                schema: serde_json::json!({"type": "object", "properties": {}}),
+                                oversight_required: true,
+                                doc_url: None,
+                                tags: Some(vec!["execution".to_string(), "deterministic".to_string()]),
+                                full_instructions: None,
+                                negative_constraints: None,
+                                verification_script: None,
+                                category: "execution".to_string(),
+                            };
+
+                            let mut out = String::new();
+                            match self.handle_dynamic_skill(ctx, fc, &mut out, &synthesized_skill, usage).await {
+                                Ok(()) => Ok(out),
+                                Err(e) => Err(ToolExecutionError::AppError(e)),
+                            }
+                        } else {
+                            Err(ToolExecutionError::ExecutionFailed(format!(
+                                "Unknown tool '{}' (normalized: '{}'). If this is a deterministic script, ensure it exists in execution/ or invoke it via 'execute_shell'.",
+                                fc.name, normalized_name
+                            )))
+                        }
                     }
                 }
-            };
+            }
+            .instrument(span)
+            .await;
 
             match result {
                 Ok(res) => {

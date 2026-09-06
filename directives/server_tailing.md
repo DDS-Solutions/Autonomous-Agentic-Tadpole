@@ -1,15 +1,18 @@
-# Server Tailing & Health Diagnostic
-
-> **AI Assist Note**: This directive documents the `server_tail.py` execution script,
-> the single-shot replacement for manual multi-step server diagnostics.
+> [!IMPORTANT]
+> **AI Assist Note (Knowledge Heritage)**:
+> This document is part of the "Sovereign Reality" documentation.
+> - **@docs ARCHITECTURE:Core**
+> - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
+> - **Telemetry Link**: Search `[server_tailing]` in audit logs.
 >
 > ### AI Assist Note
-> **Core technical resource for the Tadpole OS Sovereign infrastructure.**
+> Core technical resource for the Tadpole OS Sovereign infrastructure.
 > Single-shot server health diagnostic and endpoint sweep.
 >
 > ### 🔍 Debugging & Observability
-> - **Failure Path**: Server unreachable, auth token mismatch, or missing .env.
-> - **Telemetry Link**: Search `[server_tail]` in system logs.
+> Traceability via `parity_guard.py`.
+
+# Server Tailing & Health Diagnostic
 
 
 ## Purpose
@@ -122,5 +125,5 @@ fed directly into other scripts or AI analysis pipelines.
 - Network access to localhost (or target host)
 - Read access to workspace `.env` and log files
 
-[//]: # (Metadata: [server_tail])
+[//]: # (Metadata: [server_tailing])
 

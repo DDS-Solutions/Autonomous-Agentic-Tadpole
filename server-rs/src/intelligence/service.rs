@@ -262,7 +262,7 @@ impl IntelligenceService {
         let graph_swap = self.state.resources.get_symbol_graph().await;
         let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
-        let query_path = path.to_string();
+        let query_path = path.replace('\\', "/");
 
         let task_future = tokio::task::spawn_blocking(move || {
             // Verify input path boundary unconditionally first
@@ -307,7 +307,7 @@ impl IntelligenceService {
         let graph_swap = self.state.resources.get_symbol_graph().await;
         let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
-        let query_path = path.to_string();
+        let query_path = path.replace('\\', "/");
 
         let bpe_arc = self.state.resources.get_tokenizer_bpe().await;
         let truncation_estimate = bpe_arc.is_none();

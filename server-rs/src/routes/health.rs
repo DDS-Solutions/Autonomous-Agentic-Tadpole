@@ -177,12 +177,38 @@ pub async fn health_check(
 }
 
 /// GET /metrics
+/// GET /metrics
 ///
 /// Serves Prometheus metrics registered in the global registry.
+/// Protected: requires valid Bearer token authorization.
 ///
 /// @docs OPERATIONS_MANUAL:Metrics
-#[tracing::instrument(name = "system::metrics")]
-pub async fn metrics_handler() -> Result<impl IntoResponse, AppError> {
+#[tracing::instrument(name = "system::metrics", skip(state, headers))]
+pub async fn metrics_handler(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> Result<impl IntoResponse, AppError> {
+    let auth_header = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|val| val.to_str().ok());
+
+    let is_authorized = if let Some(auth_str) = auth_header {
+        if let Some(token) = auth_str.strip_prefix("Bearer ") {
+            crate::middleware::auth::constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
+                || state.security.deploy_token_new.as_ref().map(|t| crate::middleware::auth::constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+                || state.security.deploy_token_old.as_ref().map(|t| crate::middleware::auth::constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if !is_authorized {
+        tracing::warn!("🚫 [Telemetry] Unauthorized attempt to access /metrics");
+        return Err(AppError::Unauthorized("Access to /metrics requires an authenticated token.".to_string()));
+    }
+
     use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
     let metric_families = prometheus::gather();

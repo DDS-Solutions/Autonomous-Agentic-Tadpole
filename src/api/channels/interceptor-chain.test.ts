@@ -80,3 +80,6 @@ describe('InterceptorChain', () => {
         expect(chain.size).toBe(0);
     });
 });
+
+// Metadata: [interceptor_chain_test]
+

@@ -115,7 +115,15 @@ export type SwarmPulse = { timestamp: number; nodes: PulseNode[]; edges: PulseCo
 /**
  * A node in the knowledge graph representing a code symbol.
  */
-export type SymbolNode = { name: string; path: string; kind: string; signature: string }
+export type SymbolNode = {
+    name: string;
+    path: string;
+    kind: string;
+    signature: string;
+    start_line?: number;
+    end_line?: number;
+    tokens?: number;
+}
 
 export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
 

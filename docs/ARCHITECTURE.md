@@ -13,7 +13,7 @@
 
 # Tadpole OS Architecture
 
-Tadpole OS is a local-first agent operations platform with a React dashboard, a Rust Axum engine, SQLite persistence, and a Python execution layer for skills and MCP tools.
+Tadpole OS is a local-first, zero-trust sovereign agent operations platform with a React dashboard, a Rust Axum engine, SQLite persistence, and an isolated execution layer for skills and MCP tools. Features Aletheia independent verification gates, zero-trust container/Wasm sandboxing, and dynamic DAG task orchestration.
 
 ## High-Level Runtime
 

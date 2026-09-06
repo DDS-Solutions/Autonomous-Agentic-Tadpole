@@ -88,3 +88,6 @@ describe('ErrorBus', () => {
         expect(bus.size).toBe(0);
     });
 });
+
+// Metadata: [error_bus_test]
+

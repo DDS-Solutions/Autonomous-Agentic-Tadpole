@@ -94,11 +94,11 @@ COPY --from=frontend-builder /usr/src/app/dist /app/dist
 # Copy data directory (skills, workflows, context, database)
 COPY data /app/data
 
+# Ensure directories exist
+RUN mkdir -p /app/.agent /app/workspaces
+
 # Copy agent configurations (mcp_config.json, skills, workflows)
 COPY .agent /app/.agent
-
-# Create workspaces directory for agent sandboxes
-RUN mkdir -p /app/workspaces
 
 # Create non-root user (UID 1001 to avoid conflict with default ubuntu user 1000)
 RUN groupadd -g 1001 tadpole && useradd -r -u 1001 -g tadpole tadpole

@@ -28,7 +28,7 @@ tmp/
 .tmp/
 scratch/
 *.log
-.agent/
+.agent/tmp/
 
 # Runtime databases and generated cache files
 *.db

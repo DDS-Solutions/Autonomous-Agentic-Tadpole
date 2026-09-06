@@ -18,6 +18,7 @@ use super::{AgentRunner, IntelligenceOutput, RunContext};
 use crate::agent::constants::*;
 use crate::error::AppError;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// RAII Guard to ensure reasoning turn state is always reset in the registry.
 struct ReasoningTurnGuard {
@@ -303,7 +304,6 @@ impl AgentRunner {
 
                     // Proceed to Tool Execution
                     let orbit_span = tracing::info_span!("ToolOrchestration", agent_id = %ctx.agent_id, count = function_calls.len());
-                    let _orbit_guard = orbit_span.enter();
 
                     use futures::stream::{FuturesUnordered, StreamExt};
                     let mut futures = FuturesUnordered::new();
@@ -359,17 +359,25 @@ impl AgentRunner {
                     let mut mission_completed = false;
                     let mut final_report = None;
 
-                    while let Some((name, result, local_text, local_usage)) = futures.next().await {
-                        self.accumulate_usage(&mut usage, local_usage);
-                        observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
-                        if let Err(e) = result { return Err((e, usage)); }
+                    let stream_res = async {
+                        while let Some((name, result, local_text, local_usage)) = futures.next().await {
+                            self.accumulate_usage(&mut usage, local_usage);
+                            observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
+                            if let Err(e) = result { return Err(e); }
 
-                        if name == "complete_mission" {
-                            mission_completed = true;
-                            final_report = Some(local_text);
+                            if name == "complete_mission" {
+                                mission_completed = true;
+                                final_report = Some(local_text);
+                            }
                         }
+                        Ok::<(), AppError>(())
                     }
-                    drop(_orbit_guard);
+                    .instrument(orbit_span)
+                    .await;
+
+                    if let Err(e) = stream_res {
+                        return Err((e, usage));
+                    }
 
                     if !observation_buffer.is_empty() {
                         conversation_history.push(format!("OBSERVATION: {}", observation_buffer));

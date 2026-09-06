@@ -101,11 +101,22 @@ def run_audit_command(name, cmd):
             "stderr": str(e)
         }
 
+def get_version():
+    try:
+        v_file = ROOT / "version.json"
+        if v_file.exists():
+            with open(v_file, "r", encoding="utf-8") as f:
+                return json.load(f).get("version", "1.1.58")
+    except Exception:
+        pass
+    return "1.1.58"
+
 def main():
     if not REPORTS_DIR.exists():
         REPORTS_DIR.mkdir(parents=True)
 
-    print(f"--- 🛡️ Tadpole OS Master Sovereign Audit (v1.1.5) ---")
+    version = get_version()
+    print(f"--- 🛡️ Tadpole OS Master Sovereign Audit (v{version}) ---")
     results = []
     
     for audit in AUDIT_SUITE:
@@ -126,7 +137,7 @@ def main():
         f"# 🛡️ Sovereign Audit Report",
         f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"**Status**: {'🟢 PASS' if passed_all else '🔴 FAIL'}",
-        f"**Engine Version**: 1.1.5",
+        f"**Engine Version**: {version}",
         "",
         "## 📊 Executive Summary",
         "| Audit Pillar | Status | Notes |",

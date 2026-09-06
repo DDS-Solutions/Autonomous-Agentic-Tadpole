@@ -134,6 +134,28 @@ impl VerificationGate {
             };
         }
 
+        if effective_blast_radius > self.blast_radius_threshold {
+            let reason = format!(
+                "Verified blast radius ({}) exceeds safety threshold ({})",
+                effective_blast_radius, self.blast_radius_threshold
+            );
+
+            let remediation_hint = format!(
+                "Decompose proposal for '{}' to reduce blast radius below threshold of {} symbols",
+                proposal.skill_name, self.blast_radius_threshold
+            );
+
+            warn!(
+                "❌ [VerificationGate] Mutation '{}' REJECTED: {}",
+                proposal.skill_name, reason
+            );
+
+            return VerificationDecision::Rejected {
+                reason,
+                remediation_hint,
+            };
+        }
+
         info!(
             "✅ [VerificationGate] Mutation '{}' APPROVED by Verifier Agent",
             proposal.skill_name
@@ -194,9 +216,13 @@ mod tests {
             oversight_required: false,
         };
 
-        // Verifier calculates real blast radius of 45 symbols
+        // Verifier calculates real blast radius of 45 symbols (> threshold 10)
         let decision = gate.evaluate(&proposal, true, Some(45), Some("Verified safe"));
-        assert_eq!(decision, VerificationDecision::Approved);
+        assert!(matches!(decision, VerificationDecision::Rejected { .. }));
+
+        // Within threshold of 10
+        let approved = gate.evaluate(&proposal, true, Some(8), Some("Verified safe"));
+        assert_eq!(approved, VerificationDecision::Approved);
     }
 }
 
