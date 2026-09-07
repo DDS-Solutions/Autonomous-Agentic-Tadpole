@@ -12,8 +12,10 @@
 mod tests {
     use axum::{
         body::Body,
+        extract::ConnectInfo,
         http::{Request, StatusCode},
     };
+    use std::net::SocketAddr;
     use tower::ServiceExt;
     use std::sync::Arc;
 
@@ -51,6 +53,7 @@ mod tests {
         // 3. Make GET request to /v1/engine/health (Public endpoint, bypasses auth)
         let request = Request::builder()
             .uri("/v1/engine/health")
+            .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 8001))))
             .body(Body::empty())
             .unwrap();
 

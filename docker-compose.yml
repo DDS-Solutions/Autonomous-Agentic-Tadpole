@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tadpole-os:latest
+    image: tadpole-os:1.1.58
     container_name: tadpole-os
     # SECURE BINDING: Binds to localhost loopback by default.
     # To expose via VPN/Tailscale or LAN, update the bind address as needed.
@@ -39,7 +39,7 @@ services:
       start_period: 10s
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.5.0
     container_name: prometheus
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -51,7 +51,7 @@ services:
       - tadpole
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.1.1
     container_name: grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -67,7 +67,7 @@ services:
       - prometheus
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.75.0
     container_name: jaeger
     ports:
       - "127.0.0.1:16686:16686"

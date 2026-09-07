@@ -354,13 +354,12 @@ impl McpHost {
         let server_config = config.mcp_servers.get(server_name)
             .ok_or_else(|| AppError::NotFound(format!("MCP server '{}' not found in config", server_name)))?;
 
-        let full_command = if server_config.args.is_empty() {
-            server_config.command.clone()
-        } else {
-            format!("{} {}", server_config.command, server_config.args.join(" "))
-        };
-
-        let mut client = client::McpClient::spawn(&full_command).await
+        let resolved_env = server_config.env.as_ref().map(resolve_mcp_env);
+        let mut client = client::McpClient::spawn(
+            &server_config.command,
+            &server_config.args,
+            resolved_env.as_ref(),
+        ).await
             .map_err(|e| AppError::InfrastructureError {
                 provider_id: format!("mcp:{}", server_name),
                 detail: format!("Failed to spawn MCP server: {}", e),
@@ -425,6 +424,35 @@ impl McpHost {
         let scrubbed_stdout = self.redactor.scrub(&raw_output);
         Ok(scrubbed_stdout)
     }
+}
+
+/// Resolves documented ${NAME} placeholders in MCP environment values.
+fn resolve_mcp_env(env: &std::collections::HashMap<String, String>) -> std::collections::HashMap<String, String> {
+    env.iter()
+        .map(|(key, value)| {
+            let mut resolved = String::new();
+            let mut remainder = value.as_str();
+            while let Some(start) = remainder.find("${") {
+                resolved.push_str(&remainder[..start]);
+                let placeholder = &remainder[start + 2..];
+                let Some(end) = placeholder.find('}') else {
+                    resolved.push_str(&remainder[start..]);
+                    remainder = "";
+                    break;
+                };
+                let variable = &placeholder[..end];
+                if !variable.is_empty() && variable.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') {
+                    resolved.push_str(&std::env::var(variable).unwrap_or_default());
+                    remainder = &placeholder[end + 1..];
+                } else {
+                    resolved.push_str("${");
+                    remainder = placeholder;
+                }
+            }
+            resolved.push_str(remainder);
+            (key.clone(), resolved)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
