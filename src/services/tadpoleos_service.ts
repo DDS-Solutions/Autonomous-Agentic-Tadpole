@@ -134,7 +134,7 @@ export type {
     Swarm_Node, 
     Store_Model 
 } from './system_api_service';
-export type Connection_State = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error';
+export type { Connection_State } from './socket';
 export type { Skill_Manifest } from './mission_api_service';
 
 

@@ -17,7 +17,7 @@ import { type DragControls, AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import { type Voice_Status } from '../../services/voice_client';
 import { i18n } from '../../i18n';
-import { type Sovereign_Scope, type Chat_Message } from '../../stores/sovereign_store';
+import { type Sovereign_Scope, type Chat_Message, type SessionLeaf } from '../../stores/sovereign_store';
 import { type Mission_Cluster } from '../../stores/workspace_store';
 import type { Agent } from '../../types';
 import { Chat_Header } from './Chat_Header';
@@ -28,12 +28,7 @@ import { Chat_Input_Bar } from './Chat_Input_Bar';
 import { Buffered_Transcript_View } from '../transcript/Buffered_Transcript_View';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 
-export interface SessionLeaf {
-    id: string;
-    role: string;
-    content: string;
-    created_at: string;
-}
+export type { SessionLeaf };
 
 export interface Chat_Content_Props {
     is_detached: boolean;

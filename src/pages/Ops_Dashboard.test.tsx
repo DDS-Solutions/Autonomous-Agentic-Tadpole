@@ -106,16 +106,6 @@ vi.mock('../stores/workspace_store', () => ({
     })
 }));
 
-vi.mock('../stores/header_store', () => ({
-    use_header_store: vi.fn((selector) => {
-        const state = {
-            set_header_actions: vi.fn(),
-            clear_header_actions: vi.fn(),
-        };
-        return selector ? selector(state) : state;
-    }),
-}));
-
 vi.mock('../stores/settings_store', () => ({
     use_settings_store: vi.fn((selector) => {
         const state = {

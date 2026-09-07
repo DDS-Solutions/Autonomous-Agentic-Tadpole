@@ -27,15 +27,8 @@ import { model_manager_api_service } from './model_manager_api_service';
 import { oversight_api_service } from './oversight_api_service';
 import { continuity_api_service } from './continuity_api_service';
 
-/** Quota_Details - Consumption metrics for budget governance. */
-export interface Quota_Details {
-    entity_id: string;
-    budget_usd: number;
-    used_usd: number;
-    reset_period: 'daily' | 'monthly' | 'never';
-    last_reset_at: string;
-    next_reset_at: string;
-}
+import type { Quota_Details } from '../contracts/governance';
+export type { Quota_Details };
 
 export interface System_Defense {
     memory_pressure: number;

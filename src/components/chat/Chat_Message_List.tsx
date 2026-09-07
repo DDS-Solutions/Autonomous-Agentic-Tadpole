@@ -15,25 +15,14 @@ import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Bot, User, Zap, GitBranch } from 'lucide-react';
 import clsx from 'clsx';
-import { type Message_Part } from '../../stores/sovereign_store';
+import { type Chat_Message } from '../../stores/sovereign_store';
 import { i18n } from '../../i18n';
 import { ArtifactPromotionCard } from './ArtifactPromotionCard';
 import { get_safe_date } from '../../utils/date_utils';
 
 const ARTIFACT_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/g;
 
-export interface Chat_Message {
-    id: string;
-    sender_id: string;
-    sender_name: string;
-    text: string;
-    scope: string;
-    target_node?: string;
-    /** timestamp: Strictly epoch milliseconds or ISO string */
-    timestamp: number | string | Date;
-    parts?: Message_Part[];
-    agent_id?: string;
-}
+export type { Chat_Message };
 
 interface Chat_Message_Item_Props {
     msg: Chat_Message;

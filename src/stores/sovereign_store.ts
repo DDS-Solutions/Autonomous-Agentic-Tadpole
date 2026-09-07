@@ -43,10 +43,8 @@ const TELEMETRY_SOURCE = '[SovereignStore]';
 
 export type Sovereign_Scope = 'agent' | 'cluster' | 'swarm';
 
-export type Message_Part = 
-    | { type: 'text', content: string }
-    | { type: 'thought', content: string, status: 'thinking' | 'done' }
-    | { type: 'tool', name: string, input: unknown, output?: unknown };
+import type { Message_Part } from '../types';
+export type { Message_Part };
 
 export interface Chat_Message {
     id: string;
@@ -54,8 +52,8 @@ export interface Chat_Message {
     sender_name: string;
     text: string;
     parts?: Message_Part[];
-    timestamp: string;
-    scope: Sovereign_Scope;
+    timestamp: string | number | Date;
+    scope: Sovereign_Scope | string;
     agent_id?: string;
     is_sub_agent?: boolean;
     lineage?: string[];

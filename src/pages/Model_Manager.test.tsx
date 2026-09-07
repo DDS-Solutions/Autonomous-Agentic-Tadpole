@@ -101,16 +101,6 @@ vi.mock('../stores/provider_store', () => ({
     })
 }));
 
-vi.mock('../stores/header_store', () => ({
-    use_header_store: vi.fn((selector) => {
-        const state = {
-            set_header_actions: vi.fn(),
-            clear_header_actions: vi.fn(),
-        };
-        return selector ? selector(state) : state;
-    }),
-}));
-
 vi.mock('../i18n', () => ({
     i18n: {
         t: (key: string) => key,
