@@ -31,6 +31,15 @@ export const sanitize_ui_context = (html: string): string => {
     sanitized = sanitized.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '[STYLE_REDACTED]');
     sanitized = sanitized.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '[IFRAME_REDACTED]');
 
+    // 1.5. Strip ChatML control tokens and DOM fence breakouts (SEC-801: ChatML injection shield)
+    sanitized = sanitized
+        .replace(/<\|im_start\|>/gi, '')
+        .replace(/<\|im_end\|>/gi, '')
+        .replace(/<\|endoftext\|>/gi, '')
+        .replace(/<\/?DOM_STATE>/gi, '')
+        .replace(/\bESCALATE_TO_ARCHITECT\b/gi, '[REDACTED_ESCALATION_TOKEN]')
+        .replace(/\bSENTINEL_SCAN\b/gi, 'SECURITY_SCAN');
+
     // 2. Redact sensitive attributes (passwords, tokens, values)
     // Focused on common input patterns to avoid accidental data leakage
     sanitized = sanitized.replace(/value="[^"]*"/gi, 'value="[VALUE_REDACTED]"');

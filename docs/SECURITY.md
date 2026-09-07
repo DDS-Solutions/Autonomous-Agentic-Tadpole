@@ -94,9 +94,24 @@ Behavior:
 - `ALLOWED_ORIGINS=*` enables wildcard troubleshooting mode and disables credentials.
 - A comma-separated list enables those exact origins with credentials.
 - An empty value falls back to local development origins: `localhost`/`127.0.0.1` on ports `5173` and `3000`, plus `tauri://localhost`.
+- **Private Network Access (PNA)**: Both `cors.rs` and `security_headers.rs` inject `Access-Control-Allow-Private-Network: true` to prevent browser pre-flight blocks when web origins communicate with local development daemon loopback addresses (`127.0.0.1` / `localhost`).
 
-## Secret Redaction
+## Secret Redaction & Client-Side Pre-Flight DLP Shield
 
+Data Loss Prevention is enforced symmetrically across both the Rust backend and the frontend runtime:
+
+### 1. Client-Side Pre-Flight DLP Shield (`src/utils/security_utils.ts`, `src/logic/command_processor.ts`)
+- **Deterministic Regex Interceptor**: Before any user prompt or command string is processed, routed to an agent, or sent to a local/cloud model, it passes through `scan_and_redact_secrets()`.
+- **Target Patterns Scrubbed**:
+  - OpenAI API keys: `sk-[a-zA-Z0-9_-]{20,}` $\to$ `[REDACTED_AI_KEY]`
+  - Anthropic API keys: `sk-ant-[a-zA-Z0-9_-]{20,}` $\to$ `[REDACTED_AI_KEY]`
+  - Google Gemini / Cloud keys: `AIzaSy[a-zA-Z0-9_-]{33}` $\to$ `[REDACTED_AI_KEY]`
+  - GitHub personal access tokens: `gh[pousr]_[a-zA-Z0-9]{36,}` $\to$ `[REDACTED_GITHUB_TOKEN]`
+  - Bearer tokens: `Bearer\s+[A-Za-z0-9\-_.~+/]+=*` $\to$ `Bearer [REDACTED_BEARER_TOKEN]`
+  - RSA / EC Private Keys: `-----BEGIN [A-Z ]*PRIVATE KEY-----` $\to$ `[REDACTED_PRIVATE_KEY]`
+- **DOM Context DLP**: Scraped active DOM state summarized by the Browser Sentinel (`summarize_active_dom()`) is sanitized through the same DLP shield before being presented to the in-browser neural specialist, preventing inadvertent token exfiltration from rendered forms or debug panels.
+
+### 2. Backend Secret Redactor (`server-rs/src/secret_redactor.rs`)
 Secret redaction is centralized through `server-rs/src/secret_redactor.rs` and used by AppState broadcast helpers before log/event publication.
 
 Sensitive environment keys include:

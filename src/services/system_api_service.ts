@@ -283,8 +283,9 @@ export const system_api_service = {
      * Fetches the real-time Sovereign State Manifest.
      */
     get_sovereign_manifest: async (): Promise<string> => {
-        const data = await api_request<{ manifest: string }>('/v1/governance/manifest', { method: 'GET' });
-        return data.manifest;
+        const data = await api_request<{ manifest?: string } | string>('/v1/governance/manifest', { method: 'GET' });
+        if (typeof data === 'string') return data;
+        return data?.manifest ?? '';
     }
 };
 

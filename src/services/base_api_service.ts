@@ -70,7 +70,7 @@ export function with_timeout(timeout_ms: number = DEFAULT_TIMEOUT): { signal: Ab
 
 function require_api_token(): string {
     const { tadpole_os_api_key } = get_settings();
-    const token = tadpole_os_api_key.trim();
+    const token = (tadpole_os_api_key || '').trim() || (import.meta.env.VITE_NEURAL_TOKEN || '').trim();
     if (!token) {
         throw new AuthError('Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.');
     }

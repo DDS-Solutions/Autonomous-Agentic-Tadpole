@@ -61,8 +61,31 @@ interface Settings_State {
 }
 
 const get_base_url = (): string => {
-    // For local sidecar communication, we always default to the HTTP loopback.
-    return import.meta.env.VITE_TADPOLE_OS_URL || 'http://127.0.0.1:8000';
+    // Dynamically align loopback URL with current window origin if available
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+        const host = window.location.hostname;
+        if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+            return `http://${host}:8000`;
+        }
+    }
+    return import.meta.env.VITE_TADPOLE_OS_URL || 'http://localhost:8000';
+};
+
+const normalize_loopback_url = (url: string | undefined): string => {
+    if (!url) return get_base_url();
+    if (url.toLowerCase().includes('tauri')) {
+        return get_base_url();
+    }
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+        const current_host = window.location.hostname;
+        if (current_host === 'localhost' && url.includes('127.0.0.1:8000')) {
+            return url.replace('127.0.0.1:8000', 'localhost:8000');
+        }
+        if (current_host === '127.0.0.1' && url.includes('localhost:8000')) {
+            return url.replace('localhost:8000', '127.0.0.1:8000');
+        }
+    }
+    return url;
 };
 
 const sanitize_api_key = (value: string): string => {
@@ -72,9 +95,7 @@ const sanitize_api_key = (value: string): string => {
 
 const sanitize_settings = (settings: Tadpole_Settings): Tadpole_Settings => ({
     ...settings,
-    tadpole_os_url: settings.tadpole_os_url?.toLowerCase().includes('tauri')
-        ? get_base_url()
-        : settings.tadpole_os_url,
+    tadpole_os_url: normalize_loopback_url(settings.tadpole_os_url),
     tadpole_os_api_key: sanitize_api_key(settings.tadpole_os_api_key || ''),
 });
 
@@ -119,7 +140,7 @@ export const use_settings_store = create<Settings_State>()(
                 default_budget_usd: 1.0,
                 is_safe_mode: true, // Default to safe mode for stabilization
                 privacy_mode: false,
-                browser_specialist_model_id: 'onnx-community/Gemma-2b-it-v2',
+                browser_specialist_model_id: 'HuggingFaceTB/SmolLM-360M-Instruct',
                 computer_architect_url: 'http://localhost:11434',
                 enable_neural_handoff: true,
                 sentinel_mode: false,
@@ -127,16 +148,20 @@ export const use_settings_store = create<Settings_State>()(
 
             save_settings: (new_settings) => {
                 // NUCLEAR PROTECTION: Never allow internal tauri URIs to be explicitly saved
-                if (new_settings.tadpole_os_url.toLowerCase().includes('tauri')) {
-                    new_settings.tadpole_os_url = 'http://127.0.0.1:8000';
+                let clean_url = new_settings.tadpole_os_url;
+                if (clean_url.toLowerCase().includes('tauri')) {
+                    clean_url = get_base_url();
+                } else {
+                    clean_url = normalize_loopback_url(clean_url);
                 }
 
-                if (!is_valid_url(new_settings.tadpole_os_url)) {
+                if (!is_valid_url(clean_url)) {
                     return 'Invalid URL. Must start with http:// or https://';
                 }
                 set({
                     settings: {
                         ...new_settings,
+                        tadpole_os_url: clean_url,
                         tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key),
                     }
                 });
@@ -150,7 +175,9 @@ export const use_settings_store = create<Settings_State>()(
                 // Aggressive cleaning for the specific URL setting
                 if (key === 'tadpole_os_url' && typeof value === 'string') {
                     if (value.toLowerCase().includes('tauri')) {
-                        final_value = 'http://127.0.0.1:8000' as unknown as Tadpole_Settings[K];
+                        final_value = get_base_url() as unknown as Tadpole_Settings[K];
+                    } else {
+                        final_value = normalize_loopback_url(value) as unknown as Tadpole_Settings[K];
                     }
                 }
 
@@ -169,11 +196,14 @@ export const use_settings_store = create<Settings_State>()(
                         return;
                     }
                     if (hydrated_state) {
+                        const original_url = hydrated_state.settings.tadpole_os_url;
                         hydrated_state.settings = sanitize_settings(hydrated_state.settings);
                         const url = hydrated_state.settings.tadpole_os_url;
                         if (url && url.toLowerCase().includes('tauri')) {
                             console.warn('[SettingsStore] Legacy internal URL detected in persistent storage. Resetting to standard loopback.');
-                            hydrated_state.update_setting('tadpole_os_url', 'http://127.0.0.1:8000');
+                            hydrated_state.update_setting('tadpole_os_url', get_base_url());
+                        } else if (url !== original_url) {
+                            hydrated_state.update_setting('tadpole_os_url', url);
                         }
 
                         // Just log completion, don't trigger side effects here

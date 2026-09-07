@@ -108,6 +108,7 @@ pub fn create_cors_layer() -> CorsLayer {
         axum::http::header::AUTHORIZATION,
         axum::http::HeaderName::from_static("x-request-id"),
         axum::http::HeaderName::from_static("traceparent"),
+        axum::http::HeaderName::from_static("access-control-request-private-network"),
     ])
     .allow_credentials(allow_credentials)
 }

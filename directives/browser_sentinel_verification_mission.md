@@ -19,15 +19,19 @@
 ---
 
 ## 📋 Mission Objective
-Run an end-to-end verification mission on the **Browser Sentinel (WebGPU Specialist)** to validate zero-latency tactical routing, VRAM memory pressure protection, dynamic token scaling, and fallback device chain resilience.
+Run an end-to-end verification mission on the **Browser Sentinel (WebGPU Specialist & Autonomous Daemon)** to validate zero-latency tactical routing, 4-bit ONNX model quantization, VRAM memory pressure protection, autonomous idle DOM evaluations, pipeline disposal/recovery, and the deterministic pre-flight DLP secret shield.
 
 ---
 
 ## 🛠️ Step-by-Step Instructions
 
 1. **Step 1: Execute Sentinel Unit & Integration Tests**
-   - Run `npx vitest run src/logic/command_processor.test.ts src/pages/Settings_Handoff.test.tsx`.
-   - Verify 100% test pass rate for tactical intent interception and sentinel toggle state changes.
+   - Run `npx vitest run src/services/sentinel_daemon.test.ts src/stores/browser_specialist_store.test.ts src/utils/security_utils.test.ts src/logic/command_processor.test.ts src/pages/Settings_Handoff.test.tsx`.
+   - Verify 100% test pass rate across:
+     - Autonomous Sentinel Daemon lifecycle, idle loop, and circuit breakers (hidden tab, critical VRAM, busy pipeline).
+     - Browser Specialist store reactivity, DOM summarization, and anomaly tracking.
+     - Deterministic DLP pre-flight secret redaction (OpenAI, Anthropic, Google, GitHub, Bearer, private keys).
+     - Tactical intent interception and Governance/Settings toggle persistence.
 
 2. **Step 2: Run Browser Sentinel Diagnostic Script**
    - Run `python execution/verify_browser_sentinel.py`.

@@ -78,6 +78,8 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Hardened Sandboxed Execution**: Spawns dynamic agent-generated skills inside secure WebAssembly (Wasmtime) or Docker micro-containers with strict CPU/memory limits and filesystem token isolation.
 - **Tiered Cognitive Memory consolidation**: Consolidates episodic short-term memories into semantic long-term knowledge via a background summarization loop, with a fully database-backed SQLite fallback when vector features are disabled.
 - **Inter-Agent Communication Protocol (IACP)**: Enables agents to negotiate tasks, delegate sub-tasks, peer-review skills, and transfer operational micro-budgets.
+- **Autonomous Browser Sentinel Daemon**: Background idle loop (~25s interval) executing non-intrusive DOM entropy audits, automated client-side health checks, and self-healing with triple circuit breakers (tab visibility, VRAM critical pressure, and pipeline concurrency locks).
+- **In-Browser ONNX/WebGPU Inference & DLP Shield**: Zero-cloud in-browser reasoning with quantized 4-bit ONNX models (`SmolLM-360M-Instruct`) via `@huggingface/transformers`, WebGPU hardware acceleration with WASM fallback, explicit WebGPU buffer disposal, and zero-leakage regex DLP pre-flight screening for high-entropy secrets and keys.
 - **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
@@ -173,7 +175,7 @@ Autonomous Agentic Tadpole has six practical runtime layers.
 
 | Layer | Code | Responsibility |
 | --- | --- | --- |
-| Interface | `src/` | Dashboard shell, pages, stores, services, browser monitoring, provider sync, detached views |
+| Interface | `src/` | Dashboard shell, pages, stores, services, Browser Sentinel & DLP Shield, browser monitoring, provider sync, detached views |
 | Engine | `server-rs/src/` | Axum routes, AppState, actors, middleware, telemetry, agent runner, security, startup workers |
 | Token & Context | `server-rs/src/agent/tokenizer.rs`, `server-rs/src/agent/context_manager.rs`, `server-rs/src/agent/context_slicer.rs` | Model-aware BPE counting (< 1µs), 2-Tier compression, adaptive 3-zone context slicing |
 | Supervision & Durability | `server-rs/src/system/actors/supervisor.rs`, `server-rs/src/agent/durable.rs` | OTP supervision tree, crash-resilient step memoization |

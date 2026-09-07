@@ -30,9 +30,19 @@ pub async fn inject_security_headers(
     req: axum::extract::Request,
     next: Next,
 ) -> impl IntoResponse {
+    let has_pna = req
+        .headers()
+        .contains_key("access-control-request-private-network");
     let mut response: axum::response::Response = next.run(req).await;
     debug!("[SecurityHeaders] Injecting security headers into response");
     let headers = response.headers_mut();
+
+    if has_pna {
+        headers.insert(
+            axum::http::HeaderName::from_static("access-control-allow-private-network"),
+            HeaderValue::from_static("true"),
+        );
+    }
 
     // 1. Content-Security-Policy
     // Conservative policy allowing only essential dashboard resources.

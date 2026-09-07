@@ -123,12 +123,40 @@ The dashboard boot logic lives in `src/App.tsx`. During startup it:
 - syncs provider defaults
 - syncs providers with the backend
 - initializes visual monitoring
+- syncs provider defaults
+- syncs providers with the backend
+- initializes visual monitoring
 - starts VRAM/memory pressure polling
-- optionally pre-warms browser inference when sentinel mode is enabled
+- starts the autonomous Browser Sentinel background daemon if `sentinel_mode` is enabled (`src/services/sentinel_daemon.ts`)
 - fetches the current agent registry
+- pre-loads route chunks in background idle time
 - applies theme and density settings
 
 Dashboard pages are registered in `src/constants/routes.ts`.
+
+### Operating the Browser Sentinel (Governance Console)
+
+The Browser Sentinel is managed and monitored directly through the **Governance** view (`/governance`):
+
+1. **Enabling/Disabling Sentinel Mode**:
+   - Toggle the **Active Sentinel Mode** switch in the Browser Sentinel card.
+   - When enabled, the `sentinel_daemon` initializes the quantized model (`SmolLM-360M-Instruct` on WebGPU/WASM) and schedules 25-second idle health evaluations.
+   - When disabled, the background daemon immediately un-registers, disposes of cached WebGPU buffers, and enters the `Sentinel Offline (Dormant)` state.
+
+2. **Reading Sentinel Status Ribbons**:
+   - `Sentinel Offline (Dormant)`: Sentinel mode is disabled; no GPU or memory is allocated.
+   - `Warming Up (progress%)`: Model tensors are downloading/hydrating into WebGPU/WASM runtime.
+   - `Auditing Active DOM...`: An active background or manual evaluation cycle is executing.
+   - `Sentinel Active · WEBGPU`: Model is fully loaded and standing by on WebGPU hardware acceleration.
+   - `Pipeline Exception`: A device loss or inference exception occurred.
+
+3. **Manual Trigger & Emergency Reset**:
+   - **Run Audit Now**: Bypasses the 25-second idle interval to immediately audit the current DOM for broken surfaces, error alerts, or high entropy.
+   - **Reset**: Purges all WebGPU buffers, cleans pipeline caches, and forces re-initialization of the model runtime without reloading the browser tab.
+
+4. **Deterministic Pre-Flight DLP Shield**:
+   - Runs automatically on every command in `command_processor.ts` and on every DOM scrape.
+   - All known API keys (`sk-proj-...`, `sk-ant-...`, `AIzaSy...`, `ghp_...`, Bearer tokens, private keys) are scrubbed to `[REDACTED_*]` before local reasoning or network transmission.
 
 ## Agent And Swarm Management
 

@@ -33,7 +33,11 @@ All autonomous actions must pass through the triple-gate verification loop:
 
 ## 3. Data Integrity & State Healing
 *   **Non-Repudiation**: Every tool call MUST be recorded in the `AuditActor` hash chain. Failure to log is a fatal error.
-*   **Privacy**: PII (Personally Identifiable Information) must be redacted by the `SecretRedactor` actor before hitting the persistent ledger.
+*   **Privacy & In-Flight Redaction**: PII and sensitive API keys must be scrubbed by the `SecretRedactor` actor before hitting the persistent ledger.
+*   **Client-Side In-Browser Sentinel & Pre-Flight DLP Shield**:
+    - Every user input and command string must pass through the deterministic pre-flight DLP shield (`scan_and_redact_secrets`) before entering local or cloud agent reasoning loops.
+    - The autonomous Browser Sentinel (`sentinel_daemon`) monitors DOM health, view integrity, and anomaly states in real time under strict resource guardrails (halting on hidden tabs or critical VRAM).
+    - Detected UI high-entropy anomalies or unhandled errors are automatically sanitized and escalated to the Architect core via structured telemetry (`NEURAL_HANDOFF`).
 *   **Self-Healing State Reversion**: If a benchmark suite fails (`status == "FAIL"`), the kernel autonomously triggers a sovereign revert to the last known "Green" state in the multiversal session tree to preserve infrastructure integrity without human intervention.
 
 ## 4. Entity Hierarchy

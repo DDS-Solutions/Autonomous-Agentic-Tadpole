@@ -130,12 +130,38 @@ When `STATIC_DIR` exists, defaulting to `dist`, the router serves the dashboard 
 - provider defaults and backend provider sync
 - visual monitor bridge
 - VRAM monitor service
-- optional browser inference pre-warm when sentinel mode is enabled
+- autonomous Browser Sentinel daemon boot when sentinel mode is enabled (`src/services/sentinel_daemon.ts`)
 - agent registry hydration
+- background route pre-loading
 - theme and density attributes
 - route-to-tab synchronization
 
 Routes are registered in `src/constants/routes.ts` and rendered through `Dashboard_Layout`.
+
+### Browser Sentinel & Local Cognitive Shield
+
+The Browser Sentinel operates as a client-side, zero-cloud sentry for real-time DOM health, UI entropy monitoring, and security isolation:
+
+1. **Quantized In-Browser Inference (`src/services/browser_inference.ts`)**:
+   - Executes `HuggingFaceTB/SmolLM-360M-Instruct` (or `onnx-community/SmolLM2-360M-Instruct-ONNX`) in strict 4-bit quantization (`dtype: 'q4'`), requiring only ~220MB model storage and ~350MB peak VRAM.
+   - Hardware-accelerated device fallback chain: WebGPU $\to$ WASM $\to$ CPU.
+   - Dynamic KV-cache & token trimming adjusted in real time based on VRAM pressure (32–128 tokens).
+   - Explicit lifecycle buffer disposal via `dispose()` to prevent WebGPU memory leaks and handle browser `device.lost` events.
+
+2. **Autonomous Sentinel Daemon (`src/services/sentinel_daemon.ts`)**:
+   - Executes background evaluation on a 25-second idle cadence using `requestIdleCallback` (with timeout fallback).
+   - Triple Circuit Breakers:
+     - *Tab Visibility*: Skips execution when `document.hidden === true` to conserve GPU/CPU resources on background tabs.
+     - *VRAM Resource Guard*: Defers scans when memory pressure enters `critical` ($\ge 95\%$).
+     - *Pipeline Concurrency*: Defers scans when user inference or model initialization is already in flight.
+
+3. **Deterministic Secret & Credential Pre-Flight Shield (DLP) (`src/utils/security_utils.ts`)**:
+   - Zero-latency regex DLP interceptor run at prompt intake in `command_processor.ts` and DOM summarization in `browser_specialist_store.ts`.
+   - Redacts OpenAI (`sk-proj-...`), Anthropic (`sk-ant-...`), Google (`AIzaSy...`), GitHub tokens (`ghp_...`, `gho_...`), Bearer tokens, and RSA/EC private keys before any model reasoning, logging, or cloud dispatch occurs.
+
+4. **Reactive Specialist State & Governance UI Integration (`src/stores/browser_specialist_store.ts`, `src/pages/Governance_View.tsx`)**:
+   - Real-time reactive Zustand store synchronized via listener subscriptions.
+   - Governance screen provides live status ribbons (`Dormant`, `Warming Up %`, `Auditing DOM...`, `Sentinel Active · WEBGPU`), hardware execution core indicators, escalated anomaly tracking, manual "Run Audit Now" trigger, and one-click "Reset Pipeline" recovery.
 
 ## Persistence
 

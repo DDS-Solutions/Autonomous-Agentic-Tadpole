@@ -120,14 +120,13 @@ export default function App(): React.ReactElement {
         vram_monitor_service.start();
         console.debug('[AppKernel] VRAM monitor started.');
 
-        // --- Phase 4: Browser Inference Pre-Warm ---
-        // Only pre-warm if sentinel_mode is already enabled in persisted settings.
-        // This avoids a surprise 2GB download for users who never enabled the feature.
+        // --- Phase 4: Browser Sentinel Daemon Boot ---
+        // Only start sentinel daemon if sentinel_mode is already enabled in persisted settings.
         const settings = get_settings();
         if (settings.sentinel_mode) {
-          const { browser_inference_service } = await import('./services/browser_inference');
-          browser_inference_service.pre_warm();
-          console.debug('[AppKernel] Browser specialist pre-warm initiated.');
+          const { sentinel_daemon } = await import('./services/sentinel_daemon');
+          sentinel_daemon.start();
+          console.debug('[AppKernel] Browser sentinel daemon initiated.');
         }
 
         // --- Phase 5: Agent Registry Hydration ---

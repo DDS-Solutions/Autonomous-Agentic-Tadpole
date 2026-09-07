@@ -195,6 +195,10 @@ def check_doc_file_refs(root):
                 root / "tests" / "unit" / normalized,
                 root / "server-rs" / "src" / "routes" / normalized,
                 root / "server-rs" / "src" / "system" / normalized,
+                root / "server-rs" / "src" / "middleware" / normalized,
+                root / "src" / "services" / normalized,
+                root / "src" / "stores" / normalized,
+                root / "src" / "logic" / normalized,
             ]
             if not any(candidate.exists() for candidate in candidates):
                 print_result("DOC-REF", False, f"{doc.relative_to(root)} references missing {ref}")

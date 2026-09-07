@@ -22,8 +22,9 @@ This map reflects the current code layout and should be used as the first orient
 
 | Concern | Path | Language | Notes |
 | --- | --- | --- | --- |
-| Dashboard boot | `src/main.tsx`, `src/App.tsx` | TypeScript/React | Mounts the dashboard, route shell, provider sync, visual monitor, VRAM monitor, and agent hydration. |
+| Dashboard boot | `src/main.tsx`, `src/App.tsx` | TypeScript/React | Mounts dashboard, route shell, provider sync, visual monitor, VRAM monitor, autonomous Sentinel Daemon boot, and agent hydration. |
 | Dashboard routes | `src/constants/routes.ts` | TypeScript | Defines the main UI navigation registry. |
+| Browser Sentinel Daemon | `src/services/sentinel_daemon.ts` | TypeScript | Autonomous background idle loop (~25s) with triple circuit breakers (tab visibility, VRAM critical pressure, pipeline concurrency) for DOM entropy audits. |
 | Engine boot | `server-rs/src/main.rs` | Rust | Loads env, initializes tracing, builds `AppState`, starts workers, actors, orchestrator, and Axum. |
 | API router | `server-rs/src/router.rs` | Rust | Nests routes under `/v1`, applies middleware, serves `dist/` when present. |
 | Global state | `server-rs/src/state/mod.rs` | Rust | Owns AppState hubs, registries, DB pool, actor registry, and boot gate. |
@@ -35,8 +36,9 @@ This map reflects the current code layout and should be used as the first orient
 
 | Subsystem | Primary paths | Purpose |
 | --- | --- | --- |
-| Frontend shell | `src/layouts/`, `src/components/`, `src/pages/` | Dashboard navigation, operations views, detached windows, visualizations, and forms. |
-| Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, and telemetry. |
+| Frontend shell | `src/layouts/`, `src/components/`, `src/pages/` | Dashboard navigation, operations views, Governance View Sentinel card, detached windows, visualizations, and forms. |
+| Browser Sentinel & DLP Shield | `src/services/sentinel_daemon.ts`, `src/services/browser_inference.ts`, `src/stores/browser_specialist_store.ts`, `src/utils/security_utils.ts` | Local 4-bit ONNX browser reasoning (`SmolLM-360M-Instruct`), WebGPU/WASM device chain, autonomous DOM health audits, WebGPU buffer disposal, and zero-leakage regex DLP pre-flight shield. |
+| Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, browser specialist telemetry, and telemetry. |
 | Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
 | Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
 | OTP Actor Supervision | `server-rs/src/system/actors/supervisor.rs` | Erlang/OTP supervision tree engine (`OneForOne`, `OneForAll`, `AbortHandle` hard shutdown, stability backoff reset, and `DashMap` registry). |

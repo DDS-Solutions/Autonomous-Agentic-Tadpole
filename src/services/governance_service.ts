@@ -64,8 +64,9 @@ class Governance_Service {
     private update_quotas(new_quotas: GovernanceQuotas) {
         this.quotas = new_quotas;
         this.listeners.forEach(cb => cb(new_quotas));
+        const display_eff = new_quotas.efficiency <= 1.0 ? new_quotas.efficiency * 100 : new_quotas.efficiency;
         event_bus.emit_log({
-            text: `Governance Pulse: Budget utilization at ${(new_quotas.efficiency * 100).toFixed(1)}%`,
+            text: `Governance Pulse: Budget utilization at ${display_eff.toFixed(1)}%`,
             severity: 'info',
             source: 'System'
         });

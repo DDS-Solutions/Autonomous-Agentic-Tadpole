@@ -10,10 +10,12 @@
  * - **Telemetry Link**: Search `[Governance_View]` in observability traces.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { use_settings_store } from '../stores/settings_store';
 import { browser_inference_service } from '../services/browser_inference';
 import { governance_service } from '../services/governance_service';
+import { use_browser_specialist_store } from '../stores/browser_specialist_store';
+import { sentinel_daemon } from '../services/sentinel_daemon';
 import { i18n } from '../i18n';
 import { 
     Shield, 
@@ -21,11 +23,14 @@ import {
     CreditCard, 
     Terminal, 
     AlertTriangle, 
-    RefreshCcw,
-    Lock,
-    Zap,
-    Scale,
-    Brain
+    RefreshCcw, 
+    Lock, 
+    Zap, 
+    Scale, 
+    Brain, 
+    Play, 
+    RotateCw, 
+    Cpu 
 } from 'lucide-react';
 
 import type { GovernanceQuotas } from '../contracts/governance';
@@ -33,59 +38,163 @@ import { LD_Json } from '../components/ui/LD_Json';
 import { get_safe_date } from '../utils/date_utils';
 
 export default function Governance_View() {
+    // --- Local View State (Lazy Initializers) ---
     const [manifest, setManifest] = useState<string>('');
-    const [quotas, setQuotas] = useState<GovernanceQuotas | null>(governance_service.get_current_quotas());
+    const [quotas, setQuotas] = useState<GovernanceQuotas | null>(() => governance_service.get_current_quotas());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [lastRefresh, setLastRefresh] = useState(new Date());
-    const { settings, update_setting } = use_settings_store();
-    const isSyncingRef = useRef(false);
+    const [lastRefresh, setLastRefresh] = useState(() => new Date());
+    const [isAuditing, setIsAuditing] = useState(false);
 
-    const toggle_sentinel = () => {
-        const next = !settings.sentinel_mode;
+    // --- Lifecycle Refs ---
+    const isSyncingRef = useRef(false);
+    const isMountedRef = useRef(true);
+
+    // --- Atomic Settings Store Selectors (Prevents Re-Render Storms) ---
+    const is_safe_mode = use_settings_store((s) => s.settings.is_safe_mode);
+    const sentinel_mode = use_settings_store((s) => s.settings.sentinel_mode);
+    const browser_specialist_model_id = use_settings_store((s) => s.settings.browser_specialist_model_id);
+    const update_setting = use_settings_store((s) => s.update_setting);
+
+    // --- Atomic Browser Specialist Store Selectors ---
+    const specialist_status = use_browser_specialist_store((s) => s.status);
+    const specialist_device = use_browser_specialist_store((s) => s.active_device);
+    const specialist_progress = use_browser_specialist_store((s) => s.model_loading_progress);
+    const specialist_error = use_browser_specialist_store((s) => s.last_error);
+    const specialist_scan_at = use_browser_specialist_store((s) => s.last_scan_at);
+    const specialist_anomalies = use_browser_specialist_store((s) => s.anomaly_count);
+    const specialist_init = use_browser_specialist_store((s) => s.init);
+    const specialist_reset_pipeline = use_browser_specialist_store((s) => s.reset_pipeline);
+
+    // --- Critical #1: Reconcile Persisted sentinel_mode on Mount ---
+    useEffect(() => {
+        if (sentinel_mode && specialist_status === 'idle') {
+            sentinel_daemon.start();
+            void specialist_init().catch((err: unknown) => {
+                console.error('[Governance_View] Failed to initialize specialist on mount:', err);
+            });
+        }
+    }, [sentinel_mode, specialist_status, specialist_init]);
+
+    // Track unmount lifecycle for async safety
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    // --- Action Handlers with Complete Rejection Guarding ---
+    const toggle_sentinel = async () => {
+        const next = !sentinel_mode;
         update_setting('sentinel_mode', next);
         if (next) {
-            browser_inference_service.pre_warm();
+            sentinel_daemon.start();
+            try {
+                await specialist_init();
+            } catch (err: unknown) {
+                console.error('[Governance_View] Specialist init error on toggle:', err);
+            }
+        } else {
+            sentinel_daemon.stop();
+            browser_inference_service.dispose();
+            use_browser_specialist_store.setState({ 
+                status: 'idle', 
+                active_device: 'none',
+                last_error: null 
+            });
         }
     };
 
-    const fetchGovernance = async () => {
+    const handle_run_audit = async () => {
+        if (!sentinel_mode || isAuditing || specialist_status === 'thinking' || specialist_status === 'loading') return;
+        setIsAuditing(true);
+        try {
+            await sentinel_daemon.scan_now();
+        } catch (err: unknown) {
+            console.error('[Governance_View] Sentinel audit scan failed:', err);
+            use_browser_specialist_store.setState({
+                status: 'error',
+                last_error: err instanceof Error ? err.message : String(err),
+            });
+        } finally {
+            if (isMountedRef.current) {
+                setIsAuditing(false);
+            }
+        }
+    };
+
+    const handle_reset_pipeline = async () => {
+        if (specialist_status === 'loading' || specialist_status === 'thinking') return;
+        try {
+            await specialist_reset_pipeline();
+        } catch (err: unknown) {
+            console.error('[Governance_View] Pipeline reset error:', err);
+        }
+    };
+
+    // --- Network Sync with Abort / Timeout Protection (High #6) ---
+    const fetchGovernance = useCallback(async () => {
         if (isSyncingRef.current) return;
         isSyncingRef.current = true;
         
         setLoading(true);
         setError(null);
         try {
-            const [m, q] = await Promise.all([
+            const timeoutPromise = new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error('Sync timeout')), 10000)
+            );
+            const syncPromise = Promise.all([
                 governance_service.get_manifest(),
                 governance_service.sync()
             ]);
-            setManifest(m);
-            setQuotas(q);
-            setLastRefresh(new Date());
-        } catch (e) {
-            console.error('[Governance] Sync Failed:', e);
-            setError('Neural link synchronization failed. System state may be stale.');
+
+            const [m, q] = await Promise.race([syncPromise, timeoutPromise]);
+            if (isMountedRef.current) {
+                setManifest(m);
+                setQuotas(q);
+                setLastRefresh(new Date());
+            }
+        } catch (e: unknown) {
+            if (isMountedRef.current) {
+                console.error('[Governance_View] Sync Failed:', e);
+                setError('Neural link synchronization failed. System state may be stale.');
+            }
         } finally {
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
             isSyncingRef.current = false;
         }
-    };
+    }, []);
 
+    // --- Effect Wiring: Clean Dependency Graph (High #5) ---
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        fetchGovernance();
+        void fetchGovernance();
         
         // Event-driven sync: Listen for pulses from the service
         const unsubscribe = governance_service.on_pulse((new_quotas) => {
-            setQuotas(new_quotas);
-            setLastRefresh(new Date());
+            if (isMountedRef.current) {
+                setQuotas(new_quotas);
+                setLastRefresh(new Date());
+            }
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [fetchGovernance]);
 
-    const spentPercentage = quotas ? (quotas.total_spent / quotas.total_budget) * 100 : 0;
+    // --- Mathematical & Precision Normalization ---
+    const spentPercentage = quotas && quotas.total_budget > 0 
+        ? Math.min(100, Math.max(0, (quotas.total_spent / quotas.total_budget) * 100))
+        : 0;
+
+    const efficiencyDisplay = quotas?.efficiency !== undefined
+        ? (quotas.efficiency <= 1.0 ? quotas.efficiency * 100 : quotas.efficiency).toFixed(1)
+        : '0.0';
+
+    // Float equality extraction (High #8)
+    const merkle_val = quotas?.system_defense?.merkle_integrity ?? 1;
+    const is_merkle_intact = merkle_val >= 0.9999;
 
     return (
         <div className="flex flex-col h-full bg-[#050505] text-zinc-100 p-6 overflow-y-auto custom-scrollbar">
@@ -110,7 +219,11 @@ export default function Governance_View() {
                 </div>
                 <div className="flex items-center gap-4">
                     {error && (
-                        <div className="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 animate-pulse">
+                        <div 
+                            role="alert" 
+                            aria-live="polite" 
+                            className="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 animate-pulse"
+                        >
                             <AlertTriangle className="w-3 h-3 text-red-400" />
                             <span className="text-[10px] font-mono text-red-400 uppercase">{error}</span>
                         </div>
@@ -120,8 +233,9 @@ export default function Governance_View() {
                         <p className="text-xs text-zinc-400 font-mono">{get_safe_date(lastRefresh)?.toLocaleTimeString() || '--:--:--'}</p>
                     </div>
                     <button 
-                        onClick={fetchGovernance}
+                        onClick={() => void fetchGovernance()}
                         disabled={loading}
+                        aria-label={i18n.t('governance.aria_refresh', { defaultValue: 'Refresh governance quotas and sovereign manifest' })}
                         className="p-2 hover:bg-white/5 rounded-lg transition-colors border border-zinc-800 disabled:opacity-50"
                     >
                         <RefreshCcw className={`w-4 h-4 text-zinc-400 ${loading ? 'animate-spin' : ''}`} />
@@ -147,16 +261,16 @@ export default function Governance_View() {
                             <div>
                                 <div className="flex justify-between items-end mb-2">
                                     <span className="text-3xl font-mono font-bold">
-                                        ${quotas?.total_spent?.toFixed(2) || '0.00'}
+                                        ${Number.isFinite(quotas?.total_spent) ? quotas?.total_spent.toFixed(2) : '0.00'}
                                     </span>
                                     <span className="text-zinc-500 text-xs mb-1">
-                                        of ${quotas?.total_budget?.toFixed(2) || '0.00'} limit
+                                        of ${Number.isFinite(quotas?.total_budget) ? quotas?.total_budget.toFixed(2) : '0.00'} limit
                                     </span>
                                 </div>
                                 <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
                                     <div 
                                         className="h-full bg-gradient-to-r from-emerald-500 to-indigo-500 transition-all duration-1000"
-                                        style={{ width: `${Math.min(spentPercentage, 100)}%` }}
+                                        style={{ width: `${spentPercentage}%` }}
                                     />
                                 </div>
                             </div>
@@ -164,11 +278,11 @@ export default function Governance_View() {
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
                                 <div>
                                     <p className="text-[10px] text-zinc-600 uppercase font-mono mb-1">Efficiency Score</p>
-                                    <p className="text-lg font-mono text-emerald-400">{((quotas?.efficiency ?? 0) * 100).toFixed(1)}%</p>
+                                    <p className="text-lg font-mono text-emerald-400">{efficiencyDisplay}%</p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] text-zinc-600 uppercase font-mono mb-1">Remaining</p>
-                                    <p className="text-lg font-mono">${quotas?.remaining?.toFixed(2) || '0.00'}</p>
+                                    <p className="text-lg font-mono">${Number.isFinite(quotas?.remaining) ? quotas?.remaining.toFixed(2) : '0.00'}</p>
                                 </div>
                             </div>
                         </div>
@@ -184,69 +298,194 @@ export default function Governance_View() {
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    <div className={`w-2 h-2 rounded-full animate-pulse ${
+                                        is_safe_mode && is_merkle_intact
+                                            ? 'bg-emerald-500'
+                                            : 'bg-amber-500'
+                                    }`} />
                                     <span className="text-sm font-medium">Aletheia Verification</span>
-                                    <div className={`p-1.5 rounded-lg border flex items-center gap-2 ${settings.is_safe_mode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                    <div className={`p-1.5 rounded-lg border flex items-center gap-2 ${is_safe_mode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
                                         <Shield size={12} />
-                                        <span className="text-[10px] font-bold uppercase tracking-wider">{settings.is_safe_mode ? 'Verified' : 'Bypassed'}</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-wider">{is_safe_mode ? 'Verified' : 'Bypassed'}</span>
                                     </div>
-                                    <span className="text-[10px] text-zinc-500 font-mono">OS: v1.1.58 | Mode: {settings.is_safe_mode ? 'Secure' : 'Unrestricted'}</span>
+                                    <span className="text-[10px] text-zinc-500 font-mono">OS: v1.1.58 | Mode: {is_safe_mode ? 'Secure' : 'Unrestricted'}</span>
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <div className="flex justify-between text-[10px] uppercase font-mono text-zinc-600">
                                     <span>Merkle Chain Integrity</span>
-                                    <span>{((quotas?.system_defense?.merkle_integrity ?? 1) * 100).toFixed(2)}%</span>
+                                    <span className={is_merkle_intact ? 'text-indigo-400' : 'text-rose-400'}>
+                                        {(merkle_val * 100).toFixed(2)}%
+                                    </span>
                                 </div>
                                 <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
                                     <div 
-                                        className="h-full bg-indigo-500/50" 
-                                        style={{ width: '100%' }}
+                                        className={`h-full transition-all duration-500 ${
+                                            is_merkle_intact ? 'bg-indigo-500/50' : 'bg-rose-500/80'
+                                        }`} 
+                                        style={{ width: `${Math.min(100, Math.max(0, merkle_val * 100))}%` }}
                                     />
+                                </div>
+                            </div>
+
+                            {/* Host Containment & Resource Guard Telemetry */}
+                            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-800/40 text-[11px]">
+                                <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-lg p-2.5">
+                                    <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Sandbox Isolation</div>
+                                    <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${quotas?.system_defense?.sandbox_status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                                        <span className="font-mono text-xs">{quotas?.system_defense?.sandbox_type || 'Host Native'}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-lg p-2.5">
+                                    <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Host Memory Guard</div>
+                                    <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                                        <span className={`font-mono text-xs ${((quotas?.system_defense?.memory_pressure ?? 0) > 0.85) ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                            {quotas?.system_defense?.memory_pressure !== undefined ? `${((quotas.system_defense.memory_pressure) * 100).toFixed(1)}%` : 'Nominal'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Sentinel Mode Toggle */}
-                    <div className="bg-[#0a0a0a] border border-zinc-800/50 rounded-2xl p-6">
-                        <div className="flex items-center gap-2 mb-5">
-                            <Brain className="w-4 h-4 text-cyan-400" />
-                            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Browser Sentinel</h2>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                                <p className="text-sm font-semibold text-zinc-200 mb-1">Active Sentinel Mode</p>
-                                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                                    Enables real-time UI health monitoring, predictive skill filtering, 
-                                    and autonomous error detection via the local browser AI specialist 
-                                    (Gemma-2B · WebGPU/WASM).
-                                </p>
-                                <div className={`mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                    settings.sentinel_mode
-                                        ? 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300'
-                                        : 'bg-zinc-800/50 border border-zinc-700/50 text-zinc-500'
-                                }`}>
-                                    <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                                        settings.sentinel_mode ? 'bg-cyan-400 animate-pulse' : 'bg-zinc-600'
-                                    }`} />
-                                    {settings.sentinel_mode ? 'Sentinel Active' : 'Sentinel Offline'}
+                    {/* Sentinel Mode Cognitive Shield Card */}
+                    <div className="bg-[#0a0a0a] border border-zinc-800/50 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-center">
+                                    <Brain className="w-4 h-4 text-cyan-400" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-300">Browser Sentinel</h2>
+                                    <p className="text-[10px] text-zinc-500 font-mono">
+                                        {browser_specialist_model_id || 'SmolLM-360M-Instruct'} · q4
+                                    </p>
                                 </div>
                             </div>
 
                             <button
                                 id="sentinel-mode-toggle"
+                                role="switch"
+                                aria-checked={sentinel_mode}
                                 onClick={toggle_sentinel}
                                 aria-label={i18n.t('governance.aria_toggle_sentinel', { defaultValue: 'Toggle Sentinel Mode' })}
                                 className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
-                                    settings.sentinel_mode ? 'bg-cyan-500' : 'bg-zinc-700'
+                                    sentinel_mode ? 'bg-cyan-500' : 'bg-zinc-700'
                                 }`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${
-                                    settings.sentinel_mode ? 'left-7' : 'left-1'
+                                    sentinel_mode ? 'left-7' : 'left-1'
                                 }`} />
+                            </button>
+                        </div>
+
+                        <p className="text-[11px] text-zinc-400 leading-relaxed mb-4">
+                            Autonomous in-browser cognitive sentry. Performs client-side DOM health audits, 
+                            entropy scans, and zero-leakage DLP filtering without sending UI data to external clouds.
+                        </p>
+
+                        {/* Status Ribbon */}
+                        <div className="mb-4">
+                            {!sentinel_mode ? (
+                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 text-zinc-500">
+                                    <div className="w-2 h-2 rounded-full bg-zinc-600" />
+                                    <span>Sentinel Offline (Dormant)</span>
+                                </div>
+                            ) : specialist_status === 'loading' ? (
+                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                                    <RotateCw className="w-3 h-3 animate-spin text-amber-400" />
+                                    <span>Warming Up {specialist_progress > 0 ? `(${specialist_progress}%)` : 'Pipelines...'}</span>
+                                </div>
+                            ) : specialist_status === 'thinking' ? (
+                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-cyan-500/15 border border-cyan-500/30 text-cyan-300">
+                                    <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                                    <span>Auditing Active DOM...</span>
+                                </div>
+                            ) : specialist_status === 'error' ? (
+                                <div className="flex flex-col gap-1">
+                                    <div 
+                                        className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 border border-rose-500/30 text-rose-400"
+                                        title={specialist_error || 'Pipeline initialization failed. Click Reset to retry.'}
+                                    >
+                                        <AlertTriangle className="w-3 h-3 text-rose-400" />
+                                        <span>Pipeline Exception</span>
+                                    </div>
+                                    {specialist_error && (
+                                        <div className="text-[10px] font-mono text-rose-400/80 max-w-xs truncate" title={specialist_error}>
+                                            {specialist_error}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>Sentinel Active · {specialist_device === 'none' ? 'READY' : specialist_device.toUpperCase()}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Telemetry Metrics Grid */}
+                        <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-zinc-800/60 mb-4 text-[11px]">
+                            <div className="bg-zinc-950/60 border border-zinc-800/40 rounded-lg p-2.5">
+                                <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Execution Core</div>
+                                <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                                    {specialist_device === 'none' 
+                                        ? (sentinel_mode ? 'Allocating...' : 'Dormant') 
+                                        : specialist_device.toUpperCase()}
+                                </div>
+                            </div>
+                            <div className="bg-zinc-950/60 border border-zinc-800/40 rounded-lg p-2.5">
+                                <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">DLP Shield</div>
+                                <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                                    <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                                    Pre-Flight Active
+                                </div>
+                            </div>
+                            <div className="bg-zinc-950/60 border border-zinc-800/40 rounded-lg p-2.5">
+                                <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Last DOM Scan</div>
+                                <div className="font-semibold text-zinc-300">
+                                    {specialist_scan_at ? specialist_scan_at.toLocaleTimeString() : 'Pending Next Idle'}
+                                </div>
+                            </div>
+                            <div className="bg-zinc-950/60 border border-zinc-800/40 rounded-lg p-2.5">
+                                <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Anomalies Detected</div>
+                                <div className={`font-semibold ${specialist_anomalies > 0 ? 'text-rose-400' : 'text-zinc-300'}`}>
+                                    {specialist_anomalies} escalated
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Quick Action Controls */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handle_run_audit}
+                                disabled={!sentinel_mode || isAuditing || specialist_status === 'thinking' || specialist_status === 'loading'}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {isAuditing || specialist_status === 'thinking' ? (
+                                    <>
+                                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Auditing...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="w-3.5 h-3.5" />
+                                        <span>Run Audit Now</span>
+                                    </>
+                                )}
+                            </button>
+
+                            <button
+                                onClick={handle_reset_pipeline}
+                                disabled={specialist_status === 'loading' || specialist_status === 'thinking'}
+                                title="Purge cached WebGPU/WASM pipeline buffers and re-initialize"
+                                className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800/60 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <RefreshCcw className="w-3.5 h-3.5" />
+                                <span>Reset</span>
                             </button>
                         </div>
                     </div>
