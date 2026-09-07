@@ -80,6 +80,18 @@ class TestMcpSandbox(unittest.TestCase):
             tadpole_mcp_server.validate_arguments({"verbose": 1}, schema)
         self.assertIn("must be a boolean", str(ctx.exception))
 
+    def test_validate_arguments_empty_or_none_schema(self):
+        # Empty and non-dict schemas should be handled gracefully without error
+        tadpole_mcp_server.validate_arguments({"any": "key"}, None)
+        tadpole_mcp_server.validate_arguments({"any": "key"}, {})
+        tadpole_mcp_server.validate_arguments({}, {})
+
+    def test_mcp_import_resilience(self):
+        # Ensure HAS_MCP flag exists and module is safely loaded
+        self.assertTrue(hasattr(tadpole_mcp_server, "HAS_MCP"))
+        self.assertIsInstance(tadpole_mcp_server.HAS_MCP, bool)
+        self.assertTrue(callable(tadpole_mcp_server.validate_arguments))
+
 if __name__ == "__main__":
     unittest.main()
 

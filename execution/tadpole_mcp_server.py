@@ -11,22 +11,54 @@ Uses stdio to communicate with clients, discovering class-based skills via the S
 - **Telemetry Link**: Search `[tadpole_mcp_server]` in system logs.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-from mcp.server.models import InitializationOptions
-import mcp.types as types
-from mcp.server import NotificationOptions, Server
-from mcp.server.stdio import stdio_server
+try:
+    from mcp.server.models import InitializationOptions
+    import mcp.types as types
+    from mcp.server import NotificationOptions, Server
+    from mcp.server.stdio import stdio_server
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
+    types = None
+    Server = None
+    InitializationOptions = None
+    NotificationOptions = None
+    stdio_server = None
+
 from core.registry import SkillRegistry
 
 
 # Initialize the MCP server
-server = Server("tadpole-execution-layer")
+if HAS_MCP and Server is not None:
+    server = Server("tadpole-execution-layer")
+else:
+    server = None
+
+
+def _list_tools_decorator():
+    if server is not None:
+        return server.list_tools()
+    def decorator(func):
+        return func
+    return decorator
+
+
+def _call_tool_decorator():
+    if server is not None:
+        return server.call_tool()
+    def decorator(func):
+        return func
+    return decorator
 
 # Store tools globally
 _TOOLS_CACHE = []
@@ -85,13 +117,22 @@ def load_skills():
             if not name:
                 continue
 
-            _TOOLS_CACHE.append(
-                types.Tool(
-                    name=name,
-                    description=description,
-                    inputSchema=schema
+            if HAS_MCP and types is not None:
+                _TOOLS_CACHE.append(
+                    types.Tool(
+                        name=name,
+                        description=description,
+                        inputSchema=schema
+                    )
                 )
-            )
+            else:
+                _TOOLS_CACHE.append(
+                    {
+                        "name": name,
+                        "description": description,
+                        "inputSchema": schema
+                    }
+                )
             _TOOL_MANIFESTS[name] = manifest
 
         except Exception as e:
@@ -100,24 +141,33 @@ def load_skills():
     # 2. Load Modular Class-based Skills
     _SKILL_REGISTRY.discover_skills()
     for tool_def in _SKILL_REGISTRY.get_all_tools():
-        _TOOLS_CACHE.append(
-            types.Tool(
-                name=tool_def["name"],
-                description=tool_def["description"],
-                inputSchema=tool_def["schema"]
+        if HAS_MCP and types is not None:
+            _TOOLS_CACHE.append(
+                types.Tool(
+                    name=tool_def["name"],
+                    description=tool_def["description"],
+                    inputSchema=tool_def["schema"]
+                )
             )
-        )
+        else:
+            _TOOLS_CACHE.append(tool_def)
 
 
-@server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
+def _format_text_response(text: str) -> Any:
+    if HAS_MCP and types is not None:
+        return types.TextContent(type="text", text=text)
+    return {"type": "text", "text": text}
+
+
+@_list_tools_decorator()
+async def handle_list_tools() -> list[Any]:
     """Returns the list of parsed tools."""
     return _TOOLS_CACHE
 
-@server.call_tool()
+@_call_tool_decorator()
 async def handle_call_tool(
     name: str, arguments: dict | None
-) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+) -> list[Any]:
     """Executes a specific tool."""
     import time
     import sys
@@ -126,7 +176,7 @@ async def handle_call_tool(
     # 1. Try Modular Class-based Registry first (Faster/Modern)
     if name in _SKILL_REGISTRY.skills:
         result = await _SKILL_REGISTRY.call_skill(name, arguments or {})
-        return [types.TextContent(type="text", text=result)]
+        return [_format_text_response(result)]
 
     # 2. Fallback to Legacy JSON Manifests
     if name not in _TOOL_MANIFESTS:
@@ -139,22 +189,22 @@ async def handle_call_tool(
     command = manifest.get("execution_command")
 
     if not command:
-        return [types.TextContent(type="text", text=f"Tool {name} has no execution_command defined.")]
+        return [_format_text_response(f"Tool {name} has no execution_command defined.")]
 
     if command == "(Native Execution Mode)":
-        return [types.TextContent(type="text", text=f"Tool {name} is a native Rust tool. Please execute via TadpoleOS internal host.")]
+        return [_format_text_response(f"Tool {name} is a native Rust tool. Please execute via TadpoleOS internal host.")]
 
     # Shell Scanner Compliance (SEC-05) - Extra safety guard
     dangerous_chars = ['|', '>', '<', '&', ';', '`', '$(']
     if any(char in command for char in dangerous_chars):
-        return [types.TextContent(type="text", text=f"Execution Failed: Command failed Shell Scanner compliance (contains forbidden shell operators).")]
+        return [_format_text_response("Execution Failed: Command failed Shell Scanner compliance (contains forbidden shell operators).")]
 
     # Validate arguments against manifest schema
     schema = manifest.get("schema", {})
     try:
         validate_arguments(arguments or {}, schema)
     except Exception as err:
-        return [types.TextContent(type="text", text=f"Argument Validation Failed: {str(err)}")]
+        return [_format_text_response(f"Argument Validation Failed: {str(err)}")]
 
     args_json = json.dumps(arguments or {})
     env = os.environ.copy()
@@ -199,9 +249,9 @@ async def handle_call_tool(
         print(f"🕒 [MCPHost] Legacy Tool '{name}' executed in {duration:.2f}ms (Subprocess)", file=sys.stderr)
 
         if process.returncode == 0:
-            return [types.TextContent(type="text", text=stdout_str)]
+            return [_format_text_response(stdout_str)]
         else:
-            return [types.TextContent(type="text", text=f"Execution Failed (Code {process.returncode}):\n{stdout_str}\n{stderr_str}")]
+            return [_format_text_response(f"Execution Failed (Code {process.returncode}):\n{stdout_str}\n{stderr_str}")]
 
     except asyncio.TimeoutError:
         try:
@@ -209,12 +259,17 @@ async def handle_call_tool(
             await process.wait()
         except Exception:
             pass
-        return [types.TextContent(type="text", text="Execution timed out after 30 seconds (subprocess terminated).")]
+        return [_format_text_response("Execution timed out after 30 seconds (subprocess terminated).")]
     except Exception as e:
-        return [types.TextContent(type="text", text=f"Execution Error: {str(e)}")]
+        return [_format_text_response(f"Execution Error: {str(e)}")]
 
 
 async def main():
+    if not HAS_MCP or server is None or stdio_server is None:
+        print("❌ Error: The 'mcp' Python SDK is required to run the Tadpole MCP Server.", file=sys.stderr)
+        print("Please install requirements: pip install -r execution/requirements.txt", file=sys.stderr)
+        sys.exit(1)
+
     # Load all skills into memory
     load_skills()
 

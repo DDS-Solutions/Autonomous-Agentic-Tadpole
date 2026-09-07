@@ -22,7 +22,7 @@ import sys
 import os
 import io
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Ensure stdout handles UTF-8 on Windows
 if sys.platform == "win32":
@@ -54,7 +54,7 @@ def backup_sqlite():
     backup_dir = db_path.parent / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_path = backup_dir / f"tadpole_{ts}.db"
     
     try:
