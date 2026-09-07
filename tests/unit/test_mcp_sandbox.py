@@ -92,6 +92,23 @@ class TestMcpSandbox(unittest.TestCase):
         self.assertIsInstance(tadpole_mcp_server.HAS_MCP, bool)
         self.assertTrue(callable(tadpole_mcp_server.validate_arguments))
 
+    def test_decorators_resilient_without_list_tools(self):
+        list_dec = tadpole_mcp_server._list_tools_decorator()
+        call_dec = tadpole_mcp_server._call_tool_decorator()
+        self.assertTrue(callable(list_dec))
+        self.assertTrue(callable(call_dec))
+        
+        @list_dec
+        def dummy_list():
+            return []
+            
+        @call_dec
+        def dummy_call():
+            return []
+            
+        self.assertEqual(dummy_list(), [])
+        self.assertEqual(dummy_call(), [])
+
 if __name__ == "__main__":
     unittest.main()
 

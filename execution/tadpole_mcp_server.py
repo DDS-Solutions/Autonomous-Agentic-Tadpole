@@ -46,7 +46,7 @@ else:
 
 
 def _list_tools_decorator():
-    if server is not None:
+    if server is not None and hasattr(server, "list_tools"):
         return server.list_tools()
     def decorator(func):
         return func
@@ -54,7 +54,7 @@ def _list_tools_decorator():
 
 
 def _call_tool_decorator():
-    if server is not None:
+    if server is not None and hasattr(server, "call_tool"):
         return server.call_tool()
     def decorator(func):
         return func
