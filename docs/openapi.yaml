@@ -1570,7 +1570,6 @@ paths:
     get:
       tags: [engine]
       summary: "Live voice"
-      security: []
       responses:
         "200":
           description: Success
@@ -1578,6 +1577,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/engine/pre-pr:
     post:
       tags: [engine]
@@ -1744,7 +1755,6 @@ paths:
     get:
       tags: [engine]
       summary: "Ws"
-      security: []
       responses:
         "200":
           description: Success
@@ -1752,6 +1762,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/env-schema:
     get:
       tags: [system]

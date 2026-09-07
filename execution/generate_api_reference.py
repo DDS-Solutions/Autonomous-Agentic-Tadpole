@@ -97,8 +97,6 @@ TAG_BY_PREFIX = [
 
 PUBLIC_PATHS = {
     "/v1/engine/health",
-    "/v1/engine/ws",
-    "/v1/engine/live-voice",
 }
 
 
@@ -991,6 +989,12 @@ def write_api_reference(routes: list[Route]) -> None:
             "Authorization: Bearer <NEURAL_TOKEN>",
             "```",
             "",
+            "Protected WebSocket routes (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) require token authentication via the WebSocket subprotocol header:",
+            "",
+            "```http",
+            "Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>",
+            "```",
+            "",
         ]
     )
 
@@ -1002,7 +1006,10 @@ def write_api_reference(routes: list[Route]) -> None:
         title = tag.replace("-", " ").title()
         lines.extend([f"## {title}", "", "| Method | Path | Handler | Notes |", "| --- | --- | --- | --- |"])
         for route in grouped[tag]:
-            note = "Public" if route.public else "Protected"
+            if route.path in ("/v1/engine/ws", "/v1/engine/live-voice"):
+                note = "Protected (WS Subprotocol)"
+            else:
+                note = "Public" if route.public else "Protected"
             if route.feature_note:
                 note = f"{note}; {route.feature_note}"
             lines.append(f"| `{route.method}` | `{route.path}` | `{route.handler}` | {note} |")
