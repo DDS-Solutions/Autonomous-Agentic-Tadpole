@@ -57,7 +57,7 @@ Modes are not random; they follow the development lifecycle:
 ### 3. ⚖️ ALETHEIA Mode
 **When to use**: Core logical reasoning, proving correctness, and evaluating edge cases before implementation.
 - **Behavior**: Deep truth-seeking, logical validation, and risk analysis. Governed by the specialized Aletheia reasoning protocol.
-- **Constraint**: Proactively identify failure paths, trade-offs, and invariants. Cross-reference [.agent/skills/aletheia-reasoning/SKILL.md](file:///d:/TadpoleOS-Dev/.agent/skills/aletheia-reasoning/SKILL.md) for execution.
+- **Constraint**: Proactively identify failure paths, trade-offs, and invariants. Cross-reference [.agent/skills/aletheia-reasoning/SKILL.md](file:///.agent/skills/aletheia-reasoning/SKILL.md) for execution.
 - **Output Style**: Analytical/Socratic. State assumptions, prove assertions, and list edge cases.
 
 ### 4. ⚡ IMPLEMENT Mode

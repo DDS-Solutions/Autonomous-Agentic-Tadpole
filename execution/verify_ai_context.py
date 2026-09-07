@@ -180,7 +180,19 @@ def verify_file(file_path, auto_fix=False):
                 clean_str_path = str(link_path).split('#')[0]
                 link_path_clean = Path(clean_str_path)
                 if not link_path_clean.exists():
-                    findings.append(f"Broken file link: '{cleaned_link}' not found")
+                    # Attempt fallback by matching against repo-relative path if absolute from dev host
+                    norm = cleaned_link.lstrip('/')
+                    if len(norm) > 2 and norm[1] == ':':
+                        norm = norm[2:].lstrip('/')
+                    parts = [p for p in norm.split('/') if p]
+                    fallback_found = False
+                    for i in range(len(parts)):
+                        candidate = ROOT.joinpath(*parts[i:])
+                        if candidate.exists() and not candidate.is_dir():
+                            fallback_found = True
+                            break
+                    if not fallback_found:
+                        findings.append(f"Broken file link: '{cleaned_link}' not found")
                     
             plain_paths = re.findall(r'\b((?:server-rs|execution|src|data|docs|directives)/[a-zA-Z0-9_\-\./]+\.(?:rs|py|ts|tsx|json|md|sql))\b', content)
             for path_str in plain_paths:
