@@ -437,7 +437,7 @@ async function dispatch_directive(
     event_bus.emit_log({ source: 'User', text: `→ ${target_display}: ${message}`, severity: 'info' });
 
     // 2. Neural Link Acknowledgment (cancellable timer to avoid race-after-failure)
-    let ack_timer: ReturnType<typeof setTimeout> | null = null;
+    let ack_timer: ReturnType<typeof setTimeout> | undefined;
     ack_timer = setTimeout(() => {
         const clean_name = (target_display.startsWith('@') || target_display.startsWith('#'))
             ? target_display.substring(1)
@@ -519,7 +519,6 @@ async function dispatch_directive(
     } catch (err) {
         if (ack_timer) {
             clearTimeout(ack_timer);
-            ack_timer = null;
         }
         const error_msg = err instanceof Error ? err.message : String(err);
         event_bus.emit_log({

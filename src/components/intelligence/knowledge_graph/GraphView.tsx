@@ -77,7 +77,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                 } else if (norm_concept === 'engineering' || norm_concept === 'playbook' || norm_concept === 'subsystem') {
                     kind_color = '#06b6d4'; // Cyan
                 } else if (norm_concept === 'executive' || norm_concept === 'governance') {
-                    kind_color = '#a855f7'; // Purple
+                    kind_color = '#0d9488'; // Teal
                 } else if (norm_concept === 'product') {
                     kind_color = '#f59e0b'; // Amber
                 } else {

@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { governance_service } from './governance_service';
 import { system_api_service } from './system_api_service';
-import { tadpole_os_socket } from './socket';
 import { event_bus } from './event_bus';
 
 vi.mock('./system_api_service', () => ({

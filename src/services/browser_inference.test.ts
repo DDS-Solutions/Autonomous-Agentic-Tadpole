@@ -78,7 +78,6 @@ import {
     build_chatml_prompt,
     ALLOWED_SPECIALIST_MODELS,
     DEFAULT_SPECIALIST_MODEL,
-    SKILL_SIMILARITY_FLOOR,
     resolve_specialist_model_id
 } from './browser_inference';
 import { event_bus } from './event_bus';

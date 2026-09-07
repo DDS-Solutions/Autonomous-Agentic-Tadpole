@@ -170,7 +170,31 @@ export default function Governance_View() {
 
     // --- Effect Wiring: Clean Dependency Graph (High #5) ---
     useEffect(() => {
-        void fetchGovernance();
+        let active = true;
+        const initSync = async () => {
+            try {
+                const [m, q] = await Promise.all([
+                    governance_service.get_manifest(),
+                    governance_service.sync()
+                ]);
+                if (active && isMountedRef.current) {
+                    setManifest(m);
+                    setQuotas(q);
+                    setLastRefresh(new Date());
+                }
+            } catch (e: unknown) {
+                if (active && isMountedRef.current) {
+                    console.error('[Governance_View] Initial Sync Failed:', e);
+                    setError('Neural link synchronization failed. System state may be stale.');
+                }
+            } finally {
+                if (active && isMountedRef.current) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        void initSync();
         
         // Event-driven sync: Listen for pulses from the service
         const unsubscribe = governance_service.on_pulse((new_quotas) => {
@@ -180,8 +204,11 @@ export default function Governance_View() {
             }
         });
 
-        return () => unsubscribe();
-    }, [fetchGovernance]);
+        return () => {
+            active = false;
+            unsubscribe();
+        };
+    }, []);
 
     // --- Mathematical & Precision Normalization ---
     const spentPercentage = quotas && quotas.total_budget > 0 

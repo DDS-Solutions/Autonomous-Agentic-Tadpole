@@ -384,6 +384,7 @@ describe('process_command', () => {
             // Fast-forward past 100ms
             vi.advanceTimersByTime(200);
 
+            expect(emit_spy).toHaveBeenCalled();
             vi.useRealTimers();
         });
 

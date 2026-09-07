@@ -125,7 +125,7 @@ export const scan_and_redact_secrets = (text: string): SecretScanResult => {
     }
 
     // 5. Explicit Bearer Tokens
-    const bearer_regex = /Bearer\s+([a-zA-Z0-9_\-\.]{25,})/gi;
+    const bearer_regex = /Bearer\s+([a-zA-Z0-9_\-.]{25,})/gi;
     if (bearer_regex.test(sanitized)) {
         sanitized = sanitized.replace(bearer_regex, 'Bearer [REDACTED_BEARER_TOKEN]');
         detected_types.push('Bearer Token');
