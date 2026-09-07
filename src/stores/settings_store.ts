@@ -32,6 +32,70 @@ const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
 ]);
 
+
+const API_KEY_SESSION_KEY = 'tadpole_api_key_session';
+
+const get_session_api_key = (): string => {
+    if (typeof window === 'undefined') return '';
+    try {
+        return window.sessionStorage.getItem(API_KEY_SESSION_KEY) || '';
+    } catch {
+        return '';
+    }
+};
+
+const set_session_api_key = (value: string): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        if (value) window.sessionStorage.setItem(API_KEY_SESSION_KEY, value);
+        else window.sessionStorage.removeItem(API_KEY_SESSION_KEY);
+    } catch {
+        // Storage can be unavailable in locked-down browser contexts.
+    }
+};
+
+const strip_persisted_api_key = (serialized: string): string => {
+    try {
+        const parsed = JSON.parse(serialized);
+        const persisted_settings = parsed?.state?.settings;
+        if (persisted_settings && typeof persisted_settings.tadpole_os_api_key === 'string' && persisted_settings.tadpole_os_api_key) {
+            parsed.state.settings = { ...persisted_settings, tadpole_os_api_key: '' };
+            return JSON.stringify(parsed);
+        }
+    } catch {
+        // Leave malformed data for Zustand's normal error handling.
+    }
+    return serialized;
+};
+
+const settings_storage = {
+    getItem: (name: string): string | null => {
+        try {
+            const value = globalThis.localStorage.getItem(name);
+            if (!value) return null;
+            const safe_value = strip_persisted_api_key(value);
+            if (safe_value !== value) globalThis.localStorage.setItem(name, safe_value);
+            return safe_value;
+        } catch {
+            return null;
+        }
+    },
+    setItem: (name: string, value: string): void => {
+        try {
+            globalThis.localStorage.setItem(name, strip_persisted_api_key(value));
+        } catch {
+            // Persistence is optional; keep the in-memory store usable.
+        }
+    },
+    removeItem: (name: string): void => {
+        try {
+            globalThis.localStorage.removeItem(name);
+        } catch {
+            // Persistence is optional.
+        }
+    },
+};
+
 export interface Tadpole_Settings {
     tadpole_os_url: string;
     tadpole_os_api_key: string;
@@ -126,7 +190,7 @@ export const use_settings_store = create<Settings_State>()(
         (set, get) => ({
             settings: {
                 tadpole_os_url: get_base_url(),
-                tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
+                tadpole_os_api_key: sanitize_api_key(get_session_api_key() || import.meta.env.VITE_NEURAL_TOKEN || ''),
                 theme: 'zinc',
                 density: 'compact',
                 backdrop_theme: 'cyan',
@@ -162,9 +226,10 @@ export const use_settings_store = create<Settings_State>()(
                     settings: {
                         ...new_settings,
                         tadpole_os_url: clean_url,
-                        tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key),
+                        tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key || ''),
                     }
                 });
+                set_session_api_key(sanitize_api_key(new_settings.tadpole_os_api_key || ''));
                 return null;
             },
 
@@ -181,12 +246,21 @@ export const use_settings_store = create<Settings_State>()(
                     }
                 }
 
+                if (key === 'tadpole_os_api_key' && typeof final_value === 'string') {
+                    final_value = sanitize_api_key(final_value) as Tadpole_Settings[K];
+                    set_session_api_key(final_value);
+                }
+
                 set({ settings: { ...current, [key]: final_value } });
             }
         }),
         {
             name: SETTINGS_KEY,
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => settings_storage),
+            // Keep preferences persistent, but never serialize the API key to disk.
+            partialize: (state) => ({
+                settings: { ...state.settings, tadpole_os_api_key: '' },
+            }),
             
             // THE NUCLEAR PURGE: Simplified to avoid infinite loops during initialization
             onRehydrateStorage: () => {
@@ -197,7 +271,11 @@ export const use_settings_store = create<Settings_State>()(
                     }
                     if (hydrated_state) {
                         const original_url = hydrated_state.settings.tadpole_os_url;
-                        hydrated_state.settings = sanitize_settings(hydrated_state.settings);
+                        hydrated_state.settings = {
+                            ...sanitize_settings(hydrated_state.settings),
+                            // API keys are session-scoped and are never recovered from localStorage.
+                            tadpole_os_api_key: sanitize_api_key(get_session_api_key() || import.meta.env.VITE_NEURAL_TOKEN || ''),
+                        };
                         const url = hydrated_state.settings.tadpole_os_url;
                         if (url && url.toLowerCase().includes('tauri')) {
                             console.warn('[SettingsStore] Legacy internal URL detected in persistent storage. Resetting to standard loopback.');

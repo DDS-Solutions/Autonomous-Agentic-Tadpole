@@ -16,10 +16,11 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::{extract::State, Json};
+use axum::response::{IntoResponse, Response};
+use axum::{extract::{ConnectInfo, State}, Json};
 use serde::Serialize;
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 #[derive(Serialize)]
 pub struct DatabaseHealth {
@@ -46,6 +47,13 @@ pub struct SwarmHealth {
     pub status: String,
 }
 
+/// Minimal heartbeat returned to non-loopback callers.
+#[derive(Serialize)]
+pub struct MinimalHealthResponse {
+    pub status: &'static str,
+    pub heartbeat: String,
+}
+
 /// Heartbeat status response containing system telemetry and feature flags.
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -70,7 +78,17 @@ pub struct HealthResponse {
 #[tracing::instrument(skip(state), name = "system::health")]
 pub async fn health_check(
     State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> Result<Response, AppError> {
+    if !peer.ip().is_loopback() {
+        return Ok((
+            StatusCode::OK,
+            Json(MinimalHealthResponse {
+                status: "ok",
+                heartbeat: chrono::Utc::now().to_rfc3339(),
+            }),
+        ).into_response());
+    }
     #[allow(unused_mut)]
     let mut features = Vec::new();
 
@@ -173,7 +191,7 @@ pub async fn health_check(
             swarm,
             uptime_seconds,
         }),
-    ))
+    )).into_response()
 }
 
 /// GET /metrics

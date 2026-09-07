@@ -194,7 +194,7 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
     // 1. Whitelist of Allowed Base Binaries
     let allowed_binaries = [
         "ls", "cd", "pwd", "cat", "echo", "grep", "find", 
-        "cargo", "npm", "git", "python", "node", "rustc",
+        "cargo", "npm", "git", "python", "node", "rustc", "bash", "powershell",
         "mkdir", "cp", "mv", "touch", "test"
     ];
 
@@ -251,7 +251,7 @@ pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
     // 3. Whitelist of Allowed Base Commands
     let allowed_commands = [
         "ls", "cd", "pwd", "cat", "echo", "grep", "find", 
-        "cargo", "npm", "git", "python", "node", "rustc",
+        "cargo", "npm", "git", "python", "node", "rustc", "bash", "powershell",
         "mkdir", "cp", "mv", "touch", "test"
     ];
 

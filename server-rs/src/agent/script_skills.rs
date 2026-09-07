@@ -65,6 +65,19 @@ fn default_oversight() -> bool {
     true
 }
 
+/// Maps a skill name to a safe filename without collapsing distinct names.
+fn collision_safe_skill_filename(name: &str, extension: &str) -> String {
+    let safe_name = crate::utils::security::sanitize_id(name);
+    let base = if safe_name.is_empty() { "skill" } else { safe_name.as_str() };
+    if safe_name == name && !safe_name.is_empty() {
+        return format!("{base}.{extension}");
+    }
+    let hash = name.bytes().fold(0xcbf29ce484222325u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
+    });
+    format!("{base}-{hash:016x}.{extension}")
+}
+
 /// Represents a dynamic workflow loaded from `data/workflows/*.md`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowDefinition {
@@ -399,8 +412,7 @@ impl ScriptSkillsRegistry {
     /// rename, ensuring disk integrity even on power failure or crash.
     pub async fn save_skill(&self, skill: SkillDefinition) -> Result<(), AppError> {
         crate::utils::security::validate_shell_command(&skill.execution_command)?;
-        let safe_name = crate::utils::security::sanitize_id(&skill.name);
-        let filename = format!("{}.json", safe_name);
+        let filename = collision_safe_skill_filename(&skill.name, "json");
         let path = crate::utils::security::validate_path(&self.skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         let content = serde_json::to_string_pretty(&skill).map_err(|e| AppError::InternalServerError(e.to_string()))?;
@@ -413,8 +425,7 @@ impl ScriptSkillsRegistry {
 
     pub async fn save_agent_skill(&self, mut skill: SkillDefinition) -> Result<(), AppError> {
         crate::utils::security::validate_shell_command(&skill.execution_command)?;
-        let safe_name = crate::utils::security::sanitize_id(&skill.name);
-        let filename = format!("{}.json", safe_name);
+        let filename = collision_safe_skill_filename(&skill.name, "json");
         let path = crate::utils::security::validate_path(&self.agent_skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         skill.category = "ai".to_string();
@@ -451,8 +462,7 @@ impl ScriptSkillsRegistry {
     }
 
     pub async fn delete_skill(&self, name: &str) -> Result<(), AppError> {
-        let safe_name = crate::utils::security::sanitize_id(name);
-        let filename = format!("{}.json", safe_name);
+        let filename = collision_safe_skill_filename(name, "json");
         let path = crate::utils::security::validate_path(&self.skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if path.exists() {
@@ -699,6 +709,13 @@ pub fn extract_script_docstring(content: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_skill_filename_is_collision_safe() {
+        assert_eq!(collision_safe_skill_filename("safe_name", "json"), "safe_name.json");
+        assert_ne!(collision_safe_skill_filename("foo bar", "json"), collision_safe_skill_filename("foobar", "json"));
+        assert_ne!(collision_safe_skill_filename("foo!", "json"), collision_safe_skill_filename("foo?", "json"));
+    }
 
     #[test]
     fn test_extract_script_docstring() {

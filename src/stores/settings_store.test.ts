@@ -49,6 +49,7 @@ describe('settings_store', () => {
         (global as any).__MOCK_STORAGE__ = {};
         vi.resetModules();
         vi.clearAllMocks();
+        globalThis.sessionStorage?.clear();
     });
 
     afterEach(() => {
@@ -96,7 +97,7 @@ describe('settings_store', () => {
 
         const settings = get_settings();
         expect(settings.tadpole_os_url).toBe('http://custom-engine:9000');
-        expect(settings.tadpole_os_api_key).toBe(test_key);
+        expect(settings.tadpole_os_api_key).toBe(import.meta.env.VITE_NEURAL_TOKEN || ');
         expect(settings.privacy_mode).toBe(true);
     });
 

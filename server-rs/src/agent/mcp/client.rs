@@ -15,6 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -53,20 +54,30 @@ pub struct McpClient {
     stdout: BufReader<ChildStdout>,
     next_id: u64,
 }
-
 impl McpClient {
-    pub async fn spawn(command_line: &str) -> Result<Self, AppError> {
-        info!("🚀 [client] [MCP] Spawning server: {}", command_line);
-        
-        let mut parts = command_line.split_whitespace();
-        let program = parts.next().ok_or_else(|| AppError::BadRequest("Empty command".to_string()))?;
-        let args: Vec<&str> = parts.collect();
 
-        let mut child = Command::new(program)
-            .args(args)
+    /// Spawns an MCP server from structured JSON command, args, and env.
+    /// Keeping argv as an array preserves quoted arguments and avoids shell parsing.
+    pub async fn spawn(
+        program: &str,
+        args: &[String],
+        env: Option<&HashMap<String, String>>,
+    ) -> Result<Self, AppError> {
+        if program.trim().is_empty() {
+            return Err(AppError::BadRequest("Empty command".to_string()));
+        }
+        info!("🚀 [client] [MCP] Spawning server: {}", program);
+
+        let mut command = Command::new(program);
+        command.args(args);
+        if let Some(env) = env {
+            command.envs(env);
+        }
+
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit()) // Log stderr to the console
+            .stderr(Stdio::inherit())
             .spawn()
             .map_err(AppError::Io)?;
 
