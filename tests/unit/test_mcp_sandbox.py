@@ -109,6 +109,47 @@ class TestMcpSandbox(unittest.TestCase):
         self.assertEqual(dummy_list(), [])
         self.assertEqual(dummy_call(), [])
 
+
+    def test_build_skill_subprocess_env_excludes_secrets(self):
+        source = {
+            "PATH": "/usr/bin",
+            "HOME": "/home/tadpole",
+            "WORKSPACE_ROOT": "/workspace",
+            "OPENAI_API_KEY": "sk-secret",
+            "ANTHROPIC_API_KEY": "sk-ant-secret",
+            "GOOGLE_API_KEY": "goog-secret",
+            "GROQ_API_KEY": "groq-secret",
+            "DEEPSEEK_API_KEY": "ds-secret",
+            "REPLICATE_API_KEY": "r8-secret",
+            "NEURAL_TOKEN": "neural-secret",
+            "NEURAL_TOKEN_OLD": "old-secret",
+            "NEURAL_TOKEN_NEW": "new-secret",
+            "NEURAL_ENGINE_ACCESS_TOKEN": "engine-secret",
+            "UNRELATED_CUSTOM": "should-not-pass",
+        }
+        env = tadpole_mcp_server.build_skill_subprocess_env(
+            arguments_json='{"x":1}',
+            source_env=source,
+        )
+        self.assertEqual(env["PATH"], "/usr/bin")
+        self.assertEqual(env["HOME"], "/home/tadpole")
+        self.assertEqual(env["WORKSPACE_ROOT"], "/workspace")
+        self.assertEqual(env["TADPOLE_SKILL_ARGS"], '{"x":1}')
+        for secret_key in (
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GOOGLE_API_KEY",
+            "GROQ_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "REPLICATE_API_KEY",
+            "NEURAL_TOKEN",
+            "NEURAL_TOKEN_OLD",
+            "NEURAL_TOKEN_NEW",
+            "NEURAL_ENGINE_ACCESS_TOKEN",
+            "UNRELATED_CUSTOM",
+        ):
+            self.assertNotIn(secret_key, env)
+
 if __name__ == "__main__":
     unittest.main()
 
