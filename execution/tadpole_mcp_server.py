@@ -96,6 +96,49 @@ def validate_arguments(args: dict, schema: dict):
 
 
 
+# Environment keys allowed into legacy skill subprocesses.
+# Explicitly excludes provider API keys and NEURAL_TOKEN*.
+_SKILL_ENV_ALLOWLIST = frozenset({
+    "PATH",
+    "HOME",
+    "USER",
+    "USERNAME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "VIRTUAL_ENV",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "WORKSPACE_ROOT",
+    "TADPOLE_SKILL_ARGS",
+})
+
+
+def build_skill_subprocess_env(arguments_json: str | None = None, source_env: dict | None = None) -> dict[str, str]:
+    """Build a minimal env for skill subprocesses (no provider secrets)."""
+    src = source_env if source_env is not None else os.environ
+    env: dict[str, str] = {}
+    for key in _SKILL_ENV_ALLOWLIST:
+        if key == "TADPOLE_SKILL_ARGS":
+            continue
+        val = src.get(key)
+        if val is not None:
+            env[key] = val
+    if arguments_json is not None:
+        env["TADPOLE_SKILL_ARGS"] = arguments_json
+    elif "TADPOLE_SKILL_ARGS" in src:
+        env["TADPOLE_SKILL_ARGS"] = src["TADPOLE_SKILL_ARGS"]
+    return env
+
+
+
 def load_skills():
     """Scans the execution directory for JSON manifests and loads them."""
     global _TOOLS_CACHE, _TOOL_MANIFESTS
@@ -207,8 +250,7 @@ async def handle_call_tool(
         return [_format_text_response(f"Argument Validation Failed: {str(err)}")]
 
     args_json = json.dumps(arguments or {})
-    env = os.environ.copy()
-    env["TADPOLE_SKILL_ARGS"] = args_json
+    env = build_skill_subprocess_env(arguments_json=args_json)
 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
 

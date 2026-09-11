@@ -57,3 +57,6 @@ audit_production_report.md
 sidecar_panic.log
 server-rs/errors.txt
 server-rs/logs.txt
+
+# Local Prometheus scrape credentials (copy from bearer_token.example)
+monitoring/prometheus/bearer_token

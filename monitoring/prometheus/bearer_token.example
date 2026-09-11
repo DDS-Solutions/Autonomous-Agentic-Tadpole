@@ -1,2 +1,3 @@
-# Paste your NEURAL_TOKEN here to enable Prometheus to scrape /metrics
-test-token
+# Copy this file to bearer_token and paste your NEURAL_TOKEN (one line, no quotes).
+# Never commit bearer_token — it is gitignored.
+your-neural-token-here
