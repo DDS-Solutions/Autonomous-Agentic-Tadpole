@@ -260,11 +260,9 @@ class BrowserInferenceService {
                     const [gen_res, embed_res] = await Promise.all([
                         pipeline('text-generation', this.model_id, { 
                             device,
-                            // @ts-expect-error -- dtype: 'q4' supported in Transformers.js v3/v4 ONNX
                             dtype: 'q4',
                             // @ts-expect-error -- fetch_init not in pipeline options type
                             fetch_init: { credentials: 'omit' },
-                            // @ts-expect-error -- progress_callback supported in Transformers.js
                             progress_callback: (item: { status?: string; progress?: number }) => {
                                 if (item?.status === 'progress' && typeof item?.progress === 'number') {
                                     gen_progress = item.progress;
@@ -276,7 +274,6 @@ class BrowserInferenceService {
                             device,
                             // @ts-expect-error -- fetch_init not in pipeline options type
                             fetch_init: { credentials: 'omit' },
-                            // @ts-expect-error -- progress_callback supported in Transformers.js
                             progress_callback: (item: { status?: string; progress?: number }) => {
                                 if (item?.status === 'progress' && typeof item?.progress === 'number') {
                                     embed_progress = item.progress;
@@ -467,7 +464,6 @@ class BrowserInferenceService {
                 const output = await this.pipe(input, {
                     max_new_tokens,
                     temperature: 0.2,
-                    // @ts-expect-error -- return_full_text supported in text-generation pipeline
                     return_full_text: false,
                 });
 
@@ -551,7 +547,6 @@ class BrowserInferenceService {
                 const output = await this.pipe(prompt, {
                     max_new_tokens: 64,
                     temperature: 0.1,
-                    // @ts-expect-error -- return_full_text supported in text-generation pipeline
                     return_full_text: false,
                 });
 

@@ -172,8 +172,9 @@ describe('BrowserInferenceService', () => {
             vi.mocked(vram_monitor_service.get_status).mockReturnValueOnce({
                 severity: 'critical',
                 pressure: 0.96,
-                available_mb: 100,
-                used_mb: 3996
+                is_throttled: true,
+                vram_bytes_used: 3996 * 1024 * 1024,
+                vram_bytes_total: 4096 * 1024 * 1024
             });
 
             const result = await browser_inference_service.analyze_ui_structured('test', 'DOM');

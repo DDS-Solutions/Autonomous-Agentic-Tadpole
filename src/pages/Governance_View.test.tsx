@@ -302,7 +302,7 @@ describe('Governance_View - Kernel Defense Integration', () => {
 
     it('handles scan_now failure gracefully without throwing unhandled rejection', async () => {
         use_settings_store.getState().update_setting('sentinel_mode', true);
-        use_browser_specialist_store.setState({ status: 'ready' });
+        use_browser_specialist_store.setState({ status: 'idle' });
         (sentinel_daemon.scan_now as Mock).mockRejectedValue(new Error('GPU context lost'));
 
         render(

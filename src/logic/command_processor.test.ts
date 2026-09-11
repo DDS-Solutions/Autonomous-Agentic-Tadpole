@@ -300,9 +300,9 @@ describe('process_command', () => {
 
     describe('Disambiguated Agent Resolution', () => {
         const ambiguity_roster: Agent[] = [
-            { id: '1', name: 'Alpha Analyst', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: {}, role: 'Analyst', department: 'Eng', category: 'general' },
-            { id: '2', name: 'Alpha Architect', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: {}, role: 'Architect', department: 'Eng', category: 'general' },
-            { id: '3', name: 'Beta', status: 'idle', theme_color: '#fff', voice_id: 'v3', tokens_used: 0, model: 'gpt-4', model_config: {}, role: 'Tester', department: 'QA', category: 'general' }
+            { id: '1', name: 'Alpha Analyst', status: 'idle', theme_color: '#000', voice_id: 'v1', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'ollama', modelId: 'test-model' }, role: 'Analyst', department: 'Engineering', category: 'general' },
+            { id: '2', name: 'Alpha Architect', status: 'idle', theme_color: '#fff', voice_id: 'v2', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'ollama', modelId: 'test-model' }, role: 'Architect', department: 'Engineering', category: 'general' },
+            { id: '3', name: 'Beta', status: 'idle', theme_color: '#fff', voice_id: 'v3', tokens_used: 0, model: 'gpt-4', model_config: { provider: 'ollama', modelId: 'test-model' }, role: 'Tester', department: 'Quality Assurance', category: 'general' }
         ];
 
         it('should resolve exact match without ambiguity', () => {
@@ -359,7 +359,7 @@ describe('process_command', () => {
 
         it('should execute deploy when preceded by "/deploy"', async () => {
             const { system_api_service } = await import('../services/system_api_service');
-            const deploy_spy = vi.spyOn(system_api_service, 'deploy_engine').mockResolvedValueOnce({ output: 'Deploy success' });
+            const deploy_spy = vi.spyOn(system_api_service, 'deploy_engine').mockResolvedValueOnce({ status: 'ok', output: 'Deploy success' });
 
             // Step 1: Request
             await process_command('/deploy', mock_agents);

@@ -259,7 +259,7 @@ export async function process_command(
     if (secret_scan.has_secrets) {
         command_text = secret_scan.sanitized;
         event_bus.emit_log({
-            source: 'SentinelDLP',
+            source: 'System',
             text: `🛡️ [Pre-Flight DLP Shield] Redacted ${secret_scan.redacted_count} credential(s) (${secret_scan.detected_types.join(', ')}) from outgoing prompt.`,
             severity: 'warning'
         });
@@ -503,7 +503,7 @@ async function dispatch_directive(
         // Clear ack timer on rapid successful resolution to prevent out-of-order acknowledgment logs
         if (ack_timer) {
             clearTimeout(ack_timer);
-            ack_timer = null;
+            ack_timer = undefined;
         }
 
         // 5. Asynchronous Audit Tracking (Non-blocking background subscription)
