@@ -80,9 +80,13 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --break-system-packages skillspector
+# Optional Wasmtime for USE_SANDBOX_WASM (best-effort; Docker remains the primary sandbox).
+RUN curl -fsSL https://github.com/bytecodealliance/wasmtime/releases/download/v26.0.1/wasmtime-v26.0.1-x86_64-linux.tar.xz \
+    | tar -xJ --strip-components=1 -C /usr/local/bin wasmtime-v26.0.1-x86_64-linux/wasmtime \
+    || echo "warn: wasmtime install skipped"
 
 # Copy binary from builder
 COPY --from=builder /tmp/target/release/server-rs /app/server-rs-bin
@@ -90,6 +94,11 @@ RUN chmod +x /app/server-rs-bin
 
 # Copy the built React dashboard from the frontend-builder stage
 COPY --from=frontend-builder /usr/src/app/dist /app/dist
+
+# Python execution layer (MCP host, skills, verification scripts)
+COPY execution /app/execution
+RUN python3 -m pip install --break-system-packages -r /app/execution/requirements.txt \
+    && python3 -m pip install --break-system-packages skillspector
 
 # Copy data directory (skills, workflows, context, database)
 COPY data /app/data
@@ -100,7 +109,7 @@ RUN mkdir -p /app/.agent /app/workspaces
 # Copy agent configurations (mcp_config.json, skills, workflows)
 COPY .agent /app/.agent
 
-# Create non-root user (UID 1001 to avoid conflict with default ubuntu user 1000)
+# Create non-root user (UID 1001). Docker socket access is granted at runtime via compose group_add.
 RUN groupadd -g 1001 tadpole && useradd -r -u 1001 -g tadpole tadpole
 RUN chown -R tadpole:tadpole /app
 
@@ -111,6 +120,9 @@ USER tadpole
 
 # Single process — no process manager needed
 ENV STATIC_DIR=/app/dist
+ENV WORKSPACE_ROOT=/app
+ENV USE_SANDBOX_DOCKER=true
+ENV ALLOW_HOST_SKILL_EXECUTION=false
 
 # Health check (TRAC-01 observability)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
