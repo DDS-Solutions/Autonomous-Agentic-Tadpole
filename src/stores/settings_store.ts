@@ -32,12 +32,16 @@ const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
 ]);
 
+export type ThemeOption = 'zinc' | 'slate' | 'neutral';
+export type DensityOption = 'compact' | 'comfortable';
+export type BackdropThemeOption = 'cyan' | 'emerald' | 'nebula' | 'slate' | 'amber';
+
 export interface Tadpole_Settings {
     tadpole_os_url: string;
     tadpole_os_api_key: string;
-    theme: string;
-    density: string;
-    backdrop_theme: string;
+    theme: ThemeOption;
+    density: DensityOption;
+    backdrop_theme: BackdropThemeOption;
     default_model: string;
     default_temperature: number;
     auto_approve_safe_skills: boolean;
@@ -58,11 +62,12 @@ interface Settings_State {
     settings: Tadpole_Settings;
     save_settings: (new_settings: Tadpole_Settings) => string | null;
     update_setting: <K extends keyof Tadpole_Settings>(key: K, value: Tadpole_Settings[K]) => void;
+    reset_to_defaults: () => void;
 }
 
-const get_base_url = (): string => {
+export const get_base_url = (): string => {
     if (import.meta.env.VITE_TADPOLE_OS_URL) {
-        return import.meta.env.VITE_TADPOLE_OS_URL;
+        return import.meta.env.VITE_TADPOLE_OS_URL.trim().replace(/\/+$/, '');
     }
     // Dynamically align loopback URL with current window origin if available
     if (typeof window !== 'undefined' && window.location?.hostname) {
@@ -76,19 +81,20 @@ const get_base_url = (): string => {
 
 const normalize_loopback_url = (url: string | undefined): string => {
     if (!url) return get_base_url();
-    if (url.toLowerCase().includes('tauri')) {
+    const cleaned = url.trim().replace(/\/+$/, '');
+    if (cleaned.toLowerCase().includes('tauri')) {
         return get_base_url();
     }
     if (typeof window !== 'undefined' && window.location?.hostname) {
         const current_host = window.location.hostname;
-        if (current_host === 'localhost' && url.includes('127.0.0.1:8000')) {
-            return url.replace('127.0.0.1:8000', 'localhost:8000');
+        if (current_host === 'localhost' && cleaned.includes('127.0.0.1:8000')) {
+            return cleaned.replace('127.0.0.1:8000', 'localhost:8000');
         }
-        if (current_host === '127.0.0.1' && url.includes('localhost:8000')) {
-            return url.replace('localhost:8000', '127.0.0.1:8000');
+        if (current_host === '127.0.0.1' && cleaned.includes('localhost:8000')) {
+            return cleaned.replace('localhost:8000', '127.0.0.1:8000');
         }
     }
-    return url;
+    return cleaned;
 };
 
 const sanitize_api_key = (value: string): string => {
@@ -102,7 +108,28 @@ const sanitize_settings = (settings: Tadpole_Settings): Tadpole_Settings => ({
     tadpole_os_api_key: sanitize_api_key(settings.tadpole_os_api_key || ''),
 });
 
-
+/** Canonical default configuration state */
+export const get_default_settings = (): Tadpole_Settings => ({
+    tadpole_os_url: get_base_url(),
+    tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
+    theme: 'zinc',
+    density: 'compact',
+    backdrop_theme: 'cyan',
+    default_model: 'GPT-4o',
+    default_temperature: 0.7,
+    auto_approve_safe_skills: true,
+    max_agents: 50,
+    max_clusters: 10,
+    max_swarm_depth: 5,
+    max_task_length: 32768,
+    default_budget_usd: 1.0,
+    is_safe_mode: true, // Default to safe mode for stabilization
+    privacy_mode: false,
+    browser_specialist_model_id: 'HuggingFaceTB/SmolLM-360M-Instruct',
+    computer_architect_url: 'http://localhost:11434',
+    enable_neural_handoff: true,
+    sentinel_mode: false,
+});
 
 /** is_valid_url - Validates a URL string for HTTP/HTTPS protocols. */
 export function is_valid_url(url: string): boolean {
@@ -127,27 +154,7 @@ export function is_valid_api_key(api_key: string): boolean {
 export const use_settings_store = create<Settings_State>()(
     persist(
         (set, get) => ({
-            settings: {
-                tadpole_os_url: get_base_url(),
-                tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
-                theme: 'zinc',
-                density: 'compact',
-                backdrop_theme: 'cyan',
-                default_model: 'GPT-4o',
-                default_temperature: 0.7,
-                auto_approve_safe_skills: true,
-                max_agents: 50,
-                max_clusters: 10,
-                max_swarm_depth: 5,
-                max_task_length: 32768,
-                default_budget_usd: 1.0,
-                is_safe_mode: true, // Default to safe mode for stabilization
-                privacy_mode: false,
-                browser_specialist_model_id: 'HuggingFaceTB/SmolLM-360M-Instruct',
-                computer_architect_url: 'http://localhost:11434',
-                enable_neural_handoff: true,
-                sentinel_mode: false,
-            } as unknown as Tadpole_Settings,
+            settings: get_default_settings(),
 
             save_settings: (new_settings) => {
                 // NUCLEAR PROTECTION: Never allow internal tauri URIs to be explicitly saved
@@ -161,11 +168,24 @@ export const use_settings_store = create<Settings_State>()(
                 if (!is_valid_url(clean_url)) {
                     return 'Invalid URL. Must start with http:// or https://';
                 }
+
+                // Numeric Invariant Clamping
+                const clamped_temperature = Math.min(2.0, Math.max(0.0, Number(new_settings.default_temperature) || 0.7));
+                const clamped_agents = Math.min(100, Math.max(1, Math.floor(Number(new_settings.max_agents) || 50)));
+                const clamped_clusters = Math.min(20, Math.max(1, Math.floor(Number(new_settings.max_clusters) || 10)));
+                const clamped_swarm_depth = Math.min(10, Math.max(1, Math.floor(Number(new_settings.max_swarm_depth) || 5)));
+                const clamped_budget = Math.max(0, Number(new_settings.default_budget_usd) || 0);
+
                 set({
                     settings: {
                         ...new_settings,
                         tadpole_os_url: clean_url,
-                        tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key),
+                        tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key || ''),
+                        default_temperature: clamped_temperature,
+                        max_agents: clamped_agents,
+                        max_clusters: clamped_clusters,
+                        max_swarm_depth: clamped_swarm_depth,
+                        default_budget_usd: clamped_budget,
                     }
                 });
                 return null;
@@ -182,9 +202,19 @@ export const use_settings_store = create<Settings_State>()(
                     } else {
                         final_value = normalize_loopback_url(value) as unknown as Tadpole_Settings[K];
                     }
+                } else if (key === 'tadpole_os_api_key' && typeof value === 'string') {
+                    final_value = sanitize_api_key(value) as unknown as Tadpole_Settings[K];
+                } else if (key === 'default_temperature' && typeof value === 'number') {
+                    final_value = Math.min(2.0, Math.max(0.0, value)) as unknown as Tadpole_Settings[K];
+                } else if (key === 'max_agents' && typeof value === 'number') {
+                    final_value = Math.min(100, Math.max(1, Math.floor(value))) as unknown as Tadpole_Settings[K];
                 }
 
                 set({ settings: { ...current, [key]: final_value } });
+            },
+
+            reset_to_defaults: () => {
+                set({ settings: get_default_settings() });
             }
         }),
         {
@@ -233,6 +263,7 @@ export const use_settings_store = create<Settings_State>()(
 // Backward compatibility helpers for non-reactive code
 export const get_settings = (): Tadpole_Settings => use_settings_store.getState().settings;
 export const save_settings = (s: Tadpole_Settings): string | null => use_settings_store.getState().save_settings(s);
+export const reset_settings = (): void => use_settings_store.getState().reset_to_defaults();
 
 
 

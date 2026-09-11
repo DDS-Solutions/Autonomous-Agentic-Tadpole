@@ -189,6 +189,50 @@ describe('settings_store', () => {
         expect(is_valid_api_key('tadpole-dev-token-2026')).toBe(true);
         expect(is_valid_api_key('tadpole-os-sidecar-default-2026')).toBe(true);
     });
+
+    it('applies symmetric sanitization in update_setting', async () => {
+        const { get_settings, use_settings_store } = await import('./settings_store');
+        await use_settings_store.persist.rehydrate();
+
+        // Updating api key with banned legacy token should be sanitized to empty string
+        use_settings_store.getState().update_setting('tadpole_os_api_key', 'my-secure-token-123');
+        expect(get_settings().tadpole_os_api_key).toBe('');
+
+        // Updating with trailing slashes in url should be trimmed
+        use_settings_store.getState().update_setting('tadpole_os_url', '  http://custom:9000///  ');
+        expect(get_settings().tadpole_os_url).toBe('http://custom:9000');
+    });
+
+    it('enforces numeric bounds clamping on temperature and agents', async () => {
+        const { get_settings, save_settings, use_settings_store } = await import('./settings_store');
+        await use_settings_store.persist.rehydrate();
+
+        save_settings({
+            ...get_settings(),
+            default_temperature: 5.5,
+            max_agents: 9999,
+            max_clusters: -10,
+        });
+
+        expect(get_settings().default_temperature).toBe(2.0);
+        expect(get_settings().max_agents).toBe(100);
+        expect(get_settings().max_clusters).toBe(1);
+
+        // update_setting clamping
+        use_settings_store.getState().update_setting('default_temperature', -1);
+        expect(get_settings().default_temperature).toBe(0.0);
+    });
+
+    it('resets settings to defaults with reset_to_defaults', async () => {
+        const { get_settings, get_default_settings, reset_settings, use_settings_store } = await import('./settings_store');
+        await use_settings_store.persist.rehydrate();
+
+        use_settings_store.getState().update_setting('theme', 'slate');
+        expect(get_settings().theme).toBe('slate');
+
+        reset_settings();
+        expect(get_settings().theme).toBe(get_default_settings().theme);
+    });
 });
 
 
