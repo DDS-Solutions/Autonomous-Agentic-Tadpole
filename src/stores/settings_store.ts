@@ -61,6 +61,9 @@ interface Settings_State {
 }
 
 const get_base_url = (): string => {
+    if (import.meta.env.VITE_TADPOLE_OS_URL) {
+        return import.meta.env.VITE_TADPOLE_OS_URL;
+    }
     // Dynamically align loopback URL with current window origin if available
     if (typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;
@@ -68,7 +71,7 @@ const get_base_url = (): string => {
             return `http://${host}:8000`;
         }
     }
-    return import.meta.env.VITE_TADPOLE_OS_URL || 'http://localhost:8000';
+    return 'http://localhost:8000';
 };
 
 const normalize_loopback_url = (url: string | undefined): string => {

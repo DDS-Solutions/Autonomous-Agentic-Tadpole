@@ -60,8 +60,43 @@ describe('settings_store', () => {
         await use_settings_store.persist.rehydrate();
         
         const settings = get_settings();
-        expect(settings.tadpole_os_url).toBe(import.meta.env.VITE_TADPOLE_OS_URL || 'http://127.0.0.1:8000');
+        const expected_url = import.meta.env.VITE_TADPOLE_OS_URL || (typeof window !== 'undefined' && window.location?.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000' : 'http://localhost:8000');
+        expect(settings.tadpole_os_url).toBe(expected_url);
         expect(settings.tadpole_os_api_key).toBe(import.meta.env.VITE_NEURAL_TOKEN || '');
+    });
+
+    it('defaults to loopback based on window origin when VITE_TADPOLE_OS_URL is unset', async () => {
+        vi.stubEnv('VITE_TADPOLE_OS_URL', '');
+        const { get_settings, use_settings_store } = await import('./settings_store');
+        await use_settings_store.persist.rehydrate();
+        
+        const settings = get_settings();
+        const expected_url = typeof window !== 'undefined' && window.location?.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000' : 'http://localhost:8000';
+        expect(settings.tadpole_os_url).toBe(expected_url);
+        vi.unstubAllEnvs();
+    });
+
+    it('aligns loopback URL to 127.0.0.1 when running on 127.0.0.1 origin and no env override', async () => {
+        vi.stubEnv('VITE_TADPOLE_OS_URL', '');
+        const original_location = window.location;
+        try {
+            Object.defineProperty(window, 'location', {
+                value: { ...original_location, hostname: '127.0.0.1' },
+                writable: true,
+                configurable: true,
+            });
+            const { get_settings, use_settings_store } = await import('./settings_store');
+            await use_settings_store.persist.rehydrate();
+            const settings = get_settings();
+            expect(settings.tadpole_os_url).toBe('http://127.0.0.1:8000');
+        } finally {
+            Object.defineProperty(window, 'location', {
+                value: original_location,
+                writable: true,
+                configurable: true,
+            });
+            vi.unstubAllEnvs();
+        }
     });
 
     it('rehydrates from localStorage correctly', async () => {
