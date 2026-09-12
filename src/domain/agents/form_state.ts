@@ -36,9 +36,9 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
     const settings = use_settings_store.getState().settings;
     const system_default_model = settings?.default_model || 'Gemini 3 Pro';
 
-    const active_model = agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model || system_default_model;
-    const secondary_model = agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2 || '';
-    const tertiary_model = agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3 || '';
+    const active_model = agent.model_config?.modelId || agent.model_config?.model || agent.model || system_default_model;
+    const secondary_model = agent.model_config2?.modelId || agent.model_config2?.model || agent.model_2 || '';
+    const tertiary_model = agent.model_config3?.modelId || agent.model_config3?.model || agent.model_3 || '';
 
     // Phase 4: Ensure provider/model consistency on hydration
     const primary_provider = agent.model_config?.provider || resolve_provider(active_model);

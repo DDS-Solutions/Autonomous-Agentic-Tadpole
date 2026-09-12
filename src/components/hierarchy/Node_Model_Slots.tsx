@@ -145,9 +145,9 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
     };
 
     const slot_models: Record<1 | 2 | 3, string | undefined> = {
-        1: agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model,
-        2: agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2,
-        3: agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3
+        1: agent.model_config?.modelId || agent.model_config?.model || agent.model,
+        2: agent.model_config2?.modelId || agent.model_config2?.model || agent.model_2,
+        3: agent.model_config3?.modelId || agent.model_config3?.model || agent.model_3
     };
 
     return (

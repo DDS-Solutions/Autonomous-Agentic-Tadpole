@@ -197,14 +197,11 @@ export function resolve_agent_model_config(agent: Agent, global_default_model?: 
  * Returns the display name of the model currently active in the agent's slots.
  */
 export function get_active_model_name(agent: Agent): string {
-    let raw = '';
-    if (agent.active_model_slot === 2) {
-        raw = agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2 || agent.model_config?.modelId || agent.model || 'Unknown';
-    } else if (agent.active_model_slot === 3) {
-        raw = agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3 || agent.model_config?.modelId || agent.model || 'Unknown';
-    } else {
-        raw = agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model || 'Unknown';
-    }
+    const raw = agent.active_model_slot === 2
+        ? (agent.model_config2?.modelId || agent.model_config2?.model || agent.model_2 || agent.model_config?.modelId || agent.model || 'Unknown')
+        : agent.active_model_slot === 3
+        ? (agent.model_config3?.modelId || agent.model_config3?.model || agent.model_3 || agent.model_config?.modelId || agent.model || 'Unknown')
+        : (agent.model_config?.modelId || agent.model_config?.model || agent.model || 'Unknown');
     return resolve_friendly_model_name(raw) || raw;
 }
 

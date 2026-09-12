@@ -129,6 +129,23 @@ describe('model_utils', () => {
             };
             expect(get_active_model_name(agent as Agent)).toBe('Claude 3.5 Sonnet');
         });
+
+        it('falls back to model_config.model if modelId is not present', () => {
+            const agent: Partial<Agent> = {
+                model: 'fallback-model',
+                model_config: { provider: 'google', modelId: '', model: 'gemini-2.5-flash' },
+                active_model_slot: 1
+            };
+            expect(get_active_model_name(agent as Agent)).toBe('Gemini 2.5 Flash');
+        });
+
+        it('returns Unknown when all model slots and configs are missing', () => {
+            const agent: Partial<Agent> = {
+                model: '',
+                active_model_slot: 1
+            };
+            expect(get_active_model_name(agent as Agent)).toBe('Unknown');
+        });
     });
 
     describe('get_model_color', () => {

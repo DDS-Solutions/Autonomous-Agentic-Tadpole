@@ -15,6 +15,7 @@ import type { Agent_Connector_Config } from './shared';
 export interface ModelConfigDto {
     provider: string;
     modelId: string;
+    model?: string;
     apiKey?: string;
     baseUrl?: string;
     systemPrompt?: string;
