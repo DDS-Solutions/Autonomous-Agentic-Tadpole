@@ -13,6 +13,7 @@
 import type { 
     Agent, 
     AgentDto, 
+    ModelConfigDto,
     Department, 
     Agent_Status,
     Agent_Memory_Entry,
@@ -23,6 +24,19 @@ import type {
 import { resolve_friendly_model_name } from '../../utils/model_utils';
 import { get_settings } from '../../stores/settings_store';
 import { use_trace_store } from '../../stores/trace_store';
+
+const normalize_model_config = (raw: unknown, default_model_id?: string): ModelConfigDto | undefined => {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const cfg = raw as Record<string, unknown>;
+    const modelId = (cfg.modelId || cfg.model_id || cfg.model || default_model_id) as string | undefined;
+    if (!modelId || modelId === 'unknown') return undefined;
+    const provider = (cfg.provider as string | undefined) || 'ollama';
+    return {
+        ...cfg,
+        provider,
+        modelId,
+    } as ModelConfigDto;
+};
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -154,6 +168,20 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         || default_model;
     const model = resolve_friendly_model_name(raw_model) || raw_model;
 
+    const cfg2 = get_val('modelConfig2', 'model_config2', undefined) as Record<string, unknown> | undefined;
+    const m2_config_id = (cfg2?.modelId || cfg2?.model_id || cfg2?.model) as string | undefined;
+    const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
+    const raw_m2 = (m2_config_id && m2_config_id !== 'unknown' ? m2_config_id : undefined)
+        || (m2_name && m2_name !== 'unknown' ? m2_name : undefined);
+    const model_2 = raw_m2 ? (resolve_friendly_model_name(raw_m2) || raw_m2) : undefined;
+
+    const cfg3 = get_val('modelConfig3', 'model_config3', undefined) as Record<string, unknown> | undefined;
+    const m3_config_id = (cfg3?.modelId || cfg3?.model_id || cfg3?.model) as string | undefined;
+    const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
+    const raw_m3 = (m3_config_id && m3_config_id !== 'unknown' ? m3_config_id : undefined)
+        || (m3_name && m3_name !== 'unknown' ? m3_name : undefined);
+    const model_3 = raw_m3 ? (resolve_friendly_model_name(raw_m3) || raw_m3) : undefined;
+
     const input_tokens = (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0);
     const output_tokens = (dto.tokenUsage?.outputTokens ?? d.output_tokens ?? existing_agent?.output_tokens ?? 0);
     const tokens_used = (dto.tokenUsage?.totalTokens ?? d.tokensUsed ?? d.tokens_used ?? (input_tokens + output_tokens));
@@ -167,14 +195,7 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         status: status,
         tokens_used,
         model: model,
-        model_config: (() => {
-            const cfg = get_val('modelConfig', 'model_config', undefined) as Record<string, unknown> | undefined;
-            if (!cfg) return undefined;
-            if (!cfg.modelId && cfg.model_id) {
-                return { ...cfg, modelId: cfg.model_id };
-            }
-            return cfg;
-        })(),
+        model_config: normalize_model_config(cfg1, raw_model),
         workspace_path: workspace_path || get_val('workspace', 'workspace_path', undefined),
         current_task: current_task || undefined,
         skills: parse_json_array('skills', 'skills'),
@@ -184,38 +205,10 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         budget_usd: get_val('budgetUsd', 'budget_usd', 0),
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
-        model_2: (() => {
-            const cfg2 = get_val('modelConfig2', 'model_config2', undefined) as Record<string, unknown> | undefined;
-            const m2_config_id = (cfg2?.modelId || cfg2?.model_id || cfg2?.model) as string | undefined;
-            const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
-            const raw_m2 = (m2_config_id && m2_config_id !== 'unknown' ? m2_config_id : undefined)
-                || (m2_name && m2_name !== 'unknown' ? m2_name : undefined);
-            return raw_m2 ? (resolve_friendly_model_name(raw_m2) || raw_m2) : undefined;
-        })(),
-        model_3: (() => {
-            const cfg3 = get_val('modelConfig3', 'model_config3', undefined) as Record<string, unknown> | undefined;
-            const m3_config_id = (cfg3?.modelId || cfg3?.model_id || cfg3?.model) as string | undefined;
-            const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
-            const raw_m3 = (m3_config_id && m3_config_id !== 'unknown' ? m3_config_id : undefined)
-                || (m3_name && m3_name !== 'unknown' ? m3_name : undefined);
-            return raw_m3 ? (resolve_friendly_model_name(raw_m3) || raw_m3) : undefined;
-        })(),
-        model_config2: (() => {
-            const cfg2 = get_val('modelConfig2', 'model_config2', undefined) as Record<string, unknown> | undefined;
-            if (!cfg2) return undefined;
-            const m2_id = cfg2.modelId || cfg2.model_id || cfg2.model;
-            if (!m2_id || m2_id === 'unknown') return undefined;
-            if (!cfg2.modelId && cfg2.model_id) return { ...cfg2, modelId: cfg2.model_id };
-            return cfg2;
-        })(),
-        model_config3: (() => {
-            const cfg3 = get_val('modelConfig3', 'model_config3', undefined) as Record<string, unknown> | undefined;
-            if (!cfg3) return undefined;
-            const m3_id = cfg3.modelId || cfg3.model_id || cfg3.model;
-            if (!m3_id || m3_id === 'unknown') return undefined;
-            if (!cfg3.modelId && cfg3.model_id) return { ...cfg3, modelId: cfg3.model_id };
-            return cfg3;
-        })(),
+        model_2,
+        model_3,
+        model_config2: normalize_model_config(cfg2, raw_m2),
+        model_config3: normalize_model_config(cfg3, raw_m3),
         active_model_slot: (get_val('activeModelSlot', 'active_model_slot', 1) as 1 | 2 | 3),
         failure_count: get_val('failureCount', 'failure_count', 0),
         last_failure_at: get_val('lastFailureAt', 'last_failure_at', undefined),

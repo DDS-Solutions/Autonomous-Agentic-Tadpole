@@ -211,6 +211,7 @@ describe('agent_mappers', () => {
                 model_2: 'claude-3-5-sonnet',
                 model_config2: { modelId: 'claude-3-5-sonnet', provider: 'anthropic', temperature: 0.5 },
                 active_model_slot: 2,
+                category: 'general',
                 skills: [],
                 workflows: []
             };
@@ -235,6 +236,7 @@ describe('agent_mappers', () => {
                 model: 'Gemini 1.5 Flash',
                 model_config: { modelId: 'gemini-1.5-flash', provider: 'google', temperature: 0.7 },
                 active_model_slot: 1,
+                category: 'general',
                 skills: [],
                 workflows: []
             };

@@ -11,10 +11,10 @@
  */
 
 import type { ModelConfigDto } from './wire';
-import type { 
-    Agent_Status, 
-    Department, 
-    Agent_Metadata, 
+import type {
+    Agent_Status,
+    Department,
+    Agent_Metadata,
     Agent_Connector_Config,
     Agent_Voice_Engine,
     Agent_Stt_Engine
@@ -29,7 +29,7 @@ export interface Agent {
     status: Agent_Status;
     tokens_used?: number;
     current_task?: string;
-    model: string; 
+    model: string;
     model_2?: string;
     model_3?: string;
     model_config?: ModelConfigDto;
@@ -52,7 +52,7 @@ export interface Agent {
     output_tokens?: number;
     failure_count?: number;
     last_failure_at?: string;
-    category: string; 
+    category: string;
     connector_configs?: Agent_Connector_Config[];
     metadata?: Agent_Metadata;
     current_reasoning_turn?: number;
@@ -60,7 +60,7 @@ export interface Agent {
     workspace_path?: string;
     _local_timestamp?: number;
     _telemetry_timestamp?: number;
-    active_mission?: { 
+    active_mission?: {
         id: string;
         objective?: string;
         constraints?: string[];
@@ -103,13 +103,13 @@ export interface Agent_Memory_Entry {
  * Represents a unit of work assigned to an agent.
  */
 export interface Task {
-  id: string;
-  title: string;
-  assigned_to: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'failed';
-  priority: 'low' | 'medium' | 'high';
-  created_at: string;
-  logs: string[];
+    id: string;
+    title: string;
+    assigned_to: string;
+    status: 'pending' | 'in-progress' | 'completed' | 'failed';
+    priority: 'low' | 'medium' | 'high';
+    created_at: string;
+    logs: string[];
 }
 
 /**
@@ -117,27 +117,27 @@ export interface Task {
  * Payload for sending a command/task to an agent.
  */
 export interface Task_Payload {
-  message: string;
-  cluster_id?: string;
-  department?: string;
-  provider?: string;
-  model_id?: string;
-  api_key?: string;
-  base_url?: string;
-  rpm?: number;
-  tpm?: number;
-  rpd?: number;
-  tpd?: number;
-  budget_usd?: number;
-  external_id?: string;
-  safe_mode?: boolean;
-  analysis?: boolean;
-  swarm_depth?: number;
-  swarm_lineage?: string[];
-  recent_findings?: string;
-  traceparent?: string;
-  parent_node_id?: string;
-  enabled_skills?: string[];
+    message: string;
+    cluster_id?: string;
+    department?: string;
+    provider?: string;
+    model_id?: string;
+    api_key?: string;
+    base_url?: string;
+    rpm?: number;
+    tpm?: number;
+    rpd?: number;
+    tpd?: number;
+    budget_usd?: number;
+    external_id?: string;
+    safe_mode?: boolean;
+    analysis?: boolean;
+    swarm_depth?: number;
+    swarm_lineage?: string[];
+    recent_findings?: string;
+    traceparent?: string;
+    parent_node_id?: string;
+    enabled_skills?: string[];
 }
 
 export type AgentPatch = Partial<Agent>;

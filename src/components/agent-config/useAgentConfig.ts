@@ -16,7 +16,7 @@ import { tadpole_os_service } from '../../services/tadpoleos_service';
 import { event_bus } from '../../services/event_bus';
 import { use_role_store } from '../../stores/role_store';
 import { use_model_store } from '../../stores/model_store';
-import { resolve_agent_model_config, resolve_technical_model_id } from '../../utils/model_utils';
+import { resolve_agent_model_config, resolve_technical_model_id, get_agent_slot_model } from '../../utils/model_utils';
 import { ValidationUtils } from '../../utils/validation_utils';
 import { i18n } from '../../i18n';
 import type { Agent, AgentPatch, Role_Definition, Agent_Model_Slot_Key, Department } from '../../contracts/agent';
@@ -59,12 +59,12 @@ export function useAgentConfig(
         last_seen_agent_ref.current = agent;
 
         // Skip rehydration if the parent/external store didn't update the agent structurally
-        const last_m1 = last_seen.model_config?.modelId || (last_seen.model_config as unknown as { model_id?: string })?.model_id;
-        const curr_m1 = agent.model_config?.modelId || (agent.model_config as unknown as { model_id?: string })?.model_id;
-        const last_m2 = last_seen.model_config2?.modelId || (last_seen.model_config2 as unknown as { model_id?: string })?.model_id;
-        const curr_m2 = agent.model_config2?.modelId || (agent.model_config2 as unknown as { model_id?: string })?.model_id;
-        const last_m3 = last_seen.model_config3?.modelId || (last_seen.model_config3 as unknown as { model_id?: string })?.model_id;
-        const curr_m3 = agent.model_config3?.modelId || (agent.model_config3 as unknown as { model_id?: string })?.model_id;
+        const last_m1 = get_agent_slot_model(last_seen, 1);
+        const curr_m1 = get_agent_slot_model(agent, 1);
+        const last_m2 = get_agent_slot_model(last_seen, 2);
+        const curr_m2 = get_agent_slot_model(agent, 2);
+        const last_m3 = get_agent_slot_model(last_seen, 3);
+        const curr_m3 = get_agent_slot_model(agent, 3);
 
         if (last_seen &&
             last_seen.id === agent.id &&

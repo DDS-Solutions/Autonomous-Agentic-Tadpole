@@ -18,7 +18,7 @@
 import { create } from 'zustand';
 import { tadpole_os_socket } from '../services/socket';
 import { use_agent_registry_store } from './agent_registry_store';
-import type { Agent, AgentDto } from '../types';
+import type { Agent, AgentDto } from '../contracts/agent';
 import { normalize_agent_dto } from '../domain/agents/normalizers';
 
 export interface Telemetry_State {
