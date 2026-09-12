@@ -31,14 +31,22 @@ impl AclServiceTrait for AclService {
                 "issue_alpha_directive" => false,
                 _ => true,
             }
+        } else if agent_id == AGENT_ALPHA {
+            match tool_name {
+                "issue_alpha_directive" => false,
+                _ => true, // Alpha Commander can spawn subagents & recruit
+            }
         } else if authority == RoleAuthorityLevel::Observer {
             match tool_name {
                 "read_file" | "list_files" | "search_global_vault" => true,
                 _ => false, // No mutations for observers
             }
         } else {
-            // Specialists
-            tool_name != "issue_alpha_directive"
+            // Tactical Specialists: cannot spawn subagents or issue alpha directives
+            match tool_name {
+                "issue_alpha_directive" | "spawn_subagent" => false,
+                _ => true,
+            }
         }
     }
 
@@ -87,5 +95,13 @@ mod tests {
         let acl = AclService;
         let protocols = acl.get_role_protocols(AGENT_CEO, "CEO", RoleAuthorityLevel::Executive);
         assert!(protocols.iter().any(|p| p.contains("Never use <execute_tool>")));
+    }
+
+    #[test]
+    fn test_specialist_spawn_subagent_blocked() {
+        let acl = AclService;
+        assert!(!acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "spawn_subagent"));
+        assert!(acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "read_file"));
+        assert!(acl.is_tool_allowed(AGENT_ALPHA, "Commander", RoleAuthorityLevel::Specialist, "spawn_subagent"));
     }
 }

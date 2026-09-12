@@ -30,6 +30,7 @@ pub struct ServiceDebugInfo {
 
 #[derive(serde::Serialize)]
 pub struct QueueDebugInfo {
+    pub active_runners_count: usize,
     pub ingestion_queue_depth: usize,
     pub continuity_jobs_pending: usize,
     pub mcp_message_queue: usize,
@@ -61,7 +62,7 @@ pub async fn debug_services(
 pub async fn debug_queues(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let ingestion_queue_depth = state.comms.active_runners.len();
+    let active_runners_count = state.comms.active_runners.len();
     
     // Query database for running jobs count
     let continuity_jobs_pending = sqlx::query_scalar::<_, i64>(
@@ -71,12 +72,14 @@ pub async fn debug_queues(
     .await
     .unwrap_or(0) as usize;
 
+    // Direct STDIO MCP transport does not queue in-memory messages
     let mcp_message_queue = 0;
 
     Ok((
         StatusCode::OK,
         Json(QueueDebugInfo {
-            ingestion_queue_depth,
+            active_runners_count,
+            ingestion_queue_depth: active_runners_count,
             continuity_jobs_pending,
             mcp_message_queue,
         }),

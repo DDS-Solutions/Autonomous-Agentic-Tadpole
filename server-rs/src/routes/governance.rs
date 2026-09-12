@@ -11,6 +11,7 @@
 //!
 
 use crate::agent::types::RoleBlueprint;
+use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
@@ -24,14 +25,9 @@ use std::sync::Arc;
 /// Returns a list of all registered Role Blueprints.
 pub async fn list_blueprints(
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    match crate::agent::persistence::load_blueprints(&state.resources.pool).await {
-        Ok(blueprints) => (StatusCode::OK, Json(blueprints)).into_response(),
-        Err(e) => {
-            tracing::error!("❌ [Governance] Failed to load blueprints: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
-        }
-    }
+) -> Result<impl IntoResponse, AppError> {
+    let blueprints = crate::agent::persistence::load_blueprints(&state.resources.pool).await?;
+    Ok((StatusCode::OK, Json(blueprints)))
 }
 
 /// ### ⚖️ Governance: Promote to Role
@@ -39,22 +35,17 @@ pub async fn list_blueprints(
 pub async fn save_blueprint(
     State(state): State<Arc<AppState>>,
     Json(blueprint): Json<RoleBlueprint>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, AppError> {
     // Basic validation
-    if blueprint.id.is_empty() || blueprint.name.is_empty() {
-        return (StatusCode::BAD_REQUEST, "Blueprint ID and Name are required").into_response();
+    if blueprint.id.trim().is_empty() || blueprint.name.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "Blueprint ID and Name are required".to_string(),
+        ));
     }
 
-    match crate::agent::persistence::save_blueprint(&state.resources.pool, &blueprint).await {
-        Ok(_) => {
-            tracing::info!("✅ [Governance] Role Blueprint '{}' saved successfully", blueprint.id);
-            StatusCode::OK.into_response()
-        }
-        Err(e) => {
-            tracing::error!("❌ [Governance] Failed to save blueprint: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
-        }
-    }
+    crate::agent::persistence::save_blueprint(&state.resources.pool, &blueprint).await?;
+    tracing::info!("✅ [Governance] Role Blueprint '{}' saved successfully", blueprint.id);
+    Ok(StatusCode::OK)
 }
 
 /// ### ⚖️ Governance: Role Retirement
@@ -62,26 +53,25 @@ pub async fn save_blueprint(
 pub async fn delete_blueprint(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match crate::agent::persistence::delete_blueprint(&state.resources.pool, &id).await {
-        Ok(_) => {
-            tracing::warn!("🗑️ [Governance] Role Blueprint '{}' retired.", id);
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(e) => {
-            tracing::error!("❌ [Governance] Failed to delete blueprint: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
-        }
+) -> Result<impl IntoResponse, AppError> {
+    let deleted = crate::agent::persistence::delete_blueprint(&state.resources.pool, &id).await?;
+    if !deleted {
+        return Err(AppError::NotFound(format!(
+            "Role Blueprint '{}' not found",
+            id
+        )));
     }
+    tracing::warn!("🗑️ [Governance] Role Blueprint '{}' retired.", id);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// ### ⚖️ Governance: System Manifest
 /// Generates and returns the latest Sovereign State Manifest.
 pub async fn get_sovereign_manifest(
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, AppError> {
     let manifest = crate::system::manifest::SovereignStateManifest::generate(&state).await;
-    (StatusCode::OK, Json(serde_json::json!({ "manifest": manifest }))).into_response()
+    Ok((StatusCode::OK, Json(serde_json::json!({ "manifest": manifest }))))
 }
 
 

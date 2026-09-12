@@ -8,6 +8,12 @@
 //! Coordinates with `ConnectInfo` to resolve client identifiers (BRUTE-01).
 //! Note: Success automatically resets the failure counter for that IP.
 //!
+//! ### 🛡️ Security Prerequisite (Proxy Confinement)
+//! When `TRUST_PROXY_HEADERS=true`, the limiter trusts `X-Forwarded-For`.
+//! Upstream reverse proxies (Nginx, Traefik, Cloudflare) MUST sanitize or overwrite
+//! this header; otherwise, unauthenticated attackers can rotate spoofed IPs to bypass
+//! rate-limiting buckets.
+//!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: False positive blocks on shared NAT gateways,
 //!   memory bloat from high IP churn (ephemeral attackers), or missing

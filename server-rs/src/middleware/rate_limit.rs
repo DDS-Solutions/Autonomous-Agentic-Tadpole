@@ -4,9 +4,9 @@
 //! **Rate Limiter**: Orchestrates the communication of ingestion and
 //! inference capacity status. Injects standard **X-RateLimit** headers
 //! (`Limit`, `Remaining`, `Reset`) into every API response. Enforces
-//! a **Sovereign Token Bucket** policy (100 RPM default). Tracks
-//! consumption by client IP to ensure fair resource allocation
-//! across the swarm (RLMT-01).
+//! a **Sovereign Token Bucket** policy (2000 RPM engine default, tunable via
+//! `ENGINE_RATE_LIMIT`). Tracks consumption by client IP to ensure fair
+//! resource allocation across the swarm (RLMT-01).
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: 429 Too Many Requests status on legitimate
@@ -116,8 +116,8 @@ pub async fn inject_rate_limit_headers(
     Ok(response)
 }
 
-/// No longer needed with `moka`'s automated eviction, but kept as a no-op 
-/// to maintain compatibility with the background task structure.
+/// Deprecated no-op: `moka` handles automated background eviction via `time_to_idle`.
+#[deprecated(note = "moka handles automated background eviction via time_to_idle")]
 pub fn evict_stale_buckets(_max_age: std::time::Duration) {
     // moka handles this automatically via `time_to_idle`
 }

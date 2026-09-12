@@ -42,48 +42,55 @@ pub async fn get_nodes(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
     Ok(Json(nodes))
 }
 
+#[derive(serde::Deserialize, Debug, Default)]
+pub struct DiscoverQuery {
+    pub simulate: Option<bool>,
+}
+
 /// POST /v1/infra/nodes/discover — Triggers a network discovery scan for new Bunkers.
-/// For the prototype, this will simulate discovery by "finding" a new node if none exist beyond the defaults.
+/// Simulated node injection is strictly gated behind ?simulate=true to avoid corrupting live routing.
 #[tracing::instrument(skip(state), name = "infra_nodes::discover")]
 pub async fn discover_nodes(
     State(state): State<Arc<AppState>>,
+    axum::extract::Query(query): axum::extract::Query<DiscoverQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    tracing::info!("🔍 Discovery scan initiated...");
+    tracing::info!("🔍 Discovery scan initiated (simulate: {:?})...", query.simulate);
 
-    // Simulate finding a new node
-    let new_id = "bunker_3";
-    if !state.registry.nodes.contains_key(new_id) {
-        state.registry.nodes.insert(
-            new_id.to_string(),
-            SwarmNode {
-                id: new_id.to_string(),
-                name: "Swarm Bunker 3 (Edge)".to_string(),
-                address: "192.168.50.42".to_string(),
-                status: "online".to_string(),
-                last_seen: chrono::Utc::now(),
-                metadata: std::collections::HashMap::from([(
-                    "tier".to_string(),
-                    "edge".to_string(),
-                )]),
-            },
-        );
+    if query.simulate == Some(true) {
+        let new_id = "bunker_3";
+        if !state.registry.nodes.contains_key(new_id) {
+            state.registry.nodes.insert(
+                new_id.to_string(),
+                SwarmNode {
+                    id: new_id.to_string(),
+                    name: "Swarm Bunker 3 (Edge)".to_string(),
+                    address: "192.168.50.42".to_string(),
+                    status: "online".to_string(),
+                    last_seen: chrono::Utc::now(),
+                    metadata: std::collections::HashMap::from([(
+                        "tier".to_string(),
+                        "edge".to_string(),
+                    )]),
+                },
+            );
 
-        state.broadcast_sys(
-            "New Bunker node discovered: Swarm Bunker 3",
-            "success",
-            None,
-        );
+            state.broadcast_sys(
+                "New Bunker node discovered: Swarm Bunker 3",
+                "success",
+                None,
+            );
 
-        Ok(Json(serde_json::json!({
-            "status": "success",
-            "discovered": ["bunker_3"]
-        })))
-    } else {
-        Ok(Json(serde_json::json!({
-            "status": "success",
-            "discovered": []
-        })))
+            return Ok(Json(serde_json::json!({
+                "status": "success",
+                "discovered": ["bunker_3"]
+            })));
+        }
     }
+
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "discovered": []
+    })))
 }
 
 

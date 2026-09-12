@@ -156,7 +156,14 @@ pub async fn text_to_speech(
         })?;
 
     if res.status().is_success() {
-        let bytes = res.bytes().await.unwrap_or_default();
+        let bytes = res.bytes().await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to read audio response bytes: {}", e))
+        })?;
+        if bytes.is_empty() {
+            return Err(AppError::InternalServerError(
+                "TTS provider returned empty audio stream".to_string(),
+            ));
+        }
         Ok((
             StatusCode::OK,
             [(header::CONTENT_TYPE, "audio/mpeg")],
@@ -176,18 +183,32 @@ pub async fn text_to_speech(
 /// Standardized audio transcription endpoint.
 ///
 /// Accepts a multipart form with an audio file and dispatches it
-/// to the Groq/Whisper engine for high-speed text extraction.
+/// to the requested STT engine (Groq/Whisper default or local Whisper).
 pub async fn transcribe_audio(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
     let mut audio_data = Vec::new();
     let mut filename = "speech.wav".to_string();
+    let mut engine = "groq".to_string();
 
     while let Ok(Some(field)) = multipart.next_field().await {
         let name = field.name().unwrap_or_default().to_string();
-        if name == "file" {
-            filename = field.file_name().unwrap_or("speech.wav").to_string();
+        if name == "engine" {
+            if let Ok(eng) = field.text().await {
+                engine = eng.trim().to_lowercase();
+            }
+        } else if name == "file" {
+            let raw_filename = field.file_name().unwrap_or("speech.wav");
+            let safe_name: String = std::path::Path::new(raw_filename)
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "speech.wav".to_string())
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
+                .collect();
+            filename = if safe_name.is_empty() { "speech.wav".to_string() } else { safe_name };
+
             audio_data = field
                 .bytes()
                 .await
@@ -199,8 +220,6 @@ pub async fn transcribe_audio(
     if audio_data.is_empty() {
         return Err(AppError::BadRequest("No audio file provided".to_string()));
     }
-
-    let engine = "groq"; // Default for now
 
     if engine == "local" {
         #[cfg(feature = "neural-audio")]

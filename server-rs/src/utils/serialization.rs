@@ -26,11 +26,21 @@
 
 use serde_json::Value;
 
+pub const MAX_RECURSION_DEPTH: usize = 64;
+
 /// Scans a JSON value and prunes any strings longer than the specified limit.
 ///
-/// This is used to prevent "long-string" attacks or accidental DB bloat when
-/// agents attempt to log massive payloads (e.g., base64 images or minified JS).
+/// Recursion is capped at MAX_RECURSION_DEPTH (64) to prevent recursive stack overflow attacks.
 pub fn prune_large_strings(value: &mut Value, limit: usize) {
+    prune_large_strings_with_depth(value, limit, 0);
+}
+
+fn prune_large_strings_with_depth(value: &mut Value, limit: usize, current_depth: usize) {
+    if current_depth > MAX_RECURSION_DEPTH {
+        *value = Value::String("... [PRUNED: MAX_DEPTH_EXCEEDED]".to_string());
+        return;
+    }
+
     match value {
         Value::String(s) if s.len() > limit => {
             let original_len = s.len();
@@ -42,12 +52,12 @@ pub fn prune_large_strings(value: &mut Value, limit: usize) {
         }
         Value::Array(arr) => {
             for v in arr {
-                prune_large_strings(v, limit);
+                prune_large_strings_with_depth(v, limit, current_depth + 1);
             }
         }
         Value::Object(obj) => {
             for v in obj.values_mut() {
-                prune_large_strings(v, limit);
+                prune_large_strings_with_depth(v, limit, current_depth + 1);
             }
         }
         _ => {}
@@ -86,6 +96,19 @@ mod tests {
             .unwrap()
             .contains("... [TRUNCATED"));
         assert!(val["array"][1].as_str().unwrap().contains("... [TRUNCATED"));
+    }
+
+    #[test]
+    fn test_deep_nesting_stack_overflow_prevention() {
+        let mut root = json!("deep");
+        for _ in 0..100 {
+            root = json!({ "nested": root });
+        }
+
+        // Must not stack overflow; stops at depth 64
+        prune_large_strings(&mut root, 100);
+        let s = root.to_string();
+        assert!(s.contains("MAX_DEPTH_EXCEEDED"));
     }
 }
 

@@ -34,6 +34,12 @@ pub async fn create_mission(
     title: &str,
     budget_usd: f64,
 ) -> Result<Mission, AppError> {
+    if !budget_usd.is_finite() || budget_usd <= 0.0 {
+        return Err(AppError::BadRequest(
+            "Mission budget must be strictly positive and finite".to_string(),
+        ));
+    }
+
     let mission_id = Uuid::new_v4().to_string();
     let now = Utc::now();
 
@@ -97,6 +103,23 @@ pub async fn update_mission(
     status: MissionStatus,
     cost_usd: f64,
 ) -> Result<(), AppError> {
+    // Status transition validation
+    if let Some(existing) = get_mission_by_id(pool, mission_id).await? {
+        match (&existing.status, &status) {
+            (MissionStatus::Completed, new_st) if *new_st != MissionStatus::Completed => {
+                return Err(AppError::BadRequest(
+                    "Invalid state transition: Completed mission cannot transition back to an active state".to_string(),
+                ));
+            }
+            (MissionStatus::Failed, new_st) if *new_st != MissionStatus::Failed && *new_st != MissionStatus::Pending => {
+                return Err(AppError::BadRequest(
+                    "Invalid state transition: Failed mission can only transition to Pending for restart".to_string(),
+                ));
+            }
+            _ => {}
+        }
+    }
+
     let status_str = status_to_str(&status);
     let now = Utc::now();
 
@@ -416,20 +439,21 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
         let status: String = row.get("status");
 
         // Only add if not already inferred from registry to avoid duplicates
-        // but ensure we have the title/status from the DB.
-        nodes.push(GraphNode {
-            id: mid,
-            label: title,
-            r#type: "mission".to_string(),
-            status,
-            metadata: serde_json::json!({}),
-        });
+        if !active_missions_in_registry.contains(&mid) {
+            nodes.push(GraphNode {
+                id: mid,
+                label: title,
+                r#type: "mission".to_string(),
+                status,
+                metadata: serde_json::json!({}),
+            });
+        }
     }
 
     // 4. Fetch Explicit Relationships (Directives) from DB
     // This maps inter-agent delegation (who spawned whom or who issued a directive).
     let dir_rows = sqlx::query(
-        "SELECT id, source_agent_id, target_agent_id, instruction, status FROM agent_directives",
+        "SELECT id, source_agent_id, target_agent_id, instruction, status FROM agent_directives LIMIT 500",
     )
     .fetch_all(pool)
     .await?;

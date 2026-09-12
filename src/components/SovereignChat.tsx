@@ -35,6 +35,10 @@ interface SovereignChatProps {
     isDetachedView?: boolean;
 }
 
+const ROOT_AGENT_NAME = 'Agent of Nine';
+const CEO_KEYWORD = 'ceo';
+const NINE_KEYWORD = 'nine';
+
 export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) => {
     const MAX_RENDERED_MESSAGES = 300;
 
@@ -124,9 +128,9 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
         if (agents.length === 0) return;
         if (selected_agent_id) return;
 
-        const is_ungetTarget = !target_agent || target_agent.toLowerCase() === 'ceo' || target_agent === 'Agent of Nine';
+        const is_ungetTarget = !target_agent || target_agent.toLowerCase() === CEO_KEYWORD || target_agent === ROOT_AGENT_NAME;
         if (is_ungetTarget) {
-            const ceo = agents.find(a => a.role?.toLowerCase().includes('ceo') || a.name.toLowerCase().includes('nine'));
+            const ceo = agents.find(a => a.role?.toLowerCase().includes(CEO_KEYWORD) || a.name.toLowerCase().includes(NINE_KEYWORD));
             if (ceo) {
                 set_target_agent(ceo.name);
                 set_selected_agent_id(ceo.id);

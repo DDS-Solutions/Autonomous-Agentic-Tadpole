@@ -1086,11 +1086,11 @@ impl AppState {
         let result: Vec<_> = history.into_iter().map(|row| {
             use sqlx::Row;
             serde_json::json!({
-                "id": row.get::<String, _>("id"),
-                "role": row.get::<String, _>("role"),
-                "content": row.get::<String, _>("content"),
-                "metadata": row.get::<Option<String>, _>("metadata").and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                "id": row.try_get::<String, _>("id").unwrap_or_default(),
+                "role": row.try_get::<String, _>("role").unwrap_or_default(),
+                "content": row.try_get::<String, _>("content").unwrap_or_default(),
+                "metadata": row.try_get::<Option<String>, _>("metadata").ok().flatten().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").ok()
             })
         }).collect();
 

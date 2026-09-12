@@ -51,13 +51,12 @@ impl SystemService for SecurityEvictionService {
         let app_state = context.app_state;
         let mut shutdown_rx = context.shutdown_rx;
         let eviction_interval_secs = context.config.rate_limit_eviction_interval_secs;
-        let max_bucket_age_secs = context.config.max_bucket_age_secs;
+        let _max_bucket_age_secs = context.config.max_bucket_age_secs;
         let max_auth_age_secs = context.config.max_auth_age_secs;
         app_state.resources.set_subsystem_status("SecurityEviction", crate::types::SubsystemStatus::Ready);
         tokio::spawn(async move {
             use std::time::Duration;
             let eviction_interval = Duration::from_secs(eviction_interval_secs);
-            let max_bucket_age = Duration::from_secs(max_bucket_age_secs);
             let max_auth_age = Duration::from_secs(max_auth_age_secs);
             let mut interval = tokio::time::interval(eviction_interval);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -71,9 +70,8 @@ impl SystemService for SecurityEvictionService {
                         }
                     }
                     _ = interval.tick() => {
-                        crate::middleware::rate_limit::evict_stale_buckets(max_bucket_age);
                         crate::middleware::auth_rate_limit::evict_expired_blocks(max_auth_age);
-                        tracing::debug!("🧹 [Security] Rate limit bucket eviction completed");
+                        tracing::debug!("🧹 [Security] Expired auth block eviction completed");
                     }
                 }
             }

@@ -76,10 +76,20 @@ pub async fn create_job_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateJobRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Validate agent exists (skip if it's a workflow job with an empty agent_id)
-    if (!req.agent_id.is_empty() || req.workflow_id.is_none())
-        && !state.registry.agents.contains_key(&req.agent_id)
-    {
+    // Validate agent exists: if workflow_id is None, agent_id must be non-empty and present in registry
+    if req.workflow_id.is_none() {
+        if req.agent_id.trim().is_empty() {
+            return Err(AppError::BadRequest(
+                "agent_id is required when workflow_id is not specified".to_string(),
+            ));
+        }
+        if !state.registry.agents.contains_key(&req.agent_id) {
+            return Err(AppError::NotFound(format!(
+                "Agent '{}' not found",
+                req.agent_id
+            )));
+        }
+    } else if !req.agent_id.is_empty() && !state.registry.agents.contains_key(&req.agent_id) {
         return Err(AppError::NotFound(format!(
             "Agent '{}' not found",
             req.agent_id
@@ -131,9 +141,7 @@ pub async fn update_job_handler(
     Path(job_id): Path<String>,
     Json(req): Json<UpdateJobRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let job = update_job(&state.resources.pool, &job_id, req)
-        .await
-        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let job = update_job(&state.resources.pool, &job_id, req).await?;
     Ok(Json(json!(job)))
 }
 
@@ -205,9 +213,7 @@ pub async fn disable_job_handler(
         enabled: Some(false),
         max_failures: None,
     };
-    let job = update_job(&state.resources.pool, &job_id, req)
-        .await
-        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let job = update_job(&state.resources.pool, &job_id, req).await?;
     Ok(Json(json!(job)))
 }
 
@@ -256,6 +262,13 @@ pub async fn add_workflow_step_handler(
     Path(workflow_id): Path<String>,
     Json(req): Json<AddStepRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    if !state.registry.agents.contains_key(&req.agent_id) {
+        return Err(AppError::NotFound(format!(
+            "Agent '{}' not found in registry",
+            req.agent_id
+        )));
+    }
+
     let engine = WorkflowEngine::new(state);
     let step = engine
         .add_step(
@@ -274,6 +287,7 @@ pub async fn add_workflow_step_handler(
 //  DELETE /v1/continuity/workflows/:id
 // ─────────────────────────────────────────────────────────
 
+#[tracing::instrument(skip(state), name = "continuity::delete_workflow")]
 pub async fn delete_workflow_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,

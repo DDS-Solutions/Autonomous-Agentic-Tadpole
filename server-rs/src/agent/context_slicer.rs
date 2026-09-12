@@ -63,7 +63,8 @@ impl ContextSlicer {
         Self { config }
     }
 
-    /// Estimates token count accurately via BPE tokenizer, with a character fallback.
+    /// Estimates token count via OpenAI BPE (`cl100k_base`) tokenizer, with a character fallback.
+    /// Note: Serves as a standardized upper-bound token approximation across OpenAI, Anthropic, and Gemini models.
     pub fn count_tokens(text: &str) -> usize {
         if let Some(bpe) = TOKENIZER.as_ref() {
             bpe.encode_with_special_tokens(text).len()
@@ -128,6 +129,11 @@ impl ContextSlicer {
             if current_tokens + window_tokens < self.config.target_max_tokens {
                 writeln!(output, "\n{}", working_window).unwrap();
                 current_tokens += window_tokens;
+            } else {
+                warn!(
+                    "⚠️ [ContextSlicer] Active working window exceeds target token budget ({} tokens); omitted.",
+                    window_tokens
+                );
             }
 
             // 3B. Historical Summary (Only if remaining token budget allows)

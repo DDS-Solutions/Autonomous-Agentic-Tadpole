@@ -53,7 +53,21 @@ pub async fn negotiate_hire(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<NegotiateRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Verify agents exist
+    // 1. Budget validation: strictly positive and finite
+    if !payload.budget.is_finite() || payload.budget <= 0.0 {
+        return Err(AppError::BadRequest(
+            "Hire budget must be strictly positive and finite".to_string(),
+        ));
+    }
+
+    // 2. Verify agents are distinct
+    if payload.hiring_agent_id == payload.target_agent_id {
+        return Err(AppError::BadRequest(
+            "Agent cannot hire itself".to_string(),
+        ));
+    }
+
+    // 3. Verify agents exist
     if !state.registry.agents.contains_key(&payload.hiring_agent_id) {
         return Err(AppError::NotFound(format!(
             "Hiring agent {} not found",
@@ -67,7 +81,6 @@ pub async fn negotiate_hire(
         )));
     }
 
-    // 2. Simple budget validation
     let hiring_agent_budget: f64 =
         sqlx::query_scalar("SELECT budget_usd - cost_usd FROM agents WHERE id = ?")
             .bind(&payload.hiring_agent_id)
@@ -83,6 +96,20 @@ pub async fn negotiate_hire(
     }
 
     let proposal_id = Uuid::new_v4().to_string();
+
+    // Persist proposal into agent_hires with status 'proposed'
+    let _ = sqlx::query(
+        "INSERT INTO agent_hires (id, hiring_agent_id, target_agent_id, budget, task_description, status)
+         VALUES (?, ?, ?, ?, ?, 'proposed')"
+    )
+    .bind(&proposal_id)
+    .bind(&payload.hiring_agent_id)
+    .bind(&payload.target_agent_id)
+    .bind(payload.budget)
+    .bind(&payload.task_description)
+    .execute(&state.resources.pool)
+    .await;
+
     tracing::info!(
         "🤝 [IACP] Agent {} proposed hiring agent {} for ${:.2} (Proposal: {})",
         payload.hiring_agent_id,
@@ -106,7 +133,21 @@ pub async fn execute_hire(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<HireRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Verify agents exist
+    // 1. Budget validation: strictly positive and finite
+    if !payload.budget.is_finite() || payload.budget <= 0.0 {
+        return Err(AppError::BadRequest(
+            "Hire budget must be strictly positive and finite".to_string(),
+        ));
+    }
+
+    // 2. Verify agents are distinct
+    if payload.hiring_agent_id == payload.target_agent_id {
+        return Err(AppError::BadRequest(
+            "Agent cannot hire itself".to_string(),
+        ));
+    }
+
+    // 3. Verify agents exist
     if !state.registry.agents.contains_key(&payload.hiring_agent_id) {
         return Err(AppError::NotFound(format!(
             "Hiring agent {} not found",
@@ -120,7 +161,7 @@ pub async fn execute_hire(
         )));
     }
 
-    // 2. Perform atomic transaction: validate budget, transfer funds, log contract
+    // 3. Perform atomic transaction: validate budget, transfer funds, log contract
     let mut tx = state.resources.pool.begin().await.map_err(AppError::Sqlx)?;
 
     let hiring_agent_budget: f64 =
@@ -197,6 +238,57 @@ pub async fn execute_hire(
     ))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_negative_budget_rejected() {
+        let state = Arc::new(AppState::new().await.expect("State init failed"));
+        state.notify_boot_complete();
+
+        let req = HireRequest {
+            hiring_agent_id: "agent_1".to_string(),
+            target_agent_id: "agent_2".to_string(),
+            budget: -50.0,
+            task_description: "test".to_string(),
+        };
+
+        let res = execute_hire(State(state), Json(req)).await;
+        assert!(matches!(res, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_self_hire_rejected() {
+        let state = Arc::new(AppState::new().await.expect("State init failed"));
+        state.notify_boot_complete();
+
+        let req = HireRequest {
+            hiring_agent_id: "agent_1".to_string(),
+            target_agent_id: "agent_1".to_string(),
+            budget: 50.0,
+            task_description: "test".to_string(),
+        };
+
+        let res = execute_hire(State(state), Json(req)).await;
+        assert!(matches!(res, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_zero_budget_rejected() {
+        let state = Arc::new(AppState::new().await.expect("State init failed"));
+        state.notify_boot_complete();
+
+        let req = HireRequest {
+            hiring_agent_id: "agent_1".to_string(),
+            target_agent_id: "agent_2".to_string(),
+            budget: 0.0,
+            task_description: "test".to_string(),
+        };
+
+        let res = execute_hire(State(state), Json(req)).await;
+        assert!(matches!(res, Err(AppError::BadRequest(_))));
+    }
+}
 
 // Metadata: [iacp]

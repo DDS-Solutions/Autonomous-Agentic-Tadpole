@@ -62,7 +62,7 @@ impl TaskGraph {
         }
     }
 
-    /// Adds a task node to the DAG.
+    /// Adds a task node to the DAG (capped at 500 nodes to prevent unbounded build overhead).
     pub fn add_node(
         &mut self,
         id: impl Into<String>,
@@ -70,6 +70,14 @@ impl TaskGraph {
         assigned_agent_id: impl Into<String>,
         input_payload: serde_json::Value,
     ) -> Result<String, AppError> {
+        const MAX_DAG_NODES: usize = 500;
+        if self.graph.node_count() >= MAX_DAG_NODES {
+            return Err(AppError::BadRequest(format!(
+                "TaskGraph node limit reached (max: {})",
+                MAX_DAG_NODES
+            )));
+        }
+
         let id_str = id.into();
         if self.node_map.contains_key(&id_str) {
             return Err(AppError::BadRequest(format!("Node '{}' already exists in TaskGraph", id_str)));

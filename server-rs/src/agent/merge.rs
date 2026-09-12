@@ -124,6 +124,16 @@ impl AgentConfigUpdate {
                 // Restore ID if missing from nested config but present in parent
                 agent.models.model.model_id = m_id.clone();
             }
+            if agent.models.model.api_key.is_none() {
+                if let Some(api_key) = &self.api_key {
+                    agent.models.model.api_key = Some(api_key.clone());
+                }
+            }
+            if agent.models.model.base_url.is_none() {
+                if let Some(base_url) = &self.base_url {
+                    agent.models.model.base_url = Some(base_url.clone());
+                }
+            }
             changed = true;
         } else {
             // Fallback to flat fields if model_config is not provided
@@ -246,14 +256,8 @@ impl AgentConfigUpdate {
             agent.identity.category = category.clone();
             changed = true;
         }
-        if let Some(created_at) = self.created_at {
-            agent.created_at = Some(created_at);
-            changed = true;
-        }
-        if let Some(last_pulse) = self.last_pulse {
-            agent.health.heartbeat_at = Some(last_pulse);
-            changed = true;
-        }
+        // Note: created_at and last_pulse are immutable/system-controlled
+        // and cannot be modified via client AgentConfigUpdate to protect audit logs and reaper integrity.
         if let Some(current_task) = &self.current_task {
             agent.state.current_task = Some(current_task.clone());
             changed = true;
@@ -268,19 +272,19 @@ impl AgentConfigUpdate {
             agent.economics.token_usage.output_tokens += usage.output_tokens;
             agent.economics.token_usage.total_tokens += usage.total_tokens;
             changed = true;
-        }
- 
-        if let Some(it) = self.input_tokens {
-            agent.economics.token_usage.input_tokens = it;
-            changed = true;
-        }
-        if let Some(ot) = self.output_tokens {
-            agent.economics.token_usage.output_tokens = ot;
-            changed = true;
-        }
-        if let Some(tt) = self.total_tokens {
-            agent.economics.token_usage.total_tokens = tt;
-            changed = true;
+        } else {
+            if let Some(it) = self.input_tokens {
+                agent.economics.token_usage.input_tokens = it;
+                changed = true;
+            }
+            if let Some(ot) = self.output_tokens {
+                agent.economics.token_usage.output_tokens = ot;
+                changed = true;
+            }
+            if let Some(tt) = self.total_tokens {
+                agent.economics.token_usage.total_tokens = tt;
+                changed = true;
+            }
         }
         if let Some(tu) = self.tokens_used {
             agent.economics.tokens_used = tu;
@@ -433,9 +437,5 @@ mod tests {
         assert_eq!(update.model_3, Some("mixtral-8x7b".to_string()));
     }
 }
-
-// Metadata: [AgentMerge]
-
-
 
 // Metadata: [merge]

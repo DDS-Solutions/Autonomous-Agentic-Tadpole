@@ -105,10 +105,18 @@ pub async fn list_knowledge_docs() -> Result<impl IntoResponse, AppError> {
 pub async fn get_knowledge_doc(
     AxumPath((category, name)): AxumPath<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Sanitize input to prevent directory traversal
-    if category.contains("..") || name.contains("..") {
+    // Sanitize input to prevent directory traversal and absolute path escaping
+    if category.contains("..")
+        || name.contains("..")
+        || category.starts_with('/')
+        || category.starts_with('\\')
+        || category.contains(':')
+        || name.starts_with('/')
+        || name.starts_with('\\')
+        || name.contains(':')
+    {
         return Err(AppError::BadRequest(
-            "Invalid path: directory traversal detected".to_string(),
+            "Invalid path: directory traversal or absolute path detected".to_string(),
         ));
     }
 
@@ -121,13 +129,26 @@ pub async fn get_knowledge_doc(
         }
     };
 
-    let path = base_path.join(category).join(&name);
-    tracing::debug!("📖 Fetching knowledge doc: {:?}", path);
+    let path = base_path.join(&category).join(&name);
+    let canonical_base = base_path
+        .canonicalize()
+        .map_err(|_| AppError::NotFound("Knowledge base directory not found".to_string()))?;
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|_| AppError::NotFound(format!("Document not found: {}", name)))?;
 
-    match fs::read_to_string(&path) {
+    if !canonical_path.starts_with(&canonical_base) {
+        return Err(AppError::BadRequest(
+            "Invalid path: path escape detected".to_string(),
+        ));
+    }
+
+    tracing::debug!("📖 Fetching knowledge doc: {:?}", canonical_path);
+
+    match fs::read_to_string(&canonical_path) {
         Ok(content) => Ok((StatusCode::OK, content)),
         Err(e) => {
-            tracing::error!("❌ Failed to read knowledge doc {:?}: {}", path, e);
+            tracing::error!("❌ Failed to read knowledge doc {:?}: {}", canonical_path, e);
             Err(AppError::NotFound(format!("Document not found: {}", name)))
         }
     }
@@ -159,6 +180,25 @@ pub async fn get_operations_manual() -> Result<impl IntoResponse, AppError> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::extract::Path as AxumPath;
 
+    #[tokio::test]
+    async fn test_knowledge_doc_path_traversal_rejected() {
+        let res = get_knowledge_doc(AxumPath(("../etc".to_string(), "passwd".to_string()))).await;
+        assert!(matches!(res, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_doc_absolute_path_rejected() {
+        let res = get_knowledge_doc(AxumPath(("/etc".to_string(), "passwd".to_string()))).await;
+        assert!(matches!(res, Err(AppError::BadRequest(_))));
+
+        let res2 = get_knowledge_doc(AxumPath(("architecture".to_string(), "/root/secret".to_string()))).await;
+        assert!(matches!(res2, Err(AppError::BadRequest(_))));
+    }
+}
 
 // Metadata: [docs]

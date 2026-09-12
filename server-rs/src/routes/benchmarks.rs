@@ -59,6 +59,10 @@ pub async fn create_benchmark(
 ) -> Result<impl IntoResponse, AppError> {
     if payload.id.is_empty() {
         payload.id = Uuid::new_v4().to_string();
+    } else if payload.id.len() > 64 || !payload.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(AppError::BadRequest(
+            "Invalid benchmark ID format. Must be alphanumeric slug or UUID".to_string(),
+        ));
     }
 
     benchmarks::save_benchmark(&state.resources.pool, payload)
@@ -79,6 +83,15 @@ pub async fn trigger_benchmark(
     Path(test_id): Path<String>,
     Query(query): Query<BenchmarkTriggerQuery>,
 ) -> Result<impl IntoResponse, AppError> {
+    if test_id.trim().is_empty()
+        || test_id.len() > 64
+        || !test_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(AppError::BadRequest(
+            "Invalid test_id format. Must be alphanumeric slug or UUID".to_string(),
+        ));
+    }
+
     let result = benchmarks::run_benchmark_suite(
         state,
         &test_id,

@@ -60,25 +60,41 @@ impl SharedBlackboard {
             .or_insert_with(|| Arc::new(DashMap::new()))
             .clone();
 
+        let tags_vec: Vec<String> = tags.into_iter().map(Into::into).collect();
         let now = Utc::now();
-        let new_version = mission_map
-            .get(key)
-            .map(|entry| entry.version + 1)
-            .unwrap_or(1);
 
-        let entry = Arc::new(BlackboardEntry {
-            key: key.to_string(),
-            value,
-            author_agent_id: author_agent_id.to_string(),
-            tags: tags.into_iter().map(Into::into).collect(),
-            version: new_version,
-            updated_at: now,
-        });
+        let mut map_entry = mission_map.entry(key.to_string());
+        let entry = match map_entry {
+            dashmap::mapref::entry::Entry::Occupied(ref mut occ) => {
+                let next_version = occ.get().version + 1;
+                let new_entry = Arc::new(BlackboardEntry {
+                    key: key.to_string(),
+                    value,
+                    author_agent_id: author_agent_id.to_string(),
+                    tags: tags_vec,
+                    version: next_version,
+                    updated_at: now,
+                });
+                occ.insert(new_entry.clone());
+                new_entry
+            }
+            dashmap::mapref::entry::Entry::Vacant(vac) => {
+                let new_entry = Arc::new(BlackboardEntry {
+                    key: key.to_string(),
+                    value,
+                    author_agent_id: author_agent_id.to_string(),
+                    tags: tags_vec,
+                    version: 1,
+                    updated_at: now,
+                });
+                vac.insert(new_entry.clone());
+                new_entry
+            }
+        };
 
-        mission_map.insert(key.to_string(), entry.clone());
         info!(
             "📋 [Blackboard] Mission '{}' key '{}' updated to v{} by '{}'",
-            mission_id, key, new_version, author_agent_id
+            mission_id, key, entry.version, author_agent_id
         );
         entry
     }
@@ -228,6 +244,35 @@ mod tests {
 
         assert!(bb.get("m_1", "k1").is_none());
         assert!(bb.get("m_2", "k2").is_some(), "Mission 2 entries must remain unaffected");
+    }
+
+    #[tokio::test]
+    async fn test_blackboard_concurrent_versioning() {
+        let bb = Arc::new(SharedBlackboard::new());
+        let m_id = "concurrent_mission";
+        let key = "shared_counter";
+
+        let mut handles = Vec::new();
+        for i in 0..20 {
+            let bb_clone = bb.clone();
+            let handle = tokio::spawn(async move {
+                bb_clone.set(
+                    m_id,
+                    key,
+                    serde_json::json!({ "worker": i }),
+                    &format!("agent_{}", i),
+                    Vec::<String>::new(),
+                );
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        let entry = bb.get(m_id, key).expect("Entry must exist");
+        assert_eq!(entry.version, 20, "Version must be exactly 20 after 20 atomic writes");
     }
 }
 

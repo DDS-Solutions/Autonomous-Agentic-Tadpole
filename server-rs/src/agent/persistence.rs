@@ -685,15 +685,15 @@ where
 
 /// ### ⚖️ Governance: Role Retirement
 /// Deletes a Role Blueprint from the system.
-pub async fn delete_blueprint<'c, E>(executor: E, id: &str) -> Result<(), AppError>
+pub async fn delete_blueprint<'c, E>(executor: E, id: &str) -> Result<bool, AppError>
 where
     E: sqlx::Executor<'c, Database = sqlx::Sqlite>,
 {
-    sqlx::query("DELETE FROM role_blueprints WHERE id = ?")
+    let res = sqlx::query("DELETE FROM role_blueprints WHERE id = ?")
         .bind(id)
         .execute(executor)
         .await?;
-    Ok(())
+    Ok(res.rows_affected() > 0)
 }
 
 /// Updates the status of a sync manifest.
