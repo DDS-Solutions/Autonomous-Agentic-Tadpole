@@ -64,6 +64,11 @@ export function useAgentConfig(
             last_seen.name === agent.name &&
             last_seen.role === agent.role &&
             last_seen.model === agent.model &&
+            last_seen.model_2 === agent.model_2 &&
+            last_seen.model_3 === agent.model_3 &&
+            last_seen.model_config?.modelId === agent.model_config?.modelId &&
+            last_seen.model_config2?.modelId === agent.model_config2?.modelId &&
+            last_seen.model_config3?.modelId === agent.model_config3?.modelId &&
             last_seen.active_model_slot === agent.active_model_slot
         ) {
             return;
@@ -83,7 +88,8 @@ export function useAgentConfig(
         dispatch({ type: 'UPDATE_SLOT', slot, field: 'provider', value: val });
         const provider_models = use_model_store.getState().models.filter(m => m.provider === val);
         if (provider_models.length > 0) {
-            dispatch({ type: 'UPDATE_SLOT', slot, field: 'model', value: provider_models[0].name });
+            const first_model_id = resolve_technical_model_id(provider_models[0].name) || provider_models[0].name;
+            dispatch({ type: 'UPDATE_SLOT', slot, field: 'model', value: first_model_id });
         } else {
             dispatch({ type: 'UPDATE_SLOT', slot, field: 'model', value: '' });
             // Attempt a background sync if we have no models for this provider

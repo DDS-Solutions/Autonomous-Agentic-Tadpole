@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolve_technical_model_id, resolve_provider, resolve_agent_model_config, get_model_color } from './model_utils';
+import { resolve_technical_model_id, resolve_provider, resolve_agent_model_config, get_model_color, get_active_model_name } from './model_utils';
 import type { Agent } from '../types';
 
 describe('model_utils', () => {
@@ -97,6 +97,37 @@ describe('model_utils', () => {
             const config = resolve_agent_model_config(agent as Agent);
             expect(config.model_id).toBe('gpt-4');
             expect(config.provider).toBe('openai');
+        });
+    });
+
+    describe('get_active_model_name', () => {
+        it('prioritizes slot 1 model_config over wire fallback and resolves friendly name', () => {
+            const agent: Partial<Agent> = {
+                model: 'claude-3-5-sonnet',
+                model_config: { modelId: 'gemini-2.5-flash', provider: 'google' },
+                active_model_slot: 1
+            };
+            expect(get_active_model_name(agent as Agent)).toBe('Gemini 2.5 Flash');
+        });
+
+        it('prioritizes slot 2 model_config when slot 2 is active', () => {
+            const agent: Partial<Agent> = {
+                model: 'gemini-1.5-flash',
+                model_2: 'claude-3-opus',
+                model_config2: { modelId: 'gpt-4o', provider: 'openai' },
+                active_model_slot: 2
+            };
+            expect(get_active_model_name(agent as Agent)).toBe('GPT-4o');
+        });
+
+        it('prioritizes slot 3 model_config when slot 3 is active', () => {
+            const agent: Partial<Agent> = {
+                model: 'gemini-1.5-flash',
+                model_3: 'old-model',
+                model_config3: { modelId: 'claude-3-5-sonnet', provider: 'anthropic' },
+                active_model_slot: 3
+            };
+            expect(get_active_model_name(agent as Agent)).toBe('Claude 3.5 Sonnet');
         });
     });
 

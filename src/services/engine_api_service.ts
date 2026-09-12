@@ -20,6 +20,31 @@ export interface EngineStatus {
     features: string[];
 }
 
+export interface InstallTemplateReceipt {
+    status: string;
+    message: string;
+    template_id: string;
+    agents_installed: number;
+    agents_skipped: number;
+    workflows_copied: number;
+    skills_copied: number;
+    mcp_merged: boolean;
+    knowledge_copied: number;
+    errors?: string[];
+}
+
+export interface InstalledTemplateSummary {
+    id: string;
+    path: string;
+    name?: string;
+    installed_at?: string;
+    agents_count: number;
+    workflows_count: number;
+    skills_count: number;
+    knowledge_count: number;
+    mcp_servers_count: number;
+}
+
 export const engine_api_service = {
     /**
      * get_engine_status
@@ -121,8 +146,9 @@ export const engine_api_service = {
      * install_template
      * Installs a template from the official repository.
      * Hardens the input URL and path parameters to prevent supply chain and RCE injection vectors.
+     * Returns a structured receipt containing counts of all installed assets.
      */
-    install_template: async (repository_url: string, path: string): Promise<{ success: boolean }> => {
+    install_template: async (repository_url: string, path: string): Promise<InstallTemplateReceipt> => {
         // Validate URL format and prevent injection flags
         const trimmed_url = repository_url.trim();
         if (trimmed_url.startsWith('-')) {
@@ -144,11 +170,44 @@ export const engine_api_service = {
             throw new Error('[engine_api_service] Invalid template path: Path traversal or absolute paths are prohibited.');
         }
 
-        await api_request('/v1/engine/templates/install', {
+        return await api_request<InstallTemplateReceipt>('/v1/engine/templates/install', {
             method: 'POST',
             body: JSON.stringify({ repository_url: trimmed_url, path })
         });
-        return { success: true };
+    },
+
+    /**
+     * get_installed_templates
+     * Retrieves summaries of all currently installed swarm templates.
+     */
+    get_installed_templates: async (): Promise<InstalledTemplateSummary[]> => {
+        return await api_request<InstalledTemplateSummary[]>('/v1/engine/templates/installed', {
+            method: 'GET'
+        });
+    },
+
+    /**
+     * uninstall_template
+     * Cleanly rolls back an installed template by deleting its agents, directives, skills,
+     * knowledge files, and MCP configs using its installation receipt.
+     */
+    uninstall_template: async (id: string): Promise<{ status: string; message: string; uninstalled_id: string }> => {
+        return await api_request<{ status: string; message: string; uninstalled_id: string }>(
+            `/v1/engine/templates/${encodeURIComponent(id)}`,
+            {
+                method: 'DELETE'
+            }
+        );
+    },
+
+    /**
+     * get_template_catalog
+     * Fetches the template registry via the backend caching proxy (5-minute TTL, official User-Agent).
+     */
+    get_template_catalog: async (): Promise<{ templates: unknown[] }> => {
+        return await api_request<{ templates: unknown[] }>('/v1/engine/templates/catalog', {
+            method: 'GET'
+        });
     },
 
     /**

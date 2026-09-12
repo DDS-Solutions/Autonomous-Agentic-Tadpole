@@ -64,21 +64,45 @@ export default function Org_Chart() {
     };
 
     const handle_model_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model: new_model, 
+            model_config: { 
+                ...agent?.model_config, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
  
     const handle_model_2_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model_2: new_model, 
+            model_config2: { 
+                ...agent?.model_config2, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
  
     const handle_model_3_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model_3: new_model, 
+            model_config3: { 
+                ...agent?.model_config3, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
 
     // ── Data Partitioning (Dynamic Hierarchy Builder) ────────────────────────

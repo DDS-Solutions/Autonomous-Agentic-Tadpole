@@ -17,6 +17,7 @@ import { Tooltip } from '../ui';
 import { Model_Badge } from '../Model_Badge';
 import { use_dropdown_store } from '../../stores/dropdown_store';
 import { use_model_store } from '../../stores/model_store';
+import { resolve_friendly_model_name, resolve_technical_model_id } from '../../utils/model_utils';
 import type { Agent } from '../../types';
 
 interface Node_Model_Slots_Props {
@@ -75,10 +76,17 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
         set_dropdown_pos(new_pos);
     }, [is_model_1_open, is_model_2_open, is_model_3_open]);
 
-    const render_slot = (slot_idx: 1 | 2 | 3, model: string | undefined, is_open: boolean) => {
+    const render_slot = (slot_idx: 1 | 2 | 3, raw_model: string | undefined, is_open: boolean) => {
         const is_active_slot = agent.active_model_slot === slot_idx || (slot_idx === 1 && !agent.active_model_slot && agent.status !== 'idle' && agent.status !== 'offline');
 
-        const resolved_model_data = available_models.find(m => m.name === model);
+        const display_name = raw_model ? resolve_friendly_model_name(raw_model) || raw_model : undefined;
+        const technical_id = raw_model ? resolve_technical_model_id(raw_model) || raw_model : undefined;
+
+        const resolved_model_data = available_models.find(m => 
+            (display_name && m.name.toLowerCase() === display_name.toLowerCase()) || 
+            (technical_id && m.id.toLowerCase() === technical_id.toLowerCase()) ||
+            (raw_model && (m.name.toLowerCase() === raw_model.toLowerCase() || m.id.toLowerCase() === raw_model.toLowerCase()))
+        );
 
         const led_color =
             slot_idx === 1 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
@@ -104,7 +112,7 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
                     </button>
                 </Tooltip>
                 <Model_Badge
-                    model={model || (slot_idx === 1 ? i18n.t('agent_card.label_unknown_model') : i18n.t('agent_card.label_add_model'))}
+                    model={display_name || (slot_idx === 1 ? i18n.t('agent_card.label_unknown_model') : i18n.t('agent_card.label_add_model'))}
                     is_active={is_active_slot}
                     capabilities={resolved_model_data?.capabilities}
                     on_click={() => toggle_dropdown(agent.id, slot_idx === 1 ? 'model' : slot_idx === 2 ? 'model_2' : 'model_3')}
@@ -112,20 +120,23 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
                 {is_open && createPortal(
                     <div className="fixed mt-1 w-56 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5 max-h-60 overflow-y-auto custom-scrollbar"
                          style={{ top: dropdown_pos[slot_idx]?.top || 0, left: dropdown_pos[slot_idx]?.left || 0 }}>
-                        {available_models.map((m) => (
-                            <button key={m.id} onClick={() => {
-                                handle_slot_change(slot_idx, m.name);
-                                close_dropdown();
-                            }}
-                                className={`w-full text-left px-3 py-2 text-[10px] hover:bg-zinc-900 transition-colors flex items-center justify-between gap-2 ${model === m.name ? 'text-green-400 font-bold bg-green-500/5' : 'text-zinc-400'}`}>
-                                <span className="truncate">{m.name}</span>
-                                <div className="flex items-center gap-1 opacity-40">
-                                    {m.capabilities?.supports_vision && <span title="Vision">👁️</span>}
-                                    {m.capabilities?.supports_tools && <span title="Tools">🛠️</span>}
-                                    {m.capabilities?.supports_reasoning && <span title="Reasoning">🧠</span>}
-                                </div>
-                            </button>
-                        ))}
+                        {available_models.map((m) => {
+                            const is_current = display_name === m.name || technical_id === m.id;
+                            return (
+                                <button key={m.id} onClick={() => {
+                                    handle_slot_change(slot_idx, m.name);
+                                    close_dropdown();
+                                }}
+                                    className={`w-full text-left px-3 py-2 text-[10px] hover:bg-zinc-900 transition-colors flex items-center justify-between gap-2 ${is_current ? 'text-green-400 font-bold bg-green-500/5' : 'text-zinc-400'}`}>
+                                    <span className="truncate">{m.name}</span>
+                                    <div className="flex items-center gap-1 opacity-40">
+                                        {m.capabilities?.supports_vision && <span title="Vision">👁️</span>}
+                                        {m.capabilities?.supports_tools && <span title="Tools">🛠️</span>}
+                                        {m.capabilities?.supports_reasoning && <span title="Reasoning">🧠</span>}
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>,
                     document.body
                 )}
@@ -133,17 +144,22 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
         );
     };
 
+    const slot_models: Record<1 | 2 | 3, string | undefined> = {
+        1: agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model,
+        2: agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2,
+        3: agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3
+    };
+
     return (
         <div className={`flex flex-col gap-1.5 border-t border-zinc-800 pt-2 relative ${is_model_1_open || is_model_2_open || is_model_3_open ? 'z-50' : 'z-20'}`}>
             <div className="flex items-center gap-1.5 overflow-visible">
-                {[1, 2, 3].map((slot_num) => {
-                    const model_key = slot_num === 1 ? 'model' : `model_${slot_num}` as keyof Agent;
-                    return render_slot(
-                        slot_num as 1 | 2 | 3, 
-                        agent[model_key] as string | undefined, 
+                {([1, 2, 3] as const).map((slot_num) => (
+                    render_slot(
+                        slot_num, 
+                        slot_models[slot_num], 
                         dropdown_states[slot_num]
-                    );
-                })}
+                    )
+                ))}
             </div>
         </div>
     );

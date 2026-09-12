@@ -90,25 +90,39 @@ export function ModelSlotConfig({
                             <Info size={9} className="text-zinc-700 hover:text-zinc-300 cursor-help transition-colors" />
                         </Tooltip>
                     </label>
-                    <select
-                        value={slot.model}
-                        onChange={(e) => onUpdateField('model', e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono cursor-pointer appearance-none transition-all"
-                        style={{ borderLeft: `2px solid ${themeColor}40` }}
-                    >
-                        {filteredModels.length > 0 ? (
-                            filteredModels.map(m => (
-                                <option key={m.id} value={resolve_technical_model_id(m.name)} className="bg-zinc-950">
-                                    [{m.modality?.toUpperCase() || 'LLM'}] {m.name}
-                                </option>
-                            ))
-                        ) : (
-                            <option disabled value="" className="bg-zinc-950 italic text-zinc-500">
-                                {i18n.t('agent_config.no_models_found')}
-                            </option>
-                        )}
+                    {(() => {
+                        const current_tech_id = resolve_technical_model_id(slot.model) || slot.model;
+                        const has_matching_option = filteredModels.some(m => (resolve_technical_model_id(m.name) || resolve_technical_model_id(m.id) || m.id) === current_tech_id);
 
-                    </select>
+                        return (
+                            <select
+                                value={current_tech_id}
+                                onChange={(e) => onUpdateField('model', e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono cursor-pointer appearance-none transition-all"
+                                style={{ borderLeft: `2px solid ${themeColor}40` }}
+                            >
+                                {filteredModels.length > 0 ? (
+                                    filteredModels.map(m => {
+                                        const opt_id = resolve_technical_model_id(m.name) || resolve_technical_model_id(m.id) || m.id;
+                                        return (
+                                            <option key={m.id} value={opt_id} className="bg-zinc-950">
+                                                [{m.modality?.toUpperCase() || 'LLM'}] {m.name}
+                                            </option>
+                                        );
+                                    })
+                                ) : (
+                                    <option disabled value="" className="bg-zinc-950 italic text-zinc-500">
+                                        {i18n.t('agent_config.no_models_found')}
+                                    </option>
+                                )}
+                                {current_tech_id && !has_matching_option && (
+                                    <option value={current_tech_id} className="bg-zinc-950">
+                                        [CUSTOM] {slot.model}
+                                    </option>
+                                )}
+                            </select>
+                        );
+                    })()}
                 </div>
             </div>
 

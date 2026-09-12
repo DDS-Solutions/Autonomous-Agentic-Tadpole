@@ -165,6 +165,9 @@ export const system_api_service = {
     shutdown_engine: engine_api_service.shutdown_engine,
     transcribe: engine_api_service.transcribe,
     install_template: engine_api_service.install_template,
+    get_installed_templates: engine_api_service.get_installed_templates,
+    uninstall_template: engine_api_service.uninstall_template,
+    get_template_catalog: engine_api_service.get_template_catalog,
     pre_pr_engine: engine_api_service.pre_pr_engine,
 
     // --- Model Manager Delegation ---

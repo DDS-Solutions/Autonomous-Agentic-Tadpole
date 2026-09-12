@@ -111,14 +111,14 @@ export default function Ops_Dashboard() {
             active_model_slot: slot
         });
 
-        let model_id = agent.model;
+        let model_id = agent.model_config?.modelId || agent.model;
         let provider = agent.model_config?.provider;
 
         if (slot === 2) {
-            model_id = agent.model_2 || model_id;
+            model_id = agent.model_config2?.modelId || agent.model_2 || model_id;
             provider = agent.model_config2?.provider || provider;
         } else if (slot === 3) {
-            model_id = agent.model_3 || model_id;
+            model_id = agent.model_config3?.modelId || agent.model_3 || model_id;
             provider = agent.model_config3?.provider || provider;
         }
 
@@ -136,21 +136,45 @@ export default function Ops_Dashboard() {
     };
 
     const handle_model_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model: new_model, model_config: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model: new_model, 
+            model_config: { 
+                ...agent?.model_config, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
 
     const handle_model_2_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model_2: new_model, model_config2: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model_2: new_model, 
+            model_config2: { 
+                ...agent?.model_config2, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
 
     const handle_model_3_change = (agent_id: string, new_model: string) => {
+        const agent = agents_list.find(a => a.id === agent_id);
         const model_id = resolve_technical_model_id(new_model);
         const provider = resolve_provider(model_id);
-        handle_agent_update(agent_id, { model_3: new_model, model_config3: { modelId: model_id, provider } });
+        handle_agent_update(agent_id, { 
+            model_3: new_model, 
+            model_config3: { 
+                ...agent?.model_config3, 
+                modelId: model_id, 
+                provider 
+            } 
+        });
     };
 
 

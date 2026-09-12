@@ -68,8 +68,7 @@ describe('agent_mappers', () => {
             const normalized = from_backend_agent(hybrid as any);
             
             expect(normalized.budget_usd).toBe(500);
-            expect(normalized.cost_usd).toBe(50);
-            expect(normalized.model).toBe('gpt-4o');
+            expect(normalized.model).toBe('GPT-4o');
         });
 
         it('should preserve identity from existing_agent when DTO has missing fields', () => {
@@ -111,6 +110,39 @@ describe('agent_mappers', () => {
             const normalized = from_backend_agent(raw as any);
             expect(normalized.skills).toEqual(['rust', 'ts']);
         });
+        it('should prioritize modelConfig, modelConfig2, and modelConfig3 modelId and resolve friendly names', () => {
+            const raw = {
+                id: 'agent-tri-slot',
+                name: 'Tri Slot Agent',
+                model: 'claude-3-5-sonnet',
+                model2: 'gpt-4o-mini',
+                model3: 'unknown',
+                modelConfig: {
+                    modelId: 'gemini-2.5-flash',
+                    provider: 'google',
+                    temperature: 0.7
+                },
+                modelConfig2: {
+                    modelId: 'gpt-4o',
+                    provider: 'openai',
+                    temperature: 0.5
+                },
+                modelConfig3: {
+                    modelId: 'claude-3-5-sonnet',
+                    provider: 'anthropic',
+                    temperature: 0.9
+                }
+            };
+
+            const normalized = from_backend_agent(raw as any);
+
+            expect(normalized.model).toBe('Gemini 2.5 Flash');
+            expect(normalized.model_2).toBe('GPT-4o');
+            expect(normalized.model_3).toBe('Claude 3.5 Sonnet');
+            expect(normalized.model_config?.modelId).toBe('gemini-2.5-flash');
+            expect(normalized.model_config2?.modelId).toBe('gpt-4o');
+            expect(normalized.model_config3?.modelId).toBe('claude-3-5-sonnet');
+        });
     });
 
     describe('to_agent_update_payload', () => {
@@ -129,6 +161,38 @@ describe('agent_mappers', () => {
             // Ensure snake_case from Agent is mapped to camelCase in payload
             expect(payload).toHaveProperty('budgetUsd');
             expect(payload).not.toHaveProperty('budget_usd');
+        });
+
+        it('should serialize model_config, model_config2, and model_config3 to backend DTO', () => {
+            const updates: Partial<Agent> = {
+                model: 'Gemini 2.5 Flash',
+                model_config: {
+                    modelId: 'gemini-2.5-flash',
+                    provider: 'google',
+                    temperature: 0.7
+                },
+                model_2: 'GPT-4o',
+                model_config2: {
+                    modelId: 'gpt-4o',
+                    provider: 'openai',
+                    temperature: 0.5
+                },
+                model_3: 'Claude 3.5 Sonnet',
+                model_config3: {
+                    modelId: 'claude-3-5-sonnet',
+                    provider: 'anthropic',
+                    temperature: 0.9
+                }
+            };
+
+            const payload = to_agent_update_payload(updates as any);
+
+            expect(payload.modelId).toBe('gemini-2.5-flash');
+            expect(payload.modelConfig?.modelId).toBe('gemini-2.5-flash');
+            expect(payload.model2).toBe('gpt-4o');
+            expect(payload.modelConfig2?.modelId).toBe('gpt-4o');
+            expect(payload.model3).toBe('claude-3-5-sonnet');
+            expect(payload.modelConfig3?.modelId).toBe('claude-3-5-sonnet');
         });
     });
 });

@@ -209,19 +209,19 @@ describe('Ops_Dashboard', () => {
         const node_1 = screen.getByTestId('node-1');
         fireEvent.click(within(node_1).getByText('Slot 1'));
         expect(tadpole_os_service.send_command).toHaveBeenCalledWith(
-            '1', 'test_skill', 'Gemma 4 (Local)', 'ollama', 'cluster-1', 'Executive', 1000
+            '1', 'test_skill', 'gemma4:e4b', 'ollama', 'cluster-1', 'Executive', 1000
         );
 
         // Slot 2
         fireEvent.click(within(node_1).getByText('Slot 2'));
         expect(tadpole_os_service.send_command).toHaveBeenCalledWith(
-            '1', 'test_skill', 'Claude Opus 4.5', 'anthropic', 'cluster-1', 'Executive', 1000
+            '1', 'test_skill', 'claude-opus-4.5', 'anthropic', 'cluster-1', 'Executive', 1000
         );
 
         // Slot 3
         fireEvent.click(within(node_1).getByText('Slot 3'));
         expect(tadpole_os_service.send_command).toHaveBeenCalledWith(
-            '1', 'test_skill', 'LLaMA 4 Maverick', 'meta', 'cluster-1', 'Executive', 1000
+            '1', 'test_skill', 'llama-4-maverick', 'meta', 'cluster-1', 'Executive', 1000
         );
     });
 

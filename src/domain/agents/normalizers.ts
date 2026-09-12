@@ -139,18 +139,16 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
     const default_model = settings.default_model || 'Gemma 4 (Local)';
 
     // Model Resolution logic: 
-    // Priority: 1. `model` wire field (live, derived from model_config.model_id in backend)
-    //           2. `modelConfig.modelId` (authoritative config)
+    // Priority: 1. `modelConfig.modelId` (authoritative config from AgentConfigPanel)
+    //           2. `model` wire field (live, derived from model_config.model_id in backend)
     //           3. `modelId` wire field (legacy identity field, can be stale)
-    const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
     const model_config_id = (get_val('modelConfig', 'model_config', undefined) as { modelId?: string } | undefined)?.modelId;
+    const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
     const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
     
-    // Use the live model name first (most accurate), then resolve from config/identity IDs
-    const model = model_name_wire 
-        || (model_config_id ? resolve_friendly_model_name(model_config_id) : undefined)
-        || (model_id_wire ? resolve_friendly_model_name(model_id_wire) : undefined)
-        || default_model;
+    // Priority: modelConfig.modelId is the authoritative source of truth from AgentConfigPanel
+    const raw_model = model_config_id || model_name_wire || model_id_wire || default_model;
+    const model = resolve_friendly_model_name(raw_model) || raw_model;
 
     const input_tokens = (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0);
     const output_tokens = (dto.tokenUsage?.outputTokens ?? d.output_tokens ?? existing_agent?.output_tokens ?? 0);
@@ -176,14 +174,16 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
         model_2: (() => {
-            const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
             const m2_config_id = (get_val('modelConfig2', 'model_config2', undefined) as { modelId?: string } | undefined)?.modelId;
-            return m2_name || (m2_config_id ? resolve_friendly_model_name(m2_config_id) : undefined) || undefined;
+            const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
+            const raw_m2 = m2_config_id || m2_name;
+            return raw_m2 ? (resolve_friendly_model_name(raw_m2) || raw_m2) : undefined;
         })(),
         model_3: (() => {
-            const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
             const m3_config_id = (get_val('modelConfig3', 'model_config3', undefined) as { modelId?: string } | undefined)?.modelId;
-            return m3_name || (m3_config_id ? resolve_friendly_model_name(m3_config_id) : undefined) || undefined;
+            const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
+            const raw_m3 = m3_config_id || m3_name;
+            return raw_m3 ? (resolve_friendly_model_name(raw_m3) || raw_m3) : undefined;
         })(),
         model_config2: get_val('modelConfig2', 'model_config2', undefined),
         model_config3: get_val('modelConfig3', 'model_config3', undefined),

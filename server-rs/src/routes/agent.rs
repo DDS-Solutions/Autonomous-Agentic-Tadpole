@@ -46,12 +46,32 @@ pub struct AgentResponse {
     pub department: String,
     pub status: String,
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    pub model_config: crate::agent::types::ModelConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_2: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_config2: Option<crate::agent::types::ModelConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_3: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_config3: Option<crate::agent::types::ModelConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_model_slot: Option<i32>,
     pub provider: String,
     pub budget_usd: f64,
     pub cost_usd: f64,
     pub is_healthy: bool,
     pub is_bankrupt: bool,
     pub skills: Vec<String>,
+    pub workflows: Vec<String>,
+    pub mcp_tools: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<String>,
+    pub requires_oversight: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_task: Option<String>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub version: u32,
 }
@@ -71,12 +91,24 @@ impl From<&EngineAgent> for AgentResponse {
             department: agent.identity.department.clone(),
             status: agent.health.status.clone(),
             model: model_name,
+            model_id: agent.models.model_id.clone(),
+            model_config: agent.models.model.clone(),
+            model_2: agent.models.model_2.clone(),
+            model_config2: agent.models.model_config2.clone(),
+            model_3: agent.models.model_3.clone(),
+            model_config3: agent.models.model_config3.clone(),
+            active_model_slot: agent.models.active_model_slot,
             provider: agent.models.model.provider.to_string(),
             budget_usd: agent.economics.budget_usd,
             cost_usd: agent.economics.cost_usd,
             is_healthy: agent.health.failure_count < 5,
             is_bankrupt: agent.economics.cost_usd >= agent.economics.budget_usd && agent.economics.budget_usd > 0.0,
             skills: agent.capabilities.skills.clone(),
+            workflows: agent.capabilities.workflows.clone(),
+            mcp_tools: agent.capabilities.mcp_tools.clone(),
+            theme_color: agent.identity.theme_color.clone(),
+            requires_oversight: agent.requires_oversight,
+            current_task: agent.state.current_task.clone(),
             created_at: agent.created_at,
             version: agent.version,
         }

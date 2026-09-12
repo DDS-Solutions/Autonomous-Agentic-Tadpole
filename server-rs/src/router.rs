@@ -470,6 +470,18 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
             "/engine/templates/install",
             post(routes::templates::install_template),
         )
+        .route(
+            "/engine/templates/installed",
+            get(routes::templates::list_installed_templates),
+        )
+        .route(
+            "/engine/templates/catalog",
+            get(routes::templates::get_template_catalog),
+        )
+        .route(
+            "/engine/templates/{id}",
+            axum::routing::delete(routes::templates::uninstall_template),
+        )
         .route("/api/pull", post(routes::model_manager::ollama_proxy_pull))
         // --- MCP Bridge Endpoints ---
         .route("/mcp/sse", get(crate::agent::mcp::transport::mcp_sse_handler))

@@ -19,6 +19,8 @@ export const MODEL_MAP: Record<string, string> = {
     // Google (Tadpole OS matches technically anyway, but for safety)
     "Gemini 1.5 Pro": "gemini-1.5-pro",
     "Gemini 1.5 Flash": "gemini-1.5-flash",
+    "Gemini 2.5 Pro": "gemini-2.5-pro",
+    "Gemini 2.5 Flash": "gemini-2.5-flash",
     "Gemini 3 Pro": "gemini-3-pro-preview",
     "Gemini 3 Flash": "gemini-3-flash-preview",
     "Gemini 3.1 Pro": "gemini-3.1-pro-preview",
@@ -27,11 +29,16 @@ export const MODEL_MAP: Record<string, string> = {
     // OpenAI
     "GPT-5.2": "gpt-5.2-preview",
     "GPT-4.1": "gpt-4.1-turbo",
+    "GPT-4o": "gpt-4o",
+    "GPT-4o mini": "gpt-4o-mini",
     "o4-mini": "o4-mini-2026-02",
 
     // Anthropic
     "Claude Opus 4.5": "claude-4.5-opus",
     "Claude Sonnet 4.5": "claude-4.5-sonnet",
+    "Claude 3.5 Sonnet": "claude-3-5-sonnet",
+    "Claude 3.5 Haiku": "claude-3-5-haiku",
+    "Claude 3 Opus": "claude-3-opus",
 
     // Mistral
     "Mistral Large": "mistral-large-latest",
@@ -88,6 +95,11 @@ export function resolve_friendly_model_name(model_id: string | undefined): strin
     const lowerId = model_id.toLowerCase();
     const technicalMatch = Object.keys(REVERSE_MODEL_MAP).find(k => k.toLowerCase() === lowerId);
     if (technicalMatch) return REVERSE_MODEL_MAP[technicalMatch];
+
+    // Check if model_id is already a known friendly name
+    if (MODEL_MAP[model_id]) return model_id;
+    const nameMatch = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === lowerId);
+    if (nameMatch) return nameMatch;
 
     return model_id;
 }
@@ -185,9 +197,15 @@ export function resolve_agent_model_config(agent: Agent, global_default_model?: 
  * Returns the display name of the model currently active in the agent's slots.
  */
 export function get_active_model_name(agent: Agent): string {
-    if (agent.active_model_slot === 2) return agent.model_2 || agent.model || 'Unknown';
-    if (agent.active_model_slot === 3) return agent.model_3 || agent.model || 'Unknown';
-    return agent.model || 'Unknown';
+    let raw = '';
+    if (agent.active_model_slot === 2) {
+        raw = agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2 || agent.model_config?.modelId || agent.model || 'Unknown';
+    } else if (agent.active_model_slot === 3) {
+        raw = agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3 || agent.model_config?.modelId || agent.model || 'Unknown';
+    } else {
+        raw = agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model || 'Unknown';
+    }
+    return resolve_friendly_model_name(raw) || raw;
 }
 
 

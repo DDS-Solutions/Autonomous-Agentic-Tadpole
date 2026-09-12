@@ -107,7 +107,10 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `POST` | `/v1/engine/pre-pr` | `routes::deploy::trigger_pre_pr` | Protected |
 | `POST` | `/v1/engine/shutdown` | `routes::engine_control::shutdown_engine` | Protected |
 | `POST` | `/v1/engine/speak` | `routes::audio::text_to_speech` | Protected |
+| `GET` | `/v1/engine/templates/catalog` | `routes::templates::get_template_catalog` | Protected |
 | `POST` | `/v1/engine/templates/install` | `routes::templates::install_template` | Protected |
+| `GET` | `/v1/engine/templates/installed` | `routes::templates::list_installed_templates` | Protected |
+| `DELETE` | `/v1/engine/templates/{id}` | `routes::templates::uninstall_template` | Protected |
 | `POST` | `/v1/engine/transcribe` | `routes::audio::transcribe_audio` | Protected |
 | `GET` | `/v1/engine/ws` | `routes::ws::ws_handler` | Protected (WS Subprotocol) |
 

@@ -11,8 +11,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Search, Download, ShieldCheck, Filter, Store, Star, Clock, AlertTriangle, ArrowLeft, Code, X } from 'lucide-react';
+import { Search, Download, ShieldCheck, Filter, Store, Star, Clock, AlertTriangle, ArrowLeft, Code, X, Trash2, CheckCircle2 } from 'lucide-react';
 import { system_api_service } from '../services/system_api_service';
+import { use_notification_store } from '../stores/notification_store';
 import { i18n } from '../i18n';
 
 interface Template {
@@ -29,8 +30,8 @@ interface Template {
     installed?: boolean;
 }
 
-const REPO_URL = 'https://github.com/DDS-Solutions/Tadpole-OS-Industry-Templates.git';
-const REGISTRY_RAW = 'https://raw.githubusercontent.com/DDS-Solutions/Tadpole-OS-Industry-Templates/main/registry.json';
+const REPO_URL = 'https://github.com/DDS-Solutions/AI-Tadpole-OS-Industry-Templates.git';
+const REGISTRY_RAW = 'https://raw.githubusercontent.com/DDS-Solutions/AI-Tadpole-OS-Industry-Templates/main/registry.json';
 
 function Template_Store() {
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -41,6 +42,7 @@ function Template_Store() {
     const [selectedIndustry, setSelectedIndustry] = useState('All');
     const [selectedCompanySize, setSelectedCompanySize] = useState('All');
     const [isInstalling, setIsInstalling] = useState<string | null>(null);
+    const [isUninstalling, setIsUninstalling] = useState<string | null>(null);
     const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
     const [previewConfig, setPreviewConfig] = useState<Record<string, unknown> | null>(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -49,18 +51,48 @@ function Template_Store() {
         const fetchRegistry = async () => {
             try {
                 setIsLoading(true);
-                const res = await fetch(REGISTRY_RAW);
-                if (!res.ok) throw new Error('Failed to load Swarm Template Registry');
-                const data = await res.json();
-                
-                const loaded: Template[] = (data.templates || []).map((t: Partial<Template>) => ({
-                    ...t,
-                    author: t.author || 'SMB Legal Inc.',
-                    updatedAt: t.updatedAt || new Date().toISOString().split('T')[0],
-                    stars: t.stars || Math.floor(Math.random() * 500) + 50,
-                    installed: false 
-                }));
-                
+                let rawTemplates: Partial<Template>[] = [];
+
+                // Item #9: Attempt fetching via backend proxy cache first (TadpoleOS/1.1.58),
+                // with fallback to raw GitHub if proxy is offline/unreachable
+                try {
+                    const catalog = await system_api_service.get_template_catalog();
+                    if (catalog && Array.isArray(catalog.templates)) {
+                        rawTemplates = catalog.templates as Partial<Template>[];
+                    }
+                } catch (proxyErr) {
+                    console.debug('Backend template catalog proxy unavailable, falling back to raw GitHub', proxyErr);
+                }
+
+                if (rawTemplates.length === 0) {
+                    const res = await fetch(REGISTRY_RAW);
+                    if (!res.ok) throw new Error('Failed to load Swarm Template Registry');
+                    const data = await res.json();
+                    rawTemplates = data.templates || [];
+                }
+
+                // Item #4: Query installed templates to persist and reflect installed state
+                let installedList: { id: string; path: string }[] = [];
+                try {
+                    installedList = await system_api_service.get_installed_templates();
+                } catch (instErr) {
+                    console.debug('Failed to query installed templates ledger', instErr);
+                }
+
+                const loaded: Template[] = rawTemplates.map((t: Partial<Template>) => {
+                    const isInstalled = installedList.some(
+                        inst => inst.id === t.id || inst.path === t.path || inst.id === t.path?.replace(/\//g, '_')
+                    );
+                    return {
+                        ...t,
+                        author: t.author || 'SMB Legal Inc.',
+                        updatedAt: t.updatedAt || new Date().toISOString().split('T')[0],
+                        // Item #6: Removed fake random star generation — only use genuine star rating
+                        stars: t.stars,
+                        installed: isInstalled
+                    } as Template;
+                });
+
                 setTemplates(loaded);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
@@ -78,51 +110,100 @@ function Template_Store() {
         const matchSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             t.description.toLowerCase().includes(searchQuery.toLowerCase());
         const matchIndustry = selectedIndustry === 'All' || t.industry.toLowerCase() === selectedIndustry.toLowerCase();
-        
-        // Match size - if template doesn't have a size, it's only shown if 'All' is selected
-        // Or if we want to be permissive, we can show it if it doesn't have a size.
-        // The user said they want to filter BY size, so let's be strict if a size is selected.
         const matchSize = selectedCompanySize === 'All' || String(t.company_size) === selectedCompanySize;
-        
         return matchSearch && matchIndustry && matchSize;
     });
 
     const handleInstall = async (template: Template) => {
         try {
             setIsInstalling(template.id);
-            await system_api_service.install_template(REPO_URL, template.path);
+            // Items #1 & #8: Obtain structured receipt
+            const receipt = await system_api_service.install_template(REPO_URL, template.path);
 
             // Mark as installed in local state
             setTemplates(prev => prev.map(t => t.id === template.id ? { ...t, installed: true } : t));
             
-            // Dispatch a global event so the UI knows to refresh the agents panel if needed
+            // Dispatch a global event so the UI knows to refresh the agents panel
             window.dispatchEvent(new Event('app:refresh-agents'));
+
+            // Item #5: Toast feedback replacing window.alert()
+            const countDetails = [
+                receipt.agents_installed ? `${receipt.agents_installed} agents` : null,
+                receipt.workflows_copied ? `${receipt.workflows_copied} workflows` : null,
+                receipt.skills_copied ? `${receipt.skills_copied} skills` : null,
+                receipt.knowledge_copied ? `${receipt.knowledge_copied} knowledge files` : null,
+            ].filter(Boolean).join(', ');
+
+            use_notification_store.getState().add_notification({
+                severity: 'success',
+                title: 'Template Installed',
+                message: countDetails ? `Deployed: ${countDetails}` : receipt.message,
+                persistent: false,
+            });
             
             // Close preview if it was open
             setPreviewTemplate(null);
             setPreviewConfig(null);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            alert(`Error installing template: ${msg}`);
+            // Item #5: Non-blocking error notification
+            use_notification_store.getState().add_notification({
+                severity: 'error',
+                title: 'Installation Failed',
+                message: msg,
+                persistent: false,
+            });
         } finally {
             setIsInstalling(null);
         }
     };
 
+    const handleUninstall = async (template: Template) => {
+        try {
+            setIsUninstalling(template.id);
+            // Item #11: Clean uninstall and rollback
+            await system_api_service.uninstall_template(template.id || template.path);
+
+            // Mark as uninstalled in local state
+            setTemplates(prev => prev.map(t => t.id === template.id ? { ...t, installed: false } : t));
+            
+            // Refresh agents panel
+            window.dispatchEvent(new Event('app:refresh-agents'));
+
+            use_notification_store.getState().add_notification({
+                severity: 'info',
+                title: 'Template Uninstalled',
+                message: `Template "${template.name}" was cleanly removed.`,
+                persistent: false,
+            });
+
+            if (previewTemplate?.id === template.id) {
+                setPreviewTemplate(prev => prev ? { ...prev, installed: false } : null);
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            use_notification_store.getState().add_notification({
+                severity: 'error',
+                title: 'Uninstall Failed',
+                message: msg,
+                persistent: false,
+            });
+        } finally {
+            setIsUninstalling(null);
+        }
+    };
+
     const handlePreview = async (template: Template) => {
-        console.debug('handlePreview invoked for:', template.id);
         try {
             setPreviewTemplate(template);
             setIsPreviewLoading(true);
             setPreviewConfig(null);
             
-            const configUrl = `https://raw.githubusercontent.com/DDS-Solutions/Tadpole-OS-Industry-Templates/main/${template.path}/swarm.json`;
-            console.debug('Fetching configUrl:', configUrl);
+            const configUrl = `https://raw.githubusercontent.com/DDS-Solutions/AI-Tadpole-OS-Industry-Templates/main/${template.path}/swarm.json`;
             const res = await fetch(configUrl);
             if (!res.ok) throw new Error('Failed to fetch swarm configuration');
             
             const config = await res.json();
-            console.debug('Config loaded successfully');
             setPreviewConfig(config);
         } catch (err) {
             console.error('Preview error:', err);
@@ -232,7 +313,7 @@ function Template_Store() {
                         <div key={template.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col hover:border-zinc-700 transition-colors group">
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 items-center">
                                         <span className="text-[10px] uppercase tracking-wider font-bold text-green-400 bg-green-500/10 px-2 py-0.5 rounded">
                                             {template.industry}
                                         </span>
@@ -241,13 +322,22 @@ function Template_Store() {
                                                 {template.company_size} {i18n.t('template_store.seats')}
                                             </span>
                                         )}
+                                        {template.installed && (
+                                            <span className="text-[10px] uppercase tracking-wider font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                                                <CheckCircle2 size={10} />
+                                                {i18n.t('template_store.btn_installed')}
+                                            </span>
+                                        )}
                                     </div>
                                     <h3 className="text-lg font-bold text-zinc-100 mt-2">{template.name}</h3>
                                 </div>
-                                <div className="flex items-center gap-1 text-xs text-zinc-500 font-mono">
-                                    <Star size={12} className="text-amber-500" />
-                                    {template.stars}
-                                </div>
+                                {/* Item #6: Conditionally render stars only when genuine rating is provided */}
+                                {template.stars != null && (
+                                    <div className="flex items-center gap-1 text-xs text-zinc-500 font-mono">
+                                        <Star size={12} className="text-amber-500" />
+                                        {template.stars}
+                                    </div>
+                                )}
                             </div>
                             
                             <p className="text-sm text-zinc-400 leading-relaxed mb-6 flex-1">
@@ -260,28 +350,45 @@ function Template_Store() {
                                     <span className="flex items-center gap-1"><Clock size={12}/> {template.updatedAt}</span>
                                 </div>
                                 
-                                <button
-                                    disabled={template.installed || isInstalling === template.id}
-                                    onClick={() => handlePreview(template)}
-                                    className={`w-full py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                                        template.installed 
-                                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
-                                            : isInstalling === template.id
-                                                ? 'bg-green-600/50 text-white cursor-wait'
-                                                : 'bg-zinc-100 text-zinc-900 hover:bg-white'
-                                    }`}
-                                >
-                                    {template.installed ? (
-                                        <>{i18n.t('template_store.btn_installed')}</>
-                                    ) : isInstalling === template.id ? (
-                                        <>{i18n.t('template_store.btn_deploying')}</>
-                                    ) : (
-                                        <>
+                                {template.installed ? (
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handlePreview(template)}
+                                            className="flex-1 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition-all"
+                                        >
                                             <Code size={16} />
                                             {i18n.t('template_store.btn_preview')}
-                                        </>
-                                    )}
-                                </button>
+                                        </button>
+                                        <button
+                                            disabled={isUninstalling === template.id}
+                                            onClick={() => handleUninstall(template)}
+                                            className="px-3 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-1.5 bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/60 transition-all disabled:opacity-50"
+                                            title="Uninstall template"
+                                        >
+                                            <Trash2 size={16} />
+                                            {isUninstalling === template.id ? '...' : ''}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        disabled={isInstalling === template.id}
+                                        onClick={() => handlePreview(template)}
+                                        className={`w-full py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                                            isInstalling === template.id
+                                                ? 'bg-green-600/50 text-white cursor-wait'
+                                                : 'bg-zinc-100 text-zinc-900 hover:bg-white'
+                                        }`}
+                                    >
+                                        {isInstalling === template.id ? (
+                                            <>{i18n.t('template_store.btn_deploying')}</>
+                                        ) : (
+                                            <>
+                                                <Code size={16} />
+                                                {i18n.t('template_store.btn_preview')}
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -316,6 +423,12 @@ function Template_Store() {
                                 {previewTemplate.company_size && (
                                     <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
                                         {previewTemplate.company_size} {i18n.t('template_store.seats')}
+                                    </span>
+                                )}
+                                {previewTemplate.installed && (
+                                    <span className="text-[10px] uppercase tracking-wider font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                                        <CheckCircle2 size={10} />
+                                        {i18n.t('template_store.btn_installed')}
                                     </span>
                                 )}
                             </div>
@@ -380,27 +493,38 @@ function Template_Store() {
                                 {i18n.t('template_store.btn_back')}
                             </button>
                             
-                            <button
-                                disabled={isInstalling === previewTemplate.id}
-                                onClick={() => handleInstall(previewTemplate)}
-                                className={`px-8 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all ${
-                                    isInstalling === previewTemplate.id
-                                        ? 'bg-emerald-600/50 text-white cursor-wait opacity-50'
-                                        : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20'
-                                }`}
-                            >
-                                {isInstalling === previewTemplate.id ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                        {i18n.t('template_store.btn_deploying')}
-                                    </>
-                                ) : (
-                                    <>
-                                        <Download size={18} />
-                                        {i18n.t('template_store.btn_install')}
-                                    </>
-                                )}
-                            </button>
+                            {previewTemplate.installed ? (
+                                <button
+                                    disabled={isUninstalling === previewTemplate.id}
+                                    onClick={() => handleUninstall(previewTemplate)}
+                                    className="px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 bg-red-950/60 border border-red-800/60 text-red-300 hover:bg-red-900/80 transition-all disabled:opacity-50"
+                                >
+                                    <Trash2 size={18} />
+                                    {isUninstalling === previewTemplate.id ? 'Uninstalling...' : 'Uninstall Swarm'}
+                                </button>
+                            ) : (
+                                <button
+                                    disabled={isInstalling === previewTemplate.id}
+                                    onClick={() => handleInstall(previewTemplate)}
+                                    className={`px-8 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all ${
+                                        isInstalling === previewTemplate.id
+                                            ? 'bg-emerald-600/50 text-white cursor-wait opacity-50'
+                                            : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20'
+                                    }`}
+                                >
+                                    {isInstalling === previewTemplate.id ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                            {i18n.t('template_store.btn_deploying')}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download size={18} />
+                                            {i18n.t('template_store.btn_install')}
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -410,6 +534,5 @@ function Template_Store() {
 }
 
 export default Template_Store;
-
 
 // Metadata: [Template_Store]

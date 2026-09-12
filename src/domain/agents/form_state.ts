@@ -36,12 +36,14 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
     const settings = use_settings_store.getState().settings;
     const system_default_model = settings?.default_model || 'Gemini 3 Pro';
 
-    const active_model = agent.model || system_default_model;
+    const active_model = agent.model_config?.modelId || (agent.model_config as any)?.model || agent.model || system_default_model;
+    const secondary_model = agent.model_config2?.modelId || (agent.model_config2 as any)?.model || agent.model_2 || '';
+    const tertiary_model = agent.model_config3?.modelId || (agent.model_config3 as any)?.model || agent.model_3 || '';
 
     // Phase 4: Ensure provider/model consistency on hydration
     const primary_provider = agent.model_config?.provider || resolve_provider(active_model);
-    const secondary_provider = agent.model_config2?.provider || resolve_provider(agent.model_2 || 'claude');
-    const tertiary_provider = agent.model_config3?.provider || resolve_provider(agent.model_3 || 'llama');
+    const secondary_provider = agent.model_config2?.provider || resolve_provider(secondary_model || 'claude');
+    const tertiary_provider = agent.model_config3?.provider || resolve_provider(tertiary_model || 'llama');
 
     return {
         main_tab: 'cognition',
@@ -71,7 +73,7 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
             },
             secondary: {
                 provider: secondary_provider,
-                model: agent.model_2 || '',
+                model: secondary_model,
                 temperature: agent.model_config2?.temperature ?? 0.5,
                 system_prompt: (agent.model_config2 as LegacyModelConfig)?.systemPrompt ?? (agent.model_config2 as LegacyModelConfig)?.system_prompt ?? '',
                 reasoning_depth: (agent.model_config2 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config2 as LegacyModelConfig)?.reasoning_depth ?? 1,
@@ -82,7 +84,7 @@ export const buildAgentFormState = (agent: Agent): AgentFormState => {
             },
             tertiary: {
                 provider: tertiary_provider,
-                model: agent.model_3 || '',
+                model: tertiary_model,
                 temperature: agent.model_config3?.temperature ?? 0.9,
                 system_prompt: (agent.model_config3 as LegacyModelConfig)?.systemPrompt ?? (agent.model_config3 as LegacyModelConfig)?.system_prompt ?? '',
                 reasoning_depth: (agent.model_config3 as LegacyModelConfig)?.reasoningDepth ?? (agent.model_config3 as LegacyModelConfig)?.reasoning_depth ?? 1,
