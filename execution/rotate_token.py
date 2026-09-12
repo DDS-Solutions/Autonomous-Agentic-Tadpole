@@ -45,6 +45,7 @@ def load_env_lines():
 def rotate_token(grace_period_secs=300):
     new_token = secrets.token_hex(32)
     path, lines = load_env_lines()
+    now_epoch = int(time.time())
     
     old_token = None
     new_lines = []
@@ -58,7 +59,12 @@ def rotate_token(grace_period_secs=300):
             new_lines.append(f"NEURAL_TOKEN_OLD={old_token}")
             new_lines.append(f"NEURAL_TOKEN={new_token}")
             token_found = True
-        elif line_strip.startswith("NEURAL_TOKEN_OLD=") or line_strip.startswith("NEURAL_TOKEN_NEW="):
+        elif (
+            line_strip.startswith("NEURAL_TOKEN_OLD=")
+            or line_strip.startswith("NEURAL_TOKEN_NEW=")
+            or line_strip.startswith("NEURAL_TOKEN_ROTATED_AT=")
+            or line_strip.startswith("NEURAL_TOKEN_GRACE_SECS=")
+        ):
             # Skip any existing rotation values from previous attempts
             continue
         else:
@@ -68,25 +74,42 @@ def rotate_token(grace_period_secs=300):
         # If no active token found, write it new
         new_lines.append(f"NEURAL_TOKEN={new_token}")
         
-    # Append NEURAL_TOKEN_NEW helper
+    # Append NEURAL_TOKEN_NEW and rotation metadata
     new_lines.append(f"NEURAL_TOKEN_NEW={new_token}")
+    new_lines.append(f"NEURAL_TOKEN_ROTATED_AT={now_epoch}")
+    new_lines.append(f"NEURAL_TOKEN_GRACE_SECS={grace_period_secs}")
     
     path.write_text("\n".join(new_lines) + "\n")
     
     print("✅ Zero-downtime token rotation initiated.")
     print(f"   New token: {new_token}")
     print(f"   Old token kept valid as NEURAL_TOKEN_OLD.")
-    print(f"   Grace period active. Please update your client configurations.")
-    print(f"   Ensure you confirm this rotation after clients migrate by running:")
-    print(f"   python execution/rotate_token.py --confirm")
+    print(f"   Grace period active ({grace_period_secs}s). Please update client configurations.")
+    print("   ⚠️ Server restart required: Restart the server process to load newly generated tokens.")
+    print("   Confirm rotation after migration by running:")
+    print("   python execution/rotate_token.py --confirm")
 
-def confirm_rotation():
+def confirm_rotation(force=False):
     path, lines = load_env_lines()
     new_lines = []
     confirmed = False
+    rotated_at = None
+    grace_secs = 300
     
     for line in lines:
         line_strip = line.strip()
+        if line_strip.startswith("NEURAL_TOKEN_ROTATED_AT="):
+            try:
+                rotated_at = int(line_strip.split("=", 1)[1])
+            except ValueError:
+                pass
+            continue
+        if line_strip.startswith("NEURAL_TOKEN_GRACE_SECS="):
+            try:
+                grace_secs = int(line_strip.split("=", 1)[1])
+            except ValueError:
+                pass
+            continue
         if line_strip.startswith("NEURAL_TOKEN_OLD=") or line_strip.startswith("NEURAL_TOKEN_NEW="):
             confirmed = True
             continue
@@ -97,18 +120,28 @@ def confirm_rotation():
         print("ℹ️ No active rotation grace period found. Token is already in singular state.")
         return
 
+    if rotated_at is not None and not force:
+        elapsed = int(time.time()) - rotated_at
+        if elapsed < grace_secs:
+            remaining = grace_secs - elapsed
+            print(f"❌ Cannot confirm rotation: Grace period still active ({remaining}s remaining of {grace_secs}s).")
+            print("   Pass --force to confirm immediately if all clients are already migrated.")
+            return
+
     path.write_text("\n".join(new_lines) + "\n")
-    print("✅ Token rotation confirmed. NEURAL_TOKEN_OLD and NEURAL_TOKEN_NEW removed.")
-    print("   The grace period has ended; only the active NEURAL_TOKEN is valid.")
+    print("✅ Token rotation confirmed. Fallback tokens removed.")
+    print("   Only the active NEURAL_TOKEN is now valid.")
+    print("   ⚠️ Server restart required: Restart the server to finalize token revocation.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Zero-Downtime Neural Token Rotation Runbook")
     parser.add_argument("--confirm", action="store_true", help="Confirm rotation, revoking old grace tokens")
+    parser.add_argument("--force", action="store_true", help="Force confirmation even if grace period has not elapsed")
     parser.add_argument("--grace-secs", type=int, default=300, help="Grace period duration in seconds (default: 300)")
     args = parser.parse_args()
     
     if args.confirm:
-        confirm_rotation()
+        confirm_rotation(force=args.force)
     else:
         rotate_token(args.grace_secs)
 

@@ -32,6 +32,7 @@ import sys
 import argparse
 from pathlib import Path
 from typing import List, Dict, Any
+from datetime import datetime, timezone
 
 # Paths to sync
 # Key: path relative to repo root
@@ -40,13 +41,15 @@ from typing import List, Dict, Any
 PATHS = {
     "package.json": r'"version":\s*"([^"]+)"',
     "server-rs/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "src-tauri/tauri.conf.json": r'"version":\s*"([^"]+)"',
+    "execution/tadpole_mcp_server.py": r'server_version="([^"]+)"',
     "server-rs/src/state/mod.rs": r'TadpoleOS/([0-9.]+)',
     "server-rs/src/adapter/discord.rs": r'TadpoleOS/([0-9.]+)',
     "server-rs/src/agent/skill_manifest.rs": r'\bversion:\s*"([^"]+)"',
     "directives/IDENTITY.md": r'TadpoleOS/([0-9.]+)',
     "SYSTEM_MAP.md": r'\*\*Version\*\*:\s*([0-9.]+)',
     "docs/API_REFERENCE.md": r'\*\*Version\*\*:\s*([0-9.]+)',
-    "docs/openapi.yaml": r'version:\s*([0-9.]+)',
+    "docs/openapi.yaml": r'(?m)^\s+version:\s*([0-9.]+)',
     "src/pages/Governance_View.tsx": r'OS:\s*v([0-9.]+)',
     "server-rs/src/services/privacy.rs": r'TadpoleOS/([0-9.]+)',
     "CLAUDE.md": r'TadpoleOS/([0-9.]+)',
@@ -96,6 +99,7 @@ def sync():
         old_version = current_version
         current_version = bump_version(current_version, args.bump)
         data["version"] = current_version
+        data["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with open("version.json", "w") as f:
             json.dump(data, f, indent=2)
         print(f"[+] Bumped version: {old_version} -> {current_version}")
@@ -113,9 +117,8 @@ def sync():
 
         content = file_path.read_text(encoding='utf-8')
 
-        # Update content using regex
-        # We replace the content of the first capturing group with the target version
-        new_content = re.sub(pattern, lambda m: m.group(0).replace(m.group(1), current_version), content, flags=re.MULTILINE)
+        # Update content using regex with count=1 to prevent clobbering unintended fields
+        new_content = re.sub(pattern, lambda m: m.group(0).replace(m.group(1), current_version), content, count=1, flags=re.MULTILINE)
 
         if new_content != content:
             file_path.write_text(new_content, encoding='utf-8')

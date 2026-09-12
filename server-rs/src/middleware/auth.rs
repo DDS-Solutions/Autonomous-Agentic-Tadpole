@@ -44,6 +44,18 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.ct_eq(b).into()
 }
 
+pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str> {
+    if constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes()) {
+        Some("NEURAL_TOKEN")
+    } else if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+        Some("NEURAL_TOKEN_NEW")
+    } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+        Some("NEURAL_TOKEN_OLD")
+    } else {
+        None
+    }
+}
+
 /// Middleware to validate the Bearer token.
 /// Supports two mechanisms:
 /// 1. Standard `Authorization: Bearer <token>` header (REST endpoints)
@@ -75,18 +87,8 @@ pub async fn validate_token(
     }
 
     if let Some(ref token) = token_opt {
-        let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
-            || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
-            || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
-
-        if is_valid {
-            if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_NEW");
-            } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN_OLD");
-            } else {
-                tracing::info!("🔑 [Auth] Authorized request using NEURAL_TOKEN");
-            }
+        if let Some(token_name) = match_token(token, &state) {
+            tracing::info!("🔑 [Auth] Authorized request using {}", token_name);
             return Ok(next.run(req).await);
         } else {
             tracing::warn!("🚫 Invalid token provided");
@@ -116,18 +118,8 @@ pub async fn validate_token(
         for protocol in proto_header.split(',') {
             let protocol = protocol.trim();
             if let Some(token) = protocol.strip_prefix("bearer.") {
-                let is_valid = constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
-                    || state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
-                    || state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false);
-
-                if is_valid {
-                    if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN_NEW");
-                    } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN_OLD");
-                    } else {
-                        tracing::info!("🔑 [Auth] Authorized WebSocket request using NEURAL_TOKEN");
-                    }
+                if let Some(token_name) = match_token(token, &state) {
+                    tracing::info!("🔑 [Auth] Authorized WebSocket request using {}", token_name);
                     return Ok(next.run(req).await);
                 }
             }

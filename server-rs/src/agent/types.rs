@@ -996,6 +996,7 @@ impl EngineAgent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct TaskPayload {
+    #[serde(alias = "task")]
     pub message: String,
     pub cluster_id: Option<String>,
     pub department: Option<String>,

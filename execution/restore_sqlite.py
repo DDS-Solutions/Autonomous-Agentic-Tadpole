@@ -35,18 +35,34 @@ def resolve_default_db_path() -> Path:
         return Path(db_url)
     return Path("data/tadpole.db")
 
-def verify_checksum(backup_path: Path) -> bool:
+def cleanup_wal_sidecars(db_path: Path):
+    """Removes stale -wal and -shm sidecar files to prevent SQLite corruption."""
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(str(db_path) + suffix)
+        if sidecar.exists():
+            try:
+                sidecar.unlink()
+            except OSError as e:
+                print(f"⚠️ Failed to unlink sidecar {sidecar.name}: {e}", file=sys.stderr)
+
+def verify_checksum(backup_path: Path, allow_unverified: bool = False) -> bool:
     """Verifies that the backup file matches the SHA-256 in its metadata."""
     meta_path = backup_path.with_suffix(".meta.json")
     if not meta_path.exists():
-        print(f"⚠️ Warning: Metadata file not found for {backup_path}. Skipping checksum check.", file=sys.stderr)
-        return True
+        if allow_unverified:
+            print(f"⚠️ Warning: Metadata file not found for {backup_path}. Skipping checksum check (--allow-unverified specified).", file=sys.stderr)
+            return True
+        print(f"❌ Error: Metadata file not found for {backup_path}. Pass --allow-unverified to restore without checksum verification.", file=sys.stderr)
+        return False
         
     try:
         meta = json.loads(meta_path.read_text())
         expected_sha = meta.get("sha256")
         if not expected_sha:
-            return True
+            if allow_unverified:
+                return True
+            print(f"❌ Error: SHA-256 missing in metadata for {backup_path}. Pass --allow-unverified to bypass.", file=sys.stderr)
+            return False
             
         current_sha = hashlib.sha256(backup_path.read_bytes()).hexdigest()
         return current_sha == expected_sha
@@ -68,14 +84,14 @@ def get_row_counts(db_path: Path) -> dict:
             # Skip SQLite internal tables
             if t.startswith("sqlite_"):
                 continue
-            cursor.execute(f"SELECT COUNT(*) FROM {t};")
+            cursor.execute(f'SELECT COUNT(*) FROM "{t}";')
             counts[t] = cursor.fetchone()[0]
         conn.close()
     except Exception as e:
         print(f"⚠️ Failed to get row counts for {db_path}: {e}", file=sys.stderr)
     return counts
 
-def restore_sqlite(backup_file_path: str):
+def restore_sqlite(backup_file_path: str, allow_unverified: bool = False):
     backup_path = Path(backup_file_path)
     if not backup_path.exists():
         # Try checking in the default backups directory
@@ -89,7 +105,7 @@ def restore_sqlite(backup_file_path: str):
             sys.exit(1)
 
     print(f"🔍 Verifying backup {backup_path.name}...")
-    if not verify_checksum(backup_path):
+    if not verify_checksum(backup_path, allow_unverified=allow_unverified):
         print("❌ Error: Backup SHA-256 checksum mismatch. Backup file may be corrupted or tampered with.", file=sys.stderr)
         sys.exit(1)
 
@@ -137,6 +153,9 @@ def restore_sqlite(backup_file_path: str):
         dest.close()
         src.close()
         
+        # Clean stale WAL/SHM sidecars to prevent replaying stale WAL over the newly restored database
+        cleanup_wal_sidecars(db_path)
+
         # Verify row count parity
         restored_counts = get_row_counts(db_path)
         mismatch = False
@@ -163,16 +182,19 @@ def restore_sqlite(backup_file_path: str):
                 src.backup(dest)
                 dest.close()
                 src.close()
+                cleanup_wal_sidecars(db_path)
                 print("✅ Rolled back successfully.", file=sys.stderr)
             except Exception as rollback_err:
                 print(f"🚨 CRITICAL: Rollback failed: {rollback_err}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python restore_sqlite.py <backup_path_or_filename>")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    allow_unverified_flag = "--allow-unverified" in sys.argv
+    if not args:
+        print("Usage: python restore_sqlite.py <backup_path_or_filename> [--allow-unverified]")
         sys.exit(1)
         
-    restore_sqlite(sys.argv[1])
+    restore_sqlite(args[0], allow_unverified=allow_unverified_flag)
 
 # Metadata: [restore_sqlite]

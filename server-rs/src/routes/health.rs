@@ -107,7 +107,7 @@ pub async fn health_check(
 
     // 2. Compute Budget Health
     let total_spent_usd: f64 = sqlx::query_scalar::<_, f64>(
-        "SELECT COALESCE(SUM(used_usd), 0.0) FROM agent_quotas"
+        "SELECT COALESCE(SUM(used_usd), 0.0) FROM agent_quotas WHERE reset_period = 'daily'"
     )
     .fetch_one(&state.resources.pool)
     .await
@@ -151,7 +151,7 @@ pub async fn health_check(
     };
 
     let swarm = SwarmHealth {
-        connected_bunkers: 2, // Local and main remote fallback
+        connected_bunkers: 1, // Local sovereign bunker
         total_agents,
         max_swarm_depth,
         status: swarm_status,
@@ -177,7 +177,6 @@ pub async fn health_check(
 }
 
 /// GET /metrics
-/// GET /metrics
 ///
 /// Serves Prometheus metrics registered in the global registry.
 /// Protected: requires valid Bearer token authorization.
@@ -194,9 +193,7 @@ pub async fn metrics_handler(
 
     let is_authorized = if let Some(auth_str) = auth_header {
         if let Some(token) = auth_str.strip_prefix("Bearer ") {
-            crate::middleware::auth::constant_time_eq(token.as_bytes(), state.security.deploy_token.as_bytes())
-                || state.security.deploy_token_new.as_ref().map(|t| crate::middleware::auth::constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
-                || state.security.deploy_token_old.as_ref().map(|t| crate::middleware::auth::constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false)
+            crate::middleware::auth::match_token(token, &state).is_some()
         } else {
             false
         }

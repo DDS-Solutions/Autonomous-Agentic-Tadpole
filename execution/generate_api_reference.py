@@ -109,7 +109,7 @@ def current_version() -> str:
 
 
 def rust_path_to_openapi(path: str) -> str:
-    return re.sub(r"\{([a-zA-Z0-9_]+)\}", r"{\1}", path)
+    return re.sub(r":([a-zA-Z0-9_]+)", r"{\1}", path)
 
 
 def join_path(prefix: str, path: str) -> str:
@@ -729,9 +729,10 @@ def write_openapi(routes: list[Route]) -> None:
             "        metadata: { type: object, additionalProperties: true }",
             "    TaskPayload:",
             "      type: object",
-            "      required: [task]",
+            "      required: [message]",
             "      properties:",
-            "        task: { type: string }",
+            "        message: { type: string, description: 'Task instruction message (alias: task)' }",
+            "        task: { type: string, description: 'Alias for message' }",
             "        traceparent: { type: string, nullable: true }",
             "    TaskAcceptedResponse:",
             "      type: object",

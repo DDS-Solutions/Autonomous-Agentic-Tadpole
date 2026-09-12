@@ -49,7 +49,7 @@
 - **Max Parallel Missions**: 1 (Focused Analysis)
 - **Mode**: Deep Diagnostic & Documentation
 - **Governance**: Aletheia Protocol (Zero-Trust Enforcement)
-- **Reporting Format**: Standardized Markdown Table in `audit_full_report.md`
+- **Reporting Format**: Standardized Markdown Table in audit reports
 
 
 

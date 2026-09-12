@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Build Frontend
@@ -80,11 +80,9 @@ jobs:
           workspaces: server-rs
 
       - name: Build Rust Backend
-        env:
-          PROTOC: /usr/bin/protoc
         run: |
           cd server-rs
-          cargo build --release
+          cargo build --release --locked
 
       - name: Create Release Tarball
         run: |

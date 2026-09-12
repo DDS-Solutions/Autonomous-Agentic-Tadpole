@@ -152,7 +152,7 @@ class I18n {
       Object.entries(params as Record<string, string | number>).forEach(([k, v]) => {
         if (k !== 'defaultValue') {
           const valStr = typeof v === 'string' ? this.escapeHtml(v) : String(v);
-          text = text.replace(new RegExp(`{{${k}}}`, 'g'), valStr);
+          text = text.split(`{{${k}}}`).join(valStr);
         }
       });
     }

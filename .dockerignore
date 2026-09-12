@@ -1,0 +1,33 @@
+# Local runtime databases & storage
+data/*.db*
+data/*.sqlite*
+data/backups/
+data/runtime/
+
+# Dependencies and caches
+node_modules/
+.tmp/
+scratch/
+target/
+dist/
+coverage/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+*.pem
+*.key
+
+# Git and logs
+.git/
+*.log
+
+# Test and development artifacts
+test-results/
+playwright-report/
+audit_*.json
+audit_*.md
+test_permissions.txt

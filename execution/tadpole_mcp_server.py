@@ -81,14 +81,14 @@ def validate_arguments(args: dict, schema: dict):
     for key, val in args.items():
         if key in properties:
             prop_type = properties[key].get("type")
-            if prop_type == "string" and not isinstance(val, str):
-                raise TypeError(f"Parameter '{key}' must be a string")
-            elif prop_type == "integer" and not isinstance(val, int):
-                raise TypeError(f"Parameter '{key}' must be an integer")
-            elif prop_type == "number" and not isinstance(val, (int, float)):
-                raise TypeError(f"Parameter '{key}' must be a number")
-            elif prop_type == "boolean" and not isinstance(val, bool):
+            if prop_type == "boolean" and not isinstance(val, bool):
                 raise TypeError(f"Parameter '{key}' must be a boolean")
+            elif prop_type == "string" and not isinstance(val, str):
+                raise TypeError(f"Parameter '{key}' must be a string")
+            elif prop_type == "integer" and (not isinstance(val, int) or isinstance(val, bool)):
+                raise TypeError(f"Parameter '{key}' must be an integer")
+            elif prop_type == "number" and (not isinstance(val, (int, float)) or isinstance(val, bool)):
+                raise TypeError(f"Parameter '{key}' must be a number")
             elif prop_type == "array" and not isinstance(val, list):
                 raise TypeError(f"Parameter '{key}' must be an array")
             elif prop_type == "object" and not isinstance(val, dict):
@@ -207,7 +207,16 @@ async def handle_call_tool(
         return [_format_text_response(f"Argument Validation Failed: {str(err)}")]
 
     args_json = json.dumps(arguments or {})
-    env = os.environ.copy()
+    # Security: Environment Isolation (SEC-05) - Prevent token exfiltration to child subprocesses
+    _ALLOWED_ENV_VARS = {
+        "PATH", "HOME", "USERPROFILE", "LANG", "LC_ALL", "TEMP", "TMP",
+        "SYSTEMROOT", "COMSPEC", "PATHEXT", "PYTHONPATH", "PYTHONUNBUFFERED",
+        "WORKSPACE_ROOT"
+    }
+    env = {
+        k: v for k, v in os.environ.items()
+        if k in _ALLOWED_ENV_VARS or k.startswith("TADPOLE_")
+    }
     env["TADPOLE_SKILL_ARGS"] = args_json
 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
@@ -280,7 +289,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="tadpole-execution-layer",
-                server_version="1.0.0",
+                server_version="1.1.58",
                 capabilities=server.get_capabilities(
                     NotificationOptions(),
                     experimental_capabilities={},

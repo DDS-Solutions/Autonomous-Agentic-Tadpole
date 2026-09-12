@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 @docs ARCHITECTURE:Infrastructure:Execution
 
@@ -10,7 +11,6 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 - **Telemetry Link**: Search `[parity_guard]` in system logs.
 """
 
-#!/usr/bin/env python3
 """
 # 🛡️ Tadpole Engine: Parity Guard
 **Agent Consistency**: High (ECC Optimized)
@@ -172,7 +172,7 @@ def check_doc_file_refs(root):
             continue
         text = doc.read_text(encoding="utf-8")
         refs = re.findall(r'`([^`\n]+\.(?:md|yaml|yml|json|toml|rs|tsx|ts|py|bat|css))`', text)
-        refs += [m.replace("/", "\\") for m in re.findall(r'file:///G:/Autonomous-Agentic-Tadpole/([^\)\s]+)', text)]
+        refs += [m.replace("/", "\\") for m in re.findall(rf'file:///(?:[A-Za-z]:/[^/]+/|[^/]+/)*{re.escape(root.name)}/([^\)\s]+)', text)]
         for ref in refs:
             if (
                 ref.startswith("http")
@@ -277,8 +277,8 @@ def check_api_docs_parity(root, fix=False):
             print_result("DOCS-PARITY", True, "API_REFERENCE.md is synchronized")
             return 0
 
-def check_parity(root_dir, fix=False):
-    root = ROOT
+def check_parity(root_dir=None, fix=False):
+    root = Path(root_dir).resolve() if root_dir else ROOT
     router_path = root / "server-rs" / "src" / "router.rs"
     openapi_path = root / "docs" / "openapi.yaml"
     api_ref_path = root / "docs" / "API_REFERENCE.md"

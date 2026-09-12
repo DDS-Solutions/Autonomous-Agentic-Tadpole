@@ -177,6 +177,44 @@ pub async fn get_agents(
     )))
 }
 
+pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload: TaskPayload) {
+    // Proactive Abort-on-New Policy: Terminate any existing task for this agent
+    if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
+        tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
+        old_handle.abort();
+    }
+
+    // Spawn Runner with AbortHandle registration
+    let agent_id_for_spawn = agent_id.clone();
+    let state_clone = state.clone();
+    let join_handle = tokio::spawn(async move {
+        let runner = AgentRunner::new(state_clone.clone());
+        if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
+            tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
+            
+            // Async Failure Feedback with structured RFC 9457 support
+            let error_data = serde_json::json!({
+                "type": e.type_slug(),
+                "title": e.type_slug().replace(['-', ':'], " ").to_uppercase(),
+                "status": e.status_code().as_u16(),
+                "detail": e.to_string(),
+                "error_code": e.type_slug().to_uppercase()
+            });
+
+            state_clone.emit_event(serde_json::json!({
+                "type": "agent:task_failed",
+                "agent_id": agent_id_for_spawn.clone(),
+                "error": error_data
+            }));
+        }
+        
+        // Auto-cleanup handle
+        state_clone.comms.active_runners.remove(&agent_id_for_spawn);
+    });
+
+    state.comms.active_runners.insert(agent_id, join_handle.abort_handle());
+}
+
 /// POST /v1/agents/:id/tasks
 ///
 /// Dispatches a high-level text task to a specific autonomous agent.
@@ -221,42 +259,7 @@ pub async fn send_task(
     }
 
     tracing::info!("📡 [Gateway] Task dispatched to Agent {}", agent_id);
-
-    // Proactive Abort-on-New Policy: Terminate any existing task for this agent
-    if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
-        tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
-        old_handle.abort();
-    }
-
-    // Spawn Runner with AbortHandle registration
-    let agent_id_for_spawn = agent_id.clone();
-    let state_clone = state.clone();
-    let join_handle = tokio::spawn(async move {
-        let runner = AgentRunner::new(state_clone.clone());
-        if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
-            tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
-            
-            // Async Failure Feedback with structured RFC 9457 support
-            let error_data = serde_json::json!({
-                "type": e.type_slug(),
-                "title": e.type_slug().replace(['-', ':'], " ").to_uppercase(),
-                "status": e.status_code().as_u16(),
-                "detail": e.to_string(),
-                "error_code": e.type_slug().to_uppercase()
-            });
-
-            state_clone.emit_event(serde_json::json!({
-                "type": "agent:task_failed",
-                "agent_id": agent_id_for_spawn.clone(),
-                "error": error_data
-            }));
-        }
-        
-        // Auto-cleanup handle
-        state_clone.comms.active_runners.remove(&agent_id_for_spawn);
-    });
-
-    state.comms.active_runners.insert(agent_id.clone(), join_handle.abort_handle());
+    spawn_agent_runner(state.clone(), agent_id.clone(), payload);
 
 
     Ok((
@@ -459,36 +462,7 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
                             ..Default::default()
                         };
 
-                        let state_clone = state.clone();
-                        let agent_id_for_spawn = agent_id.clone();
-                        let join_handle = tokio::spawn(async move {
-                            let runner = AgentRunner::new(state_clone.clone());
-                            if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
-                                tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
-                                
-                                // Async Failure Feedback with structured RFC 9457 support
-                                let error_data = serde_json::json!({
-                                    "type": e.type_slug(),
-                                    "title": e.type_slug().replace(['-', ':'], " ").to_uppercase(),
-                                    "status": e.status_code().as_u16(),
-                                    "detail": e.to_string(),
-                                    "error_code": e.type_slug().to_uppercase()
-                                });
-
-                                state_clone.emit_event(serde_json::json!({
-                                    "type": "agent:task_failed",
-                                    "agent_id": agent_id_for_spawn.clone(),
-                                    "error": error_data
-                                }));
-                            }
-                            
-                            // Auto-cleanup handle
-                            state_clone.comms.active_runners.remove(&agent_id_for_spawn);
-                        });
-
-                        state.comms.active_runners.insert(agent_id.clone(), join_handle.abort_handle());
-
-                        let _ = join_handle.await;
+                        spawn_agent_runner(state.clone(), agent_id.clone(), payload);
                     } else {
                         // Reset to idle since task is empty or missing.
                         let aid = agent.identity.id.clone();
@@ -543,6 +517,12 @@ pub async fn delete_agent(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    // 0. Proactively abort any active runner task for the deleted agent
+    if let Some((_, abort_handle)) = state.comms.active_runners.remove(&id) {
+        tracing::info!("🛑 [Gateway] Aborting active runner for deleted agent: {}", id);
+        abort_handle.abort();
+    }
+
     // 1. Remove from SQLite (cascading deletes)
     crate::agent::persistence::delete_agent_cascade(&state.resources.pool, &id).await?;
 

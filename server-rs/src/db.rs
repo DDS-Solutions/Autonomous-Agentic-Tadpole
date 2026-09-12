@@ -70,30 +70,43 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
 
         // Hotfix: duplicate column errors from out-of-band schema modifications
         if err_str.contains("duplicate column name") {
-            tracing::info!("🔧 [db] Detected duplicate column conflict. Marking conflicting migration as applied...");
+            tracing::info!("🔧 [db] Detected duplicate column conflict. Marking conflicting migration as applied with authoritative checksum...");
             // Extract the migration version from the error if possible
             if let Some(version_str) = err_str.split("ExecuteMigration(").nth(1)
                 .and_then(|s| s.split(')').next())
                 .and_then(|s| s.rsplit(", ").next())
             {
                 if let Ok(version) = version_str.trim().parse::<i64>() {
-                    let _ = sqlx::query(
-                        "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (?, 'hotfix_reconciled', datetime('now'), 1, X'00', 0)"
-                    )
-                    .bind(version)
-                    .execute(&pool)
-                    .await;
-                    hotfix_applied = true;
+                    let real_checksum = migrator.iter().find(|m| m.version == version).map(|m| m.checksum.clone());
+                    if let Some(checksum) = real_checksum {
+                        let _ = sqlx::query(
+                            "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (?, 'hotfix_reconciled', datetime('now'), 1, ?, 0)"
+                        )
+                        .bind(version)
+                        .bind(checksum.as_ref())
+                        .execute(&pool)
+                        .await;
+                        hotfix_applied = true;
+                    }
                 }
             }
         }
 
         // Hotfix: version mismatch from DB restored from a different timeline
         if err_str.contains("VersionMismatch") {
-            tracing::info!("🔧 [db] Detected version mismatch. Resetting dirty migration flag...");
+            tracing::info!("🔧 [db] Detected version mismatch. Purging dirty and mismatched migration rows...");
             let _ = sqlx::query("DELETE FROM _sqlx_migrations WHERE success = 0")
                 .execute(&pool)
                 .await;
+
+            // Delete any applied migration whose stored checksum does not match the compiled migrator checksum
+            for m in migrator.iter() {
+                let _ = sqlx::query("DELETE FROM _sqlx_migrations WHERE version = ? AND checksum != ?")
+                    .bind(m.version)
+                    .bind(m.checksum.as_ref())
+                    .execute(&pool)
+                    .await;
+            }
             hotfix_applied = true;
         }
 
@@ -261,7 +274,7 @@ async fn seed_minimal_alpha(pool: &SqlitePool) -> Result<()> {
     .bind("The primary intelligence node of the Tadpole OS network.")
     .bind("idle")
     .bind("google")
-    .bind("gemini-1.5-flash")
+    .bind("gemini-2.5-flash")
     .bind("#4fd1c5")
     .bind("{}")
     .bind("[]")
@@ -387,6 +400,7 @@ fn find_bundled_file(resource_root: &str, relative_path: &str) -> Option<std::pa
 /// Performs an online SQLite backup using the PRAGMA VACUUM INTO command.
 /// This command creates a safe, transactional copy of the database.
 pub async fn run_backup(pool: &SqlitePool, backup_path: &str) -> Result<()> {
+    let _ = tokio::fs::remove_file(backup_path).await;
     sqlx::query("VACUUM INTO ?")
         .bind(backup_path)
         .execute(pool)

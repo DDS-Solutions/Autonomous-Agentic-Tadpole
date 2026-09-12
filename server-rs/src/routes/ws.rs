@@ -119,7 +119,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, is_pulse_active:
 
     // Tell the frontend we connected in Rust.
     state.broadcast_sys(
-        "Connected to Tadpole OS [Rust Engine v0.1.0]",
+        &format!("Connected to Tadpole OS [Rust Engine v{}]", env!("CARGO_PKG_VERSION")),
         "success",
         None,
     );
@@ -256,19 +256,18 @@ pub async fn live_voice_handler(
     let protocol = headers
         .get("sec-websocket-protocol")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+        .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+        .unwrap_or_default();
 
-    let mut response = ws
+    let ws = if !protocol.is_empty() {
+        ws.protocols([protocol])
+    } else {
+        ws
+    };
+
+    Ok(ws
         .on_upgrade(move |socket| handle_live_socket(socket, state))
-        .into_response();
-
-    if !protocol.is_empty() {
-        if let Ok(val) = protocol.parse() {
-            response.headers_mut().insert("sec-websocket-protocol", val);
-        }
-    }
-    Ok(response)
+        .into_response())
 }
 
 async fn handle_live_socket(mut client_ws: WebSocket, _state: Arc<AppState>) {

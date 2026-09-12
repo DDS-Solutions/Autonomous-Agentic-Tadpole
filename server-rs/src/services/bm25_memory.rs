@@ -194,6 +194,20 @@ impl Bm25MemoryIndex {
         let b = 0.75f32;
         let n = self.documents.len() as f32;
 
+        // Precompute IDF for each unique query term to reduce complexity from O(N^2 * Q) to O(N * Q)
+        let mut idf_map: HashMap<&str, f32> = HashMap::new();
+        for term in &query_terms {
+            if !idf_map.contains_key(term.as_str()) {
+                let df = self
+                    .documents
+                    .iter()
+                    .filter(|d| d.term_frequencies.contains_key(term.as_str()))
+                    .count() as f32;
+                let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln();
+                idf_map.insert(term.as_str(), idf);
+            }
+        }
+
         let mut scored_docs: Vec<(f32, &IndexedDocument)> = self
             .documents
             .iter()
@@ -204,14 +218,7 @@ impl Bm25MemoryIndex {
                 for term in &query_terms {
                     if let Some(&tf) = doc.term_frequencies.get(term) {
                         let tf_f32 = tf as f32;
-                        // Count document frequency (df) across all docs for IDF
-                        let df = self
-                            .documents
-                            .iter()
-                            .filter(|d| d.term_frequencies.contains_key(term))
-                            .count() as f32;
-
-                        let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln();
+                        let idf = idf_map.get(term.as_str()).copied().unwrap_or(0.0);
                         let numerator = tf_f32 * (k1 + 1.0);
                         let denominator = tf_f32 + k1 * (1.0 - b + b * (dl / self.avg_dl));
 
@@ -282,18 +289,21 @@ mod tests {
 
     #[test]
     fn test_bm25_indexing_and_search() {
-        let temp_dir = std::env::temp_dir().join("bm25_test");
+        let temp_dir = std::env::temp_dir().join(format!("bm25_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         let doc_path = temp_dir.join("test_sop.md");
         std::fs::write(&doc_path, "# Budget Limit SOP\nAlways verify A2ATransactionCoordinator before spending.").unwrap();
 
-        let engine = Bm25MemoryEngine::new(vec![temp_dir]);
+        let engine = Bm25MemoryEngine::new(vec![temp_dir.clone()]);
         let results = engine.search("A2ATransactionCoordinator", 5);
 
         assert!(!results.is_empty());
         assert_eq!(results[0].title, "test_sop");
         assert!(results[0].score > 0.0);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

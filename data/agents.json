@@ -121,10 +121,10 @@
     "role": "Product Lead",
     "department": "Product",
     "description": "Product strategy and user-centric architecture lead.",
-    "model": "Claude Opus 4.5",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-opus-20240229"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -142,10 +142,10 @@
     "role": "DevOps",
     "department": "Engineering",
     "description": "Cloud infrastructure and CI/CD automation lead.",
-    "model": "Gemini 3 Flash",
+    "model": "Gemini 2.5 Flash",
     "model_config": {
       "provider": "google",
-      "modelId": "gemini-1.5-flash"
+      "modelId": "gemini-2.5-flash"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -163,7 +163,7 @@
     "role": "Backend Dev",
     "department": "Engineering",
     "description": "Core backend developer and API architect.",
-    "model": "DeepSeek V3.2",
+    "model": "DeepSeek V3",
     "model_config": {
       "provider": "deepseek",
       "modelId": "deepseek-v3"
@@ -187,10 +187,10 @@
     "role": "Design Lead",
     "department": "Product",
     "description": "Visual identity and design system curator.",
-    "model": "Gemini 3 Pro",
+    "model": "Gemini 2.5 Pro",
     "model_config": {
       "provider": "google",
-      "modelId": "gemini-1.5-pro"
+      "modelId": "gemini-2.5-pro"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -208,7 +208,7 @@
     "role": "Support Lead",
     "department": "Operations",
     "description": "Customer success and incident triage lead.",
-    "model": "o4-mini",
+    "model": "GPT-4o Mini",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o-mini"
@@ -229,7 +229,7 @@
     "role": "Backend Dev",
     "department": "Engineering",
     "description": "Backend specialist focused on database scaling.",
-    "model": "GPT-5.3 Codex",
+    "model": "GPT-4o",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o"
@@ -248,10 +248,10 @@
     "role": "Security Auditor",
     "department": "Engineering",
     "description": "Vulnerability research and security hardening specialist.",
-    "model": "Claude Sonnet 4.5",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-5-sonnet-20240620"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -267,10 +267,10 @@
     "role": "DevOps",
     "department": "Engineering",
     "description": "Infrastructure operations and cluster scaling specialist.",
-    "model": "Gemini 3 Flash",
+    "model": "Gemini 2.5 Flash",
     "model_config": {
       "provider": "google",
-      "modelId": "gemini-1.5-flash"
+      "modelId": "gemini-2.5-flash"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -286,7 +286,7 @@
     "role": "Product Manager",
     "department": "Product",
     "description": "Product roadmap and feature prioritization specialist.",
-    "model": "GPT-5.2",
+    "model": "GPT-4o",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o"
@@ -305,10 +305,10 @@
     "role": "Designer",
     "department": "Product",
     "description": "UI/UX designer and asset generation specialist.",
-    "model": "Gemini 3 Pro",
+    "model": "Gemini 2.5 Pro",
     "model_config": {
       "provider": "google",
-      "modelId": "gemini-1.5-pro"
+      "modelId": "gemini-2.5-pro"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -334,7 +334,7 @@
       "market_research"
     ],
     "workflows": [
-      "User Feedback Analysis"
+      "user_feedback_analysis"
     ]
   },
   {
@@ -343,10 +343,10 @@
     "role": "Copywriter",
     "department": "Marketing",
     "description": "Creative copywriter and content strategist.",
-    "model": "Claude Sonnet 4",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-5-sonnet-20240620"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -362,10 +362,10 @@
     "role": "Social Media",
     "department": "Marketing",
     "description": "Social media engagement and community manager.",
-    "model": "Grok 4.1",
+    "model": "Grok Beta",
     "model_config": {
       "provider": "xai",
-      "modelId": "grok-1"
+      "modelId": "grok-beta"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -381,7 +381,7 @@
     "role": "SEO Specialist",
     "department": "Marketing",
     "description": "Search engine optimization and performance marketing lead.",
-    "model": "GPT-5.2",
+    "model": "GPT-4o",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o"
@@ -400,7 +400,7 @@
     "role": "Sales Rep",
     "department": "Sales",
     "description": "Sales development representative and lead qualification specialist.",
-    "model": "o4-mini",
+    "model": "GPT-4o Mini",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o-mini"
@@ -419,7 +419,7 @@
     "role": "Sales Rep",
     "department": "Sales",
     "description": "Sales development representative and outreach specialist.",
-    "model": "o4-mini",
+    "model": "GPT-4o Mini",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o-mini"
@@ -438,10 +438,10 @@
     "role": "HR Manager",
     "department": "Operations",
     "description": "Human resources and organizational health specialist.",
-    "model": "Claude Sonnet 4",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-5-sonnet-20240620"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -457,7 +457,7 @@
     "role": "Finance Analyst",
     "department": "Operations",
     "description": "Financial analyst and burn rate forecasting specialist.",
-    "model": "GPT-5.2",
+    "model": "GPT-4o",
     "model_config": {
       "provider": "openai",
       "modelId": "gpt-4o"
@@ -476,10 +476,10 @@
     "role": "Legal Advisor",
     "department": "Operations",
     "description": "Legal counsel and risk mitigation specialist.",
-    "model": "Claude Opus 4.5",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-opus-20240229"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -495,7 +495,7 @@
     "role": "Support Agent",
     "department": "Operations",
     "description": "Customer support and technical troubleshooting agent.",
-    "model": "Qwen 3",
+    "model": "Qwen 2.5 Max",
     "model_config": {
       "provider": "alibaba",
       "modelId": "qwen-max"
@@ -514,10 +514,10 @@
     "role": "Quality Auditor",
     "department": "Quality Assurance",
     "description": "System robustness and compliance verification lead.",
-    "model": "Claude Sonnet 4.5",
+    "model": "Claude 3.7 Sonnet",
     "model_config": {
       "provider": "anthropic",
-      "modelId": "claude-3-5-sonnet-20240620"
+      "modelId": "claude-3-7-sonnet"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -547,7 +547,7 @@
       "verify_telemetry"
     ],
     "workflows": [
-      "Mission Analysis"
+      "mission_analysis"
     ]
   }
 ]

@@ -10,11 +10,19 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Tadpole OS",
         "width": 1280,
         "height": 800,
         "resizable": true
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
   }
 }

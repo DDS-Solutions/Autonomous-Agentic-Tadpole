@@ -493,6 +493,16 @@ pub async fn promote_artifact(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<PromotePayload>,
 ) -> Result<impl IntoResponse, AppError> {
+    if payload.name.is_empty()
+        || payload.name.len() > 64
+        || !payload.name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(AppError::BadRequest(
+            "Capability name must be 1-64 characters and contain only alphanumeric characters, underscores, or hyphens."
+                .to_string(),
+        ));
+    }
+
     let proposal_id = uuid::Uuid::new_v4().to_string();
     
     // For 'skill' type, we try to wrap it in a proper SkillDefinition JSON

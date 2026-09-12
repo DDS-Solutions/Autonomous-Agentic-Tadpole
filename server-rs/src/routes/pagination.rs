@@ -5,12 +5,12 @@
 //! standardized formatting of windowed datasets and HATEOAS link
 //! generation for the Tadpole OS engine. Features **Clamped Window
 //! Sanitization**: ensures that pagination parameters (page/per_page)
-//! are within safe operational limits (max 100 per page). Implements
-//! **RFC 8288-Compliant Navigation**: generates consistent `_links`
-//! (self, first, last, next, prev) to facilitate automated
-//! collection crawling by AI agents. AI agents should use the
-//! `PaginatedResponse::from_vec` method to wrap all collection
-//! outputs before dispatching to the frontend (NET-04).
+//!    are within safe operational limits (max 10,000 per page). Implements
+//!    **RFC 8288-Compliant Navigation**: generates consistent `_links`
+//!    (self, first, last, next, prev) to facilitate automated
+//!    collection crawling by AI agents. AI agents should use the
+//!    `PaginatedResponse::from_vec` method to wrap all collection
+//!    outputs before dispatching to the frontend (NET-04).
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Telemetry Link**: Search `[pagination]` in tracing logs.
@@ -25,7 +25,7 @@ use serde::Serialize;
 /// Standard query parameters for paginated list endpoints.
 ///
 /// Supports `?page=1&per_page=25` — both optional with sensible defaults.
-/// Max per_page is capped at 100 to prevent abuse.
+/// Max per_page is capped at 10000 to prevent abuse.
 #[derive(Debug, serde::Deserialize)]
 pub struct PaginationParams {
     #[serde(default = "default_page")]
@@ -49,10 +49,12 @@ impl PaginationParams {
         (page, per_page)
     }
 
-    /// Calculates the offset for slicing.
+    /// Calculates the offset for slicing with saturating 64-bit arithmetic to prevent overflow.
     pub fn offset(&self) -> usize {
         let (page, per_page) = self.sanitize();
-        ((page - 1) * per_page) as usize
+        (page as u64)
+            .saturating_sub(1)
+            .saturating_mul(per_page as u64) as usize
     }
 }
 
@@ -241,6 +243,21 @@ mod tests {
         };
         let (_, per_page) = p.sanitize();
         assert_eq!(per_page, 10000);
+    }
+
+    #[test]
+    fn pagination_offset_does_not_overflow_large_values() {
+        let p = PaginationParams {
+            page: 500_000,
+            per_page: 10_000,
+        };
+        let offset = p.offset();
+        assert_eq!(offset, 4_999_990_000);
+
+        let items: Vec<i32> = vec![1, 2, 3];
+        let resp = PaginatedResponse::from_vec(items, &p, "/v1/test");
+        assert!(resp.data.is_empty());
+        assert_eq!(resp.total, 3);
     }
 
     #[test]

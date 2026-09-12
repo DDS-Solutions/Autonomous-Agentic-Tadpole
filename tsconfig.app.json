@@ -32,9 +32,7 @@
   "include": [
     "src",
     "tests/*.test.ts",
-    "tests/setup.ts",
-    "tests/eventBus.test.ts",
-    "tests/settingsStore.test.ts"
+    "tests/setup.ts"
   ],
   "exclude": [
     "src/**/*.test.ts",

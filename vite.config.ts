@@ -141,17 +141,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',
-    alias: {
-      'react-dom/test-utils': 'react-dom/test-utils',
-    },
     exclude: ['**/node_modules/**', '**/dist/**', '**/.tmp/**', '**/setup.ts', 'tests/e2e/**'],
-    deps: {
-      optimizer: {
-        web: {
-          include: ['react-dom', 'react-dom/client']
-        }
-      }
-    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

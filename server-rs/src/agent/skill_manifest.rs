@@ -170,12 +170,19 @@ impl SkillRegistry {
     pub fn load_all() -> Self {
         let registry = Self::new();
 
-        let mut data_dir = PathBuf::from("data");
-        data_dir.push("skills");
+        let base_dir = std::env::var("WORKSPACE_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let mut data_dir = base_dir.join("data").join("skills");
 
         if !data_dir.exists() {
-            tracing::warn!("Skills directory not found at {:?}", data_dir);
-            return registry;
+            let fallback = PathBuf::from("data").join("skills");
+            if fallback.exists() {
+                data_dir = fallback;
+            } else {
+                tracing::warn!("Skills directory not found at {:?}", data_dir);
+                return registry;
+            }
         }
 
         let entries = match fs::read_dir(&data_dir) {

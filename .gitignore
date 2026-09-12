@@ -54,6 +54,8 @@ coverage/
 reports/
 audit_full_report.*
 audit_production_report.md
+test_permissions.txt
+server-rs/src/scratch_*.rs
 sidecar_panic.log
 server-rs/errors.txt
 server-rs/logs.txt

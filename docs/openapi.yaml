@@ -4050,9 +4050,10 @@ components:
         metadata: { type: object, additionalProperties: true }
     TaskPayload:
       type: object
-      required: [task]
+      required: [message]
       properties:
-        task: { type: string }
+        message: { type: string, description: 'Task instruction message (alias: task)' }
+        task: { type: string, description: 'Alias for message' }
         traceparent: { type: string, nullable: true }
     TaskAcceptedResponse:
       type: object

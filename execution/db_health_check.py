@@ -2,11 +2,11 @@
 @docs ARCHITECTURE:Infrastructure:Execution
 
 ### AI Assist Note
-**Core technical resource for the Tadpole OS Sovereign infrastructure.**
-Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
+**db_health_check**: Runs integrity verification (PRAGMA quick_check), table schema
+presence checks, and record counts for SQLite databases across Tadpole OS.
 
 ### 🔍 Debugging & Observability
-- **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.
+- **Failure Path**: Corrupted SQLite database, file read/write locks, or missing table schemas.
 - **Telemetry Link**: Search `[db_health_check]` in system logs.
 """
 
@@ -28,22 +28,35 @@ def check_health(db_path: str) -> Dict[str, Any]:
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+
+        # Run integrity quick_check
+        cursor.execute("PRAGMA quick_check;")
+        quick_check_res = cursor.fetchone()
+        quick_check = quick_check_res[0] if quick_check_res else "unknown"
+        if quick_check != "ok":
+            conn.close()
+            return {"status": "unhealthy", "error": f"PRAGMA quick_check failed: {quick_check}"}
         
         # Check tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [row[0] for row in cursor.fetchall()]
         
-        # Check mission count as a sample
-        cursor.execute("SELECT COUNT(*) FROM mission_history;")
-        mission_count = cursor.fetchone()[0]
+        # Check mission count safely
+        mission_count = 0
+        if "mission_history" in tables:
+            cursor.execute("SELECT COUNT(*) FROM mission_history;")
+            mission_count = cursor.fetchone()[0]
         
-        # Check agent count
-        cursor.execute("SELECT COUNT(*) FROM agents;")
-        agent_count = cursor.fetchone()[0]
+        # Check agent count safely
+        agent_count = 0
+        if "agents" in tables:
+            cursor.execute("SELECT COUNT(*) FROM agents;")
+            agent_count = cursor.fetchone()[0]
         
         report = {
             "status": "healthy",
             "database": db_path,
+            "quick_check": quick_check,
             "table_count": len(tables),
             "mission_count": mission_count,
             "agent_count": agent_count,
@@ -59,7 +72,6 @@ def resolve_default_db_path() -> str:
     Dynamically resolves the database path:
     1. Checks if the 'DATABASE_URL' environment variable is defined. If so, parses out the file path.
     2. If not, falls back to locating 'data/tadpole.db' relative to the active workspace.
-    3. As a final legacy backup, falls back to 'G:\\TadpoleOS-Dev\\tadpole.db'.
     """
     db_url = os.getenv("DATABASE_URL")
     if db_url:
@@ -78,15 +90,9 @@ def resolve_default_db_path() -> str:
         return candidate_cwd
 
     # Check relative to script's directory parent
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        candidate_script = os.path.abspath(os.path.join(script_dir, "..", "data", "tadpole.db"))
-        if os.path.exists(candidate_script):
-            return candidate_script
-    except NameError:
-        pass
-
-    return r"G:\TadpoleOS-Dev\tadpole.db"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_script = os.path.abspath(os.path.join(script_dir, "..", "data", "tadpole.db"))
+    return candidate_script
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tadpole Database Health Check")

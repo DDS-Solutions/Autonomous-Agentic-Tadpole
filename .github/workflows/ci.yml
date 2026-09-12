@@ -63,7 +63,7 @@ jobs:
         run: npm ci
 
       - name: TypeScript Check
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
       - name: Lint
         run: npm run lint
