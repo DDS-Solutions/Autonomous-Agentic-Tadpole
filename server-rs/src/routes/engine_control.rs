@@ -52,6 +52,21 @@ pub async fn kill_agents(
         }
     }
 
+    // Abort all active runners (in-flight tasks / async loops)
+    let mut aborted_runners = 0usize;
+    let runner_keys: Vec<String> = state
+        .comms
+        .active_runners
+        .iter()
+        .map(|e| e.key().clone())
+        .collect();
+    for id in runner_keys {
+        if let Some((_, handle)) = state.comms.active_runners.remove(&id) {
+            handle.abort();
+            aborted_runners += 1;
+        }
+    }
+
     // Abort all pending oversight entries — no point waiting for approval on halted agents
     let pending_ids: Vec<String> = state
         .comms
@@ -66,18 +81,35 @@ pub async fn kill_agents(
         }
     }
 
+    // Mark claimed in-flight tasks as failed so they don't remain stuck in working/needs_input state
+    let tasks_aborted = match sqlx::query(
+        "UPDATE agent_tasks SET status = 'failed', current_receipt = 'killed_by_operator', updated_at = CURRENT_TIMESTAMP WHERE status IN ('working', 'needs_input')"
+    )
+    .execute(&state.resources.pool)
+    .await {
+        Ok(res) => res.rows_affected(),
+        Err(e) => {
+            tracing::error!("Failed to cancel agent_tasks during emergency kill: {}", e);
+            0
+        }
+    };
+
     // Persist mutated agent states to SQLite to guarantee persistence across engine restarts
     state.save_agents().await;
 
     tracing::warn!(
-        "🛑 [Kill Switch] Halted {} agents, cleared {} pending oversight entries.",
+        "🛑 [Kill Switch] Halted {} agents, aborted {} runners, failed {} active tasks, cleared {} pending oversight entries.",
         halted,
+        aborted_runners,
+        tasks_aborted,
         pending_ids.len()
     );
 
     state.emit_event(serde_json::json!({
         "type": "engine:kill",
         "halted_agents": halted,
+        "aborted_runners": aborted_runners,
+        "failed_tasks": tasks_aborted,
         "cleared_oversight": pending_ids.len()
     }));
 
@@ -86,6 +118,8 @@ pub async fn kill_agents(
         Json(serde_json::json!({
             "status": "ok",
             "halted_agents": halted,
+            "aborted_runners": aborted_runners,
+            "failed_tasks": tasks_aborted,
             "cleared_oversight": pending_ids.len()
         })),
     )

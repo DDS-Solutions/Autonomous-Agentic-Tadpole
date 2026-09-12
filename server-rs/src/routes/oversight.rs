@@ -92,6 +92,15 @@ pub async fn get_ledger(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (page, per_page) = params.sanitize();
+    let limit = per_page as i64;
+    let offset = params.offset() as i64;
+
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM oversight_log WHERE status != 'pending'")
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap_or(0);
+
     let rows = sqlx::query(
         r#"
         SELECT 
@@ -109,8 +118,11 @@ pub async fn get_ledger(
         )
         WHERE o.status != 'pending' 
         ORDER BY o.created_at DESC
+        LIMIT ? OFFSET ?
         "#
     )
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.resources.pool)
     .await
     .map_err(AppError::Sqlx)?;
@@ -191,8 +203,9 @@ pub async fn get_ledger(
         entry_obj
     }).collect();
 
-    Ok(Json(PaginatedResponse::from_vec(
+    Ok(Json(PaginatedResponse::from_parts(
         entries,
+        total as u32,
         &params,
         "/v1/oversight/ledger",
     )))
@@ -462,9 +475,12 @@ pub async fn get_security_quotas(
     
     tracing::debug!("📊 [Oversight] Verifying audit trail integrity...");
     let merkle_integrity = match state.security.audit_trail.verify_last_n(10, None).await {
-         Ok((v, t)) if v == t && t > 0 => 1.0,
-         Ok((v, t)) if t > 0 => v as f64 / t as f64,
-         _ => 1.0, 
+         Ok((v, t)) if t > 0 => (v as f64 / t as f64).min(1.0),
+         Ok(_) => 1.0,
+         Err(e) => {
+             tracing::warn!("⚠️ Merkle integrity verification error: {}", e);
+             0.0
+         }
     };
 
     tracing::debug!("📊 [Oversight] Budget: ${} / ${} (Remaining: ${})", total_spent, total_budget, total_budget - total_spent);
@@ -518,7 +534,7 @@ pub async fn get_mission_quotas(
         })
         .collect();
 
-    Ok(Json(serde_json::json!({ "quotas": quotas })))
+    Ok(Json(quotas))
 }
 
 /// PUT /v1/oversight/security/missions/:id/quota
@@ -558,9 +574,20 @@ pub async fn get_audit_trail(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    // We pull directly from audit_trail instead of oversight_log for "top-tier" integrity
+    let (page, per_page) = params.sanitize();
+    let limit = per_page as i64;
+    let offset = params.offset() as i64;
+
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_trail")
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap_or(0);
+
+    // We pull directly from audit_trail with SQL LIMIT/OFFSET
     let entries: Vec<AuditEntry> =
-        sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC")
+        sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT ? OFFSET ?")
+            .bind(limit)
+            .bind(offset)
             .fetch_all(&state.resources.pool)
             .await
             .map_err(AppError::Sqlx)?;
@@ -581,8 +608,9 @@ pub async fn get_audit_trail(
         })
         .collect();
 
-    Ok(Json(PaginatedResponse::from_vec(
+    Ok(Json(PaginatedResponse::from_parts(
         response,
+        total as u32,
         &params,
         "/v1/oversight/security/audit-trail",
     )))

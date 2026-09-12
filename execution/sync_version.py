@@ -55,6 +55,7 @@ PATHS = {
     "CLAUDE.md": r'TadpoleOS/([0-9.]+)',
     "AGENTS.md": r'TadpoleOS/([0-9.]+)',
     "execution/dispatch_mission.py": r'TadpoleOS/([0-9.]+)',
+    "server-rs/src/routes/templates.rs": r'TadpoleOS/([0-9.]+)',
     "scripts/deploy-linuxlite.ps1": r'version\s*=\s*"([^"]+)"',
 }
 

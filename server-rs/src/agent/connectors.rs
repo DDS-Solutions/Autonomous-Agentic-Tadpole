@@ -104,8 +104,20 @@ impl ConnectorTrait for FsConnector {
                     continue;
                 }
 
-                let metadata = entry.metadata()?;
-                let modified: DateTime<Utc> = metadata.modified()?.into();
+                let metadata = match entry.metadata() {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::warn!("⚠️ [FsConnector] Could not read metadata for {}: {}", path.display(), e);
+                        continue;
+                    }
+                };
+                let modified: DateTime<Utc> = match metadata.modified() {
+                    Ok(mod_time) => mod_time.into(),
+                    Err(e) => {
+                        tracing::warn!("⚠️ [FsConnector] Could not read modified time for {}: {}", path.display(), e);
+                        continue;
+                    }
+                };
 
                 // ### 🔄 Efficiency: Incremental Filter
                 // Compares filesystem `mtime` with the registry's `last_sync_at` 
@@ -208,7 +220,21 @@ async fn run_ingestion_cycle(state: &crate::state::AppState) -> Result<(), AppEr
         crate::agent::persistence::update_sync_status(pool, &manifest.id, "syncing").await?;
 
         let connector: Box<dyn ConnectorTrait> = match manifest.source_type.as_str() {
-            "fs" => Box::new(FsConnector::new(manifest.id.clone(), &manifest.source_uri)),
+            "fs" => {
+                let safe_path = match crate::utils::security::validate_path(&state.base_dir, &manifest.source_uri) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::error!(
+                            "🚨 [IngestionWorker] Path validation failed for manifest source_uri '{}': {}",
+                            manifest.source_uri,
+                            e
+                        );
+                        crate::agent::persistence::update_sync_status(pool, &manifest.id, "error").await?;
+                        continue;
+                    }
+                };
+                Box::new(FsConnector::new(manifest.id.clone(), safe_path.to_str().unwrap_or(&manifest.source_uri)))
+            }
             _ => {
                 tracing::warn!("Unsupported connector type: {}", manifest.source_type);
                 continue;
@@ -368,27 +394,17 @@ fn resolve_embedding_provider(
                 }
             }
         }
-        _ => {
-            // Fallback: try Gemini with env key
-            let key = std::env::var("GOOGLE_API_KEY").ok();
-            match key {
-                Some(k) => Box::new(crate::agent::gemini::GeminiProvider::new(
-                    client,
-                    k,
-                    model_config,
-                )),
-                None => {
-                    tracing::warn!(
-                        "⚠️ [IngestionWorker] No API key for embedding — using NullProvider"
-                    );
-                    Box::new(crate::agent::null_provider::NullProvider::new(
-                        &agent.identity.id,
-                        crate::agent::null_provider::NullReason::MissingApiKey {
-                            env_var: "GOOGLE_API_KEY",
-                        },
-                    ))
-                }
-            }
+        other => {
+            tracing::warn!(
+                "⚠️ [IngestionWorker] Agent embedding provider '{}' is unsupported or unconfigured — falling back to NullProvider with explicit failure",
+                other
+            );
+            Box::new(crate::agent::null_provider::NullProvider::new(
+                &agent.identity.id,
+                crate::agent::null_provider::NullReason::UnsupportedProvider {
+                    provider: other.to_string(),
+                },
+            ))
         }
     }
 }

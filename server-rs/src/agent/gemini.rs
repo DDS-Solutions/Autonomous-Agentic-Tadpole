@@ -103,8 +103,8 @@ pub struct GeminiProvider {
     client: Client,
     config: ModelConfig,
     api_key: String,
-    /// In-memory cache map: SHA256(system_prompt) -> cache_resource_name
-    cache_refs: dashmap::DashMap<String, String>,
+    /// In-memory cache map: SHA256(system_prompt) -> (cache_resource_name, created_at)
+    cache_refs: dashmap::DashMap<String, (String, std::time::Instant)>,
 }
 
 impl GeminiProvider {
@@ -133,7 +133,13 @@ impl GeminiProvider {
         let hash = Self::compute_cache_hash(system_prompt);
 
         if let Some(r) = self.cache_refs.get(&hash) {
-            return Some(r.clone());
+            let (ref name, created_at) = *r;
+            // Cached content has 1-hour TTL on Gemini; invalidate at 50 mins (3000s) to avoid 404s
+            if created_at.elapsed() < std::time::Duration::from_secs(3000) {
+                return Some(name.clone());
+            }
+            drop(r);
+            self.cache_refs.remove(&hash);
         }
 
         let base_url = self
@@ -167,7 +173,7 @@ impl GeminiProvider {
             Ok(res) if res.status().is_success() => {
                 if let Ok(parsed) = res.json::<CachedContentResponse>().await {
                     let name = parsed.name;
-                    self.cache_refs.insert(hash, name.clone());
+                    self.cache_refs.insert(hash, (name.clone(), std::time::Instant::now()));
                     Some(name)
                 } else {
                     None

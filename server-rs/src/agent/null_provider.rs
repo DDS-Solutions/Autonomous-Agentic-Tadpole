@@ -33,6 +33,8 @@ pub enum NullReason {
     TestMode,
     /// Blocked by Privacy Shield (Privacy Mode is ON).
     PrivacyModeEnforced,
+    /// Provider does not support embedding or is unconfigured.
+    UnsupportedProvider { provider: String },
 }
 
 impl NullReason {
@@ -41,6 +43,7 @@ impl NullReason {
             NullReason::MissingApiKey { env_var } => format!("missing_api_key ({})", env_var),
             NullReason::TestMode => "test_mode".to_string(),
             NullReason::PrivacyModeEnforced => "privacy_mode_enforced".to_string(),
+            NullReason::UnsupportedProvider { provider } => format!("unsupported_provider ({})", provider),
         }
     }
 }

@@ -304,8 +304,18 @@ impl GroqProvider {
         let mut function_calls = Vec::new();
         if let Some(tool_calls) = &choice.message.tool_calls {
             for tc in tool_calls {
-                let args: serde_json::Value =
-                    serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                let args: serde_json::Value = match serde_json::from_str(&tc.function.arguments) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        tracing::warn!(
+                            "⚠️ [Groq] Discarding malformed tool call '{}': invalid arguments '{}' ({})",
+                            tc.function.name,
+                            tc.function.arguments,
+                            e
+                        );
+                        continue;
+                    }
+                };
                 function_calls.push(ToolCall {
                     name: tc.function.name.clone(),
                     args,

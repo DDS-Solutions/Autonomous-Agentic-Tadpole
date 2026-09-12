@@ -2,7 +2,7 @@
 //!
 //! ### AI Assist Note
 //! **System Deployment (Update Manager)**: Orchestrates the live
-//! updating and deployment of engine components for the Tadpole OS
+//! updating and deployment of engine components for the AI-Tadpole-OS
 //! ecosystem. Features **Multi-Bunker Support**: allows
 //! targeting specific deployment environments (Bunker 1/2) via the
 //! `target` query parameter. Implements **Secure Pipeline
@@ -63,30 +63,22 @@ pub async fn trigger_deploy(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
     // --- Authentication Gate ---
-    let expected_token = &state.security.deploy_token;
-
-    let provided = headers
+    let token = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
 
-    match provided {
-        Some(token)
-            if crate::middleware::auth::constant_time_eq(
-                token.as_bytes(),
-                expected_token.as_bytes(),
-            ) => {}
-        _ => {
-            tracing::warn!("🚫 Unauthorized deploy attempt blocked.");
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                Json(DeployResponse {
-                    status: "unauthorized".to_string(),
-                    output: None,
-                    error: Some("Missing or invalid Authorization header.".to_string()),
-                }),
-            ));
-        }
+    if crate::middleware::auth::match_token(token, &state).is_none() {
+        tracing::warn!("🚫 Unauthorized deploy attempt blocked.");
+        return Ok((
+            StatusCode::UNAUTHORIZED,
+            Json(DeployResponse {
+                status: "unauthorized".to_string(),
+                output: None,
+                error: Some("Missing or invalid Authorization header.".to_string()),
+            }),
+        ));
     }
 
     let target = params.target.unwrap_or(1);
@@ -137,11 +129,11 @@ pub async fn trigger_deploy(
         }
     }
 
-    // --- Async Process Execution ---
-    let result = cmd.output().await;
+    // --- Async Process Execution with 300s timeout ---
+    let result = tokio::time::timeout(std::time::Duration::from_secs(300), cmd.output()).await;
 
     match result {
-        Ok(output) => {
+        Ok(Ok(output)) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -179,14 +171,25 @@ pub async fn trigger_deploy(
                 ))
             }
         }
-        Err(e) => {
-            tracing::error!("❌ Failed to spawn PowerShell process: {}", e);
+        Ok(Err(e)) => {
+            tracing::error!("❌ Failed to execute deployment script: {}", e);
             Ok((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(DeployResponse {
                     status: "error".to_string(),
                     output: None,
-                    error: Some(e.to_string()),
+                    error: Some(format!("Failed to execute deployment script: {}", e)),
+                }),
+            ))
+        }
+        Err(_elapsed) => {
+            tracing::error!("⏱️ Deployment script timed out after 300 seconds");
+            Ok((
+                StatusCode::GATEWAY_TIMEOUT,
+                Json(DeployResponse {
+                    status: "error".to_string(),
+                    output: None,
+                    error: Some("Deployment execution timed out after 300 seconds.".to_string()),
                 }),
             ))
         }
@@ -202,30 +205,22 @@ pub async fn trigger_pre_pr(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
     // --- Authentication Gate ---
-    let expected_token = &state.security.deploy_token;
-
-    let provided = headers
+    let token = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
 
-    match provided {
-        Some(token)
-            if crate::middleware::auth::constant_time_eq(
-                token.as_bytes(),
-                expected_token.as_bytes(),
-            ) => {}
-        _ => {
-            tracing::warn!("🚫 Unauthorized pre-pr attempt blocked.");
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                Json(DeployResponse {
-                    status: "unauthorized".to_string(),
-                    output: None,
-                    error: Some("Missing or invalid Authorization header.".to_string()),
-                }),
-            ));
-        }
+    if crate::middleware::auth::match_token(token, &state).is_none() {
+        tracing::warn!("🚫 Unauthorized pre-pr attempt blocked.");
+        return Ok((
+            StatusCode::UNAUTHORIZED,
+            Json(DeployResponse {
+                status: "unauthorized".to_string(),
+                output: None,
+                error: Some("Missing or invalid Authorization header.".to_string()),
+            }),
+        ));
     }
 
     tracing::info!("🚀 Authenticated pre-pr triggered...");
@@ -291,7 +286,5 @@ pub async fn trigger_pre_pr(
         }
     }
 }
-
-
 
 // Metadata: [deploy]

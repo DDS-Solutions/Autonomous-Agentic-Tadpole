@@ -10,10 +10,9 @@
  * stateDiagram-v2
  *     [*] --> Locked: Initialize
  *     Locked --> Unlocked: unlock(password) [Verify Master Key]
- *     Locked --> Unlocked: BroadcastChannel (UNLOCK) [Sync]
  *     Unlocked --> Locked: lock() [Manual Recall]
  *     Unlocked --> Locked: reset_vault() [Purge Configs]
- *     Unlocked --> Locked: BroadcastChannel (LOCK) [Force Sync]
+ *     Unlocked --> Locked: BroadcastChannel (LOCK) [Force Sync Across Tabs]
  *     Unlocked --> Locked: Timeout (30 min) [Auto-Security]
  *     Unlocked --> Unlocked: reset_inactivity_timer() [User Interaction]
  * ```
@@ -35,7 +34,7 @@ interface Vault_State {
     inactivity_timeout: number; // in ms
 
     // Actions
-    unlock: (password: string, is_sync?: boolean) => Promise<{ success: boolean; error?: string }>;
+    unlock: (password: string) => Promise<{ success: boolean; error?: string }>;
     reset_vault: () => void;
     lock: (is_sync?: boolean) => void;
     set_encrypted_config: (id: string, api_key: string) => Promise<void>;
@@ -63,51 +62,26 @@ let auto_lock_timer: ReturnType<typeof setTimeout> | null = null;
  * use_vault_store
  * Secure storage for provider API keys and sensitive credentials.
  * Uses local encryption backed by a master password.
- * Refactored for strict snake_case compliance and backend parity.
+ * Master keys are strictly memory-resident per tab and never broadcasted across BroadcastChannel.
  */
 export const use_vault_store = create<Vault_State>()(
     persist(
         (set, get) => {
-            // Setup cross-tab synchronization
+            // Setup cross-tab synchronization (LOCK events only)
             const channel = get_vault_channel();
             if (channel) {
                 channel.onmessage = (event: MessageEvent) => {
-                    const { type, payload, sender_id } = event.data;
+                    const { type, sender_id } = event.data;
                     
                     // Ignore messages from the same instance
                     if (sender_id === TAB_ID) return;
 
-                    if (type === 'UNLOCK' || type === 'SYNC_RESPONSE') {
-                        if (payload) {
-                            set({ is_locked: false, master_key: payload });
-                            get().reset_inactivity_timer();
-                        }
-                    } else if (type === 'LOCK') {
+                    if (type === 'LOCK') {
                         sessionStorage.removeItem(SESSION_KEY);
                         if (auto_lock_timer) clearTimeout(auto_lock_timer);
                         set({ is_locked: true, master_key: null });
-                    } else if (type === 'REQUEST_SYNC') {
-                        const { is_locked, master_key } = get();
-                        if (!is_locked && master_key) {
-                            // Respond to the requester with our current master key
-                            get_vault_channel()?.postMessage({ 
-                                type: 'SYNC_RESPONSE', 
-                                payload: master_key,
-                                sender_id: TAB_ID 
-                            });
-                        }
                     }
                 };
-
-                // Request sync from any online tabs immediately on mount
-                setTimeout(() => {
-                    if (get().is_locked) {
-                        get_vault_channel()?.postMessage({ 
-                            type: 'REQUEST_SYNC', 
-                            sender_id: TAB_ID 
-                        });
-                    }
-                }, 100);
             }
 
             return {
@@ -126,7 +100,7 @@ export const use_vault_store = create<Vault_State>()(
                     }, get().inactivity_timeout);
                 },
 
-                unlock: async (password: string, is_sync = false) => {
+                unlock: async (password: string) => {
                     const configs = get().encrypted_configs;
                     const first_key = Object.keys(configs)[0];
 
@@ -141,15 +115,6 @@ export const use_vault_store = create<Vault_State>()(
                     }
 
                     set({ is_locked: false, master_key: password });
-                    
-                    if (!is_sync) {
-                        get_vault_channel()?.postMessage({ 
-                            type: 'UNLOCK', 
-                            payload: password, 
-                            sender_id: TAB_ID 
-                        });
-                    }
-
                     get().reset_inactivity_timer();
                     return { success: true };
                 },

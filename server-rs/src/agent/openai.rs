@@ -238,7 +238,7 @@ impl OpenAIProvider {
         }
 
         let request_body = OpenAIRequest {
-            model: self.config.model_id.to_lowercase(),
+            model: self.config.model_id.clone(),
             messages,
             temperature: self.config.temperature,
             user: self.config.external_id.clone(),
@@ -305,10 +305,13 @@ impl OpenAIProvider {
             let error_text = res.text().await?;
             tracing::error!("📡 [OpenAI] Request failed with status {}: {}", status, error_text);
             
-            // Debugging payload dump
-            let _ = tokio::fs::create_dir_all(".tmp").await;
-            if let Ok(pretty_payload) = serde_json::to_string_pretty(&request_body) {
-                let _ = tokio::fs::write(".tmp/failed_ollama_payload.json", pretty_payload).await;
+            // Debugging payload dump (gated by TADPOLE_DEBUG_PAYLOADS to avoid disk fill & collision)
+            if std::env::var("TADPOLE_DEBUG_PAYLOADS").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+                let _ = tokio::fs::create_dir_all(".tmp").await;
+                if let Ok(pretty_payload) = serde_json::to_string_pretty(&request_body) {
+                    let dump_path = format!(".tmp/failed_payload_{}.json", uuid::Uuid::new_v4());
+                    let _ = tokio::fs::write(&dump_path, pretty_payload).await;
+                }
             }
             
             // ### 🧠 Resilience: Dynamic Quantization Fallback (OML-01)

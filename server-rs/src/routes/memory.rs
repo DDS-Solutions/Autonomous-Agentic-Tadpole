@@ -281,14 +281,30 @@ pub struct Bm25SearchQuery {
     pub top_k: Option<usize>,
 }
 
-/// GET /v1/memory/search/bm25
-///
-/// Performs zero-cloud, sub-millisecond BM25 relevance search over `.agent/memory/`, `directives/`, and `docs/`.
-pub async fn bm25_search_handler(
-    Query(query): Query<Bm25SearchQuery>,
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
-    let base_dir = &state.base_dir;
+use once_cell::sync::Lazy;
+use tokio::sync::RwLock;
+
+static BM25_CACHE: Lazy<RwLock<Option<(std::time::Instant, Arc<crate::services::bm25_memory::Bm25MemoryEngine>)>>> =
+    Lazy::new(|| RwLock::new(None));
+
+async fn get_or_create_bm25_engine(base_dir: &std::path::Path) -> Arc<crate::services::bm25_memory::Bm25MemoryEngine> {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(60);
+    {
+        let read_guard = BM25_CACHE.read().await;
+        if let Some((created_at, engine)) = &*read_guard {
+            if created_at.elapsed() < TTL {
+                return Arc::clone(engine);
+            }
+        }
+    }
+
+    let mut write_guard = BM25_CACHE.write().await;
+    if let Some((created_at, engine)) = &*write_guard {
+        if created_at.elapsed() < TTL {
+            return Arc::clone(engine);
+        }
+    }
+
     let root_dirs = vec![
         base_dir.join(".agent").join("memory"),
         base_dir.join("directives"),
@@ -296,7 +312,22 @@ pub async fn bm25_search_handler(
         base_dir.join("execution"),
     ];
 
-    let engine = crate::services::bm25_memory::Bm25MemoryEngine::new(root_dirs);
+    let engine = Arc::new(crate::services::bm25_memory::Bm25MemoryEngine::new(root_dirs));
+    *write_guard = Some((std::time::Instant::now(), Arc::clone(&engine)));
+    engine
+}
+
+/// GET /v1/memory/search/bm25
+///
+/// Fast, zero-cloud keyword search against the local memory palace, directives,
+/// docs, and deterministic execution scripts using BM25.
+///
+/// @docs OPERATIONS_MANUAL:MemorySearch
+pub async fn bm25_search_handler(
+    Query(query): Query<Bm25SearchQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let engine = get_or_create_bm25_engine(&state.base_dir).await;
     let results = engine.search(&query.q, query.top_k.unwrap_or(10));
 
     Ok((
@@ -341,15 +372,8 @@ pub async fn hybrid_rag_search_handler(
         ));
     }
 
-    // 1. BM25 Retrieval
-    let base_dir = &state.base_dir;
-    let root_dirs = vec![
-        base_dir.join(".agent").join("memory"),
-        base_dir.join("directives"),
-        base_dir.join("docs"),
-        base_dir.join("execution"),
-    ];
-    let bm25_engine = crate::services::bm25_memory::Bm25MemoryEngine::new(root_dirs);
+    // 1. BM25 Retrieval (using cached engine)
+    let bm25_engine = get_or_create_bm25_engine(&state.base_dir).await;
     let bm25_hits = bm25_engine.search(&query.q, top_k * 2);
     let bm25_candidates: Vec<RagCandidate> = bm25_hits
         .into_iter()
@@ -438,15 +462,16 @@ pub async fn hybrid_rag_search_handler(
 
 /// DELETE /v1/agents/:agent_id/memories/:row_id
 pub async fn delete_agent_memory(
-    Path((_agent_id, row_id)): Path<(String, String)>,
+    Path((agent_id, row_id)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     #[cfg(not(feature = "vector-memory"))]
     {
         sqlx::query(
-            "DELETE FROM fallback_memories WHERE id = ?"
+            "DELETE FROM fallback_memories WHERE id = ? AND agent_id = ?"
         )
         .bind(&row_id)
+        .bind(&agent_id)
         .execute(&state.resources.pool)
         .await
         .map_err(AppError::Sqlx)?;

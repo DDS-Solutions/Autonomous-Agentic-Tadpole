@@ -193,6 +193,65 @@ impl<T: Serialize> PaginatedResponse<T> {
             _links: links,
         }
     }
+
+    /// Creates a paginated response when items are already sliced by SQL LIMIT/OFFSET.
+    pub fn from_parts(data: Vec<T>, total: u32, params: &PaginationParams, base_path: &str) -> Self {
+        let (page, per_page) = params.sanitize();
+        let total_pages = if total == 0 {
+            1
+        } else {
+            total.div_ceil(per_page)
+        };
+
+        let mut links = std::collections::HashMap::new();
+        links.insert(
+            "self".to_string(),
+            HateoasLink::get(format!("{}?page={}&per_page={}", base_path, page, per_page)),
+        );
+        links.insert(
+            "first".to_string(),
+            HateoasLink::get(format!("{}?page=1&per_page={}", base_path, per_page)),
+        );
+        links.insert(
+            "last".to_string(),
+            HateoasLink::get(format!(
+                "{}?page={}&per_page={}",
+                base_path, total_pages, per_page
+            )),
+        );
+
+        if page < total_pages {
+            links.insert(
+                "next".to_string(),
+                HateoasLink::get(format!(
+                    "{}?page={}&per_page={}",
+                    base_path,
+                    page + 1,
+                    per_page
+                )),
+            );
+        }
+        if page > 1 {
+            links.insert(
+                "prev".to_string(),
+                HateoasLink::get(format!(
+                    "{}?page={}&per_page={}",
+                    base_path,
+                    page - 1,
+                    per_page
+                )),
+            );
+        }
+
+        Self {
+            data,
+            page,
+            per_page,
+            total,
+            total_pages,
+            _links: links,
+        }
+    }
 }
 
 // Builds a HATEOAS `_links` map for a single resource.

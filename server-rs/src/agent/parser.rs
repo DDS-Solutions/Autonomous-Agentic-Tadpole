@@ -63,15 +63,17 @@ impl ParsedDocument {
                 format!("[{}] {}", section.heading, section.content)
             };
 
-            if text.len() <= max_chars {
+            let chars: Vec<char> = text.chars().collect();
+            if chars.len() <= max_chars {
                 chunks.push(text);
             } else {
-                // Simple character-boundary chunking with overlap
+                let step = if max_chars > 4 { max_chars - (max_chars / 4) } else { 1 };
                 let mut start = 0;
-                while start < text.len() {
-                    let end = (start + max_chars).min(text.len());
-                    chunks.push(text[start..end].to_string());
-                    start += max_chars - (max_chars / 4); // 25% overlap
+                while start < chars.len() {
+                    let end = (start + max_chars).min(chars.len());
+                    let chunk: String = chars[start..end].iter().collect();
+                    chunks.push(chunk);
+                    start += step;
                 }
             }
         }
@@ -81,6 +83,15 @@ impl ParsedDocument {
 
 /// Primary entry point: parse a file at the given path into structured sections.
 pub async fn parse_file(path: &Path) -> Result<ParsedDocument, AppError> {
+    let metadata = tokio::fs::metadata(path).await.map_err(AppError::Io)?;
+    if metadata.len() > 10 * 1024 * 1024 {
+        return Err(AppError::BadRequest(format!(
+            "File '{}' exceeds maximum allowed size of 10MB (size: {} bytes)",
+            path.display(),
+            metadata.len()
+        )));
+    }
+
     let ext = path
         .extension()
         .and_then(|s| s.to_str())

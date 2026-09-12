@@ -80,14 +80,16 @@ describe('use_vault_store', () => {
     });
 
     describe('Lock/Unlock Mechanism with Sync', () => {
-        it('unlocks and updates BroadcastChannel (No sessionStorage)', async () => {
+        it('unlocks locally without broadcasting master key over BroadcastChannel (SEC-02 / M58)', async () => {
             const store = use_vault_store.getState();
             await store.unlock('my-password');
 
             // SEC-02: Verify NO persistence in sessionStorage
             expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
-            expect(bc_post_message).toHaveBeenCalledWith(expect.objectContaining({ type: 'UNLOCK', payload: 'my-password' }));
+            // M58: Verify password is NOT broadcasted across BroadcastChannel
+            expect(bc_post_message).not.toHaveBeenCalled();
             expect(use_vault_store.getState().is_locked).toBe(false);
+            expect(use_vault_store.getState().master_key).toBe('my-password');
         });
 
         it('locks and clears BroadcastChannel', () => {

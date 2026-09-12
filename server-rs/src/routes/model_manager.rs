@@ -412,35 +412,52 @@ pub async fn sync_provider_models(
     let base_url = provider.base_url.as_deref().unwrap_or("");
     let protocol = provider.protocol.to_string().to_lowercase();
 
-    let discovered_ids = if protocol == "anthropic" {
-        // Anthropic does not support a /v1/models listing endpoint; bypass and return static flagship set
-        vec![
-            "claude-3-5-sonnet-20241022".to_string(),
-            "claude-3-5-haiku-20241022".to_string(),
-            "claude-3-opus-20240229".to_string(),
-            "claude-3-sonnet-20240229".to_string(),
-            "claude-3-haiku-20240307".to_string(),
-        ]
-    } else {
-        // 1. Resolve URL and Authenticate via Router
-        let router = ProtocolRouter::from_protocol(&protocol);
-        let url = router.build_models_url(&protocol, base_url, true);
+    // 1. Resolve URL and Authenticate via Router
+    let router = ProtocolRouter::from_protocol(&protocol);
+    let url = router.build_models_url(&protocol, base_url, true);
 
-        let request = state.resources.http_client.get(&url).timeout(std::time::Duration::from_secs(10));
-        let request = router.authenticate_request(request, &api_key);
+    let request = state.resources.http_client.get(&url).timeout(std::time::Duration::from_secs(10));
+    let request = router.authenticate_request(request, &api_key);
 
-        let resp = request.send().await.map_err(|e| {
-            AppError::InternalServerError(format!("Handshake failed during discovery: {}", e))
-        })?;
-
-        if !resp.status().is_success() {
+    let discovered_ids = match request.send().await {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(body) = resp.json::<serde_json::Value>().await {
+                let ids = router.parse_discovery_response(&body, &url);
+                if ids.is_empty() && protocol == "anthropic" {
+                    vec![
+                        "claude-3-7-sonnet-20250219".to_string(),
+                        "claude-3-5-sonnet-20241022".to_string(),
+                        "claude-3-5-haiku-20241022".to_string(),
+                        "claude-3-opus-20240229".to_string(),
+                    ]
+                } else {
+                    ids
+                }
+            } else if protocol == "anthropic" {
+                vec![
+                    "claude-3-7-sonnet-20250219".to_string(),
+                    "claude-3-5-sonnet-20241022".to_string(),
+                    "claude-3-5-haiku-20241022".to_string(),
+                    "claude-3-opus-20240229".to_string(),
+                ]
+            } else {
+                return Err(AppError::InternalServerError("Failed to parse discovery response.".to_string()));
+            }
+        }
+        _ if protocol == "anthropic" => {
+            vec![
+                "claude-3-7-sonnet-20250219".to_string(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                "claude-3-5-haiku-20241022".to_string(),
+                "claude-3-opus-20240229".to_string(),
+            ]
+        }
+        Ok(resp) => {
             return Err(AppError::Unauthorized(format!("Discovery failed ({}): Provider rejected credentials or endpoint unreachable.", resp.status())));
         }
-
-        let body: serde_json::Value = resp.json().await.map_err(|_| AppError::InternalServerError("Failed to parse discovery response.".to_string()))?;
-
-        // 2. Parse Model IDs based on protocol
-        router.parse_discovery_response(&body, &url)
+        Err(e) => {
+            return Err(AppError::InternalServerError(format!("Handshake failed during discovery: {}", e)));
+        }
     };
 
     let count = discovered_ids.len();
@@ -479,15 +496,19 @@ pub async fn sync_provider_models(
         state.save_models().await;
     }
 
-    Ok((
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "status": "success",
-            "message": format!("Synchronized {} models ({} total discovered).", added, count),
-            "added": added,
-            "discovered": count
-        })),
-    ))
+    tracing::info!(
+        "🔄 [ModelManager] Synced provider '{}': {} discovered, {} added.",
+        id,
+        count,
+        added
+    );
+
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "provider_id": id,
+        "discovered": count,
+        "added": added
+    })))
 }
 
 /// Returns a curated catalog of recommended models for the local swarm.
@@ -496,10 +517,28 @@ pub async fn get_model_catalog(
 ) -> Result<impl IntoResponse, AppError> {
     let catalog = serde_json::json!([
         {
+            "id": "llama3.3:70b",
+            "name": "Llama 3.3 (70B)",
+            "provider": "ollama",
+            "description": "Meta's flagship open model. Exceptional reasoning and coding.",
+            "size": "42GB",
+            "vram": "48GB",
+            "tags": ["Flagship", "Reasoning", "Coding"]
+        },
+        {
+            "id": "qwen2.5-coder:7b",
+            "name": "Qwen 2.5 Coder (7B)",
+            "provider": "ollama",
+            "description": "Alibaba's specialized code synthesis and refactoring model.",
+            "size": "4.7GB",
+            "vram": "8GB",
+            "tags": ["Coding", "Fast"]
+        },
+        {
             "id": "llama3:8b",
             "name": "Llama 3 (8B)",
             "provider": "ollama",
-            "description": "Meta's most capable 8B model. Balanced for logic and creative tasks.",
+            "description": "Meta's balanced 8B model for lightweight local inference.",
             "size": "4.7GB",
             "vram": "8GB",
             "tags": ["General", "Logic"]
@@ -512,15 +551,6 @@ pub async fn get_model_catalog(
             "size": "2.3GB",
             "vram": "4GB",
             "tags": ["Fast", "Efficiency"]
-        },
-        {
-            "id": "mistral:latest",
-            "name": "Mistral (7B)",
-            "provider": "ollama",
-            "description": "The original sovereign open-weight champion.",
-            "size": "4.1GB",
-            "vram": "6GB",
-            "tags": ["Original", "Balanced"]
         },
         {
             "id": "nomic-embed-text:latest",

@@ -372,7 +372,8 @@ pub async fn update_status_ledger(
 
 /// Generates a standardized agent code for neural identification.
 fn generate_agent_code(agent_id: &str) -> String {
-    format!("tadpole-{}", &agent_id[..agent_id.len().min(8)])
+    let prefix: String = agent_id.chars().take(8).collect();
+    format!("tadpole-{}", prefix)
 }
 
 /// Appends a receipt entry to the JSON receipt_history array on a task.

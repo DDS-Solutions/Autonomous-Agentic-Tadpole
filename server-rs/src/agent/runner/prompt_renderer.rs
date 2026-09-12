@@ -16,9 +16,13 @@ pub struct PromptRenderer;
 impl PromptRendererTrait for PromptRenderer {
     fn render(&self, template: &str, variables: &HashMap<&str, String>) -> String {
         let mut rendered = template.to_string();
-        for (key, value) in variables {
-            let placeholder = format!("{{{{{}}}}}", key);
-            rendered = rendered.replace(&placeholder, value);
+        let mut sorted_keys: Vec<&&str> = variables.keys().collect();
+        sorted_keys.sort_unstable();
+        for key in sorted_keys {
+            if let Some(value) = variables.get(*key) {
+                let placeholder = format!("{{{{{}}}}}", key);
+                rendered = rendered.replace(&placeholder, value);
+            }
         }
         rendered
     }

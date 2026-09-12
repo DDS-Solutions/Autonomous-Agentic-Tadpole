@@ -61,8 +61,10 @@ impl Sanitizer {
     fn scan_recursive(text: &str, depth: usize) -> SanitizationResult {
         if depth > 2 {
             // Prevent stack exhaustion from intentionally nested Base64 
-            // recursion attacks (LMT-05).
-            return SanitizationResult::Safe; 
+            // recursion attacks while blocking deeply nested obfuscation (LMT-05).
+            return SanitizationResult::Alert(
+                "Suspicious nested obfuscation: recursion depth limit exceeded.".to_string(),
+            );
         }
 
         // 1. Unicode Normalization (NFKC)

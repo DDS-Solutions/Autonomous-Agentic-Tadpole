@@ -69,7 +69,7 @@ pub async fn prepare_transaction(
     // 2. Perform 24-hour rolling reset if 86,400 seconds have elapsed
     if now > last_reset + 86400 {
         spent = 0;
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             "UPDATE agent_economics_meta \
              SET daily_spent_accumulated_micros = 0, last_reset_at = ?1 \
              WHERE agent_id = ?2",
@@ -77,12 +77,15 @@ pub async fn prepare_transaction(
         .bind(now)
         .bind(&payload.debit_agent_id)
         .execute(pool)
-        .await;
+        .await
+        {
+            tracing::warn!("⚠️ [A2A] Failed to update daily economic reset: {}", e);
+        }
     }
 
-    // 3. Query sum of all active PREPARED transaction locks for this debit agent
+    // 3. Query sum of all active PREPARED transaction locks for this debit agent (excluding expired)
     let locked_sum: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(amount_micros), 0) FROM a2a_ledger WHERE debit_agent_id = ?1 AND status = 'PREPARED'",
+        "SELECT COALESCE(SUM(amount_micros), 0) FROM a2a_ledger WHERE debit_agent_id = ?1 AND status = 'PREPARED' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))",
     )
     .bind(&payload.debit_agent_id)
     .fetch_one(pool)
@@ -98,13 +101,13 @@ pub async fn prepare_transaction(
         )));
     }
 
-    // 5. Issue atomic transaction lock
+    // 5. Issue atomic transaction lock with 5-minute TTL (300 seconds)
     let tx_id = format!("tx_{}", uuid::Uuid::new_v4());
     let lock_id = format!("lock_{}", uuid::Uuid::new_v4());
 
     sqlx::query(
-        "INSERT INTO a2a_ledger (tx_id, debit_agent_id, credit_agent_id, amount_micros, status, lock_id)
-         VALUES (?, ?, ?, ?, 'PREPARED', ?)"
+        "INSERT INTO a2a_ledger (tx_id, debit_agent_id, credit_agent_id, amount_micros, status, lock_id, expires_at)
+         VALUES (?, ?, ?, ?, 'PREPARED', ?, datetime('now', '+300 seconds'))"
     )
     .bind(&tx_id)
     .bind(&payload.debit_agent_id)
@@ -145,16 +148,20 @@ pub async fn commit_transaction(
         None => return Err(AppError::NotFound("No matching PREPARED transaction lock found".to_string())),
     };
 
-    // 2. Commit transaction
-    sqlx::query(
-        "UPDATE a2a_ledger SET status = 'COMMITTED', updated_at = CURRENT_TIMESTAMP WHERE lock_id = ?"
+    // 2. Commit transaction with atomic CAS guard
+    let update_res = sqlx::query(
+        "UPDATE a2a_ledger SET status = 'COMMITTED', updated_at = CURRENT_TIMESTAMP WHERE lock_id = ? AND status = 'PREPARED'"
     )
     .bind(&payload.lock_id)
     .execute(pool)
     .await?;
 
+    if update_res.rows_affected() == 0 {
+        return Err(AppError::Conflict("Transaction already committed or rolled back".to_string()));
+    }
+
     // 3. Accumulate spend in agent_economics_meta
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO agent_economics_meta (agent_id, daily_spent_accumulated_micros) \
          VALUES (?1, ?2) \
          ON CONFLICT(agent_id) DO UPDATE SET \
@@ -163,7 +170,10 @@ pub async fn commit_transaction(
     .bind(&debit_agent_id)
     .bind(amount_micros)
     .execute(pool)
-    .await;
+    .await
+    {
+        tracing::error!("❌ [A2A] Failed to accumulate spend for agent {}: {}", debit_agent_id, e);
+    }
 
     Ok((
         StatusCode::OK,
@@ -217,6 +227,7 @@ mod tests {
                 amount_micros INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'PREPARED',
                 lock_id TEXT UNIQUE NOT NULL,
+                expires_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );"
@@ -272,4 +283,3 @@ mod tests {
 
 // Metadata: [a2a]
 
-// Metadata: [a2a]

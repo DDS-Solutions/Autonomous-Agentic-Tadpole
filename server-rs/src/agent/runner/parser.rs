@@ -54,6 +54,11 @@ static KEY_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"([{,]\s*)([a-zA-Z_]\w*
 
 static COMMA_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*([\]}])").unwrap());
 
+static BARE_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?s)^(?:call:)?([a-zA-Z0-9_-]+)(\{.*?\})$").unwrap());
+
+static WORD_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap());
+
 impl PolyglotParser {
     /// Extracts all tool calls from the raw text, trying multiple formats.
     pub fn extract(text: &str) -> ParserResult<Vec<ToolCall>> {
@@ -196,69 +201,82 @@ impl PolyglotParser {
                 }
 
                 if let Some(end) = close_idx {
-                    let potential_json = &text[open_idx..end];
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(potential_json) {
-                        let name_raw = v
-                            .get("tool_name")
-                            .or_else(|| v.get("command"))
-                            .and_then(|n| n.as_str())
-                            .unwrap_or_default();
+                    let prefix_trimmed = text[..open_idx].trim_end();
+                    let suffix_trimmed = text[end..].trim_start();
+                    let is_in_fence = (prefix_trimmed.ends_with("```json") || prefix_trimmed.ends_with("```"))
+                        || suffix_trimmed.starts_with("```");
+                    let has_intent_prefix = prefix_trimmed.ends_with("Action:")
+                        || prefix_trimmed.ends_with("Action Plan:")
+                        || prefix_trimmed.ends_with("tool_call:")
+                        || prefix_trimmed.ends_with("invoke:")
+                        || prefix_trimmed.ends_with("tool_name:")
+                        || prefix_trimmed.ends_with("Execute:");
 
-                        if !name_raw.is_empty() {
-                            // Handle Wrappers
-                            if name_raw == "execute_tool" || name_raw == "execute_command" {
-                                let inner_name = v
-                                    .get("tool_args")
-                                    .or(v.get("params"))
-                                    .or(v.get("tool_input"))
-                                    .and_then(|i| {
-                                        i.get("tool_name")
-                                            .or(i.get("command"))
-                                            .or(i.get("function"))
-                                    })
-                                    .and_then(|n| n.as_str());
+                    if is_in_fence || has_intent_prefix {
+                        let potential_json = &text[open_idx..end];
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(potential_json) {
+                            let name_raw = v
+                                .get("tool_name")
+                                .or_else(|| v.get("command"))
+                                .and_then(|n| n.as_str())
+                                .unwrap_or_default();
 
-                                let real_name = inner_name.or_else(|| {
-                                    let n = v
-                                        .get("tool_name")
-                                        .or(v.get("command"))
-                                        .or(v.get("function"))
+                            if !name_raw.is_empty() {
+                                // Handle Wrappers
+                                if name_raw == "execute_tool" || name_raw == "execute_command" {
+                                    let inner_name = v
+                                        .get("tool_args")
+                                        .or(v.get("params"))
+                                        .or(v.get("tool_input"))
+                                        .and_then(|i| {
+                                            i.get("tool_name")
+                                                .or(i.get("command"))
+                                                .or(i.get("function"))
+                                        })
                                         .and_then(|n| n.as_str());
-                                    if n == Some(name_raw) {
-                                        None
-                                    } else {
-                                        n
-                                    }
-                                });
 
-                                let real_args = v
-                                    .get("tool_args")
-                                    .or(v.get("params"))
-                                    .or(v.get("tool_input"))
-                                    .cloned()
-                                    .or_else(|| v.get("arguments").cloned());
-
-                                if let Some(name) = real_name {
-                                    calls.push(ToolCall {
-                                        name: name.to_string(),
-                                        args: real_args.unwrap_or_else(|| serde_json::json!({})),
+                                    let real_name = inner_name.or_else(|| {
+                                        let n = v
+                                            .get("tool_name")
+                                            .or(v.get("command"))
+                                            .or(v.get("function"))
+                                            .and_then(|n| n.as_str());
+                                        if n == Some(name_raw) {
+                                            None
+                                        } else {
+                                            n
+                                        }
                                     });
+
+                                    let real_args = v
+                                        .get("tool_args")
+                                        .or(v.get("params"))
+                                        .or(v.get("tool_input"))
+                                        .cloned()
+                                        .or_else(|| v.get("arguments").cloned());
+
+                                    if let Some(name) = real_name {
+                                        calls.push(ToolCall {
+                                            name: name.to_string(),
+                                            args: real_args.unwrap_or_else(|| serde_json::json!({})),
+                                        });
+                                    } else {
+                                        calls.push(ToolCall {
+                                            name: name_raw.to_string(),
+                                            args: real_args.unwrap_or_else(|| serde_json::json!({})),
+                                        });
+                                    }
                                 } else {
+                                    let args = v
+                                        .get("tool_input")
+                                        .or_else(|| v.get("tool_args"))
+                                        .or_else(|| v.get("params"))
+                                        .cloned();
                                     calls.push(ToolCall {
                                         name: name_raw.to_string(),
-                                        args: real_args.unwrap_or_else(|| serde_json::json!({})),
+                                        args: args.unwrap_or_else(|| serde_json::json!({})),
                                     });
                                 }
-                            } else {
-                                let args = v
-                                    .get("tool_input")
-                                    .or_else(|| v.get("tool_args"))
-                                    .or_else(|| v.get("params"))
-                                    .cloned();
-                                calls.push(ToolCall {
-                                    name: name_raw.to_string(),
-                                    args: args.unwrap_or_else(|| serde_json::json!({})),
-                                });
                             }
                         }
                     }
@@ -299,8 +317,7 @@ impl PolyglotParser {
         }
 
         // 2. Try parsing as bare call format (e.g. call:name{...} or name{...}) inside XML tags
-        let bare_pattern = Regex::new(r"(?s)^(?:call:)?([a-zA-Z0-9_-]+)(\{.*?\})$").unwrap();
-        if let Some(cap) = bare_pattern.captures(trimmed) {
+        if let Some(cap) = BARE_PATTERN.captures(trimmed) {
             let name = cap
                 .get(1)
                 .map(|m| m.as_str().to_string())
@@ -312,8 +329,7 @@ impl PolyglotParser {
         }
 
         // 3. Try parsing as a single word representing a tool name with no arguments
-        let word_pattern = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
-        if word_pattern.is_match(trimmed) {
+        if WORD_PATTERN.is_match(trimmed) {
             return Ok(ToolCall {
                 name: trimmed.to_string(),
                 args: serde_json::json!({}),
@@ -455,6 +471,13 @@ mod tests {
         let input = "Thinking... <tool_call>...</tool_call> Done.";
         let scrubbed = PolyglotParser::scrub_tool_calls(input);
         assert_eq!(scrubbed, "Thinking...  Done.");
+    }
+
+    #[test]
+    fn test_unfenced_json_is_not_extracted_as_tool() {
+        let input = "Here is an example package.json configuration:\n{ \"name\": \"my-app\", \"command\": \"build\" }\nLet me know what you think!";
+        let res = PolyglotParser::extract(input);
+        assert!(res.is_err(), "Conversational unfenced JSON without intent markers should not be parsed as a tool call");
     }
 }
 
