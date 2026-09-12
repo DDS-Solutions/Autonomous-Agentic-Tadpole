@@ -63,8 +63,14 @@ class TestTokenRotation(unittest.TestCase):
         # Initiate rotation
         rotate_token.rotate_token(grace_period_secs=10)
         
-        # Confirm rotation
-        rotate_token.confirm_rotation()
+        # Confirm rotation without force during grace period should be blocked
+        rotate_token.confirm_rotation(force=False)
+        lines = self.env_file.read_text().splitlines()
+        env_dict = {line.split("=", 1)[0].strip(): line.split("=", 1)[1].strip() for line in lines if "=" in line}
+        self.assertTrue("NEURAL_TOKEN_OLD" in env_dict)
+        
+        # Confirm rotation with force=True should revoke old tokens
+        rotate_token.confirm_rotation(force=True)
         
         # Read back env
         lines = self.env_file.read_text().splitlines()

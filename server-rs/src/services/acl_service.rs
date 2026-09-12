@@ -32,21 +32,12 @@ impl AclServiceTrait for AclService {
                 _ => true,
             }
         } else if agent_id == AGENT_ALPHA {
-            match tool_name {
-                "issue_alpha_directive" => false,
-                _ => true, // Alpha Commander can spawn subagents & recruit
-            }
+            tool_name != "issue_alpha_directive" // Alpha Commander can spawn subagents & recruit
         } else if authority == RoleAuthorityLevel::Observer {
-            match tool_name {
-                "read_file" | "list_files" | "search_global_vault" => true,
-                _ => false, // No mutations for observers
-            }
+            matches!(tool_name, "read_file" | "list_files" | "search_global_vault")
         } else {
             // Tactical Specialists: cannot spawn subagents or issue alpha directives
-            match tool_name {
-                "issue_alpha_directive" | "spawn_subagent" => false,
-                _ => true,
-            }
+            !matches!(tool_name, "issue_alpha_directive" | "spawn_subagent")
         }
     }
 
