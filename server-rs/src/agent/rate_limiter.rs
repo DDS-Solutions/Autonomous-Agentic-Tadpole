@@ -81,8 +81,20 @@ impl RateLimiter {
                 }
 
                 let current = self.tokens_used.load(Ordering::SeqCst);
-                if current + estimated_tokens <= tpm {
-                    break;
+                if current.saturating_add(estimated_tokens) <= tpm {
+                    if self
+                        .tokens_used
+                        .compare_exchange(
+                            current,
+                            current + estimated_tokens,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        )
+                        .is_ok()
+                    {
+                        break;
+                    }
+                    continue;
                 }
 
                 // Calculate how long until the window resets
@@ -109,7 +121,7 @@ impl RateLimiter {
                     });
                 }
                 Err(_) => {
-                    tracing::error!("🚨 [RateLimiter] RPM semaphore closed unexpectedly. Proceeding without rate limit.");
+                    tracing::warn!("⚠️ [RateLimiter] RPM semaphore closed. Proceeding with caution.");
                 }
             }
         }
@@ -118,6 +130,25 @@ impl RateLimiter {
     /// Records the actual tokens consumed after a successful API call.
     pub fn record_usage(&self, actual_tokens: u32) {
         self.tokens_used.fetch_add(actual_tokens, Ordering::SeqCst);
+    }
+
+    /// Reconciles an initial token estimate with actual tokens consumed.
+    pub fn record_usage_reconcile(&self, actual_tokens: u32, estimated_tokens: u32) {
+        if actual_tokens >= estimated_tokens {
+            self.tokens_used.fetch_add(actual_tokens - estimated_tokens, Ordering::SeqCst);
+        } else {
+            let diff = estimated_tokens - actual_tokens;
+            let _ = self.tokens_used.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
+                Some(val.saturating_sub(diff))
+            });
+        }
+    }
+
+    /// Releases a previously reserved token estimate (e.g. on request failure).
+    pub fn release_reservation(&self, estimated_tokens: u32) {
+        let _ = self.tokens_used.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
+            Some(val.saturating_sub(estimated_tokens))
+        });
     }
 
     /// Convenience: returns true if this limiter has any active constraints.

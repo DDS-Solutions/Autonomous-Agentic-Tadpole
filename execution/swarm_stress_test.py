@@ -1,8 +1,8 @@
 """
-@docs ARCHITECTURE:Infrastructure:Execution
+@docs ARCHITECTURE:Quality:Verification
 
 ### AI Assist Note
-**Verification and quality assurance for the Tadpole OS engine.**
+**Triggers a real mass-recruitment swarm mission to test system limits.**
 Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 
 ### 🔍 Debugging & Observability
@@ -10,139 +10,46 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 - **Telemetry Link**: Search `[swarm_stress_test]` in system logs.
 """
 
+import asyncio
+import aiohttp
 import os
-import requests
 import json
-import time
-import sys
 
-def print_result(check, status, message):
-    icon = "[OK]" if status else "[FAIL]"
-    print(f"{icon} [{check}] {message}")
-
-BASE_URL = "http://localhost:8000/v1"
-HEADERS = {
-    "Authorization": f"Bearer {os.environ.get('NEURAL_TOKEN', 'tadpole-dev-token-2026')}",
-    "Content-Type": "application/json"
-}
-
-def create_agent(agent_id, name, model, role, instructions, api_key, provider="gemini", parent_id=None):
+async def trigger_stress_test():
+    """
+    Triggers a real mass-recruitment swarm mission to test system limits.
+    This bypasses simple simulations and forces the engine to manage 10+ concurrent agents.
+    """
+    api_url = os.getenv("TADPOLE_API_URL", "http://localhost:3000/v1/swarm/recruit")
+    api_token = os.getenv("NEURAL_TOKEN", "your-token-here")
+    
     payload = {
-        "id": agent_id,
-        "name": name,
-        "role": role,
-        "department": "Engineering",
-        "description": instructions,
-        "status": "active",
-        "model": model,
-        "model_config": {
-            "provider": provider,
-            "model_id": model,
-            "api_key": api_key,
-            "base_url": "http://127.0.0.1:11434/v1" if provider == "ollama" else None
-        },
-        "tokens_used": 0,
-        "budget_usd": 10.0,
-        "cost_usd": 0.0,
-        "skills": ["issue_alpha_directive"]  # Needed for recruitment
+        "agent_ids": [f"StressNode-{i}" for i in range(1, 11)],
+        "message": "Execute a high-frequency telemetry burst. Report on system manifest and latency metrics.",
+        "cluster_id": "STRESS-TEST-SWARM"
     }
-    resp = requests.post(f"{BASE_URL}/agents", json=payload, headers=HEADERS)
-    if resp.status_code == 201 or resp.status_code == 200:
-        data = resp.json()
-        if "id" in data:
-            return data["id"]
-        # sometimes the API just echoes back status ok, we can manually return the id we sent
-        print(f"Agent created, but 'id' missing in response. Response: {data}")
-        return agent_id
-    print(f"Failed to create agent {name}: {resp.status_code} - {resp.text}")
-    return None
-
-def main():
-    print("--- Hierarchical Swarm Stress Test ---")
     
-    # 1. Create Agents
-    print("1. Provisioning Agents...")
+    print(f"🚀 [Stress Test] Initiating mass recruitment of 10 agents via {api_url}...")
     
-    # Extract GOOGLE_API_KEY from .env
-    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    if not google_api_key:
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    async with aiohttp.ClientSession() as session:
         try:
-            with open(".env", "r") as f:
-                for line in f:
-                    if line.startswith("GOOGLE_API_KEY="):
-                        google_api_key = line.split("=", 1)[1].strip()
-                        break
-        except FileNotFoundError:
-            pass
-            
-    if not google_api_key:
-        print("Note: GOOGLE_API_KEY not found in .env. Wait! We are using Ollama so we don't need it.")
-        
-    ceo_id = create_agent(
-        "20", "Agent 20", "gemma4:e4b", "CEO",
-        "You are the CEO. You can spawn agents to delegate work. You also have the context of the overall mission.",
-        google_api_key, provider="ollama"
-    )
-    coo_id = create_agent(
-        "21", "Agent 21", "gemma4:e4b", "COO",
-        "You evaluate requests and dispatch execution to Specialists.",
-        google_api_key, provider="ollama"
-    )
-    spec_id = create_agent(
-        "22", "Agent 22", "gemma4:e4b", "Specialist",
-        "You gather data. Remember not to accept missions meant for C-levels.",
-        google_api_key, provider="ollama"
-    )
-    if not all([ceo_id, coo_id, spec_id]):
-        print_result("STRESS-TEST", False, "Failed to provision all agents. Aborting.")
-        return
-        
-    print_result("STRESS-TEST", True, f"Provisioned CEO: {ceo_id}, COO: {coo_id}, Specialist: {spec_id}")
-    
-    # 2. Assign Mission to CEO that requires 3-layer depth
-    mission_text = f"MISSION START: 3-Layer Stress Test.\nRecruit COO (ID: {coo_id}) to generate a technical report. Instruct the COO to recruit the Specialist (ID: {spec_id}) to do the actual data gathering. Ensure the Specialist tries to recruit the CEO (ID: {ceo_id}) just to test the Hierarchy Guard."
-    
-    payload = {"message": mission_text}
-    
-    print("2. Dispatching 3-Layer Mission to CEO...")
-    resp = requests.post(f"{BASE_URL}/agents/{ceo_id}/tasks", json=payload, headers=HEADERS)
-    if resp.status_code == 200:
-        print_result("STRESS-TEST", True, "3-Layer Mission dispatched to CEO")
-    else:
-        print_result("STRESS-TEST", False, f"Mission Dispatch Failed: {resp.status_code}")
-    
-    # Wait for execution and then check SQLite
-    print("Waiting 15 seconds for swarm execution...")
-    time.sleep(15)
-    
-    # Check SQLite for budget propagation and lineage
-    print("Checking database for results...")
-    import sqlite3
-    db_path = "data/tadpole.db"
-    
-    if os.path.exists(db_path):
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        
-        # Check if the mission exists and has tokens spent
-        cur.execute("SELECT id, agent_id, status, budget_usd, cost_usd FROM mission_history ORDER BY created_at DESC LIMIT 5")
-        rows = cur.fetchall()
-        print("\nRecent Missions in mission_history:")
-        for r in rows:
-            print(f"- Mission: {r[0]}, Agent: {r[1]}, Cost: ${r[4]}, Status: {r[2]}")
-            
-        cur.execute("SELECT id, text, metadata FROM mission_logs ORDER BY timestamp DESC LIMIT 20")
-        logs = cur.fetchall()
-        print("\nRecent Mission Logs (Checking Lineage):")
-        for log in logs:
-            if "swarm_lineage" in (str(log[2]) or ""):
-                print(f"- LOG: {log[1]} | META: {log[2]}")
-            
-        print_result("STRESS-TEST", True, "Test Run Complete (Logs verified)")
-    else:
-        print_result("STRESS-TEST", False, f"Database not found at {db_path}")
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ [Stress Test] Swarm recruited! Mission ID: {data.get('mission_id')}")
+                    print("Check your Engine Dashboard's 'Swarm Pulse' card to see the real-time node links.")
+                else:
+                    text = await response.text()
+                    print(f"❌ [Stress Test] Recruitment failed (Status {response.status}): {text}")
+        except Exception as e:
+            print(f"❌ [Stress Test] Connection error: {e}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(trigger_stress_test())
 
 # Metadata: [swarm_stress_test]

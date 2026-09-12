@@ -139,6 +139,8 @@ impl AgentRunner {
                      Ok(None) => {}
                 }
 
+                self.record_heartbeat(&ctx.agent_id).await;
+
                 let tools = vec![self.build_tools(ctx).await];
                 // Hybrid Halting: the set_confidence tool is automatically registered via the
                 // SelfHalting trait if the model supports it.

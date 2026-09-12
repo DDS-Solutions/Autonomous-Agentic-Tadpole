@@ -53,8 +53,8 @@ impl AgentRunner {
             .insert(entry_id.clone(), entry.clone());
 
         // 3. [Persistence] Record action attempt in SQLite for audit history
-        let payload_json = serde_json::to_string(&tool_call).unwrap_or_default();
-        let params_json = serde_json::to_string(&tool_call.params).unwrap_or_default();
+        let payload_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call).unwrap_or_default());
+        let params_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call.params).unwrap_or_default());
 
         // Verify foreign key integrity for mission_id to prevent failure in ad-hoc/test environments
         let valid_mission_id = if let Some(ref mid) = mission_id {
@@ -99,10 +99,20 @@ impl AgentRunner {
 
         let approved = match tokio::time::timeout(timeout_duration, rx).await {
             Ok(Ok(decision)) => decision,
-            Ok(Err(_)) => false,
+            Ok(Err(_)) => {
+                let _ = sqlx::query("UPDATE oversight_log SET status = 'rejected' WHERE id = ?")
+                    .bind(&entry_id)
+                    .execute(&self.state.resources.pool)
+                    .await;
+                false
+            }
             Err(_) => {
                 tracing::warn!("⏱️ Oversight request '{}' timed out", entry_id);
                 self.state.comms.oversight_resolvers.remove(&entry_id);
+                let _ = sqlx::query("UPDATE oversight_log SET status = 'timeout' WHERE id = ?")
+                    .bind(&entry_id)
+                    .execute(&self.state.resources.pool)
+                    .await;
                 false
             }
         };

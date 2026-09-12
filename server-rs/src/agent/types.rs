@@ -327,7 +327,7 @@ pub struct ModelConfig {
     pub provider: ModelProvider,
     #[serde(default, alias = "system_prompt")]
     pub system_prompt: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub api_key: Option<String>,
     #[serde(default, alias = "base_url")]
     pub base_url: Option<String>,
@@ -628,6 +628,8 @@ pub struct RunnerPolicy {
     pub max_concurrent: u32,
     pub resume_blocked_first: bool,
     pub preflight_checks: Vec<String>,
+    #[serde(default)]
+    pub sme_auto_workflow: bool,
 }
 
 impl Default for RunnerPolicy {
@@ -636,6 +638,7 @@ impl Default for RunnerPolicy {
             max_concurrent: 1,
             resume_blocked_first: true,
             preflight_checks: vec!["context_version".to_string(), "skill_updates".to_string()],
+            sme_auto_workflow: false,
         }
     }
 }

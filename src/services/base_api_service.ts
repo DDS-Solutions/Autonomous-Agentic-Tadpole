@@ -182,8 +182,9 @@ export async function api_request<T = unknown>(
                     signal: options.signal || signal
                 });
 
-                // Hardened Retry Logic: Handle 429 and 503 with exponential backoff
-                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES) {
+                // Hardened Retry Logic: Handle 429 and 503 with exponential backoff for safe methods
+                const _is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
+                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES && _is_safe_method) {
                     const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
                     console.warn(`[BaseAPI] ${res.status} detected at ${path}. Retrying in ${backoff}ms (Attempt ${attempt + 1})...`);
                     await new Promise(resolve => setTimeout(resolve, backoff));

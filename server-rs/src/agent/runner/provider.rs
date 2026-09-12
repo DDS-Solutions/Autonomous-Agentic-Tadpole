@@ -81,6 +81,11 @@ fn resolve_api_key(config: &crate::agent::types::ModelConfig, env_var: &str) -> 
         .or_else(|| std::env::var(env_var).ok())
 }
 
+/// Token-estimate heuristic based on byte count (~3.5 bytes per token for Latin text).
+pub(crate) fn estimate_token_count(system_prompt: &str, user_message: &str) -> usize {
+    ((system_prompt.len() + user_message.len()) as f64 / 3.5) as usize
+}
+
 impl AgentRunner {
     // ─────────────────────────────────────────────────────────
     //  PROVIDER DISPATCH
@@ -374,7 +379,14 @@ impl AgentRunner {
 
         // Pre-emptive Failover for RED status
         if health == ProviderStatus::Red {
-            tracing::error!("🚨 [Provider] {} is in RED state. Attempting failover...", provider_id);
+            tracing::warn!("🚨 [Provider] {} is in RED state. Attempting pre-emptive failover...", provider_id);
+            if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {
+                tracing::warn!(
+                    "🔄 [Pre-emptive Failover] {} in RED state for agent {}. Switching to {} ({})",
+                    provider_id, ctx.agent_id, failover_ctx.provider_name, failover_ctx.model_config.model_id
+                );
+                return self.dispatch_to_provider(&failover_ctx, system_prompt, user_message, tools).await;
+            }
         }
 
         let client = (*self.state.resources.http_client).clone();
@@ -393,9 +405,9 @@ impl AgentRunner {
             .value()
             .clone();
 
+        let estimated_tokens = estimate_token_count(system_prompt, user_message);
         if limiter.is_active() {
-            let estimated_tokens = ((system_prompt.len() + user_message.len()) as f64 / 3.5) as u32;
-            limiter.acquire(estimated_tokens).await;
+            limiter.acquire(estimated_tokens as u32).await;
         }
 
         // SSCP: Cloud providers bypass RAM guard intentionally — inference runs remotely.
@@ -407,13 +419,14 @@ impl AgentRunner {
             let arbiter = self.state.resources.continuity_arbiter.clone();
             
             // 1. Update hot registry with current agent's estimated footprint
-            let estimated_tokens = ((system_prompt.len() + user_message.len()) as f64 / 3.5) as usize;
             arbiter.update_agent_load(&ctx.agent_id, estimated_tokens);
 
             // 2. Check for VRAM/RAM pressure
             if arbiter.check_vram_pressure() {
                 if let Some(target_id) = arbiter.select_eviction_target() {
-                    if target_id != ctx.agent_id {
+                    let is_active = self.state.comms.active_runners.contains_key(&target_id)
+                        || self.state.registry.agents.get(&target_id).map(|a| a.health.status == "busy" || a.health.status == "working").unwrap_or(false);
+                    if target_id != ctx.agent_id && !is_active {
                         // Retrieve the eviction target's working memory from the registry
                         let working_memory = self.state.registry.agents.get(&target_id)
                             .map(|a| a.state.working_memory.clone());
@@ -468,7 +481,7 @@ impl AgentRunner {
 
                 if limiter.is_active() {
                     if let Some(ref u) = usage {
-                        limiter.record_usage(u.total_tokens);
+                        limiter.record_usage_reconcile(u.total_tokens, estimated_tokens as u32);
                         self.state.governance.tpm_accumulator.fetch_add(
                             u.total_tokens as usize,
                             Ordering::Relaxed,
@@ -478,6 +491,10 @@ impl AgentRunner {
                 Ok((text, tool_calls, usage))
             }
             Err(e) => {
+                if limiter.is_active() {
+                    limiter.release_reservation(estimated_tokens as u32);
+                }
+
                 // Failure: Increment count and update status
                 let failures = self.state.registry.provider_failures.entry(provider_id.clone())
                     .or_insert_with(|| std::sync::atomic::AtomicU32::new(0));
@@ -506,9 +523,7 @@ impl AgentRunner {
                     || err_str.contains("connection reset")
                     || err_str.contains("status: 429")
                     || err_str.contains("429 Too Many")
-                    || err_str.contains("status: 503")
-                    || err_str.contains("status: 401")
-                    || err_str.contains("Unauthorized");
+                    || err_str.contains("status: 503");
 
                 if is_conn_fail {
                     if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {

@@ -23,7 +23,7 @@ use crate::agent::types::{
 };
 use crate::error::AppError;
 
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 const PROVIDERS_FILE: &str = "data/infra_providers.json";
 const MODELS_FILE: &str = "data/infra_models.json";
@@ -125,8 +125,11 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
     let mut agents = Vec::new();
 
     for row in rows {
-        use sqlx::Row;
-        let metadata_str: String = row.get("metadata");
+        let metadata_str = row
+            .try_get::<Option<String>, _>("metadata")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "{}".to_string());
         let metadata: std::collections::HashMap<String, serde_json::Value> =
             serde_json::from_str(&metadata_str).unwrap_or_default();
         let input_tokens = row.get::<Option<i64>, _>("input_tokens").unwrap_or(0) as u32;
@@ -135,8 +138,18 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
         let provider_str: String = row
             .try_get("provider")
             .unwrap_or_else(|_| DEFAULT_PROVIDER.to_string());
-        let provider = crate::agent::types::ModelProvider::from_str(&provider_str)
-            .unwrap_or(crate::agent::types::ModelProvider::Google);
+        let provider = match crate::agent::types::ModelProvider::from_str(&provider_str) {
+            Some(p) => p,
+            None => {
+                let agent_id: String = row.try_get("id").unwrap_or_default();
+                tracing::warn!(
+                    "⚠️ [Persistence] Unknown model provider '{}' for agent '{}'. Falling back to Ollama.",
+                    provider_str,
+                    agent_id
+                );
+                crate::agent::types::ModelProvider::Ollama
+            }
+        };
 
         let agent = EngineAgent {
             identity: AgentIdentity {
@@ -156,9 +169,19 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                         .get::<Option<String>, _>("model_id")
                         .filter(|s| !s.trim().is_empty())
                         .unwrap_or_else(|| "".to_string()),
-                    api_key: row.try_get("api_key").ok(),
-                    base_url: row.try_get("base_url").ok(),
-                    system_prompt: row.try_get("system_prompt").ok(),
+                    api_key: row
+                        .try_get::<Option<String>, _>("api_key")
+                        .ok()
+                        .flatten()
+                        .filter(|s| !s.trim().is_empty()),
+                    base_url: row
+                        .try_get::<Option<String>, _>("base_url")
+                        .ok()
+                        .flatten(),
+                    system_prompt: row
+                        .try_get::<Option<String>, _>("system_prompt")
+                        .ok()
+                        .flatten(),
                     temperature: row.get::<Option<f64>, _>("temperature").map(|f| f as f32),
                     ..Default::default()
                 },
@@ -189,9 +212,27 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                 heartbeat_at: row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("heartbeat_at"),
             },
             capabilities: AgentCapabilities {
-                skills: serde_json::from_str(&row.get::<String, _>("skills")).unwrap_or_default(),
-                workflows: serde_json::from_str(&row.get::<String, _>("workflows")).unwrap_or_default(),
-                mcp_tools: serde_json::from_str(&row.get::<String, _>("mcp_tools")).unwrap_or_default(),
+                skills: row
+                    .try_get::<Option<String>, _>("skills")
+                    .ok()
+                    .flatten()
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default(),
+                workflows: row
+                    .try_get::<Option<String>, _>("workflows")
+                    .ok()
+                    .flatten()
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default(),
+                mcp_tools: row
+                    .try_get::<Option<String>, _>("mcp_tools")
+                    .ok()
+                    .flatten()
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default(),
                 skill_manifest: None,
             },
             state: AgentState {
@@ -212,7 +253,8 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                 .try_get::<Option<String>, _>("connector_configs")
                 .ok()
                 .flatten()
-                .and_then(|s| serde_json::from_str(&s).ok())
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_default(),
             created_at: row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("created_at"),
             requires_oversight: row
@@ -224,7 +266,8 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
                 .try_get::<Option<String>, _>("runner_policy")
                 .ok()
                 .flatten()
-                .and_then(|s| serde_json::from_str(&s).ok())
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_default(),
         };
         agents.push(agent);
@@ -326,7 +369,7 @@ where
     .bind(agent.health.heartbeat_at)
     .bind(agent.state.active_mission.as_ref().map(sqlx::types::Json))
     .bind(agent.models.model.provider.to_string())
-    .bind(&agent.models.model.api_key)
+    .bind(None::<String>)
     .bind(&agent.models.model.base_url)
     .bind(&agent.models.model.system_prompt)
     .bind(agent.models.model.temperature.map(|f| f as f64))
@@ -374,10 +417,11 @@ async fn auto_subscribe_agent_skills(
 }
 
 pub async fn save_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<(), AppError> {
-    let mut conn = pool.acquire().await?;
-    execute_save_agent(&mut *conn, agent).await?;
-    sync_manifests_for_agent(&mut conn, agent).await?;
-    auto_subscribe_agent_skills(&mut conn, agent).await?;
+    let mut tx = pool.begin().await?;
+    execute_save_agent(&mut *tx, agent).await?;
+    sync_manifests_for_agent(&mut tx, agent).await?;
+    auto_subscribe_agent_skills(&mut tx, agent).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -397,8 +441,6 @@ pub async fn save_agent_db_in_tx(
 /// This ensures that the background data ingestion workers know which URIs to watch
 /// for a specific specialist agent. It handles both "Cleanup" (deleting removed URIs)
 /// and "Discovery" (adding new URIs).
-/// Synchronizes an agent's connector configurations with the `sync_manifest` table.
-/// Synchronizes an agent's connector configurations with the `sync_manifest` table.
 async fn sync_manifests_for_agent(
     conn: &mut sqlx::SqliteConnection,
     agent: &EngineAgent,
@@ -534,7 +576,9 @@ pub async fn save_models(base_dir: &std::path::Path, models: Vec<ModelEntry>) ->
 /// Returns `Ok(true)` if the agent was successfully claimed via the atomic locking 
 /// mechanism, or `Ok(false)` if the agent is already engaged in another reasoning turn.
 pub async fn claim_agent(pool: &SqlitePool, agent_id: &str) -> Result<bool, AppError> {
-    let res = sqlx::query("UPDATE agents SET status = 'busy' WHERE id = ? AND status = 'idle'")
+    let now = chrono::Utc::now();
+    let res = sqlx::query("UPDATE agents SET status = 'busy', heartbeat_at = ? WHERE id = ? AND status = 'idle'")
+        .bind(now)
         .bind(agent_id)
         .execute(pool)
         .await?;
@@ -711,6 +755,17 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
         .execute(&mut *tx)
         .await?;
 
+    sqlx::query("DELETE FROM skill_subscriptions WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM agent_tasks WHERE agent_id = ? OR claimed_by = ?")
+        .bind(agent_id)
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
     tx.commit().await?;
     Ok(())
 }
@@ -861,7 +916,7 @@ mod tests {
         assert_eq!(loaded.identity.name, agent.identity.name);
         assert_eq!(loaded.models.model.provider, agent.models.model.provider);
         assert_eq!(loaded.models.model.model_id, agent.models.model.model_id);
-        assert_eq!(loaded.models.model.api_key, agent.models.model.api_key);
+        assert_eq!(loaded.models.model.api_key, None); // SEC-02: Plaintext API keys are never persisted
         assert_eq!(loaded.models.model.base_url, agent.models.model.base_url);
         assert_eq!(loaded.models.model.system_prompt, agent.models.model.system_prompt);
         assert_eq!(loaded.models.model.temperature, agent.models.model.temperature);

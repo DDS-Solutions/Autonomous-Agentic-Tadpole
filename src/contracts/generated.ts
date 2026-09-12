@@ -24,7 +24,7 @@ export type AgentCapabilities = { skills: string[]; workflows: string[]; mcpTool
 
 export type AgentState = { activeMission: JsonValue | null; currentTask: string | null; workingMemory: JsonValue; currentReasoningTurn: number }
 
-export type ModelConfig = { modelId?: string; provider?: ModelProvider; systemPrompt?: string | null; apiKey?: string | null; baseUrl?: string | null; temperature?: number | null; maxTokens?: number | null; topP?: number | null; externalId?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcpTools?: string[] | null; steeringVectors?: string[] | null; reasoningDepth?: number | null; actThreshold?: number | null; maxTurns?: number | null; connectorConfigs?: ConnectorConfig[] | null; extraParameters?: Partial<{ [key in string]: JsonValue }> | null }
+export type ModelConfig = { modelId?: string; provider?: ModelProvider; systemPrompt?: string | null; baseUrl?: string | null; temperature?: number | null; maxTokens?: number | null; topP?: number | null; externalId?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcpTools?: string[] | null; steeringVectors?: string[] | null; reasoningDepth?: number | null; actThreshold?: number | null; maxTurns?: number | null; connectorConfigs?: ConnectorConfig[] | null; extraParameters?: Partial<{ [key in string]: JsonValue }> | null }
 
 export type ConnectorConfig = { type: string; uri: string }
 
@@ -36,7 +36,7 @@ export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTok
  */
 export type ModelProvider = "openai" | "anthropic" | "google" | "gemini" | "ollama" | "groq" | "mistral" | "perplexity" | "fireworks" | "together" | "deepseek" | "xai" | "inception" | "openrouter" | "cerebras" | "sambanova" | "meta" | "alibaba" | "local"
 
-export type RunnerPolicy = { maxConcurrent: number; resumeBlockedFirst: boolean; preflightChecks: string[] }
+export type RunnerPolicy = { maxConcurrent: number; resumeBlockedFirst: boolean; preflightChecks: string[]; smeAutoWorkflow?: boolean }
 
 export type RoleBlueprint = { id: string; name: string; department: string; description: string; skills?: string; workflows?: string; mcpTools?: string; requiresOversight?: boolean; modelId?: string | null; createdAt?: string | null }
 

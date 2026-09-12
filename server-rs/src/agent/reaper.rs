@@ -45,7 +45,13 @@ impl SwarmReaper {
 
         // 1. Identify candidate missions for reaping
         let missions: Vec<(String,)> = sqlx::query_as(
-            "SELECT id FROM mission_history WHERE updated_at < ? AND is_pinned = 0"
+            "SELECT id FROM mission_history 
+             WHERE updated_at < ? AND is_pinned = 0
+               AND id NOT IN (
+                   SELECT json_extract(active_mission, '$.id') 
+                   FROM agents 
+                   WHERE status IN ('busy', 'working') AND active_mission IS NOT NULL
+               )"
         )
         .bind(threshold)
         .fetch_all(pool)
@@ -61,6 +67,27 @@ impl SwarmReaper {
         tracing::info!("🧹 [Reaper] Found {} stale missions to harvest.", total_count);
 
         for (mission_id,) in missions {
+            // Guard: Never harvest a mission whose agent is still actively running
+            let is_agent_active = state.registry.agents.iter().any(|entry| {
+                let is_current = entry
+                    .state
+                    .active_mission
+                    .as_ref()
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    == Some(&mission_id);
+                is_current && (
+                    entry.health.status == "busy" 
+                    || entry.health.status == "working" 
+                    || state.comms.active_runners.contains_key(&entry.identity.id)
+                )
+            });
+
+            if is_agent_active {
+                tracing::warn!("🛡️ [Reaper] Skipping harvest for mission {} — agent is currently active.", mission_id);
+                continue;
+            }
+
             tracing::debug!("🧹 [Reaper] Harvesting mission: {}", mission_id);
 
             // 2. Clear Database Records (Manual cascade since schema lacks FK CASCADE)

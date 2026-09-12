@@ -323,15 +323,24 @@ class Tadpole_OS_Socket_Client {
                 try {
                     const data = JSON.parse(event.data);
                     this.handle_socket_message(data);
-                } catch {
-                    // Ignore malformed packets silently
+                } catch (e) {
+                    console.debug('[Tadpole_OS] Dropped malformed packet:', e);
                 }
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event?: CloseEvent) => {
                 if (this.socket === ws) {
                     this.socket = null;
                     this.set_state('disconnected');
+                    if (event?.code === 1008) {
+                        console.warn('[Tadpole_OS] WebSocket closed with code 1008 (Policy Violation / Auth Failed). Halting reconnect.');
+                        event_bus.emit_log({
+                            source: 'System',
+                            text: 'WebSocket rejected authorization (code 1008). Verify NEURAL_TOKEN in Settings.',
+                            severity: 'error'
+                        });
+                        return;
+                    }
                     if (!this.is_explicitly_closed) {
                         this.schedule_reconnect();
                     }

@@ -45,11 +45,12 @@ fn sanitize_html(s: &str) -> String {
 }
 
 /// Helper function to validate if a help_link is public and safe.
-#[allow(dead_code)]
 fn is_public_and_safe_link(url: &str) -> bool {
     url.starts_with("https://tadpole.os/")
         || url.starts_with("https://docs.tadpole.os/")
         || url.starts_with("https://console.cloud.google.com/")
+        || url.starts_with("https://docs.docker.com/")
+        || url.starts_with("https://wasmtime.dev/")
 }
 
 /// RFC 9457 (Problem Details for HTTP APIs) compliant error structure.
@@ -359,7 +360,7 @@ impl AppError {
         ErrorMetadata {
             status_code,
             type_slug,
-            help_link,
+            help_link: help_link.filter(|url| is_public_and_safe_link(url)),
             error_code: Some(resolved_code),
             severity,
         }

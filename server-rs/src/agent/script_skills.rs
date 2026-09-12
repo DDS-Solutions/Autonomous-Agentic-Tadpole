@@ -266,10 +266,22 @@ impl ScriptSkillsRegistry {
                 let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
                 if ext == "json" {
-                    if let Ok(content) = read_file_bounded(&path, 5_000_000).await {
-                        if let Ok(mut skill) = serde_json::from_str::<SkillDefinition>(&content) {
-                            skill.category = category.to_string();
-                            results.push((skill.name.clone(), skill));
+                    match read_file_bounded(&path, 5_000_000).await {
+                        Ok(content) => match serde_json::from_str::<SkillDefinition>(&content) {
+                            Ok(mut skill) => {
+                                if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
+                                    tracing::warn!("🚫 [ScriptSkills] Rejecting skill '{}' ({:?}) — invalid execution command: {}", skill.name, path, e);
+                                    continue;
+                                }
+                                skill.category = category.to_string();
+                                results.push((skill.name.clone(), skill));
+                            }
+                            Err(e) => {
+                                tracing::warn!("⚠️ [ScriptSkills] Failed to parse skill JSON at {:?}: {}", path, e);
+                            }
+                        },
+                        Err(e) => {
+                            tracing::warn!("⚠️ [ScriptSkills] Failed to read skill file at {:?}: {}", path, e);
                         }
                     }
                 } else if ext == "py" || ext == "sh" || ext == "ps1" {
@@ -340,6 +352,10 @@ impl ScriptSkillsRegistry {
                     if skill_md.exists() {
                         if let Ok(content) = read_file_bounded(&skill_md, 1_000_000).await {
                             if let Some(skill) = parse_skill_md(&content) {
+                                if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
+                                    tracing::warn!("🚫 [ScriptSkills] Rejecting built-in skill '{}' ({:?}) — invalid execution command: {}", skill.name, skill_md, e);
+                                    continue;
+                                }
                                 results.push((skill.name.clone(), skill));
                             }
                         }
@@ -552,7 +568,8 @@ impl ScriptSkillsRegistry {
     }
 
     async fn atomic_write(&self, path: &Path, content: &[u8]) -> Result<(), AppError> {
-        let tmp_path = path.with_extension("tmp");
+        let unique_id = uuid::Uuid::new_v4();
+        let tmp_path = path.with_extension(format!("tmp.{}", unique_id));
         fs::write(&tmp_path, content).await.map_err(AppError::Io)?;
         fs::rename(&tmp_path, path).await.map_err(AppError::Io)?;
         Ok(())

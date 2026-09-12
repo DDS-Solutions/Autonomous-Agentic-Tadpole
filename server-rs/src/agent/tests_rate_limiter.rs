@@ -93,6 +93,31 @@ mod tests {
             "Expected timeout because TPM limit was exceeded"
         );
     }
+
+    #[tokio::test]
+    async fn rate_limiter_atomic_reservation_and_reconciliation() {
+        let limiter = RateLimiter::new(None, Some(1000));
+
+        // Acquire with estimate 400
+        limiter.acquire(400).await;
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 400);
+
+        // Reconcile with actual 350 (used less than estimate)
+        limiter.record_usage_reconcile(350, 400);
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 350);
+
+        // Reconcile with actual 500 (used more than estimate)
+        limiter.acquire(100).await;
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 450);
+        limiter.record_usage_reconcile(150, 100);
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 500);
+
+        // Release reservation on failure
+        limiter.acquire(200).await;
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 700);
+        limiter.release_reservation(200);
+        assert_eq!(limiter.tokens_used.load(std::sync::atomic::Ordering::SeqCst), 500);
+    }
 }
 
 

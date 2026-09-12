@@ -420,12 +420,12 @@ impl AgentRunner {
             let msg_lower = payload.message.to_lowercase();
             let workflow_requested = msg_lower
                 .contains(&workflow_name.to_lowercase().replace("_", " "))
-                || msg_lower.contains("workflow")
-                || msg_lower.contains("sop");
-            let is_sme = agent_data.identity.department.to_lowercase().contains("sme")
-                || agent_data.identity.role.to_lowercase().contains("specialist");
+                || msg_lower.starts_with("/workflow")
+                || msg_lower.starts_with("/sop");
 
-            if workflow_requested || is_sme {
+            let should_run_workflow = workflow_requested || agent_data.runner_policy.sme_auto_workflow;
+
+            if should_run_workflow {
                 if let Ok(mut state) = crate::agent::workflows::load_workflow(
                     self.state.base_dir.as_path(),
                     workflow_name,
@@ -526,7 +526,7 @@ impl AgentRunner {
             .bind(agent_id)
             .fetch_one(&self.state.resources.pool)
             .await
-            .unwrap_or(0);
+            .map_err(AppError::Sqlx)?;
 
             if active_claims >= policy.max_concurrent as i64 {
                 let _ = sqlx::query(
@@ -554,7 +554,7 @@ impl AgentRunner {
             .bind(agent_id)
             .fetch_optional(&self.state.resources.pool)
             .await
-            .unwrap_or(None)
+            .map_err(AppError::Sqlx)?
             .unwrap_or(1);
 
             if ledger_version > agent_data.version as i64 {
@@ -583,7 +583,7 @@ impl AgentRunner {
             .bind(agent_id)
             .fetch_all(&self.state.resources.pool)
             .await
-            .unwrap_or_default();
+            .map_err(AppError::Sqlx)?;
 
             for skill_id in &agent_data.capabilities.skills {
                 let sub = subs.iter().find(|row| {
