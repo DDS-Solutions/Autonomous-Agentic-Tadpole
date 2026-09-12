@@ -142,12 +142,16 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
     // Priority: 1. `modelConfig.modelId` (authoritative config from AgentConfigPanel)
     //           2. `model` wire field (live, derived from model_config.model_id in backend)
     //           3. `modelId` wire field (legacy identity field, can be stale)
-    const model_config_id = (get_val('modelConfig', 'model_config', undefined) as { modelId?: string } | undefined)?.modelId;
+    const cfg1 = get_val('modelConfig', 'model_config', undefined) as Record<string, unknown> | undefined;
+    const model_config_id = (cfg1?.modelId || cfg1?.model_id || cfg1?.model) as string | undefined;
     const model_name_wire = get_val<string | undefined>('model', 'model', undefined);
     const model_id_wire = get_val<string | undefined>('modelId', 'modelId', undefined);
     
     // Priority: modelConfig.modelId is the authoritative source of truth from AgentConfigPanel
-    const raw_model = model_config_id || model_name_wire || model_id_wire || default_model;
+    const raw_model = (model_config_id && model_config_id !== 'unknown' ? model_config_id : undefined)
+        || (model_name_wire && model_name_wire !== 'unknown' ? model_name_wire : undefined)
+        || (model_id_wire && model_id_wire !== 'unknown' ? model_id_wire : undefined)
+        || default_model;
     const model = resolve_friendly_model_name(raw_model) || raw_model;
 
     const input_tokens = (dto.tokenUsage?.inputTokens ?? d.input_tokens ?? existing_agent?.input_tokens ?? 0);
@@ -163,7 +167,14 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         status: status,
         tokens_used,
         model: model,
-        model_config: get_val('modelConfig', 'model_config', undefined),
+        model_config: (() => {
+            const cfg = get_val('modelConfig', 'model_config', undefined) as Record<string, unknown> | undefined;
+            if (!cfg) return undefined;
+            if (!cfg.modelId && cfg.model_id) {
+                return { ...cfg, modelId: cfg.model_id };
+            }
+            return cfg;
+        })(),
         workspace_path: workspace_path || get_val('workspace', 'workspace_path', undefined),
         current_task: current_task || undefined,
         skills: parse_json_array('skills', 'skills'),
@@ -174,19 +185,37 @@ export const normalize_agent_dto = (dto: AgentDto, workspace_path?: string, exis
         cost_usd: get_val('costUsd', 'cost_usd', 0),
         requires_oversight: get_val('requiresOversight', 'requires_oversight', false),
         model_2: (() => {
-            const m2_config_id = (get_val('modelConfig2', 'model_config2', undefined) as { modelId?: string } | undefined)?.modelId;
+            const cfg2 = get_val('modelConfig2', 'model_config2', undefined) as Record<string, unknown> | undefined;
+            const m2_config_id = (cfg2?.modelId || cfg2?.model_id || cfg2?.model) as string | undefined;
             const m2_name = get_val<string | undefined>('model2', 'model_2', undefined);
-            const raw_m2 = m2_config_id || m2_name;
+            const raw_m2 = (m2_config_id && m2_config_id !== 'unknown' ? m2_config_id : undefined)
+                || (m2_name && m2_name !== 'unknown' ? m2_name : undefined);
             return raw_m2 ? (resolve_friendly_model_name(raw_m2) || raw_m2) : undefined;
         })(),
         model_3: (() => {
-            const m3_config_id = (get_val('modelConfig3', 'model_config3', undefined) as { modelId?: string } | undefined)?.modelId;
+            const cfg3 = get_val('modelConfig3', 'model_config3', undefined) as Record<string, unknown> | undefined;
+            const m3_config_id = (cfg3?.modelId || cfg3?.model_id || cfg3?.model) as string | undefined;
             const m3_name = get_val<string | undefined>('model3', 'model_3', undefined);
-            const raw_m3 = m3_config_id || m3_name;
+            const raw_m3 = (m3_config_id && m3_config_id !== 'unknown' ? m3_config_id : undefined)
+                || (m3_name && m3_name !== 'unknown' ? m3_name : undefined);
             return raw_m3 ? (resolve_friendly_model_name(raw_m3) || raw_m3) : undefined;
         })(),
-        model_config2: get_val('modelConfig2', 'model_config2', undefined),
-        model_config3: get_val('modelConfig3', 'model_config3', undefined),
+        model_config2: (() => {
+            const cfg2 = get_val('modelConfig2', 'model_config2', undefined) as Record<string, unknown> | undefined;
+            if (!cfg2) return undefined;
+            const m2_id = cfg2.modelId || cfg2.model_id || cfg2.model;
+            if (!m2_id || m2_id === 'unknown') return undefined;
+            if (!cfg2.modelId && cfg2.model_id) return { ...cfg2, modelId: cfg2.model_id };
+            return cfg2;
+        })(),
+        model_config3: (() => {
+            const cfg3 = get_val('modelConfig3', 'model_config3', undefined) as Record<string, unknown> | undefined;
+            if (!cfg3) return undefined;
+            const m3_id = cfg3.modelId || cfg3.model_id || cfg3.model;
+            if (!m3_id || m3_id === 'unknown') return undefined;
+            if (!cfg3.modelId && cfg3.model_id) return { ...cfg3, modelId: cfg3.model_id };
+            return cfg3;
+        })(),
         active_model_slot: (get_val('activeModelSlot', 'active_model_slot', 1) as 1 | 2 | 3),
         failure_count: get_val('failureCount', 'failure_count', 0),
         last_failure_at: get_val('lastFailureAt', 'last_failure_at', undefined),

@@ -59,6 +59,13 @@ export function useAgentConfig(
         last_seen_agent_ref.current = agent;
 
         // Skip rehydration if the parent/external store didn't update the agent structurally
+        const last_m1 = last_seen.model_config?.modelId || (last_seen.model_config as unknown as { model_id?: string })?.model_id;
+        const curr_m1 = agent.model_config?.modelId || (agent.model_config as unknown as { model_id?: string })?.model_id;
+        const last_m2 = last_seen.model_config2?.modelId || (last_seen.model_config2 as unknown as { model_id?: string })?.model_id;
+        const curr_m2 = agent.model_config2?.modelId || (agent.model_config2 as unknown as { model_id?: string })?.model_id;
+        const last_m3 = last_seen.model_config3?.modelId || (last_seen.model_config3 as unknown as { model_id?: string })?.model_id;
+        const curr_m3 = agent.model_config3?.modelId || (agent.model_config3 as unknown as { model_id?: string })?.model_id;
+
         if (last_seen &&
             last_seen.id === agent.id &&
             last_seen.name === agent.name &&
@@ -66,9 +73,9 @@ export function useAgentConfig(
             last_seen.model === agent.model &&
             last_seen.model_2 === agent.model_2 &&
             last_seen.model_3 === agent.model_3 &&
-            last_seen.model_config?.modelId === agent.model_config?.modelId &&
-            last_seen.model_config2?.modelId === agent.model_config2?.modelId &&
-            last_seen.model_config3?.modelId === agent.model_config3?.modelId &&
+            last_m1 === curr_m1 &&
+            last_m2 === curr_m2 &&
+            last_m3 === curr_m3 &&
             last_seen.active_model_slot === agent.active_model_slot
         ) {
             return;

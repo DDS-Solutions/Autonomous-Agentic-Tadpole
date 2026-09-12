@@ -157,6 +157,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/intelligence", build_intelligence_routes())
         .nest("/knowledge", build_knowledge_routes())
         .nest("/iacp", build_iacp_routes())
+        .nest("/a2a", build_a2a_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/memory/search/bm25", get(routes::memory::bm25_search_handler))
         .route("/memory/search/hybrid", get(routes::memory::hybrid_rag_search_handler))
@@ -550,6 +551,13 @@ fn build_iacp_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/negotiate", post(routes::iacp::negotiate_hire))
         .route("/hire", post(routes::iacp::execute_hire))
+}
+
+fn build_a2a_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/prepare", post(routes::a2a::prepare_transaction))
+        .route("/commit", post(routes::a2a::commit_transaction))
+        .route("/rollback", post(routes::a2a::rollback_transaction))
 }
 
 async fn not_found_handler() -> impl axum::response::IntoResponse {

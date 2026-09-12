@@ -323,7 +323,7 @@ The endpoint `GET /v1/engine/health` returns detailed JSON telemetry for monitor
     *   `HighLatency`: Endpoint response latency (p99) exceeds 500ms.
     *   `BudgetExhausted`: Swarm budget usage exceeds 80%.
     *   `SQLiteLocked`: Database busy/lock wait time exceeds 10s.
-*   **Grafana Dashboard**: Configured in `monitoring/dashboard.json` for live status visualization.
+*   **Grafana Dashboard**: Configured in `monitoring/grafana/dashboards/tadpole_dashboard.json` for live status visualization.
 
 Useful log tags in code comments and traces:
 

@@ -32,6 +32,7 @@ interface CognitionSectionProps {
     themeColor: string;
     activeModelSlot: 1 | 2 | 3;
     onSetTab: (tab: Agent_Model_Slot_Key) => void;
+    onSetActiveSlot?: (slot: 1 | 2 | 3) => void;
     onUpdateSlotField: <K extends keyof Agent_Model_Slot_State>(slot: Agent_Model_Slot_Key, field: K, value: Agent_Model_Slot_State[K]) => void;
     onToggleSkill: (slot: Agent_Model_Slot_Key, kind: 'skills' | 'workflows', value: string) => void;
     onProviderChange: (slot: Agent_Model_Slot_Key, val: string) => void;
@@ -58,6 +59,7 @@ export function CognitionSection({
     themeColor,
     activeModelSlot,
     onSetTab,
+    onSetActiveSlot,
     onUpdateSlotField,
     onToggleSkill,
     onProviderChange,
@@ -65,15 +67,25 @@ export function CognitionSection({
     onResume
 }: CognitionSectionProps) {
     const isPaused = agentStatus === 'suspended';
+    const currentSlotIdx = activeTab === 'primary' ? 1 : activeTab === 'secondary' ? 2 : 3;
+    const isCurrentSlotActive = activeModelSlot === currentSlotIdx;
 
     const renderTabButton = (id: Agent_Model_Slot_Key, label: string, icon: React.ReactNode) => {
         const slotIdx = id === 'primary' ? 1 : id === 'secondary' ? 2 : 3;
         const isActiveForAgent = activeModelSlot === slotIdx;
 
         return (
-            <button
+            <div
                 onClick={() => onSetTab(id)}
-                className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all relative overflow-hidden group ${activeTab === id ? 'bg-zinc-800 border-zinc-700 shadow-lg' : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800/30'}`}
+                role="tab"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSetTab(id);
+                    }
+                }}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all relative overflow-hidden group cursor-pointer ${activeTab === id ? 'bg-zinc-800 border-zinc-700 shadow-lg' : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800/30'}`}
             >
                 {activeTab === id && (
                     <div 
@@ -83,7 +95,17 @@ export function CognitionSection({
                 )}
                 
                 {/* Active Slot LED Indicator */}
-                <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full transition-all duration-300 ${isActiveForAgent ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] scale-110' : 'bg-zinc-800 opacity-0 group-hover:opacity-100'}`} />
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onSetActiveSlot?.(slotIdx);
+                    }}
+                    title={isActiveForAgent ? i18n.t('agent_config.status_active') : `Activate Slot ${slotIdx}`}
+                    className="absolute top-2 right-2 w-4 h-4 flex items-center justify-center cursor-pointer z-10 group/led"
+                >
+                    <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isActiveForAgent ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] scale-110' : 'bg-zinc-800 group-hover/led:bg-zinc-600'}`} />
+                </button>
 
                 <div 
                     className={`p-1.5 rounded-lg transition-colors ${activeTab === id ? '' : 'bg-zinc-900 group-hover:bg-zinc-800'}`}
@@ -92,7 +114,7 @@ export function CognitionSection({
                     {icon}
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] leading-none" style={activeTab === id ? { color: themeColor } : {}}>{label}</span>
-            </button>
+            </div>
         );
     };
 
@@ -111,6 +133,19 @@ export function CognitionSection({
                             <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
                                 {i18n.t(`agent_config.slot_${activeTab}`)}
                             </h3>
+                            {isCurrentSlotActive ? (
+                                <span className="text-[9px] uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                                    Active Slot
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => onSetActiveSlot?.(currentSlotIdx)}
+                                    className="text-[9px] uppercase px-2 py-0.5 rounded border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                                >
+                                    Activate Slot
+                                </button>
+                            )}
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px] ${isPaused ? 'bg-amber-500 shadow-amber-500/50' : 'bg-emerald-500 shadow-emerald-500/50'}`} />

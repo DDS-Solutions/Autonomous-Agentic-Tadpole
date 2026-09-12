@@ -8,11 +8,8 @@
 > ### AI Assist Note
 > Core technical resource for the Autonomous Agentic Tadpole OS runtime, dashboard, Rust engine, and Python execution layer.
 >
-> ### Debugging & Observability
-> Traceability via `execution/parity_guard.py`.
->
 > ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
+> Traceability via `execution/parity_guard.py`.
 <div align="center">
 
 # Autonomous Agentic Tadpole
@@ -292,7 +289,7 @@ BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and
 | `npm run preview` | Preview the Vite build |
 | `npm run docs:api` | Regenerate `docs/openapi.yaml` and `docs/API_REFERENCE.md` from `server-rs/src/router.rs` |
 | `npm run docs:parity` | Run documentation/API/version parity checks |
-| `npm run db:backup` | Hot backup SQLite database via WAL-safe `VACUUM INTO` |
+| `npm run db:backup` | Hot backup SQLite database via WAL-safe connection `.backup()` API |
 | `npm run db:restore` | Restore SQLite database with SHA-256 verification |
 | `npm run audit:sovereign` | Run 7-pillar sovereign security, memory, and AST audit |
 | `npm run context:verify` | Verify AI assist tags (`@docs`) across entire repository |
@@ -467,7 +464,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 
 ### 🔒 Security & Credential Management
 - **Zero-Downtime Token Rotation**: Auth middleware now supports dual-token validation via `NEURAL_TOKEN_OLD` / `NEURAL_TOKEN_NEW` env vars, enabling safe production token rotation with a configurable grace window. Documented in `docs/SECURITY.md`.
-- **MCP Subprocess Sandboxing**: Hardened `execution/tadpole_mcp_server.py` with `asyncio.create_subprocess_exec` (no `shell=True`), `shlex`-based command splitting, a skill allowlist, JSON Schema input validation, hard 30-second execution timeout, and `resource.setrlimit` CPU/memory constraints on Linux/Docker.
+- **MCP Subprocess Sandboxing**: Hardened `execution/tadpole_mcp_server.py` with `asyncio.create_subprocess_exec` (no `shell=True`), `shlex`-based command splitting, an environment variable allowlist (`_ALLOWED_ENV_VARS`), JSON Schema input validation, hard 30-second execution timeout, and `resource.setrlimit` CPU/memory constraints on Linux/Docker.
 
 ### 🧠 Graph Engine & Oversight Hardening
 - **Lock-Free Concurrent Graph Engine**: Replaced `parking_lot::RwLock` with lock-free concurrent access via `arc_swap::ArcSwap` in `ResourceHub` to guarantee non-blocking reads during background graph rebuilds.
@@ -479,7 +476,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **Robustness Cap Warning and Truncation**: Demoted `MAX_NODES` and `MAX_EDGES` exceeding checks from fatal errors to early-termination warning logs, leaving the previous graph intact, and resolved workspace-wide file bloat via `MAX_DISCOVERED_FILES` truncation.
 
 ### 🗄️ Database Reliability
-- **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-mode-safe `VACUUM INTO` hot backups, SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
+- **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-safe online backups (`.backup()` API), SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
 - **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db.rs` for programmatic backup orchestration.
 - **Durable Workflow Migration**: Added `server-rs/migrations/20260822000100_durable_workflows.sql` for step memoization table.
 
@@ -525,7 +522,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - Vite runs on port `5173`; the Rust engine runs on port `8000`.
 - The Rust engine can serve the built dashboard directly from `dist/`, so production mode does not require a separate Vite server.
 - `vector-memory` and `neural-audio` are opt-in Cargo features because they can introduce heavier native dependencies.
-- SQLite backups use `VACUUM INTO` and must target a file path (not in-memory). Run `execution/backup_sqlite.py` before any major migration or deployment.
+- SQLite backups use the online `.backup()` API (and programmatic `VACUUM INTO` in engine helpers) and must target a file path (not in-memory). Run `execution/backup_sqlite.py` before any major migration or deployment.
 - Token rotation uses a two-token grace window: set `NEURAL_TOKEN_OLD` to the current token and `NEURAL_TOKEN_NEW` to the replacement before restarting the engine.
 
 

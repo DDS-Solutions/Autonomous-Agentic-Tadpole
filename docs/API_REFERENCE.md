@@ -118,6 +118,9 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
+| `POST` | `/v1/a2a/commit` | `routes::a2a::commit_transaction` | Protected |
+| `POST` | `/v1/a2a/prepare` | `routes::a2a::prepare_transaction` | Protected |
+| `POST` | `/v1/a2a/rollback` | `routes::a2a::rollback_transaction` | Protected |
 | `GET` | `/v1/governance/blueprints` | `routes::governance::list_blueprints` | Protected |
 | `POST` | `/v1/governance/blueprints` | `routes::governance::save_blueprint` | Protected |
 | `DELETE` | `/v1/governance/blueprints/{id}` | `routes::governance::delete_blueprint` | Protected |

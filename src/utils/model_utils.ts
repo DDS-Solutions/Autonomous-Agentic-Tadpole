@@ -135,32 +135,112 @@ export function resolve_provider(model_id: string): string {
 
 import type { Agent } from '../types';
 
+/** Shape of model_config with potential camelCase or snake_case keys across wire/domain. */
+interface AnyModelConfig {
+    modelId?: string;
+    model_id?: string;
+    model?: string;
+    provider?: string;
+    apiKey?: string;
+    api_key?: string;
+    baseUrl?: string;
+    base_url?: string;
+    temperature?: number;
+}
+
+/** Shape of agent with potential camelCase or snake_case slot keys across wire/domain. */
+interface AnyAgentSlotFields {
+    model_config?: AnyModelConfig;
+    modelConfig?: AnyModelConfig;
+    model_config2?: AnyModelConfig;
+    modelConfig2?: AnyModelConfig;
+    model_config3?: AnyModelConfig;
+    modelConfig3?: AnyModelConfig;
+    model?: string;
+    model_2?: string;
+    model2?: string;
+    model_3?: string;
+    model3?: string;
+}
+
+/**
+ * Resolves the raw configured model identifier for a given slot on an agent.
+ * Inspects authoritative model_config[X], wire fields, and snake/camel variants.
+ * Treats empty string, "unknown", and undefined as unconfigured (returns undefined).
+ */
+export function get_agent_slot_model(agent: Agent | undefined, slot: 1 | 2 | 3): string | undefined {
+    if (!agent) return undefined;
+    const a = agent as unknown as AnyAgentSlotFields;
+    
+    let raw: string | undefined;
+    if (slot === 1) {
+        raw = a.model_config?.modelId
+            || a.model_config?.model_id
+            || a.model_config?.model
+            || a.modelConfig?.modelId
+            || a.modelConfig?.model_id
+            || a.modelConfig?.model
+            || a.model;
+    } else if (slot === 2) {
+        raw = a.model_config2?.modelId
+            || a.model_config2?.model_id
+            || a.model_config2?.model
+            || a.modelConfig2?.modelId
+            || a.modelConfig2?.model_id
+            || a.modelConfig2?.model
+            || a.model_2
+            || a.model2;
+    } else if (slot === 3) {
+        raw = a.model_config3?.modelId
+            || a.model_config3?.model_id
+            || a.model_config3?.model
+            || a.modelConfig3?.modelId
+            || a.modelConfig3?.model_id
+            || a.modelConfig3?.model
+            || a.model_3
+            || a.model3;
+    }
+
+    if (!raw || typeof raw !== 'string' || raw.trim() === '' || raw.trim().toLowerCase() === 'unknown') {
+        return undefined;
+    }
+    return raw.trim();
+}
+
 /**
  * Resolves the active model ID and provider for an agent based on its current slot.
  * Supports global intelligence overrides to ensure swarm-wide synchronization.
  */
 export function resolve_agent_model_config(agent: Agent, global_default_model?: string): { model_id: string, provider: string } {
+    const a = agent as unknown as AnyAgentSlotFields;
+
     // STEP 1: Check multi-slot override FIRST (authoritative source)
     // The slot configs are the user's explicit selection and must take priority.
-    if (agent.active_model_slot === 2 && agent.model_config2) {
-        const c2 = agent.model_config2;
-        const model_id = resolve_technical_model_id(c2.modelId || agent.model_2 || agent.model || 'gemini-1.5-flash');
-        const provider = c2.provider || resolve_provider(model_id);
-        console.debug(`[ModelUtils] Agent ${agent.name}: Slot 2 active → model=${model_id}, provider=${provider}`);
-        return { model_id, provider };
-    } else if (agent.active_model_slot === 3 && agent.model_config3) {
-        const c3 = agent.model_config3;
-        const model_id = resolve_technical_model_id(c3.modelId || agent.model_3 || agent.model || 'gemini-1.5-flash');
-        const provider = c3.provider || resolve_provider(model_id);
-        console.debug(`[ModelUtils] Agent ${agent.name}: Slot 3 active → model=${model_id}, provider=${provider}`);
-        return { model_id, provider };
+    if (agent.active_model_slot === 2) {
+        const slot2_raw = get_agent_slot_model(agent, 2);
+        if (slot2_raw) {
+            const c2 = a.model_config2 || a.modelConfig2;
+            const model_id = resolve_technical_model_id(slot2_raw);
+            const provider = c2?.provider || resolve_provider(model_id);
+            console.debug(`[ModelUtils] Agent ${agent.name}: Slot 2 active → model=${model_id}, provider=${provider}`);
+            return { model_id, provider };
+        }
+    } else if (agent.active_model_slot === 3) {
+        const slot3_raw = get_agent_slot_model(agent, 3);
+        if (slot3_raw) {
+            const c3 = a.model_config3 || a.modelConfig3;
+            const model_id = resolve_technical_model_id(slot3_raw);
+            const provider = c3?.provider || resolve_provider(model_id);
+            console.debug(`[ModelUtils] Agent ${agent.name}: Slot 3 active → model=${model_id}, provider=${provider}`);
+            return { model_id, provider };
+        }
     }
 
     // STEP 2: Slot 1 — Check model_config first (explicit config), then fallback to agent.model
-    const config = agent.model_config;
-    const config_model_id = config?.modelId;
+    const config = a.model_config || a.modelConfig;
+    const config_model_id = get_agent_slot_model(agent, 1);
     const model_str = (config_model_id || agent.model || '').toLowerCase();
-    const has_key = !!config?.apiKey;
+    const has_key = !!(config?.apiKey || config?.api_key);
 
     const is_custom_model = model_str.includes(':') || model_str.includes('/') || model_str.startsWith('ollama');
 
@@ -197,12 +277,12 @@ export function resolve_agent_model_config(agent: Agent, global_default_model?: 
  * Returns the display name of the model currently active in the agent's slots.
  */
 export function get_active_model_name(agent: Agent): string {
-    const raw = agent.active_model_slot === 2
-        ? (agent.model_config2?.modelId || agent.model_config2?.model || agent.model_2 || agent.model_config?.modelId || agent.model || 'Unknown')
-        : agent.active_model_slot === 3
-        ? (agent.model_config3?.modelId || agent.model_config3?.model || agent.model_3 || agent.model_config?.modelId || agent.model || 'Unknown')
-        : (agent.model_config?.modelId || agent.model_config?.model || agent.model || 'Unknown');
-    return resolve_friendly_model_name(raw) || raw;
+    const active_slot = (agent.active_model_slot || 1) as 1 | 2 | 3;
+    const slot_raw = get_agent_slot_model(agent, active_slot)
+        || get_agent_slot_model(agent, 1)
+        || agent.model
+        || 'Unknown';
+    return resolve_friendly_model_name(slot_raw) || slot_raw;
 }
 
 

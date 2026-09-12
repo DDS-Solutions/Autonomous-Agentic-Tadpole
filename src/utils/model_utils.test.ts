@@ -12,10 +12,32 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolve_technical_model_id, resolve_provider, resolve_agent_model_config, get_model_color, get_active_model_name } from './model_utils';
+import { resolve_technical_model_id, resolve_provider, resolve_agent_model_config, get_model_color, get_active_model_name, get_agent_slot_model } from './model_utils';
 import type { Agent } from '../types';
 
 describe('model_utils', () => {
+    describe('get_agent_slot_model', () => {
+        it('resolves slot 1 across model_config.modelId, model_id, and model', () => {
+            expect(get_agent_slot_model({ model_config: { modelId: 'gemini-1.5-pro' } } as unknown as Agent, 1)).toBe('gemini-1.5-pro');
+            expect(get_agent_slot_model({ model_config: { model_id: 'gpt-4o' } } as unknown as Agent, 1)).toBe('gpt-4o');
+            expect(get_agent_slot_model({ model: 'claude-3-5-sonnet' } as unknown as Agent, 1)).toBe('claude-3-5-sonnet');
+        });
+
+        it('resolves slot 2 across snake_case, camelCase wire DTOs, and model_2', () => {
+            expect(get_agent_slot_model({ model_config2: { modelId: 'claude-3-5-sonnet' } } as unknown as Agent, 2)).toBe('claude-3-5-sonnet');
+            expect(get_agent_slot_model({ modelConfig2: { modelId: 'gemma4:e4b' } } as unknown as Agent, 2)).toBe('gemma4:e4b');
+            expect(get_agent_slot_model({ model_2: 'GPT-4o' } as unknown as Agent, 2)).toBe('GPT-4o');
+            expect(get_agent_slot_model({ model2: 'deepseek-r1' } as unknown as Agent, 2)).toBe('deepseek-r1');
+        });
+
+        it('returns undefined for empty, whitespace, or "unknown" slot models', () => {
+            expect(get_agent_slot_model({ model_config2: { modelId: 'unknown' } } as unknown as Agent, 2)).toBeUndefined();
+            expect(get_agent_slot_model({ model_2: '' } as unknown as Agent, 2)).toBeUndefined();
+            expect(get_agent_slot_model({ model_config3: { modelId: '   ' } } as unknown as Agent, 3)).toBeUndefined();
+            expect(get_agent_slot_model(undefined, 1)).toBeUndefined();
+        });
+    });
+
     describe('resolve_technical_model_id', () => {
         it('resolves mapped names correctly', () => {
             expect(resolve_technical_model_id('Gemini 1.5 Pro')).toBe('gemini-1.5-pro');

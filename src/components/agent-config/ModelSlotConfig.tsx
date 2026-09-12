@@ -91,7 +91,9 @@ export function ModelSlotConfig({
                         </Tooltip>
                     </label>
                     {(() => {
-                        const current_tech_id = resolve_technical_model_id(slot.model) || slot.model;
+                        const raw_model = slot.model;
+                        const is_empty_or_unknown = !raw_model || raw_model.trim() === '' || raw_model.toLowerCase() === 'unknown';
+                        const current_tech_id = is_empty_or_unknown ? '' : (resolve_technical_model_id(raw_model) || raw_model);
                         const has_matching_option = filteredModels.some(m => (resolve_technical_model_id(m.name) || resolve_technical_model_id(m.id) || m.id) === current_tech_id);
 
                         return (
@@ -101,6 +103,11 @@ export function ModelSlotConfig({
                                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono cursor-pointer appearance-none transition-all"
                                 style={{ borderLeft: `2px solid ${themeColor}40` }}
                             >
+                                {slotKey !== 'primary' && (
+                                    <option value="" className="bg-zinc-950 italic text-zinc-400">
+                                        -- {i18n.t('agent_card.label_add_model')} --
+                                    </option>
+                                )}
                                 {filteredModels.length > 0 ? (
                                     filteredModels.map(m => {
                                         const opt_id = resolve_technical_model_id(m.name) || resolve_technical_model_id(m.id) || m.id;

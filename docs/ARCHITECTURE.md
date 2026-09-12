@@ -48,7 +48,7 @@ flowchart TD
 | Tool & Skill Dispatch | `server-rs/src/agent/runner/tools/mod.rs`, `server-rs/src/agent/script_skills.rs` | Zero-Trust pipeline (Budget Check -> Token Validation -> WAL -> CBS -> Oversight -> Sandboxed Subprocess Execution), atomic snapshot capability registry (`DashMap`), auto-discovery for `.py`/`.sh`/`.ps1`, and deterministic disk script trapping. |
 | Subsystems | `server-rs/src/agent/trustgraph.rs`, `server-rs/src/services/bm25_memory.rs`, `server-rs/src/routes/a2a.rs` | TrustGraph GraphRAG entity traversal, BM25 Lexical search engine (< 1ms), and A2A 2PC budget ledger. |
 | Execution | `execution/` | Python tools, JSON skill manifests, MCP host, `tool_loop_guard.py` circuit breaker, `evaluate_annealing.py`, and skill framework. |
-| Persistence | `data/`, `server-rs/migrations/` | SQLite database, migration scripts (`20260725000100`–`20260822000100`), runtime registries, and cache files. |
+| Persistence | `data/`, `server-rs/migrations/` | SQLite database, migration scripts (`20260304000100`–`20260912000200`), runtime registries, and cache files. |
 | Directives and docs | `directives/`, `docs/` | Governance documents, operating directives, API reference, OpenAPI, and operations documentation. |
 
 ## Engine Boot Sequence
@@ -167,7 +167,7 @@ The Browser Sentinel operates as a client-side, zero-cloud sentry for real-time 
 
 - Default database: `sqlite:<workspace>/data/tadpole.db`.
 - Override with `DATABASE_URL`.
-- Migrations live in `server-rs/migrations/` (includes `20260822000100_durable_workflows.sql` for durable step memoization).
+- Migrations live in `server-rs/migrations/` (includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, and `20260912000200_a2a_ledger_expiry.sql`).
 - Providers and models are persisted during graceful shutdown.
 - Agent records are loaded from SQLite and saved through batched database writes.
 - Audio cache defaults to `data/audio_cache.db`.

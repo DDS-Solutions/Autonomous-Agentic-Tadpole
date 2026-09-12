@@ -38,11 +38,24 @@ export const use_agent_store = <T = Agent_Store_State>(
 
     // RECONCILIATION: Merge Registry Agents with Live Telemetry
     // This ensures that components always see the most up-to-date health and task status
-    // without triggering full registry re-renders.
+    // without clobbering canonical configuration data (models, slots, identity).
     const raw_agents = Array.isArray(registry.agents) ? registry.agents : [];
     const agents = raw_agents.map(agent => {
         const live = telemetry.live_status[agent.id];
         if (live) {
+            const is_local_newer = (agent._local_timestamp || 0) >= ((live as { _telemetry_timestamp?: number })._telemetry_timestamp || 0);
+            if (is_local_newer) {
+                return {
+                    ...live,
+                    ...agent,
+                    // Preserve runtime fields from live telemetry
+                    status: live.status ?? agent.status,
+                    current_task: live.current_task ?? agent.current_task,
+                    tokens_used: live.tokens_used ?? agent.tokens_used,
+                    cost_usd: live.cost_usd ?? agent.cost_usd,
+                    last_pulse: live.last_pulse ?? agent.last_pulse,
+                };
+            }
             return { ...agent, ...live };
         }
         return agent;

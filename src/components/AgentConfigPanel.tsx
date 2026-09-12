@@ -313,6 +313,7 @@ export default function AgentConfigPanel({ agent, onClose, onUpdate, isNew = fal
                             mcpTools={mcp_tools}
                             themeColor={ui.theme_color}
                             onSetTab={(tab) => dispatch({ type: 'SET_TAB', payload: tab })}
+                            onSetActiveSlot={(slot) => dispatch({ type: 'SET_ACTIVE_SLOT', payload: slot })}
                             onUpdateSlotField={<K extends keyof Agent_Model_Slot_State>(slot: Agent_Model_Slot_Key, field: K, value: Agent_Model_Slot_State[K]) => {
                                 dispatch({ type: 'UPDATE_SLOT', slot, field, value } as unknown as Agent_Config_Action);
                             }}

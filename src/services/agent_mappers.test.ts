@@ -195,6 +195,64 @@ describe('agent_mappers', () => {
             expect(payload.modelConfig3?.modelId).toBe('claude-3-5-sonnet');
         });
     });
+
+    describe('AgentFormState Lifecycle', () => {
+        it('buildAgentFormState extracts slot models accurately and resolves friendly names', async () => {
+            const { buildAgentFormState } = await import('../domain/agents/form_state');
+            const agent: Agent = {
+                id: 'agent-1',
+                name: 'Test Agent',
+                role: 'Analyst',
+                department: 'Operations',
+                status: 'idle',
+                tokens_used: 0,
+                model: 'gemma4:e4b',
+                model_config: { modelId: 'gemma4:e4b', provider: 'ollama', temperature: 0.7 },
+                model_2: 'claude-3-5-sonnet',
+                model_config2: { modelId: 'claude-3-5-sonnet', provider: 'anthropic', temperature: 0.5 },
+                active_model_slot: 2,
+                skills: [],
+                workflows: []
+            };
+
+            const form_state = buildAgentFormState(agent);
+            expect(form_state.slots.primary.model).toBe('Gemma 4 (Local)');
+            expect(form_state.slots.secondary.model).toBe('Claude 3.5 Sonnet');
+            expect(form_state.slots.tertiary.model).toBe('');
+            expect(form_state.active_model_slot).toBe(2);
+            expect(form_state.active_tab).toBe('secondary');
+        });
+
+        it('serializeFormState preserves active_model_slot and does NOT create "unknown" configs for empty slots', async () => {
+            const { buildAgentFormState, serializeFormState } = await import('../domain/agents/form_state');
+            const agent: Agent = {
+                id: 'agent-1',
+                name: 'Test Agent',
+                role: 'Analyst',
+                department: 'Operations',
+                status: 'idle',
+                tokens_used: 0,
+                model: 'Gemini 1.5 Flash',
+                model_config: { modelId: 'gemini-1.5-flash', provider: 'google', temperature: 0.7 },
+                active_model_slot: 1,
+                skills: [],
+                workflows: []
+            };
+
+            const form_state = buildAgentFormState(agent);
+            // Simulate user switching to secondary tab to view settings
+            form_state.active_tab = 'secondary';
+            // Slot 2 remains empty
+            form_state.slots.secondary.model = '';
+
+            const serialized = serializeFormState(form_state);
+            // active_model_slot must NOT be hijacked by active_tab!
+            expect(serialized.active_model_slot).toBe(1);
+            // Slot 2 must be undefined, NOT { modelId: 'unknown' }!
+            expect(serialized.model_2).toBeUndefined();
+            expect(serialized.model_config2).toBeUndefined();
+        });
+    });
 });
 
 

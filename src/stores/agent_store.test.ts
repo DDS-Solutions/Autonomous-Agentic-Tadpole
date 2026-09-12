@@ -308,6 +308,30 @@ describe('agent_store suites', () => {
             const { result: status_res } = renderHook(() => use_agent_store(s => s.is_loading));
             expect(status_res.current).toBe(false);
         });
+
+        it('preserves canonical model configuration when local update is newer than stale telemetry', async () => {
+            use_agent_registry_store.setState({ agents: [mock_agent_1] });
+            use_agent_telemetry_store.setState({
+                live_status: {
+                    '1': { status: 'idle', model: 'stale-model', _telemetry_timestamp: 1000 }
+                }
+            });
+
+            // Update agent model in registry
+            await use_agent_registry_store.getState().update_agent('1', {
+                model: 'GPT-4o',
+                model_config: { modelId: 'gpt-4o', provider: 'openai' },
+                model_2: 'Claude 3.5 Sonnet',
+                model_config2: { modelId: 'claude-3-5-sonnet', provider: 'anthropic' }
+            });
+
+            const { result } = renderHook(() => use_agent_store());
+            const agent = result.current.agents[0];
+            expect(agent.model).toBe('GPT-4o');
+            expect(agent.model_config?.modelId).toBe('gpt-4o');
+            expect(agent.model_2).toBe('Claude 3.5 Sonnet');
+            expect(agent.model_config2?.modelId).toBe('claude-3-5-sonnet');
+        });
     });
 });
 

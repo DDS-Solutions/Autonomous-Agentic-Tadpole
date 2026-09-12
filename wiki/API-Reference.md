@@ -78,6 +78,16 @@
 
 ---
 
+### `/v1/a2a` — Agent-to-Agent Economic Governance (2PC Ledger)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/a2a/prepare` | Prepare 2PC transaction with lock-aware projected spend cap check |
+| `POST` | `/v1/a2a/commit` | Atomically commit prepared transaction via CAS lock guard |
+| `POST` | `/v1/a2a/rollback` | Roll back prepared transaction lock |
+
+---
+
 ### `/v1/oversight` — Governance & Audit
 
 | Method | Endpoint | Description |

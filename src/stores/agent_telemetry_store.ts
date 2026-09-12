@@ -18,7 +18,8 @@
 import { create } from 'zustand';
 import { tadpole_os_socket } from '../services/socket';
 import { use_agent_registry_store } from './agent_registry_store';
-import type { Agent } from '../types';
+import type { Agent, AgentDto } from '../types';
+import { normalize_agent_dto } from '../domain/agents/normalizers';
 
 export interface Telemetry_State {
     /** Map of Agent ID to real-time status overrides */
@@ -38,14 +39,30 @@ export const use_agent_telemetry_store = create<Telemetry_State>()((set) => ({
                 if (!event.agent_id || !event.data) return;
                 const id = event.agent_id;
                 
-                const updates = event.data as Partial<Agent>;
+                const existing_agent = use_agent_registry_store.getState().get_agent(id);
+                const raw_data = event.data as Record<string, unknown>;
+                
+                let normalized_updates: Partial<Agent>;
+                // If the event payload contains structural model fields, run through full DTO normalizer
+                if (raw_data.modelConfig || raw_data.model_config || raw_data.model || raw_data.model2 || raw_data.model_2) {
+                    normalized_updates = normalize_agent_dto(event.data as AgentDto, existing_agent?.workspace_path, existing_agent);
+                } else {
+                    normalized_updates = {
+                        ...(event.data as Partial<Agent>),
+                        status: raw_data.status === 'working' ? 'active' : (raw_data.status as Agent['status']),
+                        current_task: (raw_data.currentTask ?? raw_data.current_task) as string | undefined,
+                        tokens_used: (raw_data.tokensUsed ?? raw_data.tokens_used) as number | undefined,
+                        failure_count: (raw_data.failureCount ?? raw_data.failure_count) as number | undefined,
+                        last_pulse: (raw_data.lastPulse ?? raw_data.last_pulse) as string | null | undefined
+                    };
+                }
                 
                 set(state => ({
                     live_status: {
                         ...state.live_status,
                         [id]: {
                             ...state.live_status[id],
-                            ...updates,
+                            ...normalized_updates,
                             _telemetry_timestamp: Date.now()
                         }
                     }

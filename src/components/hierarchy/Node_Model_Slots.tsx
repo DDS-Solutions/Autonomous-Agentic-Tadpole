@@ -17,7 +17,7 @@ import { Tooltip } from '../ui';
 import { Model_Badge } from '../Model_Badge';
 import { use_dropdown_store } from '../../stores/dropdown_store';
 import { use_model_store } from '../../stores/model_store';
-import { resolve_friendly_model_name, resolve_technical_model_id } from '../../utils/model_utils';
+import { resolve_friendly_model_name, resolve_technical_model_id, get_agent_slot_model } from '../../utils/model_utils';
 import type { Agent } from '../../types';
 
 interface Node_Model_Slots_Props {
@@ -145,9 +145,9 @@ export const Node_Model_Slots: React.FC<Node_Model_Slots_Props> = ({
     };
 
     const slot_models: Record<1 | 2 | 3, string | undefined> = {
-        1: agent.model_config?.modelId || agent.model_config?.model || agent.model,
-        2: agent.model_config2?.modelId || agent.model_config2?.model || agent.model_2,
-        3: agent.model_config3?.modelId || agent.model_config3?.model || agent.model_3
+        1: get_agent_slot_model(agent, 1),
+        2: get_agent_slot_model(agent, 2),
+        3: get_agent_slot_model(agent, 3)
     };
 
     return (

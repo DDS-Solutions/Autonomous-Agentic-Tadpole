@@ -15,7 +15,7 @@ import { createPortal } from 'react-dom';
 import { Zap, Terminal, FileText } from 'lucide-react';
 import { Tooltip } from '../ui';
 import { use_dropdown_store } from '../../stores/dropdown_store';
-import { get_model_color } from '../../utils/model_utils';
+import { get_model_color, get_agent_slot_model, resolve_friendly_model_name } from '../../utils/model_utils';
 import { i18n } from '../../i18n';
 import type { Agent } from '../../types';
 
@@ -41,11 +41,27 @@ export const Node_Stats: React.FC<Node_Stats_Props> = ({ agent, on_skill_trigger
         }
     }, [is_skill_dropdown_open]);
 
+    const slot1_model = get_agent_slot_model(agent, 1) || agent.model;
+    const slot2_model = get_agent_slot_model(agent, 2);
+    const slot3_model = get_agent_slot_model(agent, 3);
+
     const model_slots = [
-        { label: i18n.t('agent_card.label_primary'), model: agent.model, config: agent.model_config },
-        { label: i18n.t('agent_card.label_secondary'), model: agent.model_2, config: agent.model_config2 },
-        { label: i18n.t('agent_card.label_tertiary'), model: agent.model_3, config: agent.model_config3 },
-    ].filter(s => s.model);
+        { 
+            label: i18n.t('agent_card.label_primary'), 
+            model: slot1_model ? (resolve_friendly_model_name(slot1_model) || slot1_model) : undefined, 
+            config: agent.model_config || (agent as unknown as { modelConfig?: typeof agent.model_config }).modelConfig 
+        },
+        { 
+            label: i18n.t('agent_card.label_secondary'), 
+            model: slot2_model ? (resolve_friendly_model_name(slot2_model) || slot2_model) : undefined, 
+            config: agent.model_config2 || (agent as unknown as { modelConfig2?: typeof agent.model_config2 }).modelConfig2 
+        },
+        { 
+            label: i18n.t('agent_card.label_tertiary'), 
+            model: slot3_model ? (resolve_friendly_model_name(slot3_model) || slot3_model) : undefined, 
+            config: agent.model_config3 || (agent as unknown as { modelConfig3?: typeof agent.model_config3 }).modelConfig3 
+        },
+    ].filter(s => !!s.model);
 
     return (
         <div className={`grid grid-cols-[1fr_min-content] gap-2 items-center px-1 py-1 border-b border-zinc-800/30 relative ${is_skill_dropdown_open ? 'z-50' : 'z-30'}`}>

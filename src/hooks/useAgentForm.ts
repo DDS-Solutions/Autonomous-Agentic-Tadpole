@@ -28,6 +28,7 @@ export type Agent_Config_State = AgentFormState;
 export type Agent_Config_Action =
     | { type: 'SET_MAIN_TAB'; payload: 'cognition' | 'memory' | 'governance' | 'ledger' | 'maintenance' }
     | { type: 'SET_TAB'; payload: Agent_Model_Slot_Key }
+    | { type: 'SET_ACTIVE_SLOT'; payload: 1 | 2 | 3 }
     | { type: 'UPDATE_IDENTITY'; field: 'name' | 'role' | 'department'; value: string }
     | { type: 'UPDATE_SLOT'; slot: Agent_Model_Slot_Key; field: 'model' | 'provider' | 'system_prompt'; value: string }
     | { type: 'UPDATE_SLOT'; slot: Agent_Model_Slot_Key; field: 'temperature' | 'reasoning_depth' | 'act_threshold'; value: number }
@@ -55,8 +56,12 @@ export function config_reducer(state: Agent_Config_State, action: Agent_Config_A
         case 'SET_TAB':
             return { 
                 ...state, 
-                active_tab: action.payload,
-                active_model_slot: action.payload === 'primary' ? 1 : action.payload === 'secondary' ? 2 : 3
+                active_tab: action.payload
+            };
+        case 'SET_ACTIVE_SLOT':
+            return {
+                ...state,
+                active_model_slot: action.payload
             };
         case 'UPDATE_IDENTITY':
             return {

@@ -22,6 +22,7 @@ import { load_agents, persist_agent_update, normalize_agent, type Raw_Agent } fr
 import { agent_api_service } from '../services/agent_api_service';
 import { log_error } from '../services/system_utils';
 import { agents as mock_agents } from '../data/mock_agents';
+import { use_agent_telemetry_store } from './agent_telemetry_store';
 
 const SYNC_CHANNEL = 'tadpole-os-sync';
 const sync_channel = typeof window !== 'undefined' ? new BroadcastChannel(SYNC_CHANNEL) : null;
@@ -92,6 +93,21 @@ export const use_agent_registry_store = create<Agent_Registry_State>()(
                     agents: state.agents.map(a => a.id === id ? { ...a, ...updates, _local_timestamp: timestamp } : a)
                 }));
                 sync_channel?.postMessage({ type: 'agent:update', payload: { id, updates }, source_id: TAB_ID });
+
+                // Synchronize telemetry live_status to ensure immediate UI reflection and prevent stale overrides
+                use_agent_telemetry_store.setState(s => {
+                    if (!s.live_status[id]) return s;
+                    return {
+                        live_status: {
+                            ...s.live_status,
+                            [id]: {
+                                ...s.live_status[id],
+                                ...updates,
+                                _telemetry_timestamp: timestamp
+                            }
+                        }
+                    };
+                });
 
                 try {
                     await persist_agent_update(id, updates);

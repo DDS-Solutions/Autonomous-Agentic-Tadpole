@@ -60,7 +60,7 @@ This map reflects the current code layout and should be used as the first orient
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
-| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260725000100`–`20260822000100`), local data, and registry persistence. |
+| Persistence | `server-rs/src/db.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260304000100`–`20260912000200`), local data, and registry persistence. |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |
 
@@ -100,7 +100,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>` (or `Sec-W
 | Data | Current path/default | Notes |
 | --- | --- | --- |
 | Main SQLite database | `data/tadpole.db` | Default from `AppState::new` when `DATABASE_URL` is unset. |
-| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db.rs`. Includes `20260822000100_durable_workflows.sql`. |
+| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db.rs`. Includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, and `20260912000200_a2a_ledger_expiry.sql`. |
 | Agent registry data | SQLite plus `data/agents.json` where present | Agent records are loaded from SQLite; JSON files remain part of registry/runtime data. |
 | Audio cache | `data/audio_cache.db` | Initialized by AppState, falls back to no-op if unavailable. |
 | Built dashboard | `dist/` | Served by the Rust router when present. |
