@@ -43,7 +43,7 @@ export const use_agent_store = <T = Agent_Store_State>(
     const agents = raw_agents.map(agent => {
         const live = telemetry.live_status[agent.id];
         if (live) {
-            const is_local_newer = (agent._local_timestamp || 0) >= ((live as { _telemetry_timestamp?: number })._telemetry_timestamp || 0);
+            const is_local_newer = (agent._local_timestamp || 0) >= (live._telemetry_timestamp || 0);
             if (is_local_newer) {
                 return {
                     ...live,

@@ -59,6 +59,7 @@ export interface Agent {
     reasoning_depth?: number;
     workspace_path?: string;
     _local_timestamp?: number;
+    _telemetry_timestamp?: number;
     active_mission?: { 
         id: string;
         objective?: string;
