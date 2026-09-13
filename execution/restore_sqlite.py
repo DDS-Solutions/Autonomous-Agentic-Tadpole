@@ -92,6 +92,8 @@ def get_row_counts(db_path: Path) -> dict:
         conn.close()
     except Exception as e:
         print(f"⚠️ Failed to get row counts for {db_path}: {e}", file=sys.stderr)
+    return counts
+
 def check_live_engine(port: int = 8000) -> bool:
     """Checks if the Tadpole OS server-rs engine is actively running."""
     import urllib.request
