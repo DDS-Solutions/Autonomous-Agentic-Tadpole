@@ -35,16 +35,19 @@ use serde::Serialize;
 use std::sync::Arc;
 
 /// Escapes single quotes for safe embedding in LanceDB/DataFusion string literals.
+#[cfg(any(feature = "vector-memory", test))]
 fn escape_lancedb_string_literal(value: &str) -> String {
     value.replace('\'', "''")
 }
 
 /// Resolves the canonical workspaces root from app state.
+#[cfg(any(feature = "vector-memory", test))]
 fn workspaces_root(base_dir: &std::path::Path) -> Result<std::path::PathBuf, AppError> {
     crate::utils::security::validate_path(base_dir, "data/workspaces").map(|sp| sp.to_path_buf())
 }
 
 /// Robustly resolves the path to an agent's memory store by scanning workspaces.
+#[cfg(feature = "vector-memory")]
 async fn resolve_agent_memory_path(base_dir: &std::path::Path, agent_id: &str) -> Option<std::path::PathBuf> {
     let _safe_agent_id = crate::utils::security::sanitize_id(agent_id);
     let workspaces_dir = workspaces_root(base_dir).ok()?;
@@ -72,6 +75,7 @@ async fn resolve_agent_memory_path(base_dir: &std::path::Path, agent_id: &str) -
 }
 
 /// Lists all valid agent memory paths across all clusters and workspaces.
+#[cfg(feature = "vector-memory")]
 async fn list_all_memory_paths(base_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
     let workspaces_dir = match workspaces_root(base_dir) {
@@ -284,7 +288,9 @@ pub struct Bm25SearchQuery {
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
 
-static BM25_CACHE: Lazy<RwLock<Option<(std::time::Instant, Arc<crate::services::bm25_memory::Bm25MemoryEngine>)>>> =
+type Bm25CacheEntry = (std::time::Instant, Arc<crate::services::bm25_memory::Bm25MemoryEngine>);
+
+static BM25_CACHE: Lazy<RwLock<Option<Bm25CacheEntry>>> =
     Lazy::new(|| RwLock::new(None));
 
 async fn get_or_create_bm25_engine(base_dir: &std::path::Path) -> Arc<crate::services::bm25_memory::Bm25MemoryEngine> {

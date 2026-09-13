@@ -212,7 +212,7 @@ impl AgentRunner {
                 },
                 Some(ctx.mission_id.clone()),
             )
-            .await.map_err(|e| ToolExecutionError::AppError(e))?;
+            .await.map_err(ToolExecutionError::AppError)?;
 
         if approved {
             let adapter = &ctx.fs_adapter;
@@ -281,7 +281,7 @@ impl AgentRunner {
                 },
                 Some(ctx.mission_id.clone()),
             )
-            .await.map_err(|e| ToolExecutionError::AppError(e))?;
+            .await.map_err(ToolExecutionError::AppError)?;
 
         if approved {
             let adapter =

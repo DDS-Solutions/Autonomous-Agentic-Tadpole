@@ -9,18 +9,7 @@
 //! - **Telemetry Link**: Not tracked (static module declarations).
 //!
 
-#![allow(
-    clippy::too_many_arguments,
-    clippy::type_complexity,
-    clippy::enum_variant_names,
-    clippy::collapsible_match,
-    clippy::unnecessary_map_or,
-    clippy::derivable_impls,
-    clippy::redundant_closure,
-    clippy::field_reassign_with_default,
-    dead_code,
-    unused_variables
-)]
+
 
 pub mod adapter;
 pub mod agent;

@@ -70,6 +70,18 @@ impl RateLimiter {
     pub async fn acquire(&self, estimated_tokens: u32) {
         // ── TPM enforcement ──────────────────────────────────────────────────
         if let Some(tpm) = self.tpm_limit {
+            // 🛡️ [H24: Anti-Deadlock] Clamp estimated tokens to tpm to avoid infinite loop
+            let tokens_to_reserve = if estimated_tokens > tpm {
+                tracing::warn!(
+                    "⚠️ [RateLimiter] Estimated tokens ({}) exceeds TPM limit ({}). Clamping reservation to avoid deadlock.",
+                    estimated_tokens,
+                    tpm
+                );
+                tpm
+            } else {
+                estimated_tokens
+            };
+
             loop {
                 let mut start = self.window_start.lock().await;
                 let elapsed = start.elapsed();
@@ -81,12 +93,12 @@ impl RateLimiter {
                 }
 
                 let current = self.tokens_used.load(Ordering::SeqCst);
-                if current.saturating_add(estimated_tokens) <= tpm {
+                if current.saturating_add(tokens_to_reserve) <= tpm {
                     if self
                         .tokens_used
                         .compare_exchange(
                             current,
-                            current + estimated_tokens,
+                            current + tokens_to_reserve,
                             Ordering::SeqCst,
                             Ordering::SeqCst,
                         )

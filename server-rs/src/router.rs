@@ -57,8 +57,18 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
     // 5. Resolve static file serving path.
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "dist".to_string());
 
-    let mut app = Router::new()
+    let public_root_routes = Router::new()
+        .route("/health", get(routes::health::health_check));
+
+    let metrics_route = Router::new()
         .route("/metrics", get(routes::health::metrics_handler))
+        .route_layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            middleware::auth::validate_token,
+        ));
+
+    let mut app = public_root_routes
+        .merge(metrics_route)
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
         .layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024))
@@ -162,7 +172,7 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .route("/memory/search/bm25", get(routes::memory::bm25_search_handler))
         .route("/memory/search/hybrid", get(routes::memory::hybrid_rag_search_handler))
         .route("/env-schema", get(routes::env_schema::get_env_schema))
-        .route_layer(axum::middleware::from_fn_with_state(
+        .layer(axum::middleware::from_fn_with_state(
             app_state,
             middleware::auth::validate_token,
         ))
@@ -511,40 +521,25 @@ fn build_search_memory_route() -> axum::routing::MethodRouter<Arc<AppState>> {
 
 fn build_knowledge_routes() -> Router<Arc<AppState>> {
     #[cfg(feature = "vector-memory")]
-    return Router::new()
-        .route(
-            "/",
-            post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
-        )
-        .route("/search", get(routes::knowledge::search_knowledge))
-        .route(
-            "/edges",
-            post(routes::knowledge::add_knowledge_edge).get(routes::knowledge::list_knowledge_edges),
-        )
-        .route("/synthesize", post(routes::knowledge::synthesize_knowledge))
-        .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
-        .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
-        .route(
-            "/{id}",
-            axum::routing::delete(routes::knowledge::delete_knowledge),
-        );
+    let r = Router::new().route("/search", get(routes::knowledge::search_knowledge));
     #[cfg(not(feature = "vector-memory"))]
-    return Router::new()
-        .route(
-            "/",
-            post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
-        )
-        .route(
-            "/edges",
-            post(routes::knowledge::add_knowledge_edge).get(routes::knowledge::list_knowledge_edges),
-        )
-        .route("/synthesize", post(routes::knowledge::synthesize_knowledge))
-        .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
-        .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
-        .route(
-            "/{id}",
-            axum::routing::delete(routes::knowledge::delete_knowledge),
-        );
+    let r = Router::new();
+
+    r.route(
+        "/",
+        post(routes::knowledge::write_knowledge).get(routes::knowledge::list_knowledge),
+    )
+    .route(
+        "/edges",
+        post(routes::knowledge::add_knowledge_edge).get(routes::knowledge::list_knowledge_edges),
+    )
+    .route("/synthesize", post(routes::knowledge::synthesize_knowledge))
+    .route("/{id}/confirm", post(routes::knowledge::confirm_knowledge))
+    .route("/{id}/peers", get(routes::knowledge::get_knowledge_peers))
+    .route(
+        "/{id}",
+        axum::routing::delete(routes::knowledge::delete_knowledge),
+    )
 }
 
 fn build_iacp_routes() -> Router<Arc<AppState>> {

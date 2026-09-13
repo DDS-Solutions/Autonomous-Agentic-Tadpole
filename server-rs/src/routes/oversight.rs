@@ -92,7 +92,7 @@ pub async fn get_ledger(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (page, per_page) = params.sanitize();
+    let (_page, per_page) = params.sanitize();
     let limit = per_page as i64;
     let offset = params.offset() as i64;
 
@@ -574,7 +574,7 @@ pub async fn get_audit_trail(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (page, per_page) = params.sanitize();
+    let (_page, per_page) = params.sanitize();
     let limit = per_page as i64;
     let offset = params.offset() as i64;
 
@@ -583,9 +583,8 @@ pub async fn get_audit_trail(
         .await
         .unwrap_or(0);
 
-    // We pull directly from audit_trail with SQL LIMIT/OFFSET
     let entries: Vec<AuditEntry> =
-        sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT ? OFFSET ?")
+        sqlx::query_as("SELECT id, timestamp, agent_id, mission_id, user_id, action, params, prev_hash, current_hash, signature FROM audit_trail ORDER BY timestamp DESC LIMIT ? OFFSET ?")
             .bind(limit)
             .bind(offset)
             .fetch_all(&state.resources.pool)

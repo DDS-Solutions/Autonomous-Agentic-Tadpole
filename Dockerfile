@@ -6,8 +6,8 @@ WORKDIR /usr/src/app
 # Copy frontend dependency manifests
 COPY package.json package-lock.json ./
 
-# Install frontend dependencies (legacy-peer-deps to handle Vite 8 upgrade conflicts in plugins)
-RUN npm ci --legacy-peer-deps
+# Install frontend dependencies
+RUN npm ci
 
 # Copy frontend source and configuration
 COPY . .
@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust (pinned to 1.95.0 to support sysinfo@0.39.1+)
+# Install Rust (pinned to 1.95.0 for modern toolchain and compiler features)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.95.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 

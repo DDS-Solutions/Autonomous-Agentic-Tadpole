@@ -41,7 +41,7 @@ pub struct SymbolEdge {
 /// Repository containing the cached AST parse structures and file metadata.
 /// Acts as the incremental-rebuild cache: only files whose mtime or size has
 /// changed since the last `build()` call are re-parsed.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct GraphStateRepository {
     /// Maps absolute `PathBuf` → `(mtime, size)` for each tracked file.
     pub file_metadata: HashMap<PathBuf, (std::time::SystemTime, u64)>,
@@ -55,13 +55,15 @@ pub struct GraphStateRepository {
     >,
 }
 
-impl Default for GraphStateRepository {
-    fn default() -> Self {
-        Self {
-            file_metadata: HashMap::new(),
-            parse_cache: HashMap::new(),
-        }
-    }
-}
+pub type ParsedFileEntry = (
+    PathBuf,
+    String,
+    Option<(
+        Vec<crate::utils::parser::Symbol>,
+        Vec<crate::utils::parser::Reference>,
+        std::time::SystemTime,
+        u64,
+    )>,
+);
 
 // Metadata: [types]

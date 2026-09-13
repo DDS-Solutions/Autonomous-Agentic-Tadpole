@@ -334,6 +334,7 @@ impl AgentRunner {
         display
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn assemble_prompt_variables(
         &self,
         ctx: &RunContext,

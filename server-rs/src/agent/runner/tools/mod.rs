@@ -150,7 +150,7 @@ impl AgentRunner {
             ctx.user_id.as_deref(),
             &format!("[INTENT] {}", fc.name),
             &self.state.security.secret_redactor.redact(&args_str),
-        ).await.map_err(|e| ToolExecutionError::AppError(e))?;
+        ).await.map_err(ToolExecutionError::AppError)?;
 
         // 3. Security Manager (Hierarchy & Policy)
         let sec_mgr = DefaultSecurityManager;

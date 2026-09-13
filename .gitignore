@@ -59,3 +59,6 @@ server-rs/src/scratch_*.rs
 sidecar_panic.log
 server-rs/errors.txt
 server-rs/logs.txt
+server-rs/scratch/
+monitoring/prometheus/bearer_token
+!monitoring/prometheus/bearer_token.example

@@ -361,6 +361,7 @@ impl AgentRunner {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn dispatch_to_provider<'a>(
         &'a self,
         ctx: &'a RunContext,
@@ -557,30 +558,40 @@ impl AgentRunner {
     async fn try_resolve_failover_context(&self, ctx: &RunContext) -> Option<RunContext> {
         let entry = self.state.registry.agents.get(&ctx.agent_id)?;
         let a = entry.value();
-        
-        // Determine current slot and try the next one
-        let current_provider_str = ctx.model_config.provider.to_string().to_lowercase();
-        let current_model_id = &ctx.model_config.model_id;
-        
-        // Check if we're on the primary slot (compare against slot 1 config)
-        let is_primary = a.models.model.model_id == *current_model_id 
-            || a.models.model.provider.to_string().to_lowercase() == current_provider_str;
-        
-        let is_secondary = a.models.model_config2.as_ref()
-            .map(|c| c.model_id == *current_model_id)
+
+        // 🛡️ [M31: Anti-Recursion Guard] Ensure candidate is not identical to current config
+        let is_same_as_current = |candidate: &crate::agent::types::ModelConfig| {
+            candidate.provider == ctx.model_config.provider
+                && candidate.model_id == ctx.model_config.model_id
+                && candidate.base_url == ctx.model_config.base_url
+        };
+
+        // Determine if we are currently executing on secondary slot (Slot 2)
+        let is_secondary = a
+            .models
+            .model_config2
+            .as_ref()
+            .map(|c| c.model_id == ctx.model_config.model_id && c.provider == ctx.model_config.provider)
             .unwrap_or(false);
 
-        let failover_config = if is_primary {
-            // Try Slot 2 first
-            a.models.model_config2.as_ref()
-                .filter(|c| !c.model_id.is_empty())
-                .or_else(|| a.models.model_config3.as_ref().filter(|c| !c.model_id.is_empty()))
-        } else if is_secondary {
-            // Already failed on Slot 2, try Slot 3
-            a.models.model_config3.as_ref().filter(|c| !c.model_id.is_empty())
+        let failover_config = if is_secondary {
+            // Already failed on Slot 2, attempt Slot 3
+            a.models
+                .model_config3
+                .as_ref()
+                .filter(|c| !c.model_id.is_empty() && !is_same_as_current(c))
         } else {
-            // Already on Slot 3 or unknown — no more fallbacks
-            None
+            // On primary slot (Slot 1) or initial config: attempt Slot 2 first, then Slot 3
+            a.models
+                .model_config2
+                .as_ref()
+                .filter(|c| !c.model_id.is_empty() && !is_same_as_current(c))
+                .or_else(|| {
+                    a.models
+                        .model_config3
+                        .as_ref()
+                        .filter(|c| !c.model_id.is_empty() && !is_same_as_current(c))
+                })
         };
 
         let failover = failover_config?;

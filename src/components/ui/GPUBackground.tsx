@@ -11,7 +11,6 @@
  */
 
 import React from 'react';
-import { Shader, LinearGradient } from 'shaders/react';
 import { THEME_COLORS } from '../../constants/theme';
 import { use_settings_store } from '../../stores/settings_store';
 
@@ -28,40 +27,18 @@ interface SafeShaderProps {
     colorB: string;
 }
 
-class SafeShader extends React.Component<SafeShaderProps, { hasError: boolean }> {
-    state = { hasError: false };
-
-    static getDerivedStateFromError() {
-        return { hasError: true };
-    }
-
-    componentDidCatch(err: Error) {
-        console.warn('[GPUBackground] Shader initialization fallback to CSS:', err);
-    }
-
-    render() {
-        if (this.state.hasError) {
-            return null;
-        }
-        try {
-            return (
-                <Shader 
-                    className="w-full h-full"
-                    colorSpace="srgb"
-                    toneMapping="neutral"
-                >
-                    <LinearGradient 
-                        colorA={this.props.colorA} 
-                        colorB={this.props.colorB} 
-                        angle={45} 
-                    />
-                </Shader>
-            );
-        } catch {
-            return null;
-        }
-    }
-}
+const SafeShader: React.FC<SafeShaderProps> = ({ colorA, colorB }) => {
+    return (
+        <div 
+            className="absolute inset-0 w-full h-full opacity-60 transition-colors duration-700 ease-in-out"
+            style={{
+                background: `linear-gradient(135deg, ${colorB} 0%, transparent 60%, ${colorA} 100%)`,
+                filter: 'blur(30px)',
+                willChange: 'background',
+            }}
+        />
+    );
+};
 
 /**
  * GPUBackground

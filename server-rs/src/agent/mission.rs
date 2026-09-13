@@ -193,7 +193,7 @@ pub async fn log_step(
 #[allow(dead_code)]
 pub async fn get_last_active_mission(pool: &SqlitePool, agent_id: &str) -> Result<Option<Mission>, AppError> {
     let mission = sqlx::query_as::<sqlx::Sqlite, Mission>(
-        "SELECT * FROM mission_history WHERE agent_id = ?1 AND status IN ('pending', 'active') ORDER BY created_at DESC LIMIT 1")
+        "SELECT id, agent_id, title, status, created_at, updated_at, budget_usd, cost_usd, is_degraded, is_pinned, active_node_id FROM mission_history WHERE agent_id = ?1 AND status IN ('pending', 'active') ORDER BY created_at DESC LIMIT 1")
     .bind(agent_id)
     .fetch_optional(pool)
     .await?;
@@ -280,7 +280,7 @@ pub async fn get_mission_context(pool: &SqlitePool, mission_id: &str) -> Result<
 /// Retrieves a mission by its ID.
 pub async fn get_mission_by_id(pool: &SqlitePool, mission_id: &str) -> Result<Option<Mission>, AppError> {
     let mission =
-        sqlx::query_as::<sqlx::Sqlite, Mission>("SELECT * FROM mission_history WHERE id = ?1")
+        sqlx::query_as::<sqlx::Sqlite, Mission>("SELECT id, agent_id, title, status, created_at, updated_at, budget_usd, cost_usd, is_degraded, is_pinned, active_node_id FROM mission_history WHERE id = ?1")
             .bind(mission_id)
             .fetch_optional(pool)
             .await?;
@@ -291,7 +291,7 @@ pub async fn get_mission_by_id(pool: &SqlitePool, mission_id: &str) -> Result<Op
 /// Retrieves recent missions for financial auditing.
 pub async fn get_recent_missions(pool: &SqlitePool, limit: i64) -> Result<Vec<Mission>, AppError> {
     let missions = sqlx::query_as::<sqlx::Sqlite, Mission>(
-        "SELECT * FROM mission_history ORDER BY updated_at DESC LIMIT ?1",
+        "SELECT id, agent_id, title, status, created_at, updated_at, budget_usd, cost_usd, is_degraded, is_pinned, active_node_id FROM mission_history ORDER BY updated_at DESC LIMIT ?1",
     )
     .bind(limit)
     .fetch_all(pool)

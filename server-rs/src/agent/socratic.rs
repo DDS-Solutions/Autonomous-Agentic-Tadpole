@@ -18,12 +18,13 @@ pub const ENVELOPE_VERSION: &str = "1.0";
 pub const STATUS_PRE_CLEARED: &str = "PRE_CLEARED_GATE_PASS";
 
 /// Strongly-typed Blast Radius level with explicit descriptive scope.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum BlastRadiusLevel {
     /// Level 1: Read-Only operations, zero filesystem or database mutation.
     Level1ReadOnly,
     /// Level 2: Workspace-local mutations permitted (source files, artifacts).
+    #[default]
     Level2WorkspaceLocal,
     /// Level 3: System-wide changes, database schema DDL, or external network operations.
     Level3SystemWide,
@@ -44,12 +45,6 @@ impl BlastRadiusLevel {
             Self::Level2WorkspaceLocal => "Level 2 (Workspace-Local Mutation)",
             Self::Level3SystemWide => "Level 3 (System-Wide / High Blast Radius)",
         }
-    }
-}
-
-impl Default for BlastRadiusLevel {
-    fn default() -> Self {
-        Self::Level2WorkspaceLocal
     }
 }
 
@@ -148,6 +143,7 @@ pub struct SocraticContextEnvelope {
 
 impl SocraticContextEnvelope {
     /// Compiles a Socratic Context Envelope with custom configuration defaults and profile selection.
+    #[allow(clippy::too_many_arguments)]
     pub fn compile_with_config(
         agent_id: &str,
         agent_name: &str,
@@ -225,6 +221,7 @@ impl SocraticContextEnvelope {
     }
 
     /// Compiles a standard deterministic Socratic Context Envelope using global system defaults.
+    #[allow(clippy::too_many_arguments)]
     pub fn compile(
         agent_id: &str,
         agent_name: &str,

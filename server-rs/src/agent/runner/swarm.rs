@@ -136,7 +136,10 @@ impl AgentRunner {
             // 🛡️ [Harden Phase 4: Proactive Lineage Guard]
             if ctx.lineage.contains(&sub_agent_id) || ctx.agent_id == sub_agent_id {
                 tracing::warn!("🛡️ [Swarm] Recursion block triggered for {} vs {:?}", sub_agent_id, ctx.lineage);
-                results.push(format!("### Sub-agent [{}] Result:\nPROTOCOL_VIOLATION: CIRCULAR_RECRUITMENT - '{}' is already in your recruitment lineage. Parallel cycles are prohibited to prevent infinite loops (SEC-01).", sub_agent_id, sub_agent_id));
+                results.push(format!(
+                    "<subagent_report agent_id=\"{}\">\nPROTOCOL_VIOLATION: CIRCULAR_RECRUITMENT - '{}' is already in your recruitment lineage. Parallel cycles are prohibited to prevent infinite loops (SEC-01).\n</subagent_report>",
+                    sub_agent_id, sub_agent_id
+                ));
                 continue;
             }
 
@@ -191,7 +194,16 @@ impl AgentRunner {
 
         // 5. Collect remaining parallel results
         while let Some((id, res)) = swarm_tasks.next().await {
-            results.push(format!("### Sub-agent [{}] Result:\n{}", id, res));
+            // 🛡️ [M55: Prompt-Injection Defense] Neutralize boundary escapes and chat template tokens
+            let sanitized = res
+                .replace("</subagent_report>", "&lt;/subagent_report&gt;")
+                .replace("<|im_start|>", "")
+                .replace("<|im_end|>", "")
+                .replace("<|endoftext|>", "");
+            results.push(format!(
+                "<subagent_report agent_id=\"{}\">\n{}\n</subagent_report>",
+                id, sanitized
+            ));
         }
 
         if results.is_empty() {
@@ -361,12 +373,12 @@ impl AgentRunner {
         }
 
         tracing::info!("🛠️ [Swarm] Registering missing sub-agent: {}", target_id);
+        // 🛡️ [M32: Principle of Least Privilege] Auto-fabricated subagents receive read-only defaults.
+        // Mutating skills (write_file, delete_file) must arrive via extra_skills with governance approval.
         let mut base_skills = vec![
             "fetch_url".to_string(),
             "read_file".to_string(),
-            "write_file".to_string(),
             "list_files".to_string(),
-            "delete_file".to_string(),
             "get_file_contents".to_string(),
             "grep_search".to_string(),
             "get_agent_metrics".to_string(),

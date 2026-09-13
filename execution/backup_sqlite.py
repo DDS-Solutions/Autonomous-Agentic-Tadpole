@@ -32,7 +32,8 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 def resolve_default_db_path() -> Path:
-    """Resolves the database path dynamically from the environment."""
+    """Resolves the database path dynamically from the environment, anchored to repo root if relative."""
+    repo_root = Path(__file__).resolve().parent.parent
     db_url = os.getenv("DATABASE_URL")
     if db_url:
         if db_url.lower().startswith("sqlite:"):
@@ -41,9 +42,11 @@ def resolve_default_db_path() -> Path:
                 cleaned = cleaned[3:]
             elif cleaned.startswith("//"):
                 cleaned = cleaned[2:]
-            return Path(cleaned)
-        return Path(db_url)
-    return Path("data/tadpole.db")
+            path = Path(cleaned)
+        else:
+            path = Path(db_url)
+        return path if path.is_absolute() else (repo_root / path)
+    return repo_root / "data" / "tadpole.db"
 
 def backup_sqlite():
     db_path = resolve_default_db_path()

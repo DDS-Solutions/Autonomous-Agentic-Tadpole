@@ -22,7 +22,7 @@ use crate::intelligence::graph::{
     error::GraphError,
     key::index_key,
     path::{obfuscate_path, to_unix_path},
-    types::{SymbolEdge, SymbolNode},
+    types::{ParsedFileEntry, SymbolEdge, SymbolNode},
 };
 
 /// Service trait to synthesize the petgraph from cached/parsed inputs.
@@ -32,7 +32,7 @@ pub trait GraphSynthesizer: Send + Sync {
         graph: &mut CodeSymbolGraph,
         salt: &str,
         to_delete: &[PathBuf],
-        updates: Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>,
+        updates: Vec<ParsedFileEntry>,
     ) -> Result<bool, GraphError>;
 }
 
@@ -45,7 +45,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
         graph: &mut CodeSymbolGraph,
         salt: &str,
         to_delete: &[PathBuf],
-        updates: Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>,
+        updates: Vec<ParsedFileEntry>,
     ) -> Result<bool, GraphError> {
         // 1. Remove deleted files from caches
         for path in to_delete {

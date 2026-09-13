@@ -100,10 +100,16 @@ pub fn validate_path(base: &Path, user_path: &str) -> Result<SafePath, AppError>
         }
     }
 
+    if user_path.contains('\0') {
+        return Err(AppError::Forbidden("Null byte detected in path".to_string()));
+    }
+
     // 🛡️ [Traversal Hardening] Canonicalize the base directory (which must exist)
     let base_abs = strip_unc(base_raw.canonicalize().unwrap_or_else(|_| normalize(&base_raw)));
 
-    let joined = normalize(&base_abs.join(user_path));
+    // Strip leading path separators to ensure Path::join never replaces base_abs
+    let clean_user_path = user_path.trim_start_matches(['/', '\\']);
+    let joined = normalize(&base_abs.join(clean_user_path));
 
     // Find the closest existing ancestor for the joined path to resolve potential symlinks
     let mut ancestor = joined.as_path();
@@ -126,7 +132,10 @@ pub fn validate_path(base: &Path, user_path: &str) -> Result<SafePath, AppError>
     let resolved_path = canonical_ancestor.join(suffix);
     let result = normalize(&resolved_path);
 
-    if !result.starts_with(&base_abs) {
+    // Component-wise containment check (H44)
+    let base_comps: Vec<_> = base_abs.components().collect();
+    let res_comps: Vec<_> = result.components().collect();
+    if res_comps.len() < base_comps.len() || !res_comps.iter().zip(&base_comps).all(|(a, b)| a == b) {
         return Err(AppError::Forbidden("Path traversal detected: outside authorized base".to_string()));
     }
 
@@ -149,13 +158,14 @@ pub fn redact_secrets(input: &str) -> String {
         let patterns = vec![
             r"(?i)bearer\s+[a-zA-Z0-9\-\._~+/]+=*",
             r"(?i)authorization:\s*[^\s,]+",
-            r#"(?i)("?(?:api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
+            r#"(?i)("?(?:neural_token|access_token|refresh_token|api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
+            r"(?i)\beyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b",
             r"(?i)sk-[a-zA-Z0-9]{20,}",
             r"(?i)sk-(?:ant|proj|svcacct|admin)-[a-zA-Z0-9_\-]{20,}",
             r"(?i)x-api-key\s*:\s*[^\s,]+",
-            r"(?i)\b[a-zA-Z0-9_]*(?:_api_key|_token|_secret)\b\s*[:=]\s*\S+",
+            r"(?i)\b(?:neural_token|access_token|refresh_token|[a-zA-Z0-9_]*(?:_api_key|_token|_secret))\b\s*[:=]\s*\S+",
             r"(?i)AIza[0-9A-Za-z-_]{30,}",
-            r"(?i)ghp_[a-zA-Z0-9]{30,}",
+            r"(?i)gh[pousr]_[a-zA-Z0-9]{30,}",
             r"(?i)AKIA[0-9A-Z]{16}",
         ];
         let set = RegexSet::new(&patterns).expect("Security patterns must be valid regex.");
@@ -194,6 +204,10 @@ pub fn redact_secrets(input: &str) -> String {
 pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppError> {
     let lower_bin = bin.to_lowercase();
 
+    if bin.contains('\n') || bin.contains('\r') || bin.contains('\0') {
+        return Err(AppError::Forbidden("Binary contains control character or null byte".to_string()));
+    }
+
     // 1. Whitelist of Allowed Base Binaries
     let allowed_binaries = [
         "ls", "cd", "pwd", "cat", "echo", "grep", "find", 
@@ -206,7 +220,7 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
     }
 
     // 2. Scan arguments for dangerous patterns
-    let dangerous_patterns = ["$(", "`", "${", "|", ">", "<", ";", "&", "\n", "\r"];
+    let dangerous_patterns = ["$(", "`", "${", "|", ">", "<", ";", "&", "\n", "\r", "\0"];
     let restricted_paths = ["/etc", "/root", "/var", "/bin", "/usr", "/tmp", "c:\\windows"];
 
     for arg in args {
@@ -253,10 +267,8 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
                     return Err(AppError::Forbidden("Dangerous git configuration or alias flag detected".to_string()));
                 }
             }
-            "find" => {
-                if lower_arg == "-exec" || lower_arg == "-execdir" || lower_arg == "-ok" || lower_arg == "-okdir" {
-                    return Err(AppError::Forbidden("Arbitrary execution flag detected in find argument".to_string()));
-                }
+            "find" if lower_arg == "-exec" || lower_arg == "-execdir" || lower_arg == "-ok" || lower_arg == "-okdir" => {
+                return Err(AppError::Forbidden("Arbitrary execution flag detected in find argument".to_string()));
             }
             _ => {}
         }
@@ -269,8 +281,8 @@ pub fn validate_tokenized_command(bin: &str, args: &[String]) -> Result<(), AppE
 /// Prefer `validate_tokenized_command` where possible.
 #[allow(dead_code)]
 pub fn validate_shell_command(command: &str) -> Result<(), AppError> {
-    if command.contains('\n') || command.contains('\r') {
-        return Err(AppError::Forbidden("Command separator detected".to_string()));
+    if command.contains('\n') || command.contains('\r') || command.contains('\0') {
+        return Err(AppError::Forbidden("Command separator or null byte detected".to_string()));
     }
 
     let lower = command.to_lowercase();
@@ -399,12 +411,14 @@ mod tests {
 
     #[test]
     fn test_redact_secrets_modern_formats() {
-        let text = "anthropic: sk-ant-api03-abcdef1234567890abcdef1234567890\nopenai: sk-proj-123456789012345678901234567890\nheader: x-api-key: secret-value-1234567890\nenv: GOOGLE_API_KEY=AIzaSyA123456789012345678901234567890";
+        let text = "anthropic: sk-ant-api03-abcdef1234567890abcdef1234567890\nopenai: sk-proj-123456789012345678901234567890\nheader: x-api-key: secret-value-1234567890\nenv: GOOGLE_API_KEY=AIzaSyA123456789012345678901234567890\njwt: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsK88\nconfig: NEURAL_TOKEN=sovereign_secret_token_12345";
         let redacted = redact_secrets(text);
         assert!(!redacted.contains("sk-ant-api03-"));
         assert!(!redacted.contains("sk-proj-"));
         assert!(!redacted.contains("secret-value-1234567890"));
         assert!(!redacted.contains("AIzaSyA"));
+        assert!(!redacted.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"));
+        assert!(!redacted.contains("sovereign_secret_token_12345"));
     }
 }
 

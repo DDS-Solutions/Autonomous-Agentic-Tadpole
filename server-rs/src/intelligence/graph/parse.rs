@@ -28,7 +28,7 @@ pub trait CodeParser: Send + Sync {
         &self,
         files: &[PathBuf],
         root: &Path,
-    ) -> Result<Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>, GraphError>;
+    ) -> Result<Vec<super::types::ParsedFileEntry>, GraphError>;
 }
 
 /// Default implementation: parallel parse with `rayon`, enforcing workspace
@@ -40,7 +40,7 @@ impl CodeParser for CodeParsingService {
         &self,
         files: &[PathBuf],
         root: &Path,
-    ) -> Result<Vec<(PathBuf, String, Option<(Vec<crate::utils::parser::Symbol>, Vec<crate::utils::parser::Reference>, std::time::SystemTime, u64)>)>, GraphError> {
+    ) -> Result<Vec<super::types::ParsedFileEntry>, GraphError> {
         let canonical_root = root.canonicalize().map_err(|e| {
             GraphError::WorkspaceRootNotFound(format!(
                 "Failed to canonicalize root {}: {}",

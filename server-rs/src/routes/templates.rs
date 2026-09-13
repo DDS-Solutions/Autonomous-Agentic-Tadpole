@@ -266,13 +266,15 @@ pub async fn install_template(
         if let Ok(c) = tokio::fs::read_to_string(&swarm_json_src).await {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
                 if let Some(id_str) = val.get("id").and_then(|v| v.as_str()) {
-                    template_id = id_str.to_string();
+                    template_id = crate::utils::security::sanitize_id(id_str);
                 }
             }
         }
     }
 
-    let dest_folder = PathBuf::from("data/swarm_config/installed").join(&safe_name);
+    let installed_base = PathBuf::from("data/swarm_config/installed");
+    let dest_folder = crate::utils::security::validate_path(&installed_base, &safe_name)
+        .map_err(|e| AppError::BadRequest(format!("Invalid template destination: {e}")))?;
     let _ = tokio::fs::create_dir_all(&dest_folder).await;
 
     let mut receipt = InstallReceipt {
@@ -665,39 +667,66 @@ pub async fn uninstall_template(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
+    // 🛡️ [M56: Path Containment] Reject traversal sequences and separators in template ID
+    if id.contains('/') || id.contains('\\') || id.contains("..") || id.contains('\0') {
+        return Err(AppError::BadRequest(
+            "Invalid template ID: Path separators and traversal sequences are prohibited.".to_string(),
+        ));
+    }
+
     let installed_dir = PathBuf::from("data/swarm_config/installed");
     let safe_id = crate::utils::security::sanitize_id(&id.replace("/", "_"));
 
-    // Identify target installation folder
-    let target_folder = if installed_dir.join(&id).exists() {
-        installed_dir.join(&id)
-    } else if installed_dir.join(&safe_id).exists() {
-        installed_dir.join(&safe_id)
+    // Identify target installation folder with strict path containment
+    let target_folder = if let Ok(p) = crate::utils::security::validate_path(&installed_dir, &id) {
+        if p.exists() && p.is_dir() {
+            Some(p)
+        } else {
+            None
+        }
     } else {
-        let mut found = None;
-        if installed_dir.exists() {
-            if let Ok(mut entries) = tokio::fs::read_dir(&installed_dir).await {
-                while let Ok(Some(entry)) = entries.next_entry().await {
-                    let receipt_file = entry.path().join("install_receipt.json");
-                    if receipt_file.exists() {
-                        if let Ok(c) = tokio::fs::read_to_string(&receipt_file).await {
-                            if let Ok(r) = serde_json::from_str::<InstallReceipt>(&c) {
-                                if r.template_id == id || r.template_path == id {
-                                    found = Some(entry.path());
-                                    break;
+        None
+    };
+
+    let target_folder = match target_folder {
+        Some(p) => p,
+        None => {
+            let safe_p = crate::utils::security::validate_path(&installed_dir, &safe_id)
+                .map_err(|e| AppError::BadRequest(format!("Invalid template ID: {e}")))?;
+            if safe_p.exists() && safe_p.is_dir() {
+                safe_p
+            } else {
+                let mut found = None;
+                if installed_dir.exists() {
+                    if let Ok(mut entries) = tokio::fs::read_dir(&installed_dir).await {
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            let entry_name = entry.file_name().to_string_lossy().to_string();
+                            if let Ok(valid_entry) =
+                                crate::utils::security::validate_path(&installed_dir, &entry_name)
+                            {
+                                let receipt_file = valid_entry.join("install_receipt.json");
+                                if receipt_file.exists() {
+                                    if let Ok(c) = tokio::fs::read_to_string(&receipt_file).await {
+                                        if let Ok(r) = serde_json::from_str::<InstallReceipt>(&c) {
+                                            if r.template_id == id || r.template_path == id {
+                                                found = Some(valid_entry);
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-        match found {
-            Some(f) => f,
-            None => {
-                return Err(AppError::NotFound(format!(
-                    "Template '{id}' is not currently installed."
-                )));
+                match found {
+                    Some(f) => f,
+                    None => {
+                        return Err(AppError::NotFound(format!(
+                            "Template '{id}' is not currently installed."
+                        )));
+                    }
+                }
             }
         }
     };
@@ -709,8 +738,12 @@ pub async fn uninstall_template(
             if let Ok(receipt) = serde_json::from_str::<InstallReceipt>(&c) {
                 // 1. Delete agent files and cascade database records
                 for agent_file in &receipt.agents {
-                    let p = PathBuf::from("data/swarm_config/agents").join(agent_file);
-                    let _ = tokio::fs::remove_file(&p).await;
+                    if let Ok(p) = crate::utils::security::validate_path(
+                        &PathBuf::from("data/swarm_config/agents"),
+                        agent_file,
+                    ) {
+                        let _ = tokio::fs::remove_file(&p).await;
+                    }
                 }
                 for agent_id in &receipt.agent_ids {
                     let _ = crate::agent::persistence::delete_agent_cascade(
@@ -723,20 +756,32 @@ pub async fn uninstall_template(
 
                 // 2. Delete copied workflows
                 for wf in &receipt.workflows {
-                    let p = PathBuf::from("directives").join(wf);
-                    let _ = tokio::fs::remove_file(&p).await;
+                    if let Ok(p) = crate::utils::security::validate_path(
+                        &PathBuf::from("directives"),
+                        wf,
+                    ) {
+                        let _ = tokio::fs::remove_file(&p).await;
+                    }
                 }
 
                 // 3. Delete copied skills
                 for sk in &receipt.skills {
-                    let p = PathBuf::from("execution").join(sk);
-                    let _ = tokio::fs::remove_file(&p).await;
+                    if let Ok(p) = crate::utils::security::validate_path(
+                        &PathBuf::from("execution"),
+                        sk,
+                    ) {
+                        let _ = tokio::fs::remove_file(&p).await;
+                    }
                 }
 
                 // 4. Delete copied knowledge
                 for kn in &receipt.knowledge {
-                    let p = PathBuf::from("data/knowledge").join(kn);
-                    let _ = tokio::fs::remove_file(&p).await;
+                    if let Ok(p) = crate::utils::security::validate_path(
+                        &PathBuf::from("data/knowledge"),
+                        kn,
+                    ) {
+                        let _ = tokio::fs::remove_file(&p).await;
+                    }
                 }
 
                 // 5. Clean MCP configuration
@@ -766,8 +811,16 @@ pub async fn uninstall_template(
         }
     }
 
-    // Finally remove installation directory
-    let _ = tokio::fs::remove_dir_all(&target_folder).await;
+    // Finally remove installation directory after verifying path containment
+    let target_name = target_folder
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let validated_target =
+        crate::utils::security::validate_path(&installed_dir, &target_name)
+            .map_err(|e| AppError::BadRequest(format!("Security error validating target folder: {e}")))?;
+    let _ = tokio::fs::remove_dir_all(&validated_target).await;
 
     Ok((
         StatusCode::OK,

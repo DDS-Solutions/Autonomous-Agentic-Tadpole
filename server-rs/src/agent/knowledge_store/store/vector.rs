@@ -115,7 +115,7 @@ pub async fn get_peers(
 
     #[cfg(not(feature = "vector-memory"))]
     {
-        let _ = (google_api_key, http_client);
+        let _ = (google_api_key, http_client, limit, entry);
         tracing::debug!(id = %id, "[IKS] get_peers called without vector-memory feature");
         Ok(vec![])
     }

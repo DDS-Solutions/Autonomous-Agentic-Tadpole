@@ -252,10 +252,36 @@ pub async fn send_task(
             drop(agent);
             tracing::info!("🔋 [AgentDispatch] Agent {} auto-awakened from offline state", agent_id);
             let _ = update_and_persist_agent(&state, &agent_id, |a| {
-                a.health.status = "active".to_string();
+                a.health.status = "idle".to_string();
             }).await;
         },
         Some(_) => {} // All systems go
+    }
+
+    // 🛡️ [M26: Atomic Claim CAS Lock] Route task dispatch through claim_agent
+    let mut claimed = crate::agent::persistence::claim_agent(&state.resources.pool, &agent_id).await?;
+    if !claimed {
+        // Proactive Abort-on-New Policy: terminate any running task, reset status, and re-claim
+        if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
+            tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
+            old_handle.abort();
+            let _ = sqlx::query("UPDATE agents SET status = 'idle' WHERE id = ?")
+                .bind(&agent_id)
+                .execute(&state.resources.pool)
+                .await;
+            claimed = crate::agent::persistence::claim_agent(&state.resources.pool, &agent_id).await?;
+        }
+    }
+
+    if !claimed {
+        return Err(AppError::Conflict(format!(
+            "Agent '{}' is currently engaged in another mission and could not be claimed.",
+            agent_id
+        )));
+    }
+
+    if let Some(mut agent) = state.registry.agents.get_mut(&agent_id) {
+        agent.health.status = "busy".to_string();
     }
 
     tracing::info!("📡 [Gateway] Task dispatched to Agent {}", agent_id);
@@ -279,19 +305,32 @@ pub async fn create_agent(
     State(state): State<Arc<AppState>>,
     Json(new_agent): Json<EngineAgent>,
 ) -> Result<impl IntoResponse, AppError> {
+    let agent_id = new_agent.identity.id.trim();
+    if agent_id.is_empty() {
+        return Err(AppError::BadRequest("Agent ID cannot be empty.".to_string()));
+    }
+
+    // 🛡️ [M17: Collision Guard] Reject duplicate agent ID registrations
+    if state.registry.agents.contains_key(agent_id) {
+        return Err(AppError::Conflict(format!(
+            "Agent with ID '{}' already exists in the swarm registry.",
+            agent_id
+        )));
+    }
+
     crate::agent::persistence::save_agent_db(&state.resources.pool, &new_agent)
         .await?;
  
-    let agent_id = new_agent.identity.id.clone();
+    let agent_id_owned = agent_id.to_string();
     state
         .registry
         .agents
-        .insert(agent_id.clone(), new_agent.clone());
+        .insert(agent_id_owned.clone(), new_agent.clone());
 
-    let agent_path = format!("/v1/agents/{}", agent_id);
+    let agent_path = format!("/v1/agents/{}", agent_id_owned);
     state.emit_event(serde_json::json!({
         "type": "agent:create",
-        "agent_id": agent_id.clone(),
+        "agent_id": agent_id_owned.clone(),
         "data": new_agent.clone()
     }));
     Ok((
@@ -299,7 +338,7 @@ pub async fn create_agent(
         [(axum::http::header::LOCATION, agent_path.clone())],
         Json(serde_json::json!({
             "status": "ok",
-            "agent_id": agent_id,
+            "agent_id": agent_id_owned,
             "_links": {
                 "self":    { "href": agent_path.clone(), "method": "GET" },
                 "tasks":   { "href": format!("{}/tasks", agent_path), "method": "POST" },
@@ -464,51 +503,37 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
 
                         spawn_agent_runner(state.clone(), agent_id.clone(), payload);
                     } else {
-                        // Reset to idle since task is empty or missing.
-                        let aid = agent.identity.id.clone();
-                        let mut clone = state.registry.agents.get(&aid).map(|e| e.value().clone());
-
-                        if let Some(ref mut a) = clone {
-                            a.health.status = "idle".to_string();
-                            match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
-                                Ok(()) => {
-                                    if let Some(mut entry) = state.registry.agents.get_mut(&aid) {
-                                        *entry = a.clone();
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "❌ [State Recovery] Failed to reset agent {} to idle: {}. Memory NOT modified.",
-                                        aid, e
-                                    );
-                                }
-                            }
-                        }
+                        // Reset to idle since task is empty.
+                        reset_agent_to_idle(&state, &agent.identity.id).await;
                     }
                 } else {
-                    let aid = agent.identity.id.clone();
-                    let mut clone = state.registry.agents.get(&aid).map(|e| e.value().clone());
-
-                    if let Some(ref mut a) = clone {
-                        a.health.status = "idle".to_string();
-                        match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
-                            Ok(()) => {
-                                if let Some(mut entry) = state.registry.agents.get_mut(&aid) {
-                                    *entry = a.clone();
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "❌ [State Recovery] Failed to reset agent {} to idle: {}. Memory NOT modified.",
-                                    aid, e
-                                );
-                            }
-                        }
-                    }
+                    reset_agent_to_idle(&state, &agent.identity.id).await;
                 }
             }
         })
         .await;
+}
+
+/// Helper to reset an agent to idle and persist the updated state.
+async fn reset_agent_to_idle(state: &Arc<AppState>, aid: &str) {
+    let mut clone = state.registry.agents.get(aid).map(|e| e.value().clone());
+
+    if let Some(ref mut a) = clone {
+        a.health.status = "idle".to_string();
+        match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
+            Ok(()) => {
+                if let Some(mut entry) = state.registry.agents.get_mut(aid) {
+                    *entry = a.clone();
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    "❌ [State Recovery] Failed to reset agent {} to idle: {}. Memory NOT modified.",
+                    aid, e
+                );
+            }
+        }
+    }
 }
 
 /// DELETE /v1/agents/:id — Transactionally deletes an agent and cascades all metadata.

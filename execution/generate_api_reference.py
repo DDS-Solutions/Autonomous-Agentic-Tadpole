@@ -97,6 +97,7 @@ TAG_BY_PREFIX = [
 
 PUBLIC_PATHS = {
     "/v1/engine/health",
+    "/health",
 }
 
 
@@ -271,6 +272,19 @@ def discover_routes() -> list[Route]:
         for method, handler, note in method_from_target(target):
             full_path = join_path("", route_path)
             routes.append(Route(method=method, path=full_path, handler=handler, feature_note=note))
+
+    root_body = extract_function_body(source, "create_router")
+    for route_path, target, _raw in extract_route_calls(root_body):
+        for method, handler, note in method_from_target(target):
+            routes.append(
+                Route(
+                    method=method,
+                    path=route_path,
+                    handler=handler,
+                    public=route_path in PUBLIC_PATHS,
+                    feature_note=note,
+                )
+            )
 
     # Stable ordering and dedupe.
     deduped = {(route.method, route.path): route for route in routes}

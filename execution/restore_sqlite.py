@@ -22,7 +22,8 @@ import os
 from pathlib import Path
 
 def resolve_default_db_path() -> Path:
-    """Resolves the database path dynamically from the environment."""
+    """Resolves the database path dynamically from the environment, anchored to repo root if relative."""
+    repo_root = Path(__file__).resolve().parent.parent
     db_url = os.getenv("DATABASE_URL")
     if db_url:
         if db_url.lower().startswith("sqlite:"):
@@ -31,9 +32,11 @@ def resolve_default_db_path() -> Path:
                 cleaned = cleaned[3:]
             elif cleaned.startswith("//"):
                 cleaned = cleaned[2:]
-            return Path(cleaned)
-        return Path(db_url)
-    return Path("data/tadpole.db")
+            path = Path(cleaned)
+        else:
+            path = Path(db_url)
+        return path if path.is_absolute() else (repo_root / path)
+    return repo_root / "data" / "tadpole.db"
 
 def cleanup_wal_sidecars(db_path: Path):
     """Removes stale -wal and -shm sidecar files to prevent SQLite corruption."""
@@ -89,9 +92,27 @@ def get_row_counts(db_path: Path) -> dict:
         conn.close()
     except Exception as e:
         print(f"⚠️ Failed to get row counts for {db_path}: {e}", file=sys.stderr)
-    return counts
+def check_live_engine(port: int = 8000) -> bool:
+    """Checks if the Tadpole OS server-rs engine is actively running."""
+    import urllib.request
+    port = int(os.getenv("PORT", str(port)))
+    bind_address = os.getenv("BIND_ADDRESS", "127.0.0.1")
+    url = f"http://{bind_address}:{port}/health"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "TadpoleOS/1.1.58"})
+        with urllib.request.urlopen(req, timeout=1.5) as response:
+            return response.status == 200
+    except Exception:
+        return False
 
-def restore_sqlite(backup_file_path: str, allow_unverified: bool = False):
+def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force: bool = False):
+    # 🛡️ [M19: Live-Engine Guard] Prevent restore over active SQLite connection pool
+    if check_live_engine() and not force:
+        print("❌ Error: Tadpole OS engine is currently running (active /health response detected).", file=sys.stderr)
+        print("   Restoring SQLite while the engine is live can cause database corruption or lock contention.", file=sys.stderr)
+        print("   Please stop the server-rs process before restoring, or pass --force to proceed anyway.", file=sys.stderr)
+        sys.exit(1)
+
     backup_path = Path(backup_file_path)
     if not backup_path.exists():
         # Try checking in the default backups directory
@@ -191,10 +212,11 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False):
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     allow_unverified_flag = "--allow-unverified" in sys.argv
+    force_flag = "--force" in sys.argv
     if not args:
-        print("Usage: python restore_sqlite.py <backup_path_or_filename> [--allow-unverified]")
+        print("Usage: python restore_sqlite.py <backup_path_or_filename> [--allow-unverified] [--force]")
         sys.exit(1)
         
-    restore_sqlite(args[0], allow_unverified=allow_unverified_flag)
+    restore_sqlite(args[0], allow_unverified=allow_unverified_flag, force=force_flag)
 
 # Metadata: [restore_sqlite]

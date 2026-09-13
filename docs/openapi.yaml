@@ -26,6 +26,41 @@ tags:
   - name: sovereign
   - name: system
 paths:
+  /health:
+    get:
+      tags: [system]
+      summary: "Health check"
+      security: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+  /metrics:
+    get:
+      tags: [system]
+      summary: "Metrics"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/a2a/commit:
     post:
       tags: [governance]

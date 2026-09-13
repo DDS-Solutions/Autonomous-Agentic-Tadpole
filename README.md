@@ -194,7 +194,7 @@ The engine boot path starts in `server-rs/src/main.rs`, initializes environment 
 | `execution/core/` | Modular skill framework foundation |
 | `directives/` | Governance, identity, orchestration, and provider operating instructions |
 | `docs/` | Architecture, operations, API reference, OpenAPI, and security docs |
-| `data/` | Local runtime data, including the default `tadpole.db` |
+| `data/` | Local runtime data (initialized on first boot with SQLite database `tadpole.db` and agent/model seed configs) |
 | `dist/` | Production dashboard build served by the Rust engine |
 | `tests/` | Shared frontend test setup and e2e support |
 
@@ -227,21 +227,24 @@ Detached windows are available at `/detached-view`, `/detached/swarm-pulse`, and
 
 ## API
 
-The Rust engine binds to `127.0.0.1:8000` by default. All application APIs are nested under `/v1`.
+The Rust engine binds to `127.0.0.1:8000` by default. Application APIs are nested under `/v1` alongside root operational endpoints `/health` and `/metrics`.
 
 Public routes:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
+| `GET` | `/health` | Engine health check (root unauthenticated ping) |
 | `GET` | `/v1/engine/health` | Engine health check (unauthenticated ping) |
 
 Protected route groups and WebSocket streams:
 
 | Prefix / Route | Purpose |
 | --- | --- |
+| `/metrics` | Prometheus metrics scrape endpoint (`Authorization: Bearer <token>`) |
 | `/v1/engine/ws` | Live mission telemetry WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
 | `/v1/engine/live-voice` | Live voice audio WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
 | `/v1/agents` | Agent CRUD, graph, tasks, pause/resume, memory, ledger, claims, receipts |
+| `/v1/a2a` | Agent-to-Agent communication protocols and inter-agent delegation |
 | `/v1/oversight` | Decisions, ledger, quotas, audit trail, health, policy |
 | `/v1/infra` | Node discovery and infrastructure nodes |
 | `/v1/model-manager` | Providers, models, catalog, pulls, provider tests |

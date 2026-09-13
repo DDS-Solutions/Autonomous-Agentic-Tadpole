@@ -163,10 +163,13 @@ VERIFICATION_SUITE = [
     },
 ]
 
-def run_script(name: str, script_path: Path, project_path: str, url: Optional[str] = None) -> dict:
+def run_script(name: str, script_path: Path, project_path: str, url: Optional[str] = None, required: bool = False) -> dict:
     """Run validation script"""
     if not script_path.exists():
-        print_warning(f"{name}: Script not found, skipping")
+        if required:
+            print_error(f"{name}: Required script not found at {script_path}")
+            return {"name": name, "passed": False, "skipped": False, "duration": 0, "error": f"Required script not found: {script_path}"}
+        print_warning(f"{name}: Script not found, skipping (optional)")
         return {"name": name, "passed": True, "skipped": True, "duration": 0}
     
     print_step(f"Running: {name}")
@@ -288,7 +291,7 @@ Examples:
         """
     )
     parser.add_argument("project", help="Project path to validate")
-    parser.add_argument("--url", required=True, help="URL for performance & E2E checks")
+    parser.add_argument("--url", default=None, help="URL for performance & E2E checks (optional)")
     parser.add_argument("--no-e2e", action="store_true", help="Skip E2E tests")
     parser.add_argument("--stop-on-fail", action="store_true", help="Stop on first failure")
     
@@ -325,7 +328,7 @@ Examples:
         
         for name, script_path, required in suite["checks"]:
             script = project_path / script_path
-            result = run_script(name, script, str(project_path), args.url)
+            result = run_script(name, script, str(project_path), args.url, required=required)
             result["category"] = category
             results.append(result)
             

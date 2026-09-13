@@ -254,9 +254,11 @@ impl BudgetGuard {
     /// Fetches all registered quotas.
     #[allow(dead_code)]
     pub async fn get_all_quotas(&self) -> Result<Vec<Quota>> {
-        let rows = sqlx::query("SELECT * FROM agent_quotas ORDER BY entity_id ASC")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(
+            "SELECT id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM agent_quotas ORDER BY entity_id ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut results = Vec::new();
         for r in rows {
@@ -356,10 +358,12 @@ impl BudgetGuard {
     }
 
     async fn get_or_create_quota(&self, entity_id: &str) -> Result<Quota> {
-        let row = sqlx::query("SELECT * FROM agent_quotas WHERE entity_id = ?1")
-            .bind(entity_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM agent_quotas WHERE entity_id = ?1",
+        )
+        .bind(entity_id)
+        .fetch_optional(&self.pool)
+        .await?;
 
         if let Some(r) = row {
             use sqlx::Row;
@@ -429,10 +433,12 @@ impl BudgetGuard {
     }
 
     async fn get_or_create_mission_quota(&self, cluster_id: &str) -> Result<Quota> {
-        let row = sqlx::query("SELECT * FROM mission_quotas WHERE cluster_id = ?1")
-            .bind(cluster_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT id, cluster_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM mission_quotas WHERE cluster_id = ?1",
+        )
+        .bind(cluster_id)
+        .fetch_optional(&self.pool)
+        .await?;
 
         if let Some(r) = row {
             use sqlx::Row;

@@ -52,7 +52,10 @@ impl AgentRunner {
                 ctx.agent_id
             );
         }
-        tracing::debug!("DEBUG [Runner] final_delivery content: {:?}", output_text);
+        tracing::debug!(
+            "DEBUG [Runner] final_delivery content: {:?}",
+            crate::utils::security::redact_secrets(output_text)
+        );
 
         // Update global agent state
         if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
@@ -93,8 +96,11 @@ impl AgentRunner {
             // Sync to persistence
             let pool = self.state.resources.pool.clone();
             let agent_clone = agent.clone();
+            let agent_id_for_persist = ctx.agent_id.clone();
             tokio::spawn(async move {
-                let _ = crate::agent::persistence::save_agent_db(&pool, &agent_clone).await;
+                if let Err(e) = crate::agent::persistence::save_agent_db(&pool, &agent_clone).await {
+                    tracing::error!("❌ [Finalize] Failed to persist agent {} to DB: {}", agent_id_for_persist, e);
+                }
             });
 
             self.state.emit_event(serde_json::json!({
@@ -253,9 +259,12 @@ impl AgentRunner {
             drop(entry); // Release DashMap lock before async calls
 
             // Sync to DB
-            let _ =
+            if let Err(e) =
                 crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data)
-                    .await;
+                    .await
+            {
+                tracing::error!("❌ [Finalize] Failed to persist failed agent {} to DB: {}", ctx.agent_id, e);
+            }
 
             self.state.emit_event(serde_json::json!({
                 "type": "agent:update",
@@ -325,7 +334,9 @@ impl AgentRunner {
             drop(entry);
 
             // Sync to DB
-            let _ = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await;
+            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
+                tracing::error!("❌ [Finalize] Failed to persist aborted agent {} to DB: {}", ctx.agent_id, e);
+            }
 
             self.state.emit_event(serde_json::json!({
                 "type": "agent:update",

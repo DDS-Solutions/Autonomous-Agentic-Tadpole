@@ -22,7 +22,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "gemma4:26b",
@@ -47,7 +47,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "88ed1ca0-850b-4b30-bc0d-b50fa4dbd8ea",
@@ -72,7 +72,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
@@ -97,7 +97,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "phi3.5:latest",
@@ -122,7 +122,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "gemma4:e4b",
@@ -147,16 +147,16 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
-    "id": "da821b7c-8857-488d-ac61-07c9de6bfb20",
-    "name": "Gemini 2.5 Flash",
+    "id": "gemini-2.5-flash",
+    "name": "gemini-2.5-flash",
     "providerId": "google",
     "provider": "google",
-    "rpm": 5,
-    "tpm": 250,
-    "rpd": 20,
+    "rpm": 15,
+    "tpm": 1000000,
+    "rpd": 1500,
     "tpd": 10000000,
     "modality": "llm",
     "capabilities": {
@@ -172,7 +172,7 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
     "id": "qwen3.5:9b",
@@ -197,6 +197,230 @@
       "tags": [],
       "source": "matrix"
     },
-    "lastSyncedAt": null
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gemini-2.5-pro",
+    "name": "gemini-2.5-pro",
+    "providerId": "google",
+    "provider": "google",
+    "rpm": 15,
+    "tpm": 1000000,
+    "rpd": 1500,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": true,
+      "supportsHaltingTool": true,
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "flagship",
+        "pro"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "claude-3-7-sonnet",
+    "name": "claude-3-7-sonnet",
+    "providerId": "anthropic",
+    "provider": "anthropic",
+    "rpm": 50,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 50000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": true,
+      "supportsHaltingTool": true,
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "flagship",
+        "reasoning"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gpt-4o",
+    "name": "gpt-4o",
+    "providerId": "openai",
+    "provider": "openai",
+    "rpm": 50,
+    "tpm": 300000,
+    "rpd": 10000,
+    "tpd": 30000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "flagship",
+        "multimodal"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gpt-4o-mini",
+    "name": "gpt-4o-mini",
+    "providerId": "openai",
+    "provider": "openai",
+    "rpm": 100,
+    "tpm": 500000,
+    "rpd": 20000,
+    "tpd": 50000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [
+        "fast",
+        "cost-effective"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "deepseek-v3",
+    "name": "deepseek-v3",
+    "providerId": "deepseek",
+    "provider": "deepseek",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 65536,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "open-weights",
+        "efficient"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "deepseek-reasoner",
+    "name": "deepseek-reasoner",
+    "providerId": "deepseek",
+    "provider": "deepseek",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "reasoning",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": true,
+      "supportsHaltingTool": true,
+      "contextWindow": 65536,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "reasoning",
+        "math",
+        "code"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "qwen-max",
+    "name": "qwen-max",
+    "providerId": "alibaba",
+    "provider": "alibaba",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "multilingual",
+        "enterprise"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "grok-beta",
+    "name": "grok-beta",
+    "providerId": "xai",
+    "provider": "xai",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [
+        "realtime"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
   }
 ]

@@ -180,7 +180,9 @@ impl AgentRunner {
     ) -> Result<crate::agent::types::Mission, AppError> {
         // 🛡️ [Resilience] Ensure agent exists in database (auto-sync if only in registry)
         if let Some(agent) = self.state.registry.agents.get(agent_id) {
-            let _ = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent.value()).await;
+            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent.value()).await {
+                tracing::warn!("⚠️ [Lifecycle] Pre-flight sync of agent {} to DB failed: {}", agent_id, e);
+            }
         }
 
         let depth = payload.swarm_depth.unwrap_or(0);
@@ -286,13 +288,15 @@ impl AgentRunner {
         )
         .await?;
 
-        let _ = crate::agent::mission::update_mission(
+        if let Err(e) = crate::agent::mission::update_mission(
             &self.state.resources.pool,
             &mission.id,
             crate::agent::types::MissionStatus::Active,
             0.0,
         )
-        .await;
+        .await {
+            tracing::error!("❌ [Lifecycle] Failed to set mission {} to Active: {}", mission.id, e);
+        }
 
         // --- 📔 Journaling: Record initial User node ---
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
@@ -323,7 +327,9 @@ impl AgentRunner {
             // We MUST save to the database immediately so the Orchestrator
             // (Safety Valve) can see that this agent is engaged and doesn't
             // mark the mission as a "ghost".
-            let _ = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent).await;
+            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent).await {
+                tracing::error!("❌ [Lifecycle] Failed to persist engaged agent {} to DB: {}", agent_id, e);
+            }
 
             // Broadcast the agent update so other UI components (like the sidebar) sync
             self.state.emit_event(serde_json::json!({

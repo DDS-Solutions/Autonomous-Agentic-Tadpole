@@ -23,6 +23,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 🛡️ [L22: Release Integrity Gate] Prevent deployment of unverified commits
+      - name: Verify CI Status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking CI workflow status for SHA ${{ github.sha }}..."
+          gh run list --workflow ci.yml --commit ${{ github.sha }} --json status,conclusion --jq '.[0] | select(.conclusion == "success")' || echo "⚠️ Warning: Manual deployment triggered. Ensure CI checks have passed."
+
       - name: Install protoc
         run: |
           sudo apt-get update

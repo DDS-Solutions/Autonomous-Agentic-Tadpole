@@ -124,11 +124,20 @@ impl AgentRunner {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Error reading text".to_string());
-                    let truncated = self.safe_truncate(&text, 8000);
-                    Ok(format!("(FETCHED CONTENT FROM {}):\n\n{}", url, truncated))
+                    // 🛡️ [M45: Prompt-Injection Defense] Neutralize boundary escapes and chat template tokens
+                    let sanitized = text
+                        .replace("</untrusted_web_content>", "&lt;/untrusted_web_content&gt;")
+                        .replace("<|im_start|>", "")
+                        .replace("<|im_end|>", "")
+                        .replace("<|endoftext|>", "");
+                    let truncated = self.safe_truncate(&sanitized, 8000);
+                    Ok(format!(
+                        "<untrusted_web_content url=\"{}\">\n{}\n</untrusted_web_content>",
+                        url, truncated
+                    ))
                 }
                 Err(e) => {
-                    Ok(format!("(FETCH FAILED: {})", e))
+                    Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: {}\n</untrusted_web_content>", url, e))
                 }
             }
         }

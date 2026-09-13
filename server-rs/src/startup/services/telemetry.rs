@@ -215,13 +215,11 @@ impl SystemService for SystemHealthMonitorService {
                                     tracing::error!("🚨 [HealthMonitor] Critical subsystem '{}' is in failed state: {}", sub, e);
                                     failed_detected = true;
                                 }
-                                Some(crate::types::SubsystemStatus::Warming(_)) | Some(crate::types::SubsystemStatus::NotStarted) | None => {
-                                    if is_timeout {
-                                        let err_msg = "Startup timeout (exceeded 30s in warming state)".to_string();
-                                        app_state.resources.set_subsystem_status(sub, crate::types::SubsystemStatus::Failed(err_msg));
-                                        tracing::error!("🚨 [HealthMonitor] Critical subsystem '{}' timed out warming up.", sub);
-                                        failed_detected = true;
-                                    }
+                                Some(crate::types::SubsystemStatus::Warming(_)) | Some(crate::types::SubsystemStatus::NotStarted) | None if is_timeout => {
+                                    let err_msg = "Startup timeout (exceeded 30s in warming state)".to_string();
+                                    app_state.resources.set_subsystem_status(sub, crate::types::SubsystemStatus::Failed(err_msg));
+                                    tracing::error!("🚨 [HealthMonitor] Critical subsystem '{}' timed out warming up.", sub);
+                                    failed_detected = true;
                                 }
                                 _ => {}
                             }

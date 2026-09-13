@@ -1,5 +1,0 @@
-[Registry] Loaded skill: greeting_skill
-[Registry] Loaded skill: research_orchestrator
-[Registry] Loaded skill: parity_guard
-[Registry] Loaded skill: verify_ai_context
-[Registry] Loaded skill: security_scan

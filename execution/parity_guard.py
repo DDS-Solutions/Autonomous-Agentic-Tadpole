@@ -277,6 +277,49 @@ def check_api_docs_parity(root, fix=False):
             print_result("DOCS-PARITY", True, "API_REFERENCE.md is synchronized")
             return 0
 
+def check_readme_routes(root, code_routes):
+    print(f"\nChecking README.md API Routes Parity...")
+    readme_path = root / "README.md"
+    if not readme_path.exists():
+        print_result("README-ROUTES", False, "README.md missing")
+        return 1
+    
+    readme_text = readme_path.read_text(encoding="utf-8")
+    
+    # Required core endpoints and route prefixes that must be documented in README.md
+    expected_prefixes = {
+        "/health",
+        "/metrics",
+        "/v1/engine/health",
+        "/v1/engine/ws",
+        "/v1/engine/live-voice",
+        "/v1/agents",
+        "/v1/a2a",
+        "/v1/oversight",
+        "/v1/infra",
+        "/v1/model-manager",
+        "/v1/skills",
+        "/v1/benchmarks",
+        "/v1/continuity",
+        "/v1/docs",
+        "/v1/system",
+        "/v1/governance",
+        "/v1/sovereign",
+        "/v1/intelligence",
+        "/v1/knowledge",
+        "/v1/iacp",
+    }
+    
+    errors = 0
+    for prefix in sorted(expected_prefixes):
+        if prefix not in readme_text:
+            print_result("README-ROUTES", False, f"Route prefix {prefix} not documented in README.md")
+            errors += 1
+        else:
+            print_result("README-ROUTES", True, f"Route prefix {prefix} documented in README.md")
+            
+    return errors
+
 def check_parity(root_dir=None, fix=False):
     root = Path(root_dir).resolve() if root_dir else ROOT
     router_path = root / "server-rs" / "src" / "router.rs"
@@ -363,6 +406,7 @@ def check_parity(root_dir=None, fix=False):
         else:
             print_result("ADG-TAG", True, f"{tag} synchronized")
 
+    errors += check_readme_routes(root, code_routes)
     errors += check_env_vars(root)
     errors += check_version_sync(root)
     errors += check_doc_file_refs(root)

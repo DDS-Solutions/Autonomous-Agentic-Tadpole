@@ -27,11 +27,13 @@ pub struct BlackboardEntry {
     pub updated_at: DateTime<Utc>,
 }
 
+pub type MissionBoard = Arc<DashMap<String, Arc<BlackboardEntry>>>;
+
 /// Swarm-wide shared blackboard partitioned by `mission_id`.
 #[derive(Debug, Clone, Default)]
 pub struct SharedBlackboard {
     // mission_id -> (key -> Arc<BlackboardEntry>)
-    missions: Arc<DashMap<String, Arc<DashMap<String, Arc<BlackboardEntry>>>>>,
+    missions: Arc<DashMap<String, MissionBoard>>,
 }
 
 impl SharedBlackboard {

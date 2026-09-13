@@ -80,6 +80,9 @@ class LocalMemoryService {
     }
 
     private cosine_similarity(a: number[], b: number[]): number {
+        if (!a || !b || a.length === 0 || b.length === 0 || a.length !== b.length) {
+            return 0;
+        }
         let dot_product = 0;
         let norm_a = 0;
         let norm_b = 0;
@@ -88,7 +91,12 @@ class LocalMemoryService {
             norm_a += a[i] * a[i];
             norm_b += b[i] * b[i];
         }
-        return dot_product / (Math.sqrt(norm_a) * Math.sqrt(norm_b));
+        const denominator = Math.sqrt(norm_a) * Math.sqrt(norm_b);
+        if (denominator === 0 || !Number.isFinite(denominator)) {
+            return 0;
+        }
+        const score = dot_product / denominator;
+        return Number.isFinite(score) ? score : 0;
     }
 }
 

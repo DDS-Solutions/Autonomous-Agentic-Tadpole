@@ -346,9 +346,11 @@ impl AgentRunner {
                         let user_msg_clone = payload.message.clone();
                         futures.push(async move {
                             runner.update_status(&ctx_clone.agent_id, &ctx_clone.mission_id, "working", Some(&format!("Executing tool: {}...", fc.name)));
+                            runner.record_heartbeat(&ctx_clone.agent_id).await;
                             let mut local_text = String::new();
                             let mut local_usage = None;
                             let result = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
+                            runner.record_heartbeat(&ctx_clone.agent_id).await;
 
                             // 🧬 [Evolution] Autonomous Refinement Hook
                             runner.handle_tool_failure_refinement(&ctx_clone, &fc, &mut local_text);
@@ -363,6 +365,7 @@ impl AgentRunner {
 
                     let stream_res = async {
                         while let Some((name, result, local_text, local_usage)) = futures.next().await {
+                            self.record_heartbeat(&ctx.agent_id).await;
                             self.accumulate_usage(&mut usage, local_usage);
                             observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
                             result?;
@@ -483,6 +486,7 @@ impl AgentRunner {
     }
 
     /// Enforces the Sentinel Gate protocol: Specialist agents are forbidden from text-only turns.
+    #[allow(clippy::too_many_arguments)]
     async fn enforce_sentinel_gate(
         &self,
         ctx: &RunContext,
@@ -592,6 +596,7 @@ impl AgentRunner {
     }
 
     /// Handles re-prompting when the model produces malformed tool calls.
+    #[allow(clippy::too_many_arguments)]
     async fn handle_extraction_failure(
         &self,
         ctx: &RunContext,

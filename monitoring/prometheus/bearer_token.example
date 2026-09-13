@@ -1,2 +1,3 @@
-# Paste your NEURAL_TOKEN here to enable Prometheus to scrape /metrics
-test-token
+# Copy this file to monitoring/prometheus/bearer_token and insert your NEURAL_TOKEN
+# to allow Prometheus to scrape the authenticated /metrics endpoint.
+your-neural-token-here

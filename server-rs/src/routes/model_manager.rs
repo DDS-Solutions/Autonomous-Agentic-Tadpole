@@ -74,6 +74,28 @@ pub fn get_ollama_host() -> String {
     std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
 }
 
+pub fn is_secure_local(url_str: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url_str) else {
+        return false;
+    };
+    if let Some(host) = parsed.host_str() {
+        if host.eq_ignore_ascii_case("localhost")
+            || host == "127.0.0.1"
+            || host == "::1"
+            || host.eq_ignore_ascii_case("host.docker.internal")
+        {
+            return true;
+        }
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            return match ip {
+                std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+                std::net::IpAddr::V6(v6) => v6.is_loopback(),
+            };
+        }
+    }
+    false
+}
+
 enum ProtocolRouter {
     Anthropic,
     Google,
@@ -347,10 +369,13 @@ pub async fn test_provider(
     let url = router.build_models_url(&protocol, base_url, false);
 
     // SEC-01: Prevent transmission of API keys over unencrypted HTTP for external endpoints.
-    let secure_local = url.contains("localhost") || url.contains("127.0.0.1") || url.contains("host.docker.internal") || url.starts_with("http://192.168.") || url.starts_with("http://10.");
+    let parsed_url = reqwest::Url::parse(&url).map_err(|e| {
+        AppError::BadRequest(format!("Malformed provider URL: {}", e))
+    })?;
+    let secure_local = is_secure_local(&url);
     let allow_insecure = std::env::var("TADPOLE_ALLOW_LOCAL_HTTP").is_ok();
     
-    if url.starts_with("http://") && !secure_local && !allow_insecure {
+    if parsed_url.scheme() == "http" && !secure_local && !allow_insecure {
         return Err(AppError::BadRequest(
             "Insecure transmission blocked: API keys cannot be sent over HTTP to external providers. Use HTTPS."
                 .to_string(),
@@ -415,6 +440,20 @@ pub async fn sync_provider_models(
     // 1. Resolve URL and Authenticate via Router
     let router = ProtocolRouter::from_protocol(&protocol);
     let url = router.build_models_url(&protocol, base_url, true);
+
+    // SEC-01: Prevent transmission of API keys over unencrypted HTTP for external endpoints.
+    let parsed_url = reqwest::Url::parse(&url).map_err(|e| {
+        AppError::BadRequest(format!("Malformed provider URL: {}", e))
+    })?;
+    let secure_local = is_secure_local(&url);
+    let allow_insecure = std::env::var("TADPOLE_ALLOW_LOCAL_HTTP").is_ok();
+
+    if parsed_url.scheme() == "http" && !api_key.is_empty() && !secure_local && !allow_insecure {
+        return Err(AppError::BadRequest(
+            "Insecure transmission blocked: API keys cannot be sent over HTTP to external providers. Use HTTPS."
+                .to_string(),
+        ));
+    }
 
     let request = state.resources.http_client.get(&url).timeout(std::time::Duration::from_secs(10));
     let request = router.authenticate_request(request, &api_key);

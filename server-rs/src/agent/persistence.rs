@@ -577,7 +577,7 @@ pub async fn save_models(base_dir: &std::path::Path, models: Vec<ModelEntry>) ->
 /// mechanism, or `Ok(false)` if the agent is already engaged in another reasoning turn.
 pub async fn claim_agent(pool: &SqlitePool, agent_id: &str) -> Result<bool, AppError> {
     let now = chrono::Utc::now();
-    let res = sqlx::query("UPDATE agents SET status = 'busy', heartbeat_at = ? WHERE id = ? AND status = 'idle'")
+    let res = sqlx::query("UPDATE agents SET status = 'busy', heartbeat_at = ? WHERE id = ? AND status IN ('idle', 'active')")
         .bind(now)
         .bind(agent_id)
         .execute(pool)
@@ -627,9 +627,11 @@ pub async fn update_agent_heartbeat(pool: &SqlitePool, agent_id: &str) -> Result
 
 /// Loads all sync manifests from the database.
 pub async fn load_sync_manifests(pool: &SqlitePool) -> Result<Vec<crate::agent::SyncManifest>, AppError> {
-    let rows = sqlx::query_as::<_, crate::agent::SyncManifest>("SELECT * FROM sync_manifest")
-        .fetch_all(pool)
-        .await?;
+    let rows = sqlx::query_as::<_, crate::agent::SyncManifest>(
+        "SELECT id, agent_id, source_type, source_uri, status, last_sync_at FROM sync_manifest"
+    )
+    .fetch_all(pool)
+    .await?;
     Ok(rows)
 }
 

@@ -22,6 +22,7 @@ The Rust engine binds to `127.0.0.1:8000` by default and nests application route
 
 Public routes:
 
+- `GET /health`
 - `GET /v1/engine/health`
 
 Protected routes require:
@@ -226,6 +227,8 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
+| `GET` | `/health` | `routes::health::health_check` | Public |
+| `GET` | `/metrics` | `routes::health::metrics_handler` | Protected |
 | `GET` | `/v1/env-schema` | `routes::env_schema::get_env_schema` | Protected |
 | `GET` | `/v1/memory/search/hybrid` | `routes::memory::hybrid_rag_search_handler` | Protected |
 | `GET` | `/v1/system/compute-profile` | `routes::system::get_compute_profile` | Protected |
