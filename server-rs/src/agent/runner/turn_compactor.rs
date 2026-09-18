@@ -32,7 +32,7 @@ pub async fn compact_and_offload_observation(
     raw_output: &str,
     workspace_root: &Path,
 ) -> (String, Option<PathBuf>) {
-    if raw_output.len() <= 300 {
+    if raw_output.chars().count() <= 300 {
         return (format!("\nTool {} Result: {}", tool_name, raw_output), None);
     }
 
@@ -109,10 +109,13 @@ pub fn compact_conversation_history(role: &str, raw_history: &[String]) -> Vec<S
             .to_string();
 
         let is_in_pinned_tail = len > pinned_tail_count && idx >= (len - pinned_tail_count);
-        let is_failure = clean_msg.contains("error")
-            || clean_msg.contains("failed")
-            || clean_msg.contains("Error")
-            || clean_msg.contains("Failed");
+        let is_failure = clean_msg.contains("[TOOL_ERROR]")
+            || clean_msg.contains("FAILED:")
+            || clean_msg.contains("Exception:")
+            || clean_msg.contains("SyntaxError:")
+            || clean_msg.contains("Error:")
+            || clean_msg.contains("ERROR:")
+            || clean_msg.contains("Command failed with exit code");
 
         // Never compress items in the pinned tail, or failures (failure visibility retention)
         if is_in_pinned_tail || is_failure {
@@ -121,7 +124,7 @@ pub fn compact_conversation_history(role: &str, raw_history: &[String]) -> Vec<S
         }
 
         if (clean_msg.starts_with("OBSERVATION:") || clean_msg.starts_with("TOOL OUTPUT:"))
-            && clean_msg.len() > 300
+            && clean_msg.chars().count() > 300
         {
             // If the observation already points to an offloaded file, preserve pointer intact
             if !clean_msg.contains("tool_overflow") && !clean_msg.contains("Full output saved to:") {
@@ -223,6 +226,46 @@ mod tests {
         let supervisor_view = compact_conversation_history("CEO", &history);
         assert_eq!(supervisor_view.len(), 2);
     }
+
+    #[tokio::test]
+    async fn test_cleanup_overflow_directory() {
+        let dir = tempdir().unwrap();
+        let overflow = dir.path().join(".tmp").join("tool_overflow");
+        tokio::fs::create_dir_all(&overflow).await.unwrap();
+        let old_file = overflow.join("tool_output_old.txt");
+        tokio::fs::write(&old_file, "old data").await.unwrap();
+
+        // Immediate cleanup with 0 max_age should remove file
+        let removed = cleanup_overflow_directory(dir.path(), std::time::Duration::from_secs(0)).await.unwrap();
+        assert_eq!(removed, 1);
+        assert!(!old_file.exists());
+    }
+}
+
+/// Prunes overflow files older than max_age to prevent disk exhaustion.
+pub async fn cleanup_overflow_directory(workspace_root: &Path, max_age: std::time::Duration) -> Result<usize, std::io::Error> {
+    let overflow_dir = workspace_root.join(".tmp").join("tool_overflow");
+    if !overflow_dir.exists() {
+        return Ok(0);
+    }
+    let mut entries = tokio::fs::read_dir(&overflow_dir).await?;
+    let mut removed = 0;
+    let now = std::time::SystemTime::now();
+
+    while let Some(entry) = entries.next_entry().await? {
+        if let Ok(metadata) = entry.metadata().await {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(age) = now.duration_since(modified) {
+                    if age >= max_age {
+                        if let Ok(()) = tokio::fs::remove_file(entry.path()).await {
+                            removed += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(removed)
 }
 
 // Metadata: [turn_compactor]

@@ -95,6 +95,8 @@ pub struct RunContext {
     pub resource_weights: std::collections::HashMap<String, f32>,
     pub security_policy: serde_json::Value,
     pub active_node_id: std::sync::Arc<parking_lot::Mutex<Option<String>>>,
+    pub conflict: std::sync::Arc<crate::security::conflict::ConflictManager>,
+    pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
 }
 
 impl Default for RunContext {
@@ -138,6 +140,8 @@ impl Default for RunContext {
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
+            conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
+            metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
         }
     }
 }

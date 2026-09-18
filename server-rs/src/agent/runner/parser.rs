@@ -40,7 +40,7 @@ static XML_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 static GEMMA_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)<\|tool_call\|>call:([a-zA-Z0-9_-]+)(\{.*?\})<tool_call\|>").unwrap()
+    Regex::new(r"(?s)<\|tool_call\|>call:([a-zA-Z0-9_-]+)(\{.*?\})<\|?tool_call\|>").unwrap()
 });
 
 static BARE_CALL_REGEX: Lazy<Regex> =
@@ -208,14 +208,14 @@ impl PolyglotParser {
                 let open_idx = start + open;
                 let mut balance = 0;
                 let mut close_idx = None;
-                for (i, c) in text[open_idx..].chars().enumerate() {
+                for (byte_offset, c) in text[open_idx..].char_indices() {
                     if c == '{' {
                         balance += 1;
                     } else if c == '}' {
                         balance -= 1;
                     }
                     if balance == 0 {
-                        close_idx = Some(open_idx + i + 1);
+                        close_idx = Some(open_idx + byte_offset + c.len_utf8());
                         break;
                     }
                 }
@@ -291,10 +291,18 @@ impl PolyglotParser {
                                         .get("tool_input")
                                         .or_else(|| v.get("tool_args"))
                                         .or_else(|| v.get("params"))
-                                        .cloned();
+                                        .cloned()
+                                        .unwrap_or_else(|| {
+                                            let mut obj = v.clone();
+                                            if let Some(map) = obj.as_object_mut() {
+                                                map.remove("tool_name");
+                                                map.remove("command");
+                                            }
+                                            obj
+                                        });
                                     calls.push(ToolCall {
                                         name: name_raw.to_string(),
-                                        args: args.unwrap_or_else(|| serde_json::json!({})),
+                                        args,
                                     });
                                 }
                             }
@@ -588,6 +596,23 @@ mod tests {
         let input = "Checking repo... <function=search>{\"query\": \"foo\"}</function> Done search.";
         let scrubbed = PolyglotParser::scrub_tool_calls(input);
         assert_eq!(scrubbed, "Checking repo...  Done search.");
+    }
+
+    #[test]
+    fn test_fallback_scanner_non_ascii_unicode() {
+        let input = "Action:\n{\"tool_name\": \"search\", \"query\": \"café 👋 🚀\", \"details\": \"über cool\"}";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "search");
+        assert_eq!(calls[0].args["query"], "café 👋 🚀");
+    }
+
+    #[test]
+    fn test_extract_gemma_symmetric_token() {
+        let input = "I will search now. <|tool_call|>call:list_files{\"path\": \".\"}<|tool_call|>";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "list_files");
     }
 }
 

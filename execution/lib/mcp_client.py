@@ -64,6 +64,7 @@ class TadpoleClient:
         self._file = None
         self._request_id = 0
         self._tool_cache: Dict[str, dict] = {}
+        self._recv_buf = b""
         self._connect()
 
     def _connect(self):
@@ -129,21 +130,11 @@ class TadpoleClient:
             # Windows named pipe
             self._file.write(payload_bytes)
             self._file.flush()
-            response_line = b""
-            while True:
-                chunk = self._file.read(1)
-                if not chunk or chunk == b"\n":
-                    break
-                response_line += chunk
+            response_line = self._readline_from_stream(self._file)
         else:
             # Unix socket
             self._sock.sendall(payload_bytes)
-            response_line = b""
-            while True:
-                chunk = self._sock.recv(1)
-                if not chunk or chunk == b"\n":
-                    break
-                response_line += chunk
+            response_line = self._readline_from_stream(self._sock)
 
         if not response_line:
             raise ConnectionError("IPC bridge closed connection unexpectedly")
@@ -181,6 +172,37 @@ class TadpoleClient:
     def get_tool_schema(self, tool_name: str) -> dict:
         """Get full schema for a specific tool."""
         return self._send_request("get_tool_schema", {"name": tool_name})
+
+    def call_tool(self, tool_name: str, arguments: Optional[dict] = None) -> Any:
+        """
+        Execute a registered tool via the IPC bridge.
+
+        Args:
+            tool_name: The name of the tool to execute (e.g., 'read_file').
+            arguments: Dictionary of arguments matching the tool's schema.
+
+        Returns:
+            The tool's output data.
+        """
+        return self._send_request("call_tool", {"name": tool_name, "arguments": arguments or {}})
+
+    def _readline_from_stream(self, stream) -> bytes:
+        """Buffered line reader to prevent 1-byte read syscall overhead."""
+        while b"\n" not in self._recv_buf:
+            if hasattr(stream, "read"):
+                chunk = stream.read(4096)
+            else:
+                chunk = stream.recv(4096)
+            if not chunk:
+                break
+            self._recv_buf += chunk
+
+        if b"\n" in self._recv_buf:
+            line, self._recv_buf = self._recv_buf.split(b"\n", 1)
+            return line
+        line = self._recv_buf
+        self._recv_buf = b""
+        return line
 
     def close(self):
         """Close the IPC connection."""
@@ -277,8 +299,13 @@ if __name__ == "__main__":
         elif cmd == "schema" and len(sys.argv) > 2:
             schema = client.get_tool_schema(sys.argv[2])
             print(json.dumps(schema, indent=2))
+        elif cmd == "call" and len(sys.argv) > 2:
+            tool_name = sys.argv[2]
+            tool_args = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
+            result = client.call_tool(tool_name, tool_args)
+            print(json.dumps(result, indent=2) if isinstance(result, (dict, list)) else str(result))
         else:
-            print("Usage: python -m execution.lib.mcp_client [ping|list|schema <name>]")
+            print("Usage: python -m execution.lib.mcp_client [ping|list|schema <name>|call <name> [args_json]]")
     except TadpoleClientError as e:
         print(f"❌ RPC Error: {e}", file=sys.stderr)
         sys.exit(1)

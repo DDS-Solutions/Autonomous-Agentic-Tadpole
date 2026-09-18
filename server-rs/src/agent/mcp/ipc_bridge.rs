@@ -77,6 +77,7 @@ impl JsonRpcResponse {
 /// or Unix Domain Socket (Linux/macOS) using newline-delimited JSON-RPC 2.0.
 pub struct IpcBridge {
     pipe_path: PathBuf,
+    workspace_root: PathBuf,
     tool_registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,
     shutdown: Arc<Notify>,
 }
@@ -118,6 +119,7 @@ impl IpcBridge {
 
         Self {
             pipe_path,
+            workspace_root: workspace_root.to_path_buf(),
             tool_registry,
             shutdown: Arc::new(Notify::new()),
         }
@@ -160,8 +162,9 @@ impl IpcBridge {
                     match result {
                         Ok(()) => {
                             let registry = Arc::clone(&self.tool_registry);
+                            let root = self.workspace_root.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = Self::handle_connection(pipe, registry).await {
+                                if let Err(e) = Self::handle_connection(pipe, registry, root).await {
                                     tracing::warn!(target: "ipc_bridge", "Client connection error: {}", e);
                                 }
                             });
@@ -194,8 +197,9 @@ impl IpcBridge {
                     match result {
                         Ok((stream, _)) => {
                             let registry = Arc::clone(&self.tool_registry);
+                            let root = self.workspace_root.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = Self::handle_connection(stream, registry).await {
+                                if let Err(e) = Self::handle_connection(stream, registry, root).await {
                                     tracing::warn!(target: "ipc_bridge", "Client connection error: {}", e);
                                 }
                             });
@@ -218,6 +222,7 @@ impl IpcBridge {
     async fn handle_connection<S>(
         stream: S,
         registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,
+        workspace_root: PathBuf,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -232,7 +237,7 @@ impl IpcBridge {
             }
 
             let response = match serde_json::from_str::<JsonRpcRequest>(&line) {
-                Ok(req) => Self::dispatch(&req, &registry).await,
+                Ok(req) => Self::dispatch(&req, &registry, &workspace_root).await,
                 Err(e) => {
                     tracing::debug!(target: "ipc_bridge", "[IPC_BRIDGE_002] Parse error: {}", e);
                     JsonRpcResponse::error(
@@ -255,6 +260,7 @@ impl IpcBridge {
     async fn dispatch(
         req: &JsonRpcRequest,
         registry: &crate::agent::runner::tools::registry::ToolRegistry,
+        workspace_root: &std::path::Path,
     ) -> JsonRpcResponse {
         match req.method.as_str() {
             "list_tools" => {
@@ -301,11 +307,60 @@ impl IpcBridge {
 
             "ping" => JsonRpcResponse::success(req.id.clone(), serde_json::json!("pong")),
 
+            "call_tool" => {
+                let tool_name = req
+                    .params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let args = req
+                    .params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+
+                match registry.get(tool_name) {
+                    Some(tool) => {
+                        let mock_state = Arc::new(crate::state::AppState::new_minimal_mock().await);
+                        let tool_ctx = crate::agent::types::ToolContext {
+                            mission_id: "ipc-mission".to_string(),
+                            agent_id: "ipc-client".to_string(),
+                            workspace_root: workspace_root.to_path_buf(),
+                            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.to_path_buf()),
+                            state: mock_state,
+                            trace_id: uuid::Uuid::new_v4().to_string(),
+                            budget_usd: 0.0,
+                            budget_limit_usd: 10.0,
+                            security_policy: serde_json::json!({}),
+                            active_node_id: None,
+                        };
+                        let mut usage = None;
+                        match tool.execute(&tool_ctx, args, &mut usage).await {
+                            Ok(output) => {
+                                JsonRpcResponse::success(req.id.clone(), serde_json::json!({ "output": output }))
+                            }
+                            Err(e) => {
+                                JsonRpcResponse::error(
+                                    req.id.clone(),
+                                    -32000,
+                                    format!("Tool execution error: {}", e),
+                                )
+                            }
+                        }
+                    }
+                    None => JsonRpcResponse::error(
+                        req.id.clone(),
+                        -32601,
+                        format!("Tool '{}' not found", tool_name),
+                    ),
+                }
+            }
+
             _ => JsonRpcResponse::error(
                 req.id.clone(),
                 -32601,
                 format!(
-                    "Method '{}' not found. Available: list_tools, get_tool_schema, ping",
+                    "Method '{}' not found. Available: list_tools, get_tool_schema, ping, call_tool",
                     req.method
                 ),
             ),
@@ -358,5 +413,37 @@ mod tests {
         assert!(json.contains("\"error\""));
         assert!(json.contains("\"code\":-32601"));
         assert!(!json.contains("\"result\""));
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_ping() {
+        let registry = crate::agent::runner::tools::registry::ToolRegistry::new();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::json!(10),
+            method: "ping".to_string(),
+            params: serde_json::Value::Null,
+        };
+        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new(".")).await;
+        assert_eq!(resp.result, Some(serde_json::json!("pong")));
+        assert!(resp.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_call_tool_not_found() {
+        let registry = crate::agent::runner::tools::registry::ToolRegistry::new();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::json!(11),
+            method: "call_tool".to_string(),
+            params: serde_json::json!({
+                "name": "nonexistent_tool",
+                "arguments": {}
+            }),
+        };
+        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new(".")).await;
+        assert!(resp.result.is_none());
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap().code, -32601);
     }
 }

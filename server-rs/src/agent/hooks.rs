@@ -198,6 +198,7 @@ impl HooksManager {
         params: &serde_json::Value,
     ) -> Result<(), AppError> {
         let mut cmd = self.build_command(path, ctx, params)?;
+        cmd.kill_on_drop(true);
 
         // Bounded execution with timeout
         let child = cmd.output();

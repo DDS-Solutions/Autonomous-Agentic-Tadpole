@@ -1172,6 +1172,7 @@ mod tests {
                 deploy_token: "test".to_string(),
                 deploy_token_old: None,
                 deploy_token_new: None,
+                conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
             }),
             resources: Arc::new(crate::state::hubs::res::ResourceHub {
                 pool,

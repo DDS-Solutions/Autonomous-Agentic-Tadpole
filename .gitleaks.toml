@@ -1,6 +1,5 @@
 # Gitleaks Configuration — TadPole OS
-# Suppresses known false positives. All entries are verified non-secret
-# test fixtures, documentation placeholders, or preference-key constants.
+# Suppresses known false positives in test fixtures, mocks, and documentation placeholders.
 
 title = "TadPole OS Gitleaks Config"
 
@@ -8,26 +7,24 @@ title = "TadPole OS Gitleaks Config"
 useDefault = true
 
 [allowlist]
-description = "Global allowlist for test fixtures, mocks, and documentation placeholders"
+description = "Allowlist for test fixtures, mocks, and documentation placeholders"
 paths = [
-    # Rust unit test modules and security scanners
-    '''(?i)server-rs/src/agent/.*''',
-    '''(?i)server-rs/src/error/.*''',
-    '''(?i)server-rs/src/routes/.*''',
-    '''(?i)server-rs/src/secret_redactor\.rs''',
-    '''(?i)server-rs/src/security/.*''',
-    '''(?i)server-rs/src/utils/.*''',
-    # Frontend & JS/TS test files
+    # Test directories and fixture files
     '''(?i).*\.test\.(ts|tsx|js|jsx)$''',
-    '''(?i)tests/.*''',
+    '''(?i).*/tests/.*''',
+    '''(?i).*/fixtures/.*''',
+    '''(?i)server-rs/tests/.*''',
     # Documentation placeholders
     '''(?i)docs/.*\.md$''',
     '''(?i)wiki/.*\.md$''',
+    '''(?i)README\.md$''',
+    '''(?i)SYSTEM_MAP\.md$''',
+    '''(?i)\.env\.example$''',
     # Android preference constants
     '''(?i)apps/mobile-android/.*''',
 ]
-regexes = [
-    '''(?i)sk-(?:ant-|proj-|secret-|svcacct-|admin-)?[a-zA-Z0-9_-]{10,}''',
-    '''-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----''',
-    '''encrypted_ed25519_private_key''',
+stopwords = [
+    "00000000000000000000000000000000",
+    "test_token",
+    "dummy_key",
 ]

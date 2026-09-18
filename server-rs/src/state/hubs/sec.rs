@@ -45,6 +45,8 @@ pub struct SecurityHub {
     pub deploy_token_old: Option<String>,
     /// New token generated during grace period.
     pub deploy_token_new: Option<String>,
+    /// Multi-agent atomic file lease manager for TOCTOU and concurrent write prevention.
+    pub conflict: Arc<crate::security::conflict::ConflictManager>,
 }
 
 

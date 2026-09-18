@@ -12,6 +12,7 @@
 //! - **Witness Tests**: none declared
 
 use crate::error::AppError;
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -35,19 +36,24 @@ impl ConflictManager {
         self.leases
             .retain(|_, (_, timestamp)| now.duration_since(*timestamp) < self.ttl);
 
-        if let Some(entry) = self.leases.get(&path) {
-            let (holder, timestamp) = entry.value();
-            if holder != &agent_id && now.duration_since(*timestamp) < self.ttl {
-                return Err(AppError::Forbidden(format!(
-                    "Path {:?} is currently locked by agent '{}' (lease expires in {:?}). Please retry with backoff.",
-                    path,
-                    holder,
-                    self.ttl.checked_sub(now.duration_since(*timestamp)).unwrap_or(Duration::from_secs(0))
-                )));
+        match self.leases.entry(path.clone()) {
+            Entry::Occupied(mut entry) => {
+                let (holder, timestamp) = entry.get();
+                if holder != &agent_id && now.duration_since(*timestamp) < self.ttl {
+                    return Err(AppError::Forbidden(format!(
+                        "Path {:?} is currently locked by agent '{}' (lease expires in {:?}). Please retry with backoff.",
+                        path,
+                        holder,
+                        self.ttl.checked_sub(now.duration_since(*timestamp)).unwrap_or(Duration::from_secs(0))
+                    )));
+                }
+                entry.insert((agent_id, now));
+            }
+            Entry::Vacant(entry) => {
+                entry.insert((agent_id, now));
             }
         }
 
-        self.leases.insert(path, (agent_id, now));
         Ok(())
     }
 
@@ -105,5 +111,34 @@ mod tests {
         assert!(manager
             .acquire_lease(path.clone(), "agent-b".to_string())
             .is_ok());
+    }
+
+    #[test]
+    fn test_conflict_manager_concurrent_race() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let manager = Arc::new(ConflictManager::new());
+        let path = PathBuf::from("workspace/concurrent.txt");
+        let mut handles = Vec::new();
+
+        for i in 0..10 {
+            let mgr = Arc::clone(&manager);
+            let p = path.clone();
+            let agent = format!("agent-{}", i);
+            handles.push(thread::spawn(move || {
+                mgr.acquire_lease(p, agent)
+            }));
+        }
+
+        let mut successes = 0;
+        for h in handles {
+            if h.join().unwrap().is_ok() {
+                successes += 1;
+            }
+        }
+
+        // Exactly one agent must win the initial lease when concurrent agents compete
+        assert_eq!(successes, 1);
     }
 }

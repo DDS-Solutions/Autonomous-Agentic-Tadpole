@@ -23,20 +23,32 @@ pub fn get_skill_requirements(skill: &str) -> (Vec<&'static str>, Vec<&'static s
     }
 }
 
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+
+static BINARY_CACHE: Lazy<DashMap<String, bool>> = Lazy::new(DashMap::new);
+
 /// Checks if a system binary is available on the path.
 pub fn is_binary_available(name: &str) -> bool {
+    if let Some(cached) = BINARY_CACHE.get(name) {
+        return *cached;
+    }
+
     let check_cmd = if cfg!(target_os = "windows") {
         "where"
     } else {
         "which"
     };
-    std::process::Command::new(check_cmd)
+    let available = std::process::Command::new(check_cmd)
         .arg(name)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
         .map(|status| status.success())
-        .unwrap_or(false)
+        .unwrap_or(false);
+
+    BINARY_CACHE.insert(name.to_string(), available);
+    available
 }
 
 /// Verifies that all required binaries and env variables are present for the given list of skills.

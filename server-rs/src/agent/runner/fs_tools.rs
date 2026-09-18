@@ -115,9 +115,18 @@ impl AgentRunner {
             filename
         );
 
+        let path_buf = std::path::PathBuf::from(filename);
+        if let Err(e) = self.state.security.conflict.acquire_lease(path_buf.clone(), ctx.agent_id.clone()) {
+            return Ok(format!("(WRITE FAILED: Concurrent file conflict - {})", e));
+        }
+
         let adapter = &ctx.fs_adapter;
-        match adapter.write_file(filename, content).await {
+        let write_res = adapter.write_file(filename, content).await;
+        self.state.security.conflict.release_lease(&path_buf);
+
+        match write_res {
             Ok(_) => {
+                ctx.metrics.record_file_modified();
                 // 🥖 Drop a breadcrumb
                 let mut breadcrumbs = ctx.last_accessed_files.lock();
                 let f_str = filename.to_string();
@@ -323,6 +332,10 @@ impl AgentRunner {
                     // Only search text files
                     if !path.contains('.') || path.ends_with(".rs") || path.ends_with(".ts") || path.ends_with(".js") || path.ends_with(".py") || path.ends_with(".md") || path.ends_with(".txt") || path.ends_with(".json") {
                         if let Ok(content) = adapter.read_file(&path).await {
+                            // 🛡️ [Harden] Guard against oversized files (>2MB) to prevent memory exhaustion
+                            if content.len() > 2 * 1024 * 1024 {
+                                continue;
+                            }
                             if content.contains(pattern) {
                                 let lines: Vec<String> = content.lines()
                                     .enumerate()

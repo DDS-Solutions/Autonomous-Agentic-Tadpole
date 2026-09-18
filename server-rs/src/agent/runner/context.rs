@@ -148,6 +148,8 @@ impl AgentRunner {
                 };
                 std::sync::Arc::new(parking_lot::Mutex::new(node_id))
             },
+            conflict: self.state.security.conflict.clone(),
+            metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
         })
     }
 
@@ -361,6 +363,7 @@ impl AgentRunner {
             match ContextManager::summarize_history(self, ctx, &history_text).await {
                 Ok(summary) => {
                     ctx.summarized_history = Some(summary);
+                    ctx.metrics.record_summarization();
                     tracing::info!("✅ [Runner] Context summarized for {}.", mission_id);
                 }
                 Err(e) => {

@@ -20,10 +20,13 @@ impl AgentRunner {
         fc: &ToolCall,
         output_text: &mut String,
     ) {
-        let is_error = output_text.to_lowercase().contains("error") 
-            || output_text.contains("FAILED") 
-            || output_text.contains("Exception")
-            || output_text.contains("SyntaxError");
+        let is_error = output_text.contains("[TOOL_ERROR]")
+            || output_text.contains("FAILED:")
+            || output_text.contains("Exception:")
+            || output_text.contains("SyntaxError:")
+            || output_text.contains("Error:")
+            || output_text.contains("ERROR:")
+            || output_text.contains("Command failed with exit code");
 
         if !is_error {
             return;
@@ -49,9 +52,22 @@ impl AgentRunner {
              output_text.push_str(hint);
         }
 
+        let lower = output_text.to_lowercase();
+        let is_not_found = lower.contains("not found") || lower.contains("notfound");
+        let is_permission_denied = lower.contains("forbidden") 
+            || lower.contains("permission denied") 
+            || lower.contains("unauthorized")
+            || lower.contains("access denied");
+
+        let retryable = !is_not_found && !is_permission_denied;
+
         // 🛡️ [Structured Tool Error Feedback] Two-tier actionable recovery for grounded single-refine passes
         if !output_text.contains("[STRUCTURED_ERROR_FEEDBACK]") {
-            let suggested = if fc.name.contains("file") || fc.name.contains("read") {
+            let suggested = if is_not_found {
+                "Target resource was not found; verify path or identifier with discovery tools rather than retrying identically"
+            } else if is_permission_denied {
+                "Operation blocked by permissions or security policy; verify authority or request approval"
+            } else if fc.name.contains("file") || fc.name.contains("read") {
                 "Verify file path existence or check directory with list_dir"
             } else if fc.name.contains("command") || fc.name.contains("exec") {
                 "Check command syntax and arguments before retrying"
@@ -59,7 +75,8 @@ impl AgentRunner {
                 "Inspect tool parameters and retry once with corrected arguments"
             };
             let feedback = format!(
-                "\n\n[STRUCTURED_ERROR_FEEDBACK]: {{\"retryable\": true, \"suggested_action\": \"{}\"}}",
+                "\n\n[STRUCTURED_ERROR_FEEDBACK]: {{\"retryable\": {}, \"suggested_action\": \"{}\"}}",
+                retryable,
                 suggested
             );
             output_text.push_str(&feedback);

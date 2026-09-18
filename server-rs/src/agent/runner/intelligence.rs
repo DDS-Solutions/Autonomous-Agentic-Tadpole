@@ -101,6 +101,7 @@ impl AgentRunner {
 
         while turn_count < max_turns {
             turn_count += 1;
+            ctx.metrics.record_turn();
             tracing::debug!(
                 "🎯 [Intelligence] Start Turn {}/{} for agent {}",
                 turn_count,
@@ -360,12 +361,17 @@ impl AgentRunner {
                         let ctx_clone = ctx.clone();
                         let user_msg_clone = payload.message.clone();
                         futures.push(async move {
+                            ctx_clone.metrics.record_tool_attempt();
                             runner.update_status(&ctx_clone.agent_id, &ctx_clone.mission_id, "working", Some(&format!("Executing tool: {}...", fc.name)));
                             runner.record_heartbeat(&ctx_clone.agent_id).await;
                             let mut local_text = String::new();
                             let mut local_usage = None;
                             let result = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
                             runner.record_heartbeat(&ctx_clone.agent_id).await;
+
+                            if result.is_err() || local_text.contains("[TOOL_ERROR]") || local_text.contains("FAILED:") {
+                                ctx_clone.metrics.record_tool_failure();
+                            }
 
                             // 🧬 [Evolution] Autonomous Refinement Hook
                             runner.handle_tool_failure_refinement(&ctx_clone, &fc, &mut local_text);
@@ -382,6 +388,13 @@ impl AgentRunner {
                         while let Some((name, result, local_text, local_usage)) = futures.next().await {
                             self.record_heartbeat(&ctx.agent_id).await;
                             self.accumulate_usage(&mut usage, local_usage);
+                            if let Some(ref u) = usage {
+                                ctx.metrics.record_tokens(
+                                    u.input_tokens as u64,
+                                    u.output_tokens as u64,
+                                    u.total_tokens as u64,
+                                );
+                            }
                             observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
                             result?;
 
@@ -502,6 +515,7 @@ impl AgentRunner {
 
         monologue.clear();
         monologue.push(format!("CONSOLIDATED REASONING: {}", summary_text));
+        ctx.metrics.record_summarization();
 
         Ok(())
     }

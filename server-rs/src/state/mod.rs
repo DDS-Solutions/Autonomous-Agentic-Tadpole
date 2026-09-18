@@ -159,6 +159,7 @@ impl AppState {
             deploy_token: "test-token".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
@@ -298,6 +299,7 @@ impl AppState {
             deploy_token: "test-token".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
@@ -615,6 +617,7 @@ impl AppState {
             deploy_token,
             deploy_token_old,
             deploy_token_new,
+            conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
         let state = Self {
@@ -1243,6 +1246,7 @@ impl Default for AppState {
             deploy_token: "test".into(),
             deploy_token_old: None,
             deploy_token_new: None,
+            conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
         let resources = Arc::new(ResourceHub {

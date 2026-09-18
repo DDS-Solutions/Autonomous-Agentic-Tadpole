@@ -51,6 +51,7 @@ impl AgentRunner {
         fc: &ToolCall,
         usage: &mut Option<TokenUsage>,
     ) -> Result<String, ToolExecutionError> {
+        ctx.metrics.record_sub_agent();
         // 🧠 [OML-01] Pre-replicated Data Parallelism (Swarm Parallelism)
         // Detect if we are spawning a single agent or a batch.
         let mut target_ids = Vec::new();

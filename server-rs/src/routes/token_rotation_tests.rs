@@ -41,6 +41,7 @@ mod tests {
             deploy_token: current.to_string(),
             deploy_token_old: old.map(|s| s.to_string()),
             deploy_token_new: new.map(|s| s.to_string()),
+            conflict: app_state.security.conflict.clone(),
         };
         app_state.security = Arc::new(new_security_hub);
 

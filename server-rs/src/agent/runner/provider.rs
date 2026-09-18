@@ -769,6 +769,7 @@ mod tests {
             deploy_token: app_state.security.deploy_token.clone(),
             deploy_token_old: None,
             deploy_token_new: None,
+            conflict: app_state.security.conflict.clone(),
         };
         app_state.security = Arc::new(new_security_hub);
 

@@ -146,8 +146,14 @@ fn prune_old_logs(dir: &Path, max_days: i64) {
                         .trim_start_matches("telemetry-")
                         .trim_end_matches(".jsonl");
                     if date_part < cutoff_str.as_str() {
-                        let _ = std::fs::remove_file(&path);
-                        info!("🧹 [LogSink] Auto-pruned old telemetry log: {}", file_name);
+                        match std::fs::remove_file(&path) {
+                            Ok(()) => {
+                                info!("🧹 [LogSink] Auto-pruned old telemetry log: {}", file_name);
+                            }
+                            Err(e) => {
+                                warn!("⚠️ [LogSink] Failed to remove old telemetry log {:?}: {}", path, e);
+                            }
+                        }
                     }
                 }
             }

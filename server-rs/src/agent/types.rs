@@ -993,6 +993,8 @@ impl EngineAgent {
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
+            conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
+            metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
         }
     }
 }

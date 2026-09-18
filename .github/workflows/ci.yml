@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'server-rs/**'
+      - 'crates/**'
       - 'execution/**'
       - 'tests/**'
       - 'data/**'
@@ -14,6 +15,8 @@ on:
       - 'scripts/**'
       - 'version.json'
       - '.env.example'
+      - '.gitleaks.toml'
+      - 'server-rs/deny.toml'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
@@ -25,6 +28,7 @@ on:
     paths:
       - 'src/**'
       - 'server-rs/**'
+      - 'crates/**'
       - 'execution/**'
       - 'tests/**'
       - 'data/**'
@@ -33,6 +37,8 @@ on:
       - 'scripts/**'
       - 'version.json'
       - '.env.example'
+      - '.gitleaks.toml'
+      - 'server-rs/deny.toml'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
@@ -112,14 +118,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: server-rs
+          workspaces: |
+            server-rs
+            crates/wasm-codec
 
       - name: Cargo Check
         working-directory: server-rs
         run: cargo check
 
-      - name: Cargo Test
+      - name: Cargo Test (server-rs)
         working-directory: server-rs
+        run: cargo test
+
+      - name: Cargo Test (wasm-codec)
+        working-directory: crates/wasm-codec
         run: cargo test
 
       - name: Cargo Clippy

@@ -21,7 +21,6 @@ use std::time::Instant;
 
 /// Per-mission aggregate live execution metrics.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct ExecutionMetrics {
     total_turns: AtomicU32,
     tool_calls_attempted: AtomicU32,
@@ -77,7 +76,6 @@ pub struct ExecutionMetricsSnapshot {
     pub excessive_summarization_warning: bool,
 }
 
-#[allow(dead_code)]
 impl ExecutionMetrics {
     pub fn new() -> Self {
         Self::default()
