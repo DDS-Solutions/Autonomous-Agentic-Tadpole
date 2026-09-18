@@ -136,7 +136,7 @@ def load_skills():
             _TOOL_MANIFESTS[name] = manifest
 
         except Exception as e:
-            pass
+            print(f"⚠️ [MCPHost] Failed to load skill manifest '{json_file.name}': {e}", file=sys.stderr)
 
     # 2. Load Modular Class-based Skills
     _SKILL_REGISTRY.discover_skills()
@@ -223,9 +223,27 @@ async def handle_call_tool(
 
     # Split command safely (shlex) and run directly without shell
     import shlex
-    cmd_parts = shlex.split(command)
-    if cmd_parts and cmd_parts[0] == "python":
+    cmd_parts = shlex.split(command, posix=(os.name != 'nt'))
+    if not cmd_parts:
+        return [_format_text_response("Execution Failed: Empty execution command.")]
+
+    # Security: Strict Executable Allowlist (SEC-05)
+    allowed_executables = {
+        "python", "python3", "python.exe", "python3.exe",
+        "node", "node.exe",
+        Path(sys.executable).name.lower(),
+    }
+    exe_name = Path(cmd_parts[0]).name.lower()
+    if exe_name not in allowed_executables:
+        return [_format_text_response(f"Execution Blocked: Executable '{exe_name}' is not in the system allowlist.")]
+
+    if exe_name in ("python", "python3", "python.exe", "python3.exe"):
         cmd_parts[0] = sys.executable
+
+    # Security: Reject unreviewed inline execution flags (-c, -e, --command)
+    disallowed_flags = {"-c", "-e", "--command"}
+    if any(flag in disallowed_flags for flag in cmd_parts[1:]):
+        return [_format_text_response("Execution Blocked: Inline command evaluation flags (-c, -e, --command) are forbidden.")]
 
     def set_limits():
         # Set Linux/Unix limits
@@ -264,7 +282,17 @@ async def handle_call_tool(
 
     except asyncio.TimeoutError:
         try:
-            process.kill()
+            if os.name == 'nt':
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+            else:
+                import signal
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except Exception:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        try:
             await process.wait()
         except Exception:
             pass

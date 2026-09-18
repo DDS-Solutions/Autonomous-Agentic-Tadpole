@@ -35,8 +35,8 @@ def extract_metadata(content):
         "docs_link": None
     }
     
-    # Check for AI Assist Note
-    if re.search(r'###\s+AI\s+Assist\s+Note', content):
+    # Check for AI Assist Note or AI Context Alignment
+    if re.search(r'###\s+AI\s+(?:Assist\s+Note|Context\s+Alignment)', content):
         res["has_note"] = True
     
     # Check for Debugging section (emoji-agnostic)

@@ -135,6 +135,27 @@ pub async fn update_mission(
     Ok(())
 }
 
+/// Sweeps any abandoned missions that were left in `active` state due to a crash or unexpected shutdown,
+/// reconciling them to `failed` and updating their timestamp.
+pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppError> {
+    let now = Utc::now();
+    let result = sqlx::query::<sqlx::Sqlite>(
+        "UPDATE mission_history SET status = 'failed', updated_at = ?1 WHERE status = 'active'",
+    )
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    let count = result.rows_affected();
+    if count > 0 {
+        tracing::warn!(
+            "🧹 [Recovery] Reconciled {} abandoned/interrupted mission(s) from 'active' to 'failed'.",
+            count
+        );
+    }
+    Ok(count)
+}
+
 /// ### 📡 Telemetry: Structural Mission Logging
 /// Atomically records a discrete step in the mission execution graph.
 /// 

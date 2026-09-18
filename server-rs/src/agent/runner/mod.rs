@@ -48,6 +48,8 @@ pub mod synthesis;
 mod visual_tools;
 pub mod tools;
 pub mod error;
+pub(crate) mod execution_metrics;
+pub(crate) mod turn_compactor;
 mod workflow;
 
 // ─────────────────────────────────────────────────────────

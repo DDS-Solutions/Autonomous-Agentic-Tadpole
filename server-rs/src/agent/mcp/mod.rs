@@ -23,6 +23,9 @@
 pub mod registry;
 pub mod client;
 pub mod transport;
+pub mod ipc_bridge;
+
+pub use ipc_bridge::IpcBridge;
 
 #[allow(unused_imports)]
 use self::registry::{McpRegistry, ToolHandler};

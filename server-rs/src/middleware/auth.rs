@@ -25,23 +25,19 @@ use axum::{
 };
 use std::sync::Arc;
 
+use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 /// Constant-time string comparison to prevent timing-based side-channel attacks.
 ///
 /// ### 🔒 Security: Constant-Time Comparison (AUTH-01)
-/// Standard string equality checks return `false` as soon as they find the 
-/// first differing byte. An attacker can use this timing information to 
-/// guess a token one character at a time. 
-/// 
-/// This implementation uses the `subtle` crate to ensure that the execution 
-/// time is deterministic relative to the input length, preventing 
-/// optimizer-induced early returns.
+/// Compares fixed-length SHA-256 digests using `subtle::ConstantTimeEq`
+/// to guarantee execution time is completely independent of the input length,
+/// eliminating timing-based side-channel leakage.
 pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.ct_eq(b).into()
+    let hash_a = Sha256::digest(a);
+    let hash_b = Sha256::digest(b);
+    hash_a.as_slice().ct_eq(hash_b.as_slice()).into()
 }
 
 pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str> {
@@ -124,7 +120,18 @@ pub async fn validate_token(
                 }
             }
         }
-        tracing::warn!(header = ?proto_header, "🚫 Unauthorized WebSocket upgrade: invalid or missing protocol token");
+        let redacted_protocols: Vec<String> = proto_header
+            .split(',')
+            .map(|p| {
+                let p = p.trim();
+                if p.starts_with("bearer.") {
+                    "bearer.[REDACTED]".to_string()
+                } else {
+                    p.to_string()
+                }
+            })
+            .collect();
+        tracing::warn!(protocols = ?redacted_protocols, "🚫 Unauthorized WebSocket upgrade: invalid or missing protocol token");
     } else {
         tracing::warn!("🚫 Missing or malformed Authorization header");
     }

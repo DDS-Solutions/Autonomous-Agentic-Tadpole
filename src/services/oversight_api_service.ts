@@ -55,12 +55,12 @@ export const oversight_api_service = {
 
     /**
      * decide_oversight
-     * Records a decision (approve/reject) for a pending oversight action.
+     * Records a decision (approve/reject) for a pending oversight action, optionally with user answer.
      */
-    decide_oversight: async (id: string, decision: 'approved' | 'rejected'): Promise<void> => {
+    decide_oversight: async (id: string, decision: 'approved' | 'rejected', answer?: string): Promise<void> => {
         await api_request(`/v1/oversight/${id}/decide`, {
             method: 'POST',
-            body: JSON.stringify({ decision })
+            body: JSON.stringify({ decision, answer })
         });
     },
 

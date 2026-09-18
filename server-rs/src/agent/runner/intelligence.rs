@@ -108,6 +108,16 @@ impl AgentRunner {
                 ctx.agent_id
             );
 
+            // 🛡️ [Bounded Autonomy] Pre-turn financial gate: halt before LLM call if budget exhausted
+            if ctx.budget_usd > 0.0 && running_cost >= ctx.budget_usd {
+                tracing::warn!("💰 [Intelligence] Budget limit reached before Turn {} for agent {}", turn_count, ctx.agent_id);
+                self.broadcast_agent(ctx, "Budget limit reached. Quiescing mission.", "warn");
+                return Ok(IntelligenceOutput {
+                    text: format!("{} (Halting: Mission Budget Cap Exceeded)", scrub_mythos_tags(&output_text)),
+                    usage,
+                });
+            }
+
             self.state
                 .yield_phase_transition(&ctx.agent_id, &format!("Execution: Turn {}", turn_count))
                 .await;
@@ -145,10 +155,15 @@ impl AgentRunner {
                 // Hybrid Halting: the set_confidence tool is automatically registered via the
                 // SelfHalting trait if the model supports it.
 
+                // 🪟 [Context Engineering] Apply pinned-tail compaction and failure visibility retention
+                let compacted_history = crate::agent::runner::turn_compactor::compact_conversation_history(
+                    &ctx.role,
+                    &conversation_history,
+                );
                 let current_prompt = if internal_monologue.is_empty() {
-                    conversation_history.join("\n\n")
+                    compacted_history.join("\n\n")
                 } else {
-                    format!("{}\n\nINTERNAL MONOLOGUE:\n{}", conversation_history.join("\n\n"), internal_monologue.join("\n\n"))
+                    format!("{}\n\nINTERNAL MONOLOGUE:\n{}", compacted_history.join("\n\n"), internal_monologue.join("\n\n"))
                 };
 
                 // 🕒 [Memory-Aware Throttle] If system memory exceeds 90%, dynamically throttle agent execution speeds.
@@ -385,7 +400,13 @@ impl AgentRunner {
                     }
 
                     if !observation_buffer.is_empty() {
-                        conversation_history.push(format!("OBSERVATION: {}", observation_buffer));
+                        // 🪟 [Context Engineering] Offload bulky tool outputs (>300 chars) to .tmp/tool_overflow/
+                        let (compacted_obs, _) = crate::agent::runner::turn_compactor::compact_and_offload_observation(
+                            "execution",
+                            &observation_buffer,
+                            &ctx.workspace_root,
+                        ).await;
+                        conversation_history.push(format!("OBSERVATION: {}", compacted_obs));
 
                         // --- 📔 Journaling: Record Tool node ---
                         let parent_id = ctx.active_node_id.lock().clone();

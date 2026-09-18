@@ -99,10 +99,9 @@ Request
   ├── Boot gate (blocks until system ready)
   │
   ├── /v1/engine/health   ← Public (no auth)
-  ├── /v1/engine/ws       ← Public (WebSocket)
   │
   └── /v1/** ──── validate_token middleware ────► Protected routes
-                  (Bearer <token> check)
+                  (Bearer <token> REST or Sec-WebSocket-Protocol: bearer.<token> WS)
 ```
 
 ---

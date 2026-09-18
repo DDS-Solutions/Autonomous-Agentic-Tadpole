@@ -19,6 +19,8 @@ import { type Chat_Message } from '../../stores/sovereign_store';
 import { i18n } from '../../i18n';
 import { ArtifactPromotionCard } from './ArtifactPromotionCard';
 import { get_safe_date } from '../../utils/date_utils';
+import { Question_Choice_Pill } from './Question_Choice_Pill';
+import { OpenUI_Renderer } from './OpenUI_Renderer';
 
 const ARTIFACT_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/g;
 
@@ -105,6 +107,19 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                                         </div>
                                     )}
                                 </div>
+                            )}
+                            {part.type === 'question' && (
+                                <Question_Choice_Pill
+                                    question={part.question}
+                                    options={part.options}
+                                    context={part.context}
+                                    question_id={part.question_id}
+                                    selected_option={part.selected_option}
+                                    status={part.status}
+                                />
+                            )}
+                            {part.type === 'openui' && (
+                                <OpenUI_Renderer dsl={part.dsl} />
                             )}
                         </div>
                     ))

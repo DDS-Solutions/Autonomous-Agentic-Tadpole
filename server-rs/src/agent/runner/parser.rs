@@ -50,6 +50,10 @@ static EXECUTE_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?s)<execute_tool>\s*<tool_name>(.*?)</tool_name>\s*<tool_input>(.*?)</tool_input>\s*</execute_tool>").unwrap()
 });
 
+static FUNCTION_START_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?s)<function=([a-zA-Z0-9_-]+)").unwrap()
+});
+
 static KEY_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"([{,]\s*)([a-zA-Z_]\w*)\s*:").unwrap());
 
 static COMMA_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*([\]}])").unwrap());
@@ -88,7 +92,23 @@ impl PolyglotParser {
             }
         }
 
-        // 3. Fallback: Bare call format (only if no calls found yet to avoid false positives)
+        // 3. Try Groq / Llama 3 / open models function-call format: <function=name>{...}</function> or <function=name>(...)
+        let mut search_offset = 0;
+        while let Some(cap) = FUNCTION_START_REGEX.captures(&text[search_offset..]) {
+            let rel_start = cap.get(0).unwrap().start();
+            let abs_start = search_offset + rel_start;
+            if let Some((name, args_str, raw_segment)) = Self::extract_single_function_call(&text[abs_start..]) {
+                match Self::repair_and_parse_json(&args_str) {
+                    Ok(args) => calls.push(ToolCall { name, args }),
+                    Err(e) => last_error = Some(e),
+                }
+                search_offset = abs_start + raw_segment.len().max(1);
+            } else {
+                search_offset = abs_start + cap.get(0).unwrap().end().max(1);
+            }
+        }
+
+        // 4. Fallback: Bare call format (only if no calls found yet to avoid false positives)
         if calls.is_empty() {
             for cap in BARE_CALL_REGEX.captures_iter(text) {
                 let name = cap
@@ -378,6 +398,54 @@ impl PolyglotParser {
         s
     }
 
+    /// Extracts a single tool call from a function tag, using a balanced-brace counter to support nested JSON arguments.
+    /// Returns Option<(function_name, arguments_json_string, raw_matched_segment_to_strip)>.
+    pub(crate) fn extract_single_function_call(s: &str) -> Option<(String, String, String)> {
+        let start_match = FUNCTION_START_REGEX.captures(s)?;
+        let name = start_match.get(1)?.as_str().to_string();
+        let match_start = start_match.get(0)?.start();
+        let start_search_idx = start_match.get(0)?.end();
+
+        // Find the first '{' after the tag start
+        let brace_start = s[start_search_idx..].find('{')? + start_search_idx;
+
+        let mut brace_count = 0;
+        let mut brace_end = None;
+        for (i, c) in s[brace_start..].char_indices() {
+            if c == '{' {
+                brace_count += 1;
+            } else if c == '}' {
+                brace_count -= 1;
+                if brace_count == 0 {
+                    brace_end = Some(brace_start + i + 1);
+                    break;
+                }
+            }
+        }
+
+        let brace_end = brace_end?;
+        let args_json = &s[brace_start..brace_end];
+
+        // Find the end of the entire matched segment including optional </function> or >
+        let mut match_end = brace_end;
+        let lookahead = &s[brace_end..];
+        if lookahead.starts_with("</function>") {
+            match_end += "</function>".len();
+        } else if lookahead.starts_with("</function>>") {
+            match_end += "</function>>".len();
+        } else if lookahead.starts_with('>') {
+            match_end += 1;
+        }
+
+        // Also consume any trailing closed parenthesis commonly hallucinated: ({"path": ...})
+        if s[match_end..].starts_with(')') {
+            match_end += 1;
+        }
+
+        let raw_match = &s[match_start..match_end];
+        Some((name, args_json.to_string(), raw_match.to_string()))
+    }
+
     /// Removes all detected tool call blocks from the text to get the clean assistant message.
     pub fn scrub_tool_calls(text: &str) -> String {
         let mut s = text.to_string();
@@ -385,6 +453,12 @@ impl PolyglotParser {
         s = GEMMA_TOOL_REGEX.replace_all(&s, "").to_string();
         s = BARE_CALL_REGEX.replace_all(&s, "").to_string();
         s = EXECUTE_TOOL_REGEX.replace_all(&s, "").to_string();
+
+        // Scrub all function tag call blocks
+        while let Some((_, _, raw)) = Self::extract_single_function_call(&s) {
+            s = s.replacen(&raw, "", 1);
+        }
+
         s.trim().to_string()
     }
 }
@@ -478,6 +552,42 @@ mod tests {
         let input = "Here is an example package.json configuration:\n{ \"name\": \"my-app\", \"command\": \"build\" }\nLet me know what you think!";
         let res = PolyglotParser::extract(input);
         assert!(res.is_err(), "Conversational unfenced JSON without intent markers should not be parsed as a tool call");
+    }
+
+    #[test]
+    fn test_extract_function_tag_standard() {
+        let input = "<function=search>{\"query\": \"tadpole os\"}</function>";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "search");
+        assert_eq!(calls[0].args["query"], "tadpole os");
+    }
+
+    #[test]
+    fn test_extract_function_tag_nested_json() {
+        let input = "<function=search>{\"query\": \"hello\", \"filters\": {\"category\": \"news\"}}</function>";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "search");
+        assert_eq!(calls[0].args["query"], "hello");
+        assert_eq!(calls[0].args["filters"]["category"], "news");
+    }
+
+    #[test]
+    fn test_extract_function_tag_hallucinated_parens() {
+        let input = "<function=write_file>({\"path\": \"test.txt\", \"content\": \"hello world\"})";
+        let calls = PolyglotParser::extract(input).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "write_file");
+        assert_eq!(calls[0].args["path"], "test.txt");
+        assert_eq!(calls[0].args["content"], "hello world");
+    }
+
+    #[test]
+    fn test_scrub_function_tags() {
+        let input = "Checking repo... <function=search>{\"query\": \"foo\"}</function> Done search.";
+        let scrubbed = PolyglotParser::scrub_tool_calls(input);
+        assert_eq!(scrubbed, "Checking repo...  Done search.");
     }
 }
 

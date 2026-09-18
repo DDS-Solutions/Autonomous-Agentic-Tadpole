@@ -24,6 +24,7 @@ pub mod aggregator;
 pub mod pulse;
 pub mod pulse_types;
 pub mod bridge;
+pub mod sink;
 
 #[cfg(test)]
 mod pulse_tests;

@@ -25,11 +25,11 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 const SETTINGS_KEY = 'tadpole_settings';
 /** 
  * LEGACY_DEV_TOKENS
- * These were used during initial internal testing. 
- * We now allow the default sidecar token 'Tadpole-OS-2026'
+ * Deprecated development tokens explicitly rejected by client sanitization.
  */
 const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
+    'Tadpole-OS-2026',
 ]);
 
 export type ThemeOption = 'zinc' | 'slate' | 'neutral';
@@ -111,13 +111,13 @@ const sanitize_settings = (settings: Tadpole_Settings): Tadpole_Settings => ({
 /** Canonical default configuration state */
 export const get_default_settings = (): Tadpole_Settings => ({
     tadpole_os_url: get_base_url(),
-    tadpole_os_api_key: import.meta.env.VITE_NEURAL_TOKEN || '',
+    tadpole_os_api_key: '',
     theme: 'zinc',
     density: 'compact',
     backdrop_theme: 'cyan',
     default_model: 'GPT-4o',
     default_temperature: 0.7,
-    auto_approve_safe_skills: true,
+    auto_approve_safe_skills: false,
     max_agents: 50,
     max_clusters: 10,
     max_swarm_depth: 5,

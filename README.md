@@ -289,6 +289,8 @@ BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and
 | `npm run lint` | Run ESLint |
 | `npm run test` | Run Vitest |
 | `npm run test:coverage` | Run Vitest with coverage |
+| `npm run test:e2e` | Run Playwright end-to-end suite |
+| `npm run test:py` | Run Python unit tests in `tests/unit/` |
 | `npm run preview` | Preview the Vite build |
 | `npm run docs:api` | Regenerate `docs/openapi.yaml` and `docs/API_REFERENCE.md` from `server-rs/src/router.rs` |
 | `npm run docs:parity` | Run documentation/API/version parity checks |
@@ -330,6 +332,9 @@ Common environment variables:
 | `TADPOLE_ALLOW_LOCAL_HTTP` | unset | Allows insecure local HTTP model-provider calls when set |
 | `TADPOLE_NULL_PROVIDERS` | unset | Forces null providers for tests and integration runs |
 | `DISABLE_TELEMETRY` | `false` | Disables OpenTelemetry stdout exporter when `true` |
+| `TOKIO_WORKER_THREADS` | available CPUs (min 4) | Tokio async runtime worker threads count |
+| `TOKIO_MAX_BLOCKING_THREADS` | `32` | Tokio max blocking threads for blocking tasks |
+| `TOKIO_THREAD_STACK_SIZE_MB` | `4` | Stack size per worker thread in MB |
 
 Provider keys supported by `.env.example`:
 
@@ -480,7 +485,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 
 ### 🗄️ Database Reliability
 - **Hot SQLite Backup & Restore**: Added `execution/backup_sqlite.py` and `execution/restore_sqlite.py` with WAL-safe online backups (`.backup()` API), SHA-256 integrity hashing, and `PRAGMA integrity_check` verification.
-- **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db.rs` for programmatic backup orchestration.
+- **DB helper API in Rust**: Added `run_backup()` and `check_integrity()` helpers to `server-rs/src/db/init.rs` for programmatic backup orchestration.
 - **Durable Workflow Migration**: Added `server-rs/migrations/20260822000100_durable_workflows.sql` for step memoization table.
 
 ### 📊 Observability & Health

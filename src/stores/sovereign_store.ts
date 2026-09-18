@@ -60,6 +60,23 @@ export interface Chat_Message {
     target_node?: string;
 }
 
+export interface Mission_Execution_Metrics {
+    mission_id?: string;
+    agent_id?: string;
+    turns: number;
+    tool_calls_attempted: number;
+    tool_calls_failed: number;
+    cached_reads_hit: number;
+    files_modified_count: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    peak_context_tokens: number;
+    total_cost_micro_usd: number;
+    total_summarizations: number;
+    total_sub_agents: number;
+    excessive_summarization_warning: boolean;
+}
+
 interface Sovereign_State {
     messages: Chat_Message[];
     message_index_by_id: Record<string, number>;
@@ -71,6 +88,7 @@ interface Sovereign_State {
     active_node_id: string | null;
     active_mission_id: string | null;
     session_leaves: SessionLeaf[];
+    latest_metrics: Mission_Execution_Metrics | null;
 
     // Actions
     add_message: (msg: Omit<Chat_Message, 'id' | 'timestamp'> & { id?: string, timestamp?: string }) => void;
@@ -87,6 +105,8 @@ interface Sovereign_State {
     fetch_session_history: (mission_id: string, leaf_id: string) => Promise<void>;
     fetch_mission_leaves: (mission_id: string) => Promise<void>;
     revert_to_node: (mission_id: string, node_id: string) => Promise<void>;
+    set_execution_metrics: (metrics: Mission_Execution_Metrics, is_remote_sync?: boolean) => void;
+    resolve_user_question: (question_id: string, answer: string) => Promise<void>;
     clear_history: () => void;
 }
 
@@ -111,6 +131,7 @@ export const use_sovereign_store = create<Sovereign_State>()(
             active_node_id: null,
             active_mission_id: null,
             session_leaves: [],
+            latest_metrics: null,
 
             add_message: (msg) => {
                 const new_msg = {
@@ -280,6 +301,56 @@ export const use_sovereign_store = create<Sovereign_State>()(
                 }
             },
 
+            set_execution_metrics: (metrics, is_remote_sync) => {
+                set({ latest_metrics: metrics });
+                if (!is_remote_sync) {
+                    chat_channel?.postMessage({ type: 'SET_EXECUTION_METRICS', payload: metrics });
+                }
+            },
+
+            resolve_user_question: async (question_id: string, answer: string) => {
+                let target_agent_id: string | undefined;
+                set((state) => {
+                    let found = false;
+                    const next_messages = state.messages.map((m) => {
+                        if (!m.parts) return m;
+                        let modified = false;
+                        const next_parts = m.parts.map((p) => {
+                            if (p.type === 'question' && (p.question_id === question_id || (!p.question_id && p.status === 'pending'))) {
+                                modified = true;
+                                found = true;
+                                target_agent_id = m.agent_id;
+                                return {
+                                    ...p,
+                                    selected_option: answer,
+                                    status: 'answered' as const,
+                                };
+                            }
+                            return p;
+                        });
+                        return modified ? { ...m, parts: next_parts } : m;
+                    });
+
+                    return found ? { messages: next_messages } : state;
+                });
+
+                get().add_message({
+                    sender_id: '0',
+                    sender_name: 'Operator',
+                    agent_id: target_agent_id,
+                    text: answer,
+                    scope: get().active_scope,
+                    parts: [{ type: 'text', content: answer, status: 'complete' }]
+                });
+
+                try {
+                    const { system_api_service } = await import('../services/system_api_service');
+                    await system_api_service.decide_oversight(question_id, 'approved', answer);
+                } catch (err) {
+                    console.error(`${TELEMETRY_SOURCE} Failed to submit user answer to oversight:`, err);
+                }
+            },
+
             clear_history: () => {
                 set({ messages: [], message_index_by_id: {} });
                 chat_channel?.postMessage({ type: 'CLEAR_HISTORY' });
@@ -353,6 +424,9 @@ if (chat_channel) {
                 break;
             case 'SET_ACTIVE_MISSION':
                 use_sovereign_store.setState({ active_mission_id: payload as string | null });
+                break;
+            case 'SET_EXECUTION_METRICS':
+                use_sovereign_store.getState().set_execution_metrics(payload as Mission_Execution_Metrics, true);
                 break;
             case 'CLEAR_HISTORY':
                 use_sovereign_store.setState({ messages: [], message_index_by_id: {} });

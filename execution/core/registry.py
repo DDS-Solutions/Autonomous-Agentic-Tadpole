@@ -12,6 +12,7 @@ Redirects standard output to standard error to prevent MCP stdio stream corrupti
 """
 
 import os
+import asyncio
 import importlib.util
 import inspect
 import time
@@ -50,8 +51,9 @@ class SkillRegistry:
                 continue
                 
             try:
-                # Dynamic import
-                module_name = f"skills.{py_file.stem}"
+                # Dynamic import with namespacing to avoid collision
+                rel_parts = py_file.relative_to(self.skills_dir).with_suffix("").parts
+                module_name = "skills." + ".".join(rel_parts).replace("-", "_")
                 spec = importlib.util.spec_from_file_location(module_name, py_file)
                 if spec is None or spec.loader is None:
                     continue
@@ -88,12 +90,20 @@ class SkillRegistry:
             with redirect_stdout(sys.stderr):
                 # Pydantic validation
                 validated_args = skill.Arguments(**arguments)
-                result = await skill.execute(validated_args.model_dump())
+                result = await asyncio.wait_for(
+                    skill.execute(validated_args.model_dump()),
+                    timeout=30.0
+                )
                 
             duration = (time.perf_counter() - start_time) * 1000
             print(f"[Registry] [SkillRegistry] Skill {name} executed in {duration:.2f}ms", file=sys.stderr)
             return result
             
+        except asyncio.TimeoutError:
+            duration = (time.perf_counter() - start_time) * 1000
+            error_msg = f"Error: Skill '{name}' timed out after 30.0s"
+            print(f"[Registry] [SkillRegistry] {error_msg}", file=sys.stderr)
+            return error_msg
         except Exception as e:
             duration = (time.perf_counter() - start_time) * 1000
             error_msg = f"Error executing skill '{name}' after {duration:.2f}ms: {str(e)}"

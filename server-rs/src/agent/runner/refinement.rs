@@ -48,6 +48,22 @@ impl AgentRunner {
              let hint = "\n\n💡 [Swarm Hint]: If recruitment failed, ensure the agent ID exists or try a more general role (e.g., 'researcher', 'coder').";
              output_text.push_str(hint);
         }
+
+        // 🛡️ [Structured Tool Error Feedback] Two-tier actionable recovery for grounded single-refine passes
+        if !output_text.contains("[STRUCTURED_ERROR_FEEDBACK]") {
+            let suggested = if fc.name.contains("file") || fc.name.contains("read") {
+                "Verify file path existence or check directory with list_dir"
+            } else if fc.name.contains("command") || fc.name.contains("exec") {
+                "Check command syntax and arguments before retrying"
+            } else {
+                "Inspect tool parameters and retry once with corrected arguments"
+            };
+            let feedback = format!(
+                "\n\n[STRUCTURED_ERROR_FEEDBACK]: {{\"retryable\": true, \"suggested_action\": \"{}\"}}",
+                suggested
+            );
+            output_text.push_str(&feedback);
+        }
     }
 }
 

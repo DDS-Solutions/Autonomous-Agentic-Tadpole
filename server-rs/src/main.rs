@@ -140,7 +140,7 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
     };
 
     // 3. Launch Background Tasks: Telemetry, budget tracking, and swarm health checks.
-    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx).await;
+    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
 
     // 4. Build Router
     let app = router::create_router(app_state.clone());
@@ -172,6 +172,27 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
 
     // Notify that boot sequence is complete so requests can proceed
     app_state.notify_boot_complete();
+
+    // Periodic Registry Persistence Sync (every 30s) to mitigate data loss under unhandled aborts
+    let sync_state = app_state.clone();
+    let mut sync_shutdown_rx = shutdown_rx.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.tick().await;
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    sync_state.flush_all().await;
+                    sync_state.save_agents().await;
+                    sync_state.save_providers().await;
+                    sync_state.save_models().await;
+                }
+                _ = sync_shutdown_rx.changed() => {
+                    break;
+                }
+            }
+        }
+    });
 
     // --- [STAGE: RUN] ---
     // Start the Axum server and listen for incoming connections.

@@ -16,7 +16,11 @@ import json
 import os
 
 def dispatch_mission():
-    neural_token = os.getenv("NEURAL_TOKEN", "Tadpole-OS-2026")
+    neural_token = os.getenv("NEURAL_TOKEN")
+    if not neural_token:
+        print("[Dispatcher] Error: NEURAL_TOKEN environment variable is required.")
+        return
+
     url = "http://127.0.0.1:8000/v1/agents/2/tasks"
     headers = {
         "Content-Type": "application/json",

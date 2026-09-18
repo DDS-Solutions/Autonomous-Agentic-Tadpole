@@ -45,9 +45,64 @@ export type {
 };
 
 export type Message_Part = 
-    | { type: 'text', content: string }
+    | { type: 'text', content: string, status?: 'complete' | 'streaming' }
     | { type: 'thought', content: string, status: 'thinking' | 'done' }
-    | { type: 'tool', name: string, input: unknown, output?: unknown };
+    | { type: 'tool', name: string, input: unknown, output?: unknown, status?: 'pending' | 'success' | 'error' }
+    | { 
+        type: 'question', 
+        question: string, 
+        options: string[], 
+        context?: string, 
+        question_id?: string, 
+        selected_option?: string, 
+        status?: 'pending' | 'answered' 
+      }
+    | {
+        type: 'openui',
+        /** The DSL payload describing the UI to render */
+        dsl: OpenUI_DSL,
+        status?: 'rendering' | 'complete'
+      };
+
+// ── OpenUI DSL Types ─────────────────────────────────────────
+
+export type OpenUI_DSL = OpenUI_KPI_Card | OpenUI_Bar_Chart | OpenUI_Table | OpenUI_Layout;
+
+export interface OpenUI_KPI_Card {
+    kind: 'kpi_card';
+    title: string;
+    value: string | number;
+    unit?: string;
+    delta?: number;
+    delta_label?: string;
+    icon?: string;
+}
+
+export interface OpenUI_Bar_Chart {
+    kind: 'bar_chart';
+    title: string;
+    labels: string[];
+    datasets: {
+        label: string;
+        data: number[];
+        color?: string;
+    }[];
+}
+
+export interface OpenUI_Table {
+    kind: 'table';
+    title?: string;
+    columns: { key: string; label: string; align?: 'left' | 'center' | 'right' }[];
+    rows: Record<string, string | number | boolean>[];
+    sortable?: boolean;
+}
+
+export interface OpenUI_Layout {
+    kind: 'layout';
+    direction: 'row' | 'column';
+    children: OpenUI_DSL[];
+}
+
 
 
 

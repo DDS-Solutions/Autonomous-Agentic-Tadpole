@@ -209,19 +209,26 @@ def check_doc_file_refs(root):
 
 def check_skills(root):
     print(f"\nScanning Skills & Workflows...")
-    skills_dir = root / "data" / "skills"
+    candidate_dirs = [root / "execution", root / "data" / "skills"]
     errors = 0
+    scanned = 0
     
-    if not skills_dir.exists():
-        return 0
-        
-    for file in os.listdir(skills_dir):
-        if not file.endswith(".json"): continue
-        file_path = skills_dir / file
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                skill_data = json.load(f)
+    for skills_dir in candidate_dirs:
+        if not skills_dir.exists():
+            continue
+            
+        for file in os.listdir(skills_dir):
+            if not file.endswith(".json"): continue
+            file_path = skills_dir / file
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    skill_data = json.load(f)
+                    
+                if not isinstance(skill_data, dict) or "execution_command" not in skill_data:
+                    continue
+                    
+                scanned += 1
                 name = skill_data.get('name', 'UNKNOWN')
                 exec_cmd = skill_data.get('execution_command', '')
                 
@@ -240,13 +247,17 @@ def check_skills(root):
                         errors += 1
                 else:
                     print_result("SKILL-MANIFEST", True, f"[{name}] {exec_cmd} verified")
-        except json.JSONDecodeError as e:
-            print_result("SKILL-MANIFEST", False, f"Failed to parse {file} as JSON: {e}")
-            errors += 1
-        except Exception as e:
-            print_result("SKILL-MANIFEST", False, f"Error processing {file}: {e}")
-            errors += 1
-            
+            except json.JSONDecodeError as e:
+                print_result("SKILL-MANIFEST", False, f"Failed to parse {file} as JSON: {e}")
+                errors += 1
+            except Exception as e:
+                print_result("SKILL-MANIFEST", False, f"Error processing {file}: {e}")
+                errors += 1
+                
+    if scanned == 0:
+        print_result("SKILL-MANIFEST", False, "No skill manifests found in candidate directories")
+        errors += 1
+
     return errors
 
 def check_api_docs_parity(root, fix=False):

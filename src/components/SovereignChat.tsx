@@ -275,7 +275,7 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
                         dragConstraints={is_detached ? undefined : constraints_ref}
                         className={clsx(
                             "fixed z-50 flex flex-col overflow-hidden transition-[filter,opacity] duration-300 pointer-events-auto",
-                            "bottom-6 right-6 w-[440px] h-[600px] rounded-2xl border border-[color:var(--color-border)]/50 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] bg-[color:var(--color-surface)]/40 backdrop-blur-xl pointer-events-auto"
+                            "bottom-6 right-6 w-[520px] h-[680px] rounded-2xl border border-zinc-800 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] bg-zinc-950/80 backdrop-blur-xl pointer-events-auto"
                         )}
                     >
                         <Chat_Content

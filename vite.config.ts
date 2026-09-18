@@ -28,7 +28,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    host: '0.0.0.0',
+    host: process.env.VITE_HOST || '127.0.0.1',
     port: 5173,
     strictPort: true,
     proxy: {
@@ -142,12 +142,46 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',
     exclude: ['**/node_modules/**', '**/dist/**', '**/.tmp/**', '**/setup.ts', 'tests/e2e/**'],
+
+    // ── Pool Strategy ─────────────────────────────────────────────────────────
+    // vmThreads reuses the jsdom environment across files within a worker
+    // instead of creating a new one per file (was 106x, ~325s of overhead).
+    // Per-file isolation is preserved; state is reset between tests via setup.
+    pool: 'vmThreads',
+
+    // ── Reporting ─────────────────────────────────────────────────────────────
+    reporters: ['verbose'],
+
+    // ── Timeouts ──────────────────────────────────────────────────────────────
+    // Vitest v5 lowered the default hook timeout; set explicit values to avoid
+    // unexpected flakiness on slower CI machines.
+    testTimeout: 10_000,
+    hookTimeout: 10_000,
+
+    // ── Misc ──────────────────────────────────────────────────────────────────
+    // Prevents false CI failures when a glob matches no test files.
+    passWithNoTests: true,
+
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts', 'src/**/*.tsx'],
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', 'tests/**']
-    }
+      exclude: [
+        'src/main.tsx',
+        'src/vite-env.d.ts',
+        'tests/**',
+        '**/*.d.ts',
+        '**/types/**',
+        '**/*.config.*',
+      ],
+      // ── Enforce a minimum coverage floor to catch regressions ───────────────
+      thresholds: {
+        lines: 60,
+        functions: 60,
+        branches: 50,
+        statements: 60,
+      },
+    },
   },
 })
 

@@ -14,11 +14,15 @@ import requests
 import os
 
 # Standard Tadpole OS configuration
-NEURAL_TOKEN = os.getenv("NEURAL_TOKEN", "Tadpole-OS-2026")
+NEURAL_TOKEN = os.getenv("NEURAL_TOKEN")
 AGENT_ID = "1"
 BASE_URL = "http://127.0.0.1:8000/v1"
 
 def run():
+    if not NEURAL_TOKEN:
+        print("[QuickRun] Error: NEURAL_TOKEN environment variable is required.")
+        return
+
     print(f"[QuickRun] Awakening Alpha Agent (ID: {AGENT_ID})...")
     
     url = f"{BASE_URL}/agents/{AGENT_ID}/tasks"

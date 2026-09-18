@@ -30,6 +30,7 @@ import { type Voice_Status } from '../../services/voice_client';
 import { type Sovereign_Scope } from '../../stores/sovereign_store';
 import { Tooltip } from '../ui';
 import { i18n } from '../../i18n';
+import { Mission_Metrics_Badge } from './Mission_Metrics_Badge';
 
 export interface Chat_Header_Props {
     is_detached: boolean;
@@ -129,7 +130,8 @@ export const Chat_Header = React.memo<Chat_Header_Props>(({
                     </div>
                 </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+                <Mission_Metrics_Badge />
                 <Tooltip content={show_transcript ? i18n.t('chat.show_chat_tooltip') : i18n.t('chat.show_transcript_tooltip')} position="top">
                     <button
                         onClick={(e) => {

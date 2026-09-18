@@ -78,8 +78,8 @@ export const Chat_Detached_Portal: React.FC<Chat_Detached_Portal_Props> = ({
                 title={`${i18n.t('chat.title')} - ${i18n.t(`chat.scope_${active_scope}`)}`}
                 on_close={on_restore}
                 on_popup_block={on_popup_block}
-                width={440}
-                height={720}
+                width={540}
+                height={740}
                 url="/detached/chat"
             >
                 <div className="w-full h-full bg-[color:var(--color-background)] text-white overflow-hidden flex flex-col">

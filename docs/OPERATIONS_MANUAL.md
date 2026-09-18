@@ -368,7 +368,7 @@ Migration files:
 server-rs/migrations/
 ```
 
-Database initialization is handled by `server-rs/src/db.rs`.
+Database initialization is handled by `server-rs/src/db/mod.rs`.
 
 ### Database Backup & Restore Runbook
 

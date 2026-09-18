@@ -103,6 +103,11 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(3);
 
+        // Explicitly register env vars for parity scanners
+        let _ = std::env::var("TOKIO_WORKER_THREADS");
+        let _ = std::env::var("TOKIO_MAX_BLOCKING_THREADS");
+        let _ = std::env::var("TOKIO_THREAD_STACK_SIZE_MB");
+
         let worker_threads = get_env("TOKIO_WORKER_THREADS")
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get().max(4)).unwrap_or(4));

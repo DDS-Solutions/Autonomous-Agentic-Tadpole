@@ -415,7 +415,16 @@ impl IntoResponse for AppError {
             severity: metadata.severity.to_string(),
         });
 
-        (status, body).into_response()
+        let mut res = (status, body).into_response();
+        res.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/problem+json"),
+        );
+        res.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+        res
     }
 }
 

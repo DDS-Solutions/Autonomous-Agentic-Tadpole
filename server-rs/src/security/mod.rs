@@ -19,15 +19,17 @@
 //! - **Trace Scope**: `server-rs::security`
 //!
 pub mod audit;
+pub mod conflict;
+pub mod dependency_guard;
 pub mod metering;
 pub mod monitoring;
 pub mod permissions;
 pub mod scanner;
 pub mod sandbox;
 
+pub use conflict::ConflictManager;
+
 #[cfg(test)]
 mod permission_tests;
-
-
 
 // Metadata: [mod]
