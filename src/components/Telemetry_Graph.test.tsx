@@ -193,6 +193,84 @@ describe('Telemetry_Graph Component Verification', () => {
         fireEvent.click(purge_btn);
         expect(mock_clear_all).toHaveBeenCalledTimes(1);
     });
+
+    it('safely filters out self-loop edges and edges referencing unmounted parents', async () => {
+        mock_trace_state.spans = {
+            'span-root': {
+                id: 'span-root',
+                mission_id: 'm-1',
+                name: 'root_phase',
+                agent_id: 'agent-1',
+                start_time: 1000,
+                status: 'success',
+                parent_id: null
+            },
+            'span-self-loop': {
+                id: 'span-self-loop',
+                mission_id: 'm-1',
+                name: 'self_loop_phase',
+                agent_id: 'agent-1',
+                start_time: 1100,
+                status: 'running',
+                parent_id: 'span-self-loop' // Self loop edge!
+            },
+            'span-orphan-child': {
+                id: 'span-orphan-child',
+                mission_id: 'm-1',
+                name: 'orphan_child',
+                agent_id: 'agent-1',
+                start_time: 1200,
+                status: 'running',
+                parent_id: 'span-non-existent-parent' // Parent does not exist!
+            }
+        };
+
+        render(<Telemetry_Graph initial_mission_id="m-1" />);
+
+        await waitFor(() => {
+            expect(screen.getByText('root_phase')).toBeInTheDocument();
+            expect(screen.getByText('self_loop_phase')).toBeInTheDocument();
+            expect(screen.getByText('orphan_child')).toBeInTheDocument();
+        });
+    });
+
+    it('reacts to initial_mission_id prop updates dynamically', async () => {
+        mock_trace_state.spans = {
+            'span-a': {
+                id: 'span-a',
+                mission_id: 'mission-alpha',
+                name: 'task_alpha',
+                agent_id: 'agent-1',
+                start_time: 1000,
+                status: 'success',
+                parent_id: null
+            },
+            'span-b': {
+                id: 'span-b',
+                mission_id: 'mission-beta',
+                name: 'task_beta',
+                agent_id: 'agent-2',
+                start_time: 1000,
+                status: 'success',
+                parent_id: null
+            }
+        };
+
+        const { rerender } = render(<Telemetry_Graph initial_mission_id="mission-alpha" />);
+
+        await waitFor(() => {
+            expect(screen.getByText('task_alpha')).toBeInTheDocument();
+            expect(screen.queryByText('task_beta')).not.toBeInTheDocument();
+        });
+
+        // Update prop dynamically
+        rerender(<Telemetry_Graph initial_mission_id="mission-beta" />);
+
+        await waitFor(() => {
+            expect(screen.queryByText('task_alpha')).not.toBeInTheDocument();
+            expect(screen.getByText('task_beta')).toBeInTheDocument();
+        });
+    });
 });
 
 // Metadata: [Telemetry_Graph_test]

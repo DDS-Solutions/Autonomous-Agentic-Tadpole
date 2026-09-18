@@ -47,8 +47,14 @@ async fn test_intelligence_path_validation_boundaries() {
 
     let direct_res_resolve = service.resolve_context("my_symbol", "src/state.rs", 4000).await;
     assert!(direct_res_resolve.is_ok(), "Direct relative workspace path should resolve gracefully");
-}
 
-// Metadata: [intelligence_routes]
+    // Case 3: get_impacted_tests validates path traversal
+    let traversal_res_impacted = service.get_impacted_tests("my_symbol", "../../etc/passwd").await;
+    assert!(traversal_res_impacted.is_err(), "Expected boundary violation error on impacted tests");
+
+    // Case 4: get_impacted_tests on workspace path executes gracefully
+    let direct_res_impacted = service.get_impacted_tests("my_symbol", "src/state.rs").await;
+    assert!(direct_res_impacted.is_ok(), "Impacted tests on valid workspace path should succeed");
+}
 
 // Metadata: [intelligence_routes]

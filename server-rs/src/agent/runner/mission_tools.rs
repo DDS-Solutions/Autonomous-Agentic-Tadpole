@@ -593,6 +593,76 @@ impl AgentRunner {
         }
     }
 
+    /// Handles `get_symbol_context`: resolves structural caller/callee AST graph within a token budget.
+    pub(crate) async fn handle_get_symbol_context(
+        &self,
+        _ctx: &RunContext,
+        fc: &crate::agent::types::ToolCall,
+    ) -> Result<String, ToolExecutionError> {
+        let symbol_name = fc.args.get("symbol").and_then(|v| v.as_str()).unwrap_or("");
+        let path_str = fc.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let budget = fc.args.get("budget").and_then(|v| v.as_u64()).unwrap_or(2000) as usize;
+
+        if symbol_name.is_empty() || path_str.is_empty() {
+            return Ok("(GET SYMBOL CONTEXT FAILED: 'symbol' and 'path' arguments are required)".to_string());
+        }
+
+        let intel_service = crate::intelligence::service::IntelligenceService::new(self.state.clone());
+        match intel_service.resolve_context(symbol_name, path_str, budget).await {
+            Ok(res) => {
+                if res.symbols.is_empty() {
+                    Ok(format!("(No contextual symbols resolved for '{}' in {})", symbol_name, path_str))
+                } else {
+                    let mut out = format!(
+                        "### Structural Symbol Context for `{}` ({})\nBudget: {} tokens | Accumulated: {} tokens (Estimate: {})\n\n",
+                        symbol_name, path_str, res.budget, res.accumulated_tokens, res.truncation_estimate
+                    );
+                    for s in res.symbols {
+                        out.push_str(&format!(
+                            "- **{}** (`{}` in `{}`: lines {}-{} | {} tokens)\n  `{}`\n",
+                            s.name, s.kind, s.path, s.start_line, s.end_line, s.tokens, s.signature
+                        ));
+                    }
+                    Ok(out)
+                }
+            }
+            Err(e) => Ok(format!("(GET SYMBOL CONTEXT FAILED: {})", e)),
+        }
+    }
+
+    /// Handles `get_impacted_tests`: finds all test files in the blast radius of a symbol or file change.
+    pub(crate) async fn handle_get_impacted_tests(
+        &self,
+        _ctx: &RunContext,
+        fc: &crate::agent::types::ToolCall,
+    ) -> Result<String, ToolExecutionError> {
+        let symbol_name = fc.args.get("symbol").and_then(|v| v.as_str()).unwrap_or("*");
+        let path_str = fc.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+
+        if path_str.is_empty() {
+            return Ok("(GET IMPACTED TESTS FAILED: 'path' argument is required)".to_string());
+        }
+
+        let intel_service = crate::intelligence::service::IntelligenceService::new(self.state.clone());
+        match intel_service.get_impacted_tests(symbol_name, path_str).await {
+            Ok(tests) => {
+                if tests.is_empty() {
+                    Ok(format!("(No impacted tests found in blast radius of '{}' in {})", symbol_name, path_str))
+                } else {
+                    let mut out = format!(
+                        "### Impacted Tests in Blast Radius for `{}` in `{}`\nFound {} test file(s):\n\n",
+                        symbol_name, path_str, tests.len()
+                    );
+                    for t in tests {
+                        out.push_str(&format!("- `{}`\n", t));
+                    }
+                    Ok(out)
+                }
+            }
+            Err(e) => Ok(format!("(GET IMPACTED TESTS FAILED: {})", e)),
+        }
+    }
+
     /// Internal helper: Extracts a list of symbols using tree-sitter.
     fn extract_symbols(&self, content: &str, path: &str) -> Vec<String> {
         let symbols = self.state.resources.parser.list_symbols(path, content);

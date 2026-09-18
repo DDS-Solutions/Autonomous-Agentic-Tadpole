@@ -216,10 +216,18 @@ export const KnowledgeGraph: React.FC = () => {
             };
         });
 
-        const links: ForceGraphLink[] = data.links.map(link => ({
-            source: typeof link.source === 'string' ? link.source : (link.source as { id: string }).id,
-            target: typeof link.target === 'string' ? link.target : (link.target as { id: string }).id
-        }));
+        const node_id_set = new Set(nodes.map(n => n.id));
+
+        const links: ForceGraphLink[] = data.links
+            .map(link => ({
+                source: typeof link.source === 'string' ? link.source : (link.source as { id: string }).id,
+                target: typeof link.target === 'string' ? link.target : (link.target as { id: string }).id
+            }))
+            .filter(link => {
+                const s = typeof link.source === 'string' ? link.source : (link.source as { id?: string })?.id || '';
+                const t = typeof link.target === 'string' ? link.target : (link.target as { id?: string })?.id || '';
+                return node_id_set.has(s) && node_id_set.has(t);
+            });
 
         return { nodes, links };
     }, [data, affected_nodes, view_mode]);

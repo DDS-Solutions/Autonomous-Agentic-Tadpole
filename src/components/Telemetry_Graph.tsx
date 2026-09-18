@@ -120,6 +120,8 @@ const get_layouted_elements = (nodes: Node[], edges: Edge[], direction = 'TB') =
 
     const layouted_nodes = nodes.map((node) => {
         const node_with_position = dagre_graph.node(node.id);
+        const safe_x = node_with_position?.x != null ? node_with_position.x - node_width / 2 : 0;
+        const safe_y = node_with_position?.y != null ? node_with_position.y - node_height / 2 : 0;
         
         // Return cloned objects to maintain React state immutability
         return {
@@ -127,8 +129,8 @@ const get_layouted_elements = (nodes: Node[], edges: Edge[], direction = 'TB') =
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
             position: {
-                x: node_with_position.x - node_width / 2,
-                y: node_with_position.y - node_height / 2,
+                x: safe_x,
+                y: safe_y,
             },
         };
     });
@@ -141,7 +143,16 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
     const { agents } = use_agent_store();
     const [nodes, set_nodes, on_nodes_change] = useNodesState([]);
     const [edges, set_edges, on_edges_change] = useEdgesState([]);
-    const [filter_mission_id, set_filter_mission_id] = React.useState<string | undefined>(initial_mission_id);
+    const [user_filter_mission_id, set_user_filter_mission_id] = React.useState<string | undefined>(undefined);
+    const [prev_initial_mission_id, set_prev_initial_mission_id] = React.useState(initial_mission_id);
+
+    // Keep state in sync if parent changes initial_mission_id without triggering cascading effect render
+    if (initial_mission_id !== prev_initial_mission_id) {
+        set_prev_initial_mission_id(initial_mission_id);
+        set_user_filter_mission_id(undefined);
+    }
+
+    const filter_mission_id = user_filter_mission_id !== undefined ? user_filter_mission_id : initial_mission_id;
 
     const available_missions = useMemo(() => {
         const missions = new Set<string>();
@@ -170,9 +181,11 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
             };
         });
 
+        const filtered_node_ids = new Set(nodes.map(n => n.id));
         const edges: Edge[] = [];
         filtered_spans.forEach(span => {
-            if (span.parent_id && spans[span.parent_id]) {
+            // SEC: Validate parent exists in the active filtered nodes and prevent self-loop edges
+            if (span.parent_id && span.parent_id !== span.id && filtered_node_ids.has(span.parent_id)) {
                 edges.push({
                     id: `e-${span.parent_id}-${span.id}`,
                     source: span.parent_id,
@@ -247,7 +260,7 @@ export const Telemetry_Graph: React.FC<{ initial_mission_id?: string }> = ({ ini
                     <div className="flex gap-2 items-center">
                         <select 
                             value={filter_mission_id || ''} 
-                            onChange={(e) => set_filter_mission_id(e.target.value || undefined)}
+                            onChange={(e) => set_user_filter_mission_id(e.target.value || undefined)}
                             className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-300 uppercase tracking-widest outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all hover:bg-zinc-900"
                             aria-label={i18n.t('telemetry.telemetry_graph.aria_filter_mission', { defaultValue: 'Filter by Mission ID' })}
                         >

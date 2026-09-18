@@ -431,14 +431,27 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
             metadata: serde_json::to_value(&agent.metadata).unwrap_or(serde_json::json!({})),
         });
 
-        // 2. Derive Edges from Active Mission links in the Registry
+        // 2. Derive Edges & Synthesize Mission Nodes from Active Mission links in the Registry
         if let Some(mission) = &agent.state.active_mission {
             if let Some(mid) = mission.get("id").and_then(|v| v.as_str()) {
-                active_missions_in_registry.insert(mid.to_string());
+                let mid_str = mid.to_string();
+                if active_missions_in_registry.insert(mid_str.clone()) {
+                    let mission_title = mission
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Active Mission");
+                    nodes.push(GraphNode {
+                        id: mid_str.clone(),
+                        label: mission_title.to_string(),
+                        r#type: "mission".to_string(),
+                        status: "active".to_string(),
+                        metadata: serde_json::to_value(mission).unwrap_or(serde_json::json!({})),
+                    });
+                }
                 edges.push(GraphEdge {
-                    id: format!("link-{}-{}", agent.identity.id, mid),
+                    id: format!("link-{}-{}", agent.identity.id, mid_str),
                     source: agent.identity.id.clone(),
-                    target: mid.to_string(),
+                    target: mid_str,
                     label: "executing".to_string(),
                     metadata: serde_json::json!({}),
                 });
@@ -459,8 +472,13 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
         let title: String = row.get("title");
         let status: String = row.get("status");
 
-        // Only add if not already inferred from registry to avoid duplicates
-        if !active_missions_in_registry.contains(&mid) {
+        if active_missions_in_registry.contains(&mid) {
+            // Authoritatively update title/status from database record
+            if let Some(existing_node) = nodes.iter_mut().find(|n| n.id == mid) {
+                existing_node.label = title;
+                existing_node.status = status;
+            }
+        } else {
             nodes.push(GraphNode {
                 id: mid,
                 label: title,
@@ -473,6 +491,10 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
 
     // 4. Fetch Explicit Relationships (Directives) from DB
     // This maps inter-agent delegation (who spawned whom or who issued a directive).
+    // SEC: Only emit edges where both source and target agents exist in the node set
+    // to prevent dangling edge references in downstream force simulations.
+    let available_node_ids: std::collections::HashSet<String> = nodes.iter().map(|n| n.id.clone()).collect();
+
     let dir_rows = sqlx::query(
         "SELECT id, source_agent_id, target_agent_id, instruction, status FROM agent_directives LIMIT 500",
     )
@@ -486,15 +508,17 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
         let inst: String = row.get("instruction");
         let stat: String = row.get("status");
 
-        edges.push(GraphEdge {
-            id: mid,
-            source: src,
-            target: tgt,
-            label: format!("directive ({})", stat),
-            metadata: serde_json::json!({
-                "instruction": inst
-            }),
-        });
+        if available_node_ids.contains(&src) && available_node_ids.contains(&tgt) {
+            edges.push(GraphEdge {
+                id: mid,
+                source: src,
+                target: tgt,
+                label: format!("directive ({})", stat),
+                metadata: serde_json::json!({
+                    "instruction": inst
+                }),
+            });
+        }
     }
 
     Ok(SwarmGraph { nodes, edges })
@@ -503,8 +527,6 @@ pub async fn get_swarm_graph(state: &crate::state::AppState) -> Result<SwarmGrap
 #[cfg(test)]
 mod tests {
     use super::*;
-
-
 
     #[tokio::test]
     async fn test_swarm_graph_generation() -> Result<(), AppError> {
@@ -521,12 +543,116 @@ mod tests {
         // 3. Verify Graph Data
         let graph = get_swarm_graph(&state).await?;
 
-        // 2 missions from DB + 1 agent from registry (if we added it to registry, but we only added to DB)
-        // Wait, get_swarm_graph fetches from registry AND DB.
-        // In new_mock, the registry is empty.
-        // So we only get the 2 missions from the DB.
+        // 2 missions from DB
         assert_eq!(graph.nodes.len(), 2);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_swarm_graph_closed_topology_happy_path() -> Result<(), AppError> {
+        let state = crate::state::AppState::new_mock().await;
+        let pool = &state.resources.pool;
+
+        // Seed agent in DB
+        sqlx::query("INSERT INTO agents (id, name, role, department, description, status, metadata) \
+                     VALUES ('ag-alpha', 'Alpha', 'Dev', 'Core', 'desc', 'active', '{}')")
+            .execute(pool).await?;
+
+        let agent = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "ag-alpha".to_string(),
+                name: "Alpha".to_string(),
+                ..Default::default()
+            },
+            health: crate::agent::types::AgentHealth {
+                status: "active".to_string(),
+                ..Default::default()
+            },
+            state: crate::agent::types::AgentState {
+                active_mission: Some(serde_json::json!({
+                    "id": "ms-100",
+                    "title": "Operation Vanguard"
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        state.registry.agents.insert("ag-alpha".to_string(), agent);
+
+        // Seed mission history
+        sqlx::query("INSERT INTO mission_history (id, title, status, agent_id) \
+                     VALUES ('ms-100', 'Operation Vanguard', 'active', 'ag-alpha')")
+            .execute(pool).await?;
+
+        let graph = get_swarm_graph(&state).await?;
+        let node_ids: std::collections::HashSet<_> = graph.nodes.iter().map(|n| n.id.clone()).collect();
+
+        // Invariant 1: Both nodes must exist
+        assert!(node_ids.contains("ag-alpha"), "Agent node missing");
+        assert!(node_ids.contains("ms-100"), "Active mission node missing from graph.nodes");
+
+        // Invariant 2: Every edge connects valid nodes
+        for edge in &graph.edges {
+            assert!(node_ids.contains(&edge.source), "Dangling source: {}", edge.source);
+            assert!(node_ids.contains(&edge.target), "Dangling target: {}", edge.target);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_swarm_graph_filters_dangling_historical_directives() -> Result<(), AppError> {
+        let state = crate::state::AppState::new_mock().await;
+        let pool = &state.resources.pool;
+
+        // Insert agent into DB to satisfy foreign key constraint on mission_history(agent_id)
+        sqlx::query("INSERT INTO agents (id, name, role, department, description, status, metadata) \
+                     VALUES ('some-agent', 'Ghost Agent', 'Worker', 'Ops', 'Test', 'idle', '{}')")
+            .execute(pool).await?;
+
+        // Insert completed mission into mission_history (status completed, so not in active graph nodes)
+        sqlx::query("INSERT INTO mission_history (id, title, status, agent_id) \
+                     VALUES ('ms-ghost', 'Ghost Mission', 'completed', 'some-agent')")
+            .execute(pool).await?;
+
+        // Insert directive with nonexistent source/target agents
+        sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) \
+                     VALUES ('dir-orphan', 'ms-ghost', 'ghost-src', 'ghost-tgt', 'analyze', 'completed')")
+            .execute(pool).await?;
+
+        let graph = get_swarm_graph(&state).await?;
+        let orphan_edge = graph.edges.iter().find(|e| e.id == "dir-orphan");
+        assert!(orphan_edge.is_none(), "Dangling directive edge should be filtered");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_swarm_graph_edge_cases_and_empty_state() -> Result<(), AppError> {
+        let state = crate::state::AppState::new_mock().await;
+
+        // 1. Completely empty state
+        let empty_graph = get_swarm_graph(&state).await?;
+        assert_eq!(empty_graph.nodes.len(), 0);
+        assert_eq!(empty_graph.edges.len(), 0);
+
+        // 2. Active mission with missing ID
+        let malformed = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "ag-bad".to_string(),
+                name: "Bad Agent".to_string(),
+                ..Default::default()
+            },
+            state: crate::agent::types::AgentState {
+                active_mission: Some(serde_json::json!({ "title": "No ID" })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        state.registry.agents.insert("ag-bad".to_string(), malformed);
+
+        let safe_graph = get_swarm_graph(&state).await?;
+        assert_eq!(safe_graph.nodes.len(), 1);
+        assert_eq!(safe_graph.edges.len(), 0);
         Ok(())
     }
 

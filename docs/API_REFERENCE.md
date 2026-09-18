@@ -141,6 +141,7 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `GET` | `/v1/intelligence/blast-radius` | `routes::intelligence::get_blast_radius` | Protected |
 | `GET` | `/v1/intelligence/graph` | `routes::intelligence::get_code_graph` | Protected |
 | `POST` | `/v1/intelligence/graph/rebuild` | `routes::intelligence::rebuild_code_graph` | Protected |
+| `GET` | `/v1/intelligence/impacted-tests` | `routes::intelligence::get_impacted_tests` | Protected |
 | `GET` | `/v1/intelligence/resolve` | `routes::intelligence::resolve_code_context` | Protected |
 
 ## Mcp

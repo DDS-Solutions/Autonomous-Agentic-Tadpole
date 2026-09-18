@@ -96,4 +96,23 @@ pub async fn resolve_code_context(
     Ok(Json(res))
 }
 
+#[derive(Deserialize)]
+pub struct ImpactedTestsQuery {
+    pub name: Option<String>,
+    pub path: String,
+}
+
+/// GET /v1/intelligence/impacted-tests
+///
+/// Calculates all test files located in the blast radius of a symbol or file change.
+pub async fn get_impacted_tests(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ImpactedTestsQuery>,
+) -> Result<Json<Vec<String>>, AppError> {
+    let service = IntelligenceService::new(state);
+    let name = query.name.as_deref().unwrap_or("*");
+    let res = service.get_impacted_tests(name, &query.path).await?;
+    Ok(Json(res))
+}
+
 // Metadata: [intelligence]

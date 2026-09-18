@@ -43,7 +43,7 @@ impl Dispatcher {
         
         // 1. Mission Tools
         let mission_handler = Arc::new(MissionHandler);
-        let mission_tools = &["share_finding", "complete_mission", "pin_mission", "search_mission_knowledge", "read_codebase_file", "propose_capability", "list_file_symbols", "get_symbol_body", "send_mission_directive", "request_peer_audit", "submit_peer_review", "archive_to_global_vault", "search_global_vault", "update_working_memory", "query_financial_logs"];
+        let mission_tools = &["share_finding", "complete_mission", "pin_mission", "search_mission_knowledge", "read_codebase_file", "propose_capability", "list_file_symbols", "get_symbol_body", "get_symbol_context", "get_impacted_tests", "send_mission_directive", "request_peer_audit", "submit_peer_review", "archive_to_global_vault", "search_global_vault", "update_working_memory", "query_financial_logs"];
         
         // 2. Filesystem Tools
         let fs_handler = Arc::new(FsHandler);
@@ -128,6 +128,8 @@ impl CategoricalHandler for MissionHandler {
             "propose_capability" => runner.handle_propose_capability(&run_ctx, &fc).await,
             "list_file_symbols" => runner.handle_list_file_symbols(&run_ctx, &fc).await,
             "get_symbol_body" => runner.handle_get_symbol_body(&run_ctx, &fc).await,
+            "get_symbol_context" => runner.handle_get_symbol_context(&run_ctx, &fc).await,
+            "get_impacted_tests" => runner.handle_get_impacted_tests(&run_ctx, &fc).await,
             "send_mission_directive" => runner.handle_send_mission_directive(&run_ctx, &fc).await,
             "request_peer_audit" => runner.handle_request_peer_audit(&run_ctx, &fc).await,
             "submit_peer_review" => runner.handle_submit_peer_review(&run_ctx, &fc).await,

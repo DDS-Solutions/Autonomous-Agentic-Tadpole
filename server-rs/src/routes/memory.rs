@@ -395,15 +395,20 @@ pub async fn hybrid_rag_search_handler(
 
     // 2. TrustGraph Retrieval
     let search_pattern = format!("%{}%", query.q);
-    let graph_rows = sqlx::query(
-        "SELECT id, name, type, description FROM trustgraph_nodes WHERE name LIKE ? OR description LIKE ? LIMIT ?"
+    let graph_rows = match sqlx::query(
+        "SELECT id, name, type, description FROM graph_entities WHERE name LIKE ? OR description LIKE ? LIMIT ?"
     )
     .bind(&search_pattern)
     .bind(&search_pattern)
     .bind((top_k * 2) as i64)
     .fetch_all(&state.resources.pool)
-    .await
-    .unwrap_or_default();
+    .await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::warn!("⚠️ [HybridRAG] Failed to query graph_entities for TrustGraph retrieval: {}", err);
+            Vec::new()
+        }
+    };
 
     let graph_candidates: Vec<RagCandidate> = graph_rows
         .into_iter()

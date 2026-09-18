@@ -243,6 +243,7 @@ mod tests {
 }
 
 /// Prunes overflow files older than max_age to prevent disk exhaustion.
+#[allow(dead_code)]
 pub async fn cleanup_overflow_directory(workspace_root: &Path, max_age: std::time::Duration) -> Result<usize, std::io::Error> {
     let overflow_dir = workspace_root.join(".tmp").join("tool_overflow");
     if !overflow_dir.exists() {

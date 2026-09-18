@@ -309,6 +309,31 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
                 "required": ["query"]
             }),
         },
+        ToolDefinitionData {
+            name: "get_symbol_context".to_string(),
+            description: "Resolves the structural caller and callee graph of a symbol within a strict token budget using Tree-sitter AST, providing optimal context without reading entire files.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "symbol": { "type": "string", "description": "The symbol name to resolve context for (e.g. function or struct name)." },
+                    "path": { "type": "string", "description": "Relative file path containing the symbol." },
+                    "budget": { "type": "integer", "description": "Max token budget for returned symbols (default 2000)." }
+                },
+                "required": ["symbol", "path"]
+            }),
+        },
+        ToolDefinitionData {
+            name: "get_impacted_tests".to_string(),
+            description: "Finds all test files in the blast radius of a symbol or file change using the AST dependency graph.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "symbol": { "type": "string", "description": "The modified symbol name, or '*' for the entire file." },
+                    "path": { "type": "string", "description": "Relative file path that was modified." }
+                },
+                "required": ["path"]
+            }),
+        },
     ]
 }
 

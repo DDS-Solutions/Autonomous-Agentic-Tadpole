@@ -112,7 +112,7 @@ export const Neural_Map: React.FC<Neural_Map_Props> = ({ cluster, agents, theme_
                             className="w-8 h-8 rounded-lg border flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm"
                             style={{ borderColor: `${theme_color}40` }}
                         >
-                            <span className="text-[10px] font-bold" style={{ color: theme_color }}>{agent.name[0]}</span>
+                            <span className="text-[10px] font-bold" style={{ color: theme_color }}>{agent.name ? agent.name[0] : '?'}</span>
                         </motion.div>
                         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap opacity-60">
                             <span className="text-[8px] text-zinc-400 font-mono uppercase">{agent.name}</span>

@@ -358,6 +358,37 @@ impl IntelligenceService {
             truncation_estimate,
         })
     }
+
+    #[tracing::instrument(skip(self), fields(user_id, request_id))]
+    pub async fn get_impacted_tests(&self, name: &str, path: &str) -> Result<Vec<String>, AppError> {
+        let affected = self.blast_radius(name, path, Some(200)).await?;
+        let mut tests = std::collections::BTreeSet::new();
+
+        for node in affected {
+            let p = node.path.to_lowercase();
+            let n = node.name.to_lowercase();
+            let k = node.kind.to_lowercase();
+
+            let is_test = p.contains("test")
+                || p.contains("spec")
+                || p.starts_with("tests/")
+                || p.ends_with(".test.ts")
+                || p.ends_with(".test.tsx")
+                || p.ends_with(".test.js")
+                || p.ends_with(".test.jsx")
+                || p.ends_with("_test.rs")
+                || p.ends_with("_test.py")
+                || n.starts_with("test_")
+                || n.ends_with("_test")
+                || k == "test";
+
+            if is_test {
+                tests.insert(node.path);
+            }
+        }
+
+        Ok(tests.into_iter().collect())
+    }
 }
 
 // Metadata: [service]

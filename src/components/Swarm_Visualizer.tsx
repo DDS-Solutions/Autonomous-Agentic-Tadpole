@@ -13,7 +13,7 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Send, X, CheckCircle2 } from 'lucide-react';
 import { use_agent_store } from '../stores/agent_store';
 import { use_sovereign_store } from '../stores/sovereign_store';
 import { THEME_COLORS, GRAPH_THEME } from '../constants/theme';
@@ -21,6 +21,8 @@ import { i18n } from '../i18n';
 import { tadpole_os_socket } from '../services/socket';
 import { type Swarm_Pulse } from '../types';
 import { forceCenter, forceManyBody } from 'd3-force';
+import { api_request } from '../services/base_api_service';
+import { tadpole_os_service } from '../services/tadpoleos_service';
 
 /**
  * Swarm_Visualizer
@@ -70,6 +72,43 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     const set_scope = use_sovereign_store(s => s.set_scope);
     const set_target_agent = use_sovereign_store(s => s.set_target_agent);
 
+    // Interactive Quick Command Bar State
+    const [selected_node, set_selected_node] = React.useState<GraphNode | null>(null);
+    const [directive_input, set_directive_input] = React.useState('');
+    const [is_dispatching, set_is_dispatching] = React.useState(false);
+    const [dispatch_feedback, set_dispatch_feedback] = React.useState<string | null>(null);
+
+    const handle_dispatch_directive = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selected_node || !directive_input.trim() || is_dispatching) return;
+
+        set_is_dispatching(true);
+        set_dispatch_feedback(null);
+        try {
+            const matched_agent = agents_ref.current.find(a => a.id === selected_node.id);
+            const model_id = matched_agent?.model || 'gemini-1.5-flash';
+            const provider = tadpole_os_service.resolve_provider(model_id);
+
+            await tadpole_os_service.send_command(
+                selected_node.id,
+                directive_input.trim(),
+                model_id,
+                provider,
+                undefined,
+                matched_agent?.department
+            );
+
+            set_dispatch_feedback(`Directive dispatched to ${selected_node.name}`);
+            set_directive_input('');
+            setTimeout(() => set_dispatch_feedback(null), 3500);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error';
+            set_dispatch_feedback(`Dispatch failed: ${msg}`);
+        } finally {
+            set_is_dispatching(false);
+        }
+    };
+
     // ### 🧠 State Synchronization: Telemetry Ingestion
     // Subscribes to the high-speed (10Hz) binary telemetry pulse from the backend.
     // Maps the incoming 'SwarmPulse' protocol buffer records into the local D3 
@@ -78,6 +117,53 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     // Stable closure to prevent Event Loop thrashing & socket teardowns
     const agents_ref = useRef(agents);
     useEffect(() => { agents_ref.current = agents; }, [agents]);
+
+    // Initial REST bootstrap hydration to prevent blank canvas while socket connects
+    useEffect(() => {
+        let is_mounted = true;
+        const bootstrap_graph = async () => {
+            if (graph_data_ref.current.nodes.length > 0) return;
+            try {
+                const rest_graph = await api_request<{
+                    nodes: Array<{ id: string; label: string; type: string; status: string }>;
+                    edges: Array<{ source: string; target: string }>;
+                }>('/v1/agents/graph');
+
+                if (!is_mounted || !rest_graph || graph_data_ref.current.nodes.length > 0) return;
+
+                const initial_nodes: GraphNode[] = (rest_graph.nodes || []).map(n => {
+                    const is_hub = n.type === 'mission';
+                    const raw_name = n.label || n.id;
+                    const safe_name = raw_name.substring(0, 32).replace(/[^\w\s-]/g, '');
+                    return {
+                        id: n.id,
+                        name: is_hub ? `MISSION_HUB: ${safe_name.substring(0, 24)}` : safe_name,
+                        status: is_hub ? NodeStatus.HUB : (n.status === 'active' || n.status === 'busy' ? NodeStatus.BUSY : NodeStatus.IDLE),
+                        battery: 100,
+                        signal: 100,
+                        progress: 0,
+                        x: (Math.random() - 0.5) * 50,
+                        y: (Math.random() - 0.5) * 50,
+                        fx: is_hub ? 0 : undefined,
+                        fy: is_hub ? 0 : undefined,
+                    };
+                });
+
+                const node_ids = new Set(initial_nodes.map(n => n.id));
+                const initial_links: GraphLink[] = (rest_graph.edges || [])
+                    .filter(e => node_ids.has(e.source) && node_ids.has(e.target))
+                    .map(e => ({ source: e.source, target: e.target }));
+
+                graph_data_ref.current = { nodes: initial_nodes, links: initial_links };
+                set_graph_metadata({ nodes: initial_nodes.length, links: initial_links.length });
+            } catch (err) {
+                console.debug('[Swarm_Visualizer] Initial REST bootstrap deferred to socket pulse:', err);
+            }
+        };
+
+        void bootstrap_graph();
+        return () => { is_mounted = false; };
+    }, []);
 
     useEffect(() => {
         // Subscribe to high-speed binary pulses
@@ -109,7 +195,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 
                 return {
                     ...pulse_node,
-                    name: is_hub ? `MISSION_HUB: ${safe_name.substring(0, 8)}` : safe_name,
+                    name: is_hub ? `MISSION_HUB: ${safe_name.substring(0, 24)}` : safe_name,
                     // Preserve position/velocity from the D3 force engine
                     x: safe_x,
                     y: safe_y,
@@ -120,16 +206,19 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 };
             });
 
-            // 2. Map Links
-            const new_links = (pulse.edges || []).map(edge => ({
-                source: edge.source,
-                target: edge.target
-            }));
+            // 2. Map Links with Strict Mutual Endpoint Validation
+            const valid_node_ids = new Set(new_nodes.map(n => n.id));
+            const new_links = (pulse.edges || [])
+                .filter(edge => valid_node_ids.has(edge.source) && valid_node_ids.has(edge.target))
+                .map(edge => ({
+                    source: edge.source,
+                    target: edge.target
+                }));
 
-            // Check if structure or state changed (additions/deletions or status/battery shifts)
-            const state_changed = new_nodes.some((node, i) => {
-                const prev = current.nodes[i];
-                return !prev || node.id !== prev.id || node.status !== prev.status || node.battery !== prev.battery;
+            // Check if structure or state changed using ID-based Map lookup
+            const state_changed = new_nodes.some(node => {
+                const prev = existing_map.get(node.id);
+                return !prev || node.status !== prev.status || node.battery !== prev.battery;
             });
 
             const structure_changed = 
@@ -264,11 +353,18 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                 onNodeClick={(node: GraphNode) => {
                     // XSS prevention: sanitize store target
                     const safe_target = (node.name || node.id).replace(/[^\w\s-]/g, '');
+                    set_selected_node(node);
+                    set_dispatch_feedback(null);
 
-                    // Focus Agent Logs & Scope
-                    set_selected_agent_id(node.id);
-                    set_scope('agent');
-                    set_target_agent(safe_target);
+                    if (node.status === NodeStatus.HUB) {
+                        set_scope('cluster');
+                        set_target_agent(safe_target);
+                    } else {
+                        // Focus Agent Logs & Scope
+                        set_selected_agent_id(node.id);
+                        set_scope('agent');
+                        set_target_agent(safe_target);
+                    }
                     
                     // Center View on Node
                     if (Number.isFinite(node.x) && Number.isFinite(node.y)) {
@@ -298,6 +394,86 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                     </div>
                 </div>
             </div>
+
+            {/* Actionable Quick Command Bar Overlay */}
+            {selected_node && (
+                <div 
+                    data-testid="swarm-quick-command-bar"
+                    className="absolute bottom-8 left-8 right-40 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl p-3 shadow-2xl z-20 flex flex-col gap-2 max-w-xl"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span 
+                                className="w-2.5 h-2.5 rounded-full"
+                                style={{
+                                    backgroundColor: selected_node.status === NodeStatus.HUB 
+                                        ? '#a855f7' 
+                                        : (selected_node.status === NodeStatus.BUSY ? THEME_COLORS.SECONDARY : THEME_COLORS.SUCCESS)
+                                }}
+                            />
+                            <span className="text-xs font-bold text-white tracking-wide">
+                                {selected_node.name}
+                            </span>
+                            <span className="text-[10px] text-zinc-400 uppercase font-mono px-1.5 py-0.5 bg-zinc-800 rounded">
+                                {selected_node.status === NodeStatus.HUB ? 'MISSION HUB' : `BATTERY ${selected_node.battery}%`}
+                            </span>
+                        </div>
+                        <button
+                            data-testid="close-quick-command"
+                            onClick={() => {
+                                set_selected_node(null);
+                                set_dispatch_feedback(null);
+                            }}
+                            className="text-zinc-500 hover:text-white p-1 transition-colors"
+                            aria-label="Close command bar"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+
+                    {selected_node.status === NodeStatus.HUB ? (
+                        <div className="flex items-center justify-between pt-1">
+                            <p className="text-[11px] text-zinc-400">
+                                Active swarm coordination hub. Inspect cluster telemetry and directives in the Missions console.
+                            </p>
+                            <a
+                                href={`/missions?id=${encodeURIComponent(selected_node.id)}`}
+                                className="px-3 py-1.5 bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-500/30 text-cyan-300 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                            >
+                                Inspect Mission
+                            </a>
+                        </div>
+                    ) : (
+                        <form onSubmit={handle_dispatch_directive} className="flex gap-2">
+                            <input
+                                data-testid="quick-directive-input"
+                                type="text"
+                                value={directive_input}
+                                onChange={(e) => set_directive_input(e.target.value)}
+                                placeholder="Direct agent (e.g. analyze telemetry, refactor module)..."
+                                className="flex-1 bg-zinc-950/80 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                                disabled={is_dispatching}
+                            />
+                            <button
+                                data-testid="submit-quick-directive"
+                                type="submit"
+                                disabled={!directive_input.trim() || is_dispatching}
+                                className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-800 text-white disabled:text-zinc-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-cyan-950/50"
+                            >
+                                <Send size={12} />
+                                <span>{is_dispatching ? 'Dispatching...' : 'Dispatch'}</span>
+                            </button>
+                        </form>
+                    )}
+
+                    {dispatch_feedback && (
+                        <div className="text-[11px] text-cyan-400 font-mono tracking-tight flex items-center gap-1.5">
+                            <CheckCircle2 size={12} className="text-cyan-400" />
+                            <span>{dispatch_feedback}</span>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Detach Window Button - Hidden if already detached */}
             {!is_detached && (
