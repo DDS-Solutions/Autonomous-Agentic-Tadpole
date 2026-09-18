@@ -40,5 +40,7 @@ When an operator requests the deletion of a specific agent (via `DELETE /v1/agen
 
 - **Audit Trails**: Retained for 90 days. Can be cleared earlier by executing a manual purge command.
 - **Continuous Logs**: Stored under `.tmp/` and pruned automatically when size exceeds 500MB.
+- **Telemetry Event Logs**: Daily JSONL rotation under `logs/events_YYYY-MM-DD.jsonl` managed by `FileTelemetrySink`, retaining 7 days of rolling events with automatic background sweeping.
+- **Tool Observation Overflow**: Large tool observation payloads (>2,000 characters) offloaded to `.tmp/tool_overflow/<call_id>.txt` are transient runtime artifacts pruned during workspace snapshot and cleanup routines.
 
 [//]: # (Metadata: [DATA_RETENTION])

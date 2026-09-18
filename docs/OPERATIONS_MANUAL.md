@@ -472,12 +472,18 @@ The engine provides local diagnostic endpoints under `/v1/system/debug` for anal
 
 ## Sovereign Engine Hardening
 
-The engine implements several strategies to ensure resilience and zero-panic operation:
-
-- **Self-Annealing Intelligence**: The `PolyglotParser` provides structured feedback on malformed tool calls, allowing the `IntelligenceLoop` to automatically re-prompt models for correction.
+- **Self-Annealing Intelligence & Open-Model Recovery**: The `PolyglotParser` incorporates balanced-brace function call extraction for open models (`<function=...>`, hallucinated brackets/parentheses) and appends `[STRUCTURED_ERROR_FEEDBACK]` (`retryable`, `suggested_action`) on tool failures to guide single-turn refinement.
+- **Pinned-Tail Compaction & Disk Spill**: `TurnCompactor` permanently pins the system prompt and the last 3 conversational turns uncompressed. Tool observations exceeding 2,000 characters are offloaded to `.tmp/tool_overflow/<call_id>.txt` with a disk pointer URI, while tool failure observations and warnings are preserved verbatim.
+- **Lock-Free Atomic Execution Telemetry**: `ExecutionMetricsRollup` maintains mission turn counts, token throughput, USD cost, and tool success/failure tallies using lock-free `AtomicU64` primitives, warning operators if summarizations loop ($\ge 3$).
+- **Concurrent Workspace Edit Leases**: `ConflictManager` issues 30-second TTL leases on workspace file paths to prevent multi-agent race conditions during parallel modifications.
 - **Panic Remediation**: Critical paths in the bridge, parser, and security modules use safe error propagation (via `Result` and `AppError`) rather than non-recoverable panics.
 - **Non-Blocking Orchestration**: All filesystem I/O in the MCP execution and Memory Palace rehydration modules is migrated to `tokio::fs` to prevent event-loop stalling.
 - **Non-Blocking Graph Rebuilding**: Decoupling the filesystem walking and AST parsing tasks from the main thread lock prevents Axum router request timeout cascades during compilation sweeps.
+- **Database Persistence & Reconciliation Governance**:
+  - Gated reconciliation: `ALLOW_MIGRATION_RECONCILE=true` must be explicitly set to reconcile legacy database schemas before marking newer migrations.
+  - Native backup utilities: Shell scripts `scripts/backup_db.ps1` (PowerShell) and `scripts/backup_db.sh` (Bash) perform zero-downtime SQLite online backups with SHA-256 integrity verification.
+  - Persistence validation: `python scripts/verify_persistence.py` independently verifies table presence, row counts, and migration status.
+- **Automated 7-Day Telemetry Pruning**: `FileTelemetrySink` automatically rotates JSONL event logs daily (`logs/events_YYYY-MM-DD.jsonl`) and unlinks log files older than 7 days on boundary checks.
 
 
 

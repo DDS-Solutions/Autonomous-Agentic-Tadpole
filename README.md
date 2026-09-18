@@ -77,6 +77,12 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Inter-Agent Communication Protocol (IACP)**: Enables agents to negotiate tasks, delegate sub-tasks, peer-review skills, and transfer operational micro-budgets.
 - **Autonomous Browser Sentinel Daemon**: Background idle loop (~25s interval) executing non-intrusive DOM entropy audits, automated client-side health checks, and self-healing with triple circuit breakers (tab visibility, VRAM critical pressure, and pipeline concurrency locks).
 - **In-Browser ONNX/WebGPU Inference & DLP Shield**: Zero-cloud in-browser reasoning with quantized 4-bit ONNX models (`SmolLM-360M-Instruct`) via `@huggingface/transformers`, WebGPU hardware acceleration with WASM fallback, explicit WebGPU buffer disposal, and zero-leakage regex DLP pre-flight screening for high-entropy secrets and keys.
+- **Autonomous-Agentic Cognition Spine**: Enforces hard pre-turn budget cap checks prior to LLM invocation, single-pass grounded refinement with structured tool diagnostic feedback (`retryable`, `suggested_action`), and balanced-brace function call recovery for open-source models (`<function=...>`, hallucinated brackets/parentheses).
+- **Pinned-Tail Context Compactor & Tool Overflow**: Permanently pins the system prompt and the last 3 conversational turns uncompressed while offloading large tool payloads (>2,000 characters) to `.tmp/tool_overflow/<call_id>.txt` with a disk pointer URI, preserving tool failure visibility verbatim.
+- **Lock-Free Atomic Execution Metrics**: Real-time per-mission accounting (turns, token throughput, USD cost, tool failures) via lock-free `AtomicU64` counters, warning operators if summarizations loop ($\ge 3$).
+- **Concurrent Edit Conflict Manager & Dependency Guard**: 30-second TTL file write lease locks preventing multi-agent race conditions during concurrent file writes, paired with thread-safe cached cross-platform binary discovery (`git`, `python`, `node`, `docker`, `cargo`).
+- **RFC 9457 Problem Details & Auto-Pruning Telemetry**: Standardized error responses (`application/problem+json`) with W3C `traceparent` propagation, alongside a 7-day auto-rotating JSONL telemetry file sink.
+- **Clean-Room WASM Pulse Codec & Multi-Agent Starter Kits**: High-efficiency MIT-licensed Postcard pulse serialization (`crates/wasm-codec`) and 4 plug-and-play domain starter kits (`starter_kits/`) covering Customer Success, Explorer Scout, Finance Compliance, and Marketing Growth.
 - **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
@@ -195,6 +201,9 @@ The engine boot path starts in `server-rs/src/main.rs`, initializes environment 
 | `directives/` | Governance, identity, orchestration, and provider operating instructions |
 | `docs/` | Architecture, operations, API reference, OpenAPI, and security docs |
 | `data/` | Local runtime data (initialized on first boot with SQLite database `tadpole.db` and agent/model seed configs) |
+| `crates/` | High-efficiency clean-room MIT WASM codecs (`crates/wasm-codec`) |
+| `starter_kits/` | Ready-to-deploy multi-agent swarms and domain workflows |
+| `scripts/` | Database backup, recovery, and persistence verification utilities |
 | `dist/` | Production dashboard build served by the Rust engine |
 | `tests/` | Shared frontend test setup and e2e support |
 

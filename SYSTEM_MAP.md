@@ -30,6 +30,7 @@ This map reflects the current code layout and should be used as the first orient
 | Global state | `server-rs/src/state/mod.rs` | Rust | Owns AppState hubs, registries, DB pool, actor registry, and boot gate. |
 | Startup workers | `server-rs/src/startup/mod.rs` | Rust | Starts CodeGraph warmup, heartbeat, scheduler, reaper, ingestion, discovery, privacy guard, telemetry aggregation, and pulse loop. |
 | Python MCP host | `execution/tadpole_mcp_server.py` | Python | Runs JSON-defined tools and modular skill execution. |
+| Native IPC Bridge | `execution/lib/mcp_client.py`, `server-rs/src/agent/mcp/ipc_bridge.rs` | Python/Rust | Zero-HTTP JSON-RPC 2.0 communication over Windows Named Pipes and Unix domain sockets. |
 | CodeGraph API | `server-rs/src/routes/intelligence.rs` | Rust | Exposes codebase-wide symbol graph synthesis and dependent blast-radius calculations. |
 
 ## Major Subsystems
@@ -60,7 +61,13 @@ This map reflects the current code layout and should be used as the first orient
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
-| Persistence | `server-rs/src/db/mod.rs`, `server-rs/migrations/`, `data/` | SQLite initialization, migrations (`20260304000100`–`20260912000200`), local data, and registry persistence. |
+| Conflict Management | `server-rs/src/security/conflict.rs` | 30s TTL file write leases preventing multi-agent race conditions during concurrent workspace edits. |
+| Dependency Guard | `server-rs/src/security/dependency_guard.rs` | Thread-safe cached system binary discovery (`git`, `python`, `node`, `docker`, `cargo`). |
+| Cognition Spine & Compactor | `server-rs/src/agent/runner/{turn_compactor,execution_metrics,parser,refinement}.rs` | Pinned-tail context compaction (last 3 turns uncompressed), disk spill to `.tmp/tool_overflow/`, balanced-brace tool syntax recovery, atomic telemetry rollup, and structured error diagnostics. |
+| Telemetry File Sink | `server-rs/src/telemetry/sink.rs` | 7-day auto-rotating JSONL file sink for system event logs with automatic daily sweeping. |
+| Clean-Room WASM Codec | `crates/wasm-codec/` | High-efficiency MIT-licensed Postcard binary pulse serializer/deserializer. |
+| Multi-Agent Starter Kits | `starter_kits/` | Ready-to-deploy swarms (Customer Success, Explorer Scout, Finance Compliance, Marketing Growth). |
+| Persistence | `server-rs/src/db/{mod,migrations,seed,init,contract_tests}.rs`, `server-rs/migrations/`, `data/` | Modular SQLite initialization, migrations (`20260304000100`–`20260918000100`), contract test coverage, safe fallback memory provisioning, and gated reconciliation (`ALLOW_MIGRATION_RECONCILE=true`). |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |
 
@@ -100,7 +107,7 @@ Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>` (or `Sec-W
 | Data | Current path/default | Notes |
 | --- | --- | --- |
 | Main SQLite database | `data/tadpole.db` | Default from `AppState::new` when `DATABASE_URL` is unset. |
-| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db/migrations.rs`. Includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, and `20260912000200_a2a_ledger_expiry.sql`. |
+| SQL migrations | `server-rs/migrations/` | Applied through `server-rs/src/db/migrations.rs`. Includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, `20260912000200_a2a_ledger_expiry.sql`, and `20260918000100_iacp_events_fallback.sql`. |
 | Agent registry data | SQLite plus `data/agents.json` where present | Agent records are loaded from SQLite; JSON files remain part of registry/runtime data. |
 | Audio cache | `data/audio_cache.db` | Initialized by AppState, falls back to no-op if unavailable. |
 | Built dashboard | `dist/` | Served by the Rust router when present. |
