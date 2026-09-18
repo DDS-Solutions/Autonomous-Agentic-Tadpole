@@ -19,13 +19,13 @@
 
 ---
 
-## Public Routes (No Auth Required)
+## Engine Telemetry & WebSocket Routes
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/v1/engine/health` | Engine health + extended metrics |
-| `GET` | `/v1/engine/ws` | WebSocket stream (auth via subprotocol) |
-| `GET` | `/v1/engine/live-voice` | Live voice WebSocket stream |
+| `GET` | `/v1/engine/health` | Engine health + extended metrics (Public, no auth) |
+| `GET` | `/v1/engine/ws` | WebSocket stream (requires `Sec-WebSocket-Protocol: bearer.<token>`) |
+| `GET` | `/v1/engine/live-voice` | Live voice WebSocket stream (requires `Sec-WebSocket-Protocol: bearer.<token>`) |
 
 ### Health Response Schema (v1.1.58+)
 
@@ -140,6 +140,7 @@
 | `GET` | `/v1/intelligence/graph` | Full symbol dependency graph (query: `path_prefix`, `max_nodes`) |
 | `GET` | `/v1/intelligence/blast-radius` | Calculate change impact radius (query: `name`, `path`, `limit`) |
 | `GET` | `/v1/intelligence/resolve` | Resolve dependent symbols for token budget (query: `name`, `path`, `budget`) |
+| `GET` | `/v1/intelligence/impacted-tests` | Identify test files impacted by modified source path (query: `file`) |
 | `POST` | `/v1/intelligence/graph/rebuild` | Rebuild AST symbol graph from workspace (query: `dry_run`) |
 
 ---

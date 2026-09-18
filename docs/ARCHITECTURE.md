@@ -46,7 +46,8 @@ flowchart TD
 | Durable Workflows | `server-rs/src/agent/durable.rs`, `server-rs/migrations/20260822000100_durable_workflows.sql` | SQLite-native step memoization with SHA-256 parameter hashing, crash fast-forwarding, and mutation-aware re-execution. |
 | Socratic Contracts | `server-rs/src/agent/socratic.rs` | 0-Turn Socratic contract envelope auto-injection (Scope, Performance Threshold, Architecture Mode, Pre-Cleared Failure Policies) with typed `BlastRadiusLevel` and zero-allocation `Cow<str>`. |
 | Swarm Pulse Telemetry | `server-rs/src/telemetry/pulse.rs`, `server-rs/src/telemetry/sink.rs`, `crates/wasm-codec/` | Real-time MessagePack pulse stream with dynamic reasoning turn progress, 7-day auto-rotating JSONL file sink, and MIT clean-room WASM Postcard pulse codec. |
-| Swarm Orchestration | `server-rs/src/agent/dag.rs`, `server-rs/src/agent/blackboard.rs`, `server-rs/src/agent/cascade_router.rs`, `server-rs/src/agent/verification_gate.rs` | Dynamic DAG task parallelism, shared mission blackboard, tiered model cascading, and zero-trust Aletheia verification gate. |
+| Swarm Orchestration | `server-rs/src/agent/dag.rs`, `server-rs/src/agent/blackboard.rs`, `server-rs/src/agent/cascade_router.rs`, `server-rs/src/agent/verification_gate.rs`, `server-rs/src/agent/runner/swarm_persistence.rs` | Dynamic DAG task parallelism, shared mission blackboard, tiered model cascading, topological directive cycle rejection, and zero-trust Aletheia verification gate. |
+| Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Directed AST symbol graph, token-budgeted symbol context injection (`get_symbol_context`), blast-radius calculation, and impacted test targeting (`/v1/intelligence/impacted-tests`). |
 | Tool & Skill Dispatch | `server-rs/src/agent/runner/tools/mod.rs`, `server-rs/src/agent/script_skills.rs`, `server-rs/src/agent/hooks.rs` | Zero-Trust pipeline (Budget Check -> Token Validation -> WAL -> CBS -> Oversight -> Sandboxed Subprocess Execution), atomic snapshot capability registry (`DashMap`), deterministic disk script trapping, and environment-isolated 10s timed hook runner. |
 | Subsystems | `server-rs/src/agent/trustgraph.rs`, `server-rs/src/services/bm25_memory.rs`, `server-rs/src/routes/a2a.rs`, `starter_kits/` | TrustGraph GraphRAG entity traversal, BM25 Lexical search engine (< 1ms), A2A 2PC budget ledger, and multi-agent domain starter kits. |
 | Execution | `execution/`, `execution/lib/` | Python tools, JSON skill manifests, MCP host, native IPC bridge client (`execution/lib/mcp_client.py`), `tool_loop_guard.py` circuit breaker, and verification utilities. |
@@ -190,7 +191,9 @@ Tadpole OS integrates a high-fidelity **Code Intelligence & Blast Radius Engine*
 - **In-Memory Dependency Graph**: Builds a directed symbol graph of all functions, structs, classes, and interfaces across the Rust and TypeScript codebase.
 - **Visual Force-Directed Layout**: The frontend renders this dependency graph dynamically under the **Neural Map** page using `react-force-graph-2d` for interactive exploration.
 - **Blast Radius Analysis**: Traces incoming edges to calculate the downstream impact of editing any specific code symbol, returning all files and functions that depend on it.
-- **Autonomous Agent Integration**: Exposed as a native agent tool (`get_blast_radius`), enabling the agent swarm to inspect dependencies prior to performing code edits, preventing compilation regressions and "half-baked" edits.
+- **Selective Test Targeting**: Exposes `GET /v1/intelligence/impacted-tests` and agent tool `get_impacted_tests` to determine which test suites are impacted by code changes, accelerating agent verification loops.
+- **Token-Budgeted AST Symbol Context**: Exposes agent tool `get_symbol_context`, resolving exact syntax-tree definitions into agent prompt windows constrained by a strict token budget.
+- **Autonomous Agent Integration**: Exposed as native agent tools (`get_blast_radius`, `get_symbol_context`, `get_impacted_tests`), enabling the agent swarm to inspect dependencies and run targeted test validation prior to committing edits.
 - **Lock Decoupling & Token Caching**: File discovery and parsing are performed outside the RwLock read/write guards, preventing concurrency starvation. Symbol token counts are pre-calculated and cached on node compilation to yield zero-overhead BFS context resolution.
 
 ## Sovereign Engine Hardening
@@ -207,15 +210,17 @@ The engine implements several strategies to ensure resilience and zero-panic ope
 
 ## Swarm Orchestration Engine
 
-The Next-Gen Swarm Orchestration layer provides five production-grade subsystems:
+The Next-Gen Swarm Orchestration layer provides production-grade subsystems:
 
 | Subsystem | Module | Purpose |
 | --- | --- | --- |
 | Dynamic DAG Task Engine | `server-rs/src/agent/dag.rs` | Directed task dependency graph with `petgraph::StableDiGraph`, topological cycle rejection, parallel ready-queue extraction, state transition validation, and deadlock-free failure cascading via BFS `Skipped` propagation. |
+| Directive Delegation Guard | `server-rs/src/agent/runner/swarm_persistence.rs` | Enforces topological BFS acyclicity checks during directive persistence (`save_directive`), rejecting circular agent delegation graphs at the API boundary to prevent deadlocks. |
 | Shared Mission Blackboard | `server-rs/src/agent/blackboard.rs` | High-performance thread-safe in-memory scratchpad (`DashMap` + `Arc<BlackboardEntry>`) for multi-agent data exchange, replacing large prompt string passing with lightweight key pointers. |
 | Tiered Model Cascade Router | `server-rs/src/agent/cascade_router.rs` | Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Gemini Flash) and Tier 2 Frontier Reasoning (Gemini Pro/Claude/GPT-4o) with configurable critical keywords and capability-aware error escalation. |
 | Aletheia Verification Gate | `server-rs/src/agent/verification_gate.rs` | Zero-trust Generator→Verifier triad for high-impact mutations with `HashSet` O(1) sensitive skill gating and independent Verifier blast-radius evaluation. |
 | Adaptive Context Slicer | `server-rs/src/agent/context_slicer.rs` | Cognitive 3-zone prompt assembly (Pinned Anchors, `<grounded_context>` RAG, Sliding Active Window) with strict `tiktoken` BPE token budget enforcement and pre-allocated heap buffers. |
+| Live Swarm HUD & Dispatch | `src/components/Swarm_Visualizer.tsx` | Real-time active mission topology synthesis with dangling edge removal and Quick Command Bar for direct operator directive dispatch. |
 
 ## Hybrid RAG Triad Fusion
 

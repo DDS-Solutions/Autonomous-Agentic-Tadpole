@@ -83,6 +83,10 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Concurrent Edit Conflict Manager & Dependency Guard**: 30-second TTL file write lease locks preventing multi-agent race conditions during concurrent file writes, paired with thread-safe cached cross-platform binary discovery (`git`, `python`, `node`, `docker`, `cargo`).
 - **RFC 9457 Problem Details & Auto-Pruning Telemetry**: Standardized error responses (`application/problem+json`) with W3C `traceparent` propagation, alongside a 7-day auto-rotating JSONL telemetry file sink.
 - **Clean-Room WASM Pulse Codec & Multi-Agent Starter Kits**: High-efficiency MIT-licensed Postcard pulse serialization (`crates/wasm-codec`) and 4 plug-and-play domain starter kits (`starter_kits/`) covering Customer Success, Explorer Scout, Finance Compliance, and Marketing Growth.
+- **Token-Budgeted AST Symbol Context Injection**: Native agent tool (`get_symbol_context`) providing syntax-tree context extraction directly within prompt token limits, eliminating blind edits without blowing token windows.
+- **Selective Blast-Radius Test Targeting**: Intelligent test suite selection via `GET /v1/intelligence/impacted-tests` and `get_impacted_tests`, mapping code changes directly to dependent unit/integration tests for sub-second feedback loops.
+- **Swarm Delegation Cycle & Deadlock Prevention**: Enforces topological BFS acyclicity checks during directive persistence (`save_directive`), rejecting circular agent delegation graphs at the API boundary.
+- **Actionable Swarm Topology & Quick Command Bar**: Live active mission graph synthesis with dangling edge filtering and direct directive dispatch directly from the interactive `Swarm_Visualizer` canvas.
 - **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 

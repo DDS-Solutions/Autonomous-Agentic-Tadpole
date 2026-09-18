@@ -42,7 +42,7 @@ main.rs
   │
   ├── Load .env + validate config  (config.rs)
   ├── Init tracing + telemetry     (telemetry/)
-  ├── Run SQLite migrations        (db.rs)
+  ├── Run SQLite migrations        (db/migrations.rs)
   ├── Build AppState               (state/mod.rs)
   │     ├── CommunicationHub       (broadcast channels, WebSocket)
   │     ├── GovernanceHub          (budget, swarm depth, privacy)
@@ -136,7 +136,7 @@ The `intelligence/graph/` module implements a **force-directed symbol graph**:
 - **Indexing** (`key/`) — Obfuscated-path registry for traversal-safe lookups
 - **Caching** (`cache/`) — Lock-protected in-memory cache with LRU eviction
 - **Engine** (`engine.rs`) — `CodeSymbolGraph` orchestrates the full pipeline
-- **API** (`routes/intelligence.rs`) — `/v1/intelligence/blast-radius`, `/v1/intelligence/resolve`
+- **API** (`routes/intelligence.rs`) — `/v1/intelligence/graph`, `/v1/intelligence/blast-radius`, `/v1/intelligence/resolve`, `/v1/intelligence/impacted-tests`
 
 ---
 
@@ -197,7 +197,8 @@ Autonomous-Agentic-Tadpole/
 │   │   │   ├── socratic.rs       0-Turn Socratic Context Contracts
 │   │   │   ├── knowledge_store/  IKS — durable semantic memory
 │   │   │   └── mcp/              MCP host and tool registry
-│   │   ├── intelligence/graph/   Symbol graph + blast-radius engine
+│   │   ├── db/                   Modular SQLite init, migrations, contract tests
+│   │   ├── intelligence/         Symbol graph, context resolution, blast-radius
 │   │   ├── middleware/           Auth, rate-limit, boot-gate, headers
 │   │   ├── routes/               All /v1 endpoint handlers
 │   │   ├── security/             Audit trail, budget, scanner, permissions
@@ -205,10 +206,12 @@ Autonomous-Agentic-Tadpole/
 │   │   ├── state/                AppState + all hubs
 │   │   ├── startup/              Boot sequence + service modules
 │   │   ├── system/               Actors, orchestrator, event bus, supervisor
-│   │   ├── telemetry/            Pulse, bridge, OTel exporter
+│   │   ├── telemetry/            Pulse, bridge, OTel exporter, JSONL sink
 │   │   └── types/                Shared Rust types
 │   └── migrations/               SQLite schema migration files
 │
+├── crates/wasm-codec/            Clean-room MIT WASM Postcard pulse codec
+├── starter_kits/                 Plug-and-play multi-agent starter kits
 ├── execution/                    Python execution layer
 │   ├── tadpole_mcp_server.py     MCP server (sandboxed subprocess host)
 │   ├── optimize_local_slot_routing.py Model slot routing optimizer (Ollama)

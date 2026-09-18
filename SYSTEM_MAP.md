@@ -31,24 +31,24 @@ This map reflects the current code layout and should be used as the first orient
 | Startup workers | `server-rs/src/startup/mod.rs` | Rust | Starts CodeGraph warmup, heartbeat, scheduler, reaper, ingestion, discovery, privacy guard, telemetry aggregation, and pulse loop. |
 | Python MCP host | `execution/tadpole_mcp_server.py` | Python | Runs JSON-defined tools and modular skill execution. |
 | Native IPC Bridge | `execution/lib/mcp_client.py`, `server-rs/src/agent/mcp/ipc_bridge.rs` | Python/Rust | Zero-HTTP JSON-RPC 2.0 communication over Windows Named Pipes and Unix domain sockets. |
-| CodeGraph API | `server-rs/src/routes/intelligence.rs` | Rust | Exposes codebase-wide symbol graph synthesis and dependent blast-radius calculations. |
+| CodeGraph API | `server-rs/src/routes/intelligence.rs` | Rust | Exposes codebase-wide symbol graph synthesis, AST symbol context injection, impacted test suite discovery, and dependent blast-radius calculations. |
 
 ## Major Subsystems
 
 | Subsystem | Primary paths | Purpose |
 | --- | --- | --- |
-| Frontend shell | `src/layouts/`, `src/components/`, `src/pages/` | Dashboard navigation, operations views, Governance View Sentinel card, detached windows, visualizations, and forms. |
+| Frontend shell | `src/layouts/`, `src/components/`, `src/pages/` | Dashboard navigation, operations views, Governance View Sentinel card, detached windows, visualizations, Swarm Visualizer with Quick Command Bar, and forms. |
 | Browser Sentinel & DLP Shield | `src/services/sentinel_daemon.ts`, `src/services/browser_inference.ts`, `src/stores/browser_specialist_store.ts`, `src/utils/security_utils.ts` | Local 4-bit ONNX browser reasoning (`SmolLM-360M-Instruct`), WebGPU/WASM device chain, autonomous DOM health audits, WebGPU buffer disposal, and zero-leakage regex DLP pre-flight shield. |
 | Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, browser specialist telemetry, and telemetry. |
 | Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
-| Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools, hooks, and agent persistence. |
+| Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools (`get_symbol_context`, `get_impacted_tests`), hooks, and agent persistence. |
 | OTP Actor Supervision | `server-rs/src/system/actors/supervisor.rs` | Erlang/OTP supervision tree engine (`OneForOne`, `OneForAll`, `AbortHandle` hard shutdown, stability backoff reset, and `DashMap` registry). |
 | Hybrid RAG Triad Fusion | `server-rs/src/services/rag_fusion.rs` | Reciprocal Rank Fusion (RRF) combining LanceDB Vector, BM25 Lexical, and TrustGraph Entity subgraphs. |
 | Durable Workflow Engine | `server-rs/src/agent/durable.rs` | SQLite-native step memoization with SHA-256 parameter hashing, crash fast-forwarding, and mutation re-execution. |
 | Socratic Context Engine | `server-rs/src/agent/socratic.rs` | 0-Turn Socratic contract envelope auto-injection (Scope, Performance Threshold, Architecture Mode, Pre-Cleared Failure Policies) with typed `BlastRadiusLevel` and zero-allocation `Cow<str>`. |
 | Swarm Pulse Telemetry | `server-rs/src/telemetry/pulse.rs` | Real-time MessagePack pulse stream with dynamic turn progress calculation (`progress: f32`) and auto-constructed parent-child hierarchical edges (`PulseConnection`). |
 | Swarm Shared Blackboard | `server-rs/src/agent/blackboard.rs` | High-performance in-memory scratchpad per mission (`DashMap` + `Arc<BlackboardEntry>`), UTF-8 safe truncation, and tag filtering. |
-| Dynamic DAG Task Engine | `server-rs/src/agent/dag.rs` | Directed task graph with petgraph `StableDiGraph`, topological cycle rejection, state transition guards, and deadlock-free failure cascading. |
+| Dynamic DAG Task Engine | `server-rs/src/agent/dag.rs`, `server-rs/src/agent/runner/swarm_persistence.rs` | Directed task graph with petgraph `StableDiGraph`, topological cycle rejection in directive delegation, state transition guards, and deadlock-free failure cascading. |
 | Tiered Model Cascade Router | `server-rs/src/agent/cascade_router.rs` | Dynamic turn routing between Tier 1 Fast (Ollama/Groq/Flash) and Tier 2 Frontier (Gemini Pro/Claude/GPT) with capability-aware error escalation. |
 | Aletheia Verification Gate | `server-rs/src/agent/verification_gate.rs` | Zero-trust cryptographic verification gate (Generator -> Verifier -> Reviser) with independent blast-radius evaluation. |
 | Adaptive Context Slicer | `server-rs/src/agent/context_slicer.rs` | Cognitive 3-zone context assembly (Anchors, Grounded XML RAG, Sliding History) strictly enforcing `tiktoken` token budgets. |
@@ -57,7 +57,7 @@ This map reflects the current code layout and should be used as the first orient
 | BM25 Lexical Search | `server-rs/src/services/bm25_memory.rs` | Zero-embedding sub-millisecond lexical search engine (< 1ms) with 5s TTL double-checked cache. |
 | A2A Economic Governance | `server-rs/src/routes/a2a.rs` | Agent-to-Agent 2PC budget transactions, integer micro-USDC accounting, and 24h rolling limit resets. |
 | Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, A2A budget, oversight, model manager, skills, docs, governance, and engine control. |
-| Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, and downstream blast-radius analysis. |
+| Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, downstream blast-radius analysis, and impacted test suite selection (`/v1/intelligence/impacted-tests`). |
 | State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |

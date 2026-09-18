@@ -344,7 +344,12 @@ Primary API group: `/v1/intelligence`.
 Operational capabilities include:
 - **Codebase Dependency Graph**: Request the complete directed dependency graph of functions, structs, classes, and interfaces (`GET /v1/intelligence/graph`).
 - **Dependent Blast Radius**: Calculate downstream dependency paths for a specific symbol to foresee refactoring scope (`GET /v1/intelligence/blast-radius?name=<Name>&path=<Path>`).
-- **Interactive Swarm HUD**: The **Neural Map** toggle in the Operations Dashboard compiles the codebase structure on the first click (triggering lazy backend evaluation with a `"Synthesizing Symbol Graph..."` overlay) and caches it in memory for instant subsequent loads.
+- **Selective Impacted Test Discovery**: Query the dependency graph to isolate all unit and integration test files affected by changes to a given file path (`GET /v1/intelligence/impacted-tests?file=<Path>`). Allows agents to run targeted test validations rather than expensive full-suite executions.
+- **Token-Budgeted AST Symbol Context**: The `get_symbol_context` agent tool extracts exact function signatures, types, and struct definitions up to an operator-specified token budget ceiling, avoiding context overflows during large-file edits.
+- **Targeted Test Runner Tool**: The `get_impacted_tests` agent tool allows execution runners to automatically retrieve affected test suites before and after mutating workspace files.
+- **Topological Swarm Delegation Guard**: When saving or updating directives (`save_directive`), the engine executes a BFS cycle check across parent-child delegation dependencies, rejecting circular graphs (`400 Bad Request`) to guarantee deadlock-free task execution.
+- **Interactive Swarm HUD & Quick Command Bar**: The **Swarm Visualizer** (`src/components/Swarm_Visualizer.tsx`) renders active mission topologies with dangling-edge elimination, and includes a direct Quick Command Bar for dispatching directives or triggering agent actions straight from the graph canvas.
+- **Interactive Neural Map**: The **Neural Map** toggle in the Operations Dashboard compiles the codebase structure on the first click (triggering lazy backend evaluation with a `"Synthesizing Symbol Graph..."` overlay) and caches it in memory for instant subsequent loads.
 - **Sovereign Agent Safety**: The `get_blast_radius` MCP agent tool allows autonomous execution agents to map codebase linkages before executing code edits, ensuring zero-regression commits.
 - **Thread-safe Graph Compilation**: Graph compilation executes decoupled background sweeps to scan and parse files outside main read/write guards, preserving high-concurrency read routing.
 
