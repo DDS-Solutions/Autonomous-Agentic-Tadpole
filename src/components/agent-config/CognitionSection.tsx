@@ -67,6 +67,17 @@ export function CognitionSection({
     onResume
 }: CognitionSectionProps) {
     const isPaused = agentStatus === 'suspended';
+    const isOffline = agentStatus === 'offline';
+    const statusColor = isPaused
+        ? 'bg-amber-500 shadow-amber-500/50'
+        : isOffline
+            ? 'bg-zinc-500 shadow-zinc-500/50'
+            : 'bg-emerald-500 shadow-emerald-500/50';
+    const statusLabel = isPaused
+        ? i18n.t('agent_config.status_suspended')
+        : isOffline
+            ? 'OFFLINE'
+            : i18n.t('agent_config.status_active');
     const currentSlotIdx = activeTab === 'primary' ? 1 : activeTab === 'secondary' ? 2 : 3;
     const isCurrentSlotActive = activeModelSlot === currentSlotIdx;
 
@@ -102,40 +113,54 @@ export function CognitionSection({
                         onSetActiveSlot?.(slotIdx);
                     }}
                     title={isActiveForAgent ? i18n.t('agent_config.status_active') : `Activate Slot ${slotIdx}`}
-                    className="absolute top-2 right-2 w-4 h-4 flex items-center justify-center cursor-pointer z-10 group/led"
+                    aria-label={isActiveForAgent ? i18n.t('agent_config.status_active') : `Activate Slot ${slotIdx}`}
+                    className={`absolute top-2 right-2 flex items-center justify-center p-1 rounded-full transition-all cursor-pointer ${isActiveForAgent ? 'opacity-100 hover:scale-110' : 'opacity-40 hover:opacity-100 hover:bg-zinc-700/50'}`}
                 >
-                    <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isActiveForAgent ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] scale-110' : 'bg-zinc-800 group-hover/led:bg-zinc-600'}`} />
+                    <div 
+                        className={`w-2 h-2 rounded-full transition-all ${isActiveForAgent ? 'shadow-[0_0_8px_rgba(79,209,197,0.8)] scale-110' : 'bg-zinc-600'}`}
+                        style={{ backgroundColor: isActiveForAgent ? themeColor : undefined }}
+                    />
                 </button>
 
-                <div 
-                    className={`p-1.5 rounded-lg transition-colors ${activeTab === id ? '' : 'bg-zinc-900 group-hover:bg-zinc-800'}`}
-                    style={activeTab === id ? { backgroundColor: `${themeColor}15`, color: themeColor } : {}}
-                >
-                    {icon}
+                <div className="flex items-center gap-1.5">
+                    <span className={activeTab === id ? 'text-zinc-100' : 'text-zinc-500 group-hover:text-zinc-300'}>
+                        {icon}
+                    </span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${activeTab === id ? 'text-zinc-100' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+                        {label}
+                    </span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] leading-none" style={activeTab === id ? { color: themeColor } : {}}>{label}</span>
             </div>
         );
     };
 
     return (
-        <div className="p-4 space-y-6 animate-in fade-in duration-300">
-            <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                    {renderTabButton('primary', i18n.t('agent_config.tab_primary'), <Shield size={14} />)}
-                    {renderTabButton('secondary', i18n.t('agent_config.tab_secondary'), <Globe size={14} />)}
-                    {renderTabButton('tertiary', i18n.t('agent_config.tab_tertiary'), <Award size={14} />)}
+        <div className="space-y-6">
+            {/* Slot Tabs */}
+            <div className="space-y-3">
+                <div className="flex gap-2 p-1 bg-zinc-900/50 border border-zinc-800/80 rounded-2xl">
+                    {renderTabButton('primary', i18n.t('agent_config.slot_primary'), <Shield size={14} />)}
+                    {renderTabButton('secondary', i18n.t('agent_config.slot_secondary'), <Globe size={14} />)}
+                    {renderTabButton('tertiary', i18n.t('agent_config.slot_tertiary'), <Award size={14} />)}
                 </div>
 
-                <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden group">
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800/50">
+                {/* Slot Details Card */}
+                <div className="p-4 bg-zinc-900/30 border border-zinc-800/40 rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-800/40">
                         <div className="flex items-center gap-2">
-                            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
-                                {i18n.t(`agent_config.slot_${activeTab}`)}
-                            </h3>
+                            <span className="text-xs font-bold text-zinc-400 capitalize">
+                                {activeTab} {i18n.t('agent_config.slot_cognition')}
+                            </span>
                             {isCurrentSlotActive ? (
-                                <span className="text-[9px] uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
-                                    Active Slot
+                                <span 
+                                    className="text-[9px] uppercase px-1.5 py-0.2 rounded border font-mono font-bold"
+                                    style={{ 
+                                        color: themeColor, 
+                                        borderColor: `${themeColor}40`,
+                                        backgroundColor: `${themeColor}10` 
+                                    }}
+                                >
+                                    Current Active Slot
                                 </span>
                             ) : (
                                 <button
@@ -148,16 +173,16 @@ export function CognitionSection({
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <div className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px] ${isPaused ? 'bg-amber-500 shadow-amber-500/50' : 'bg-emerald-500 shadow-emerald-500/50'}`} />
-                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-[0.2em]">{isPaused ? i18n.t('agent_config.status_suspended') : i18n.t('agent_config.status_active')}</span>
+                            <div className={`w-1.5 h-1.5 rounded-full ${isOffline ? '' : 'animate-pulse'} shadow-[0_0_8px] ${statusColor}`} />
+                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-[0.2em]">{statusLabel}</span>
                             <div className="h-4 w-px bg-zinc-800 mx-1.5" />
                              <button
-                            onClick={isPaused ? onResume : onPause}
-                            aria-label={isPaused ? i18n.t('agent_config.btn_resume') : i18n.t('agent_config.btn_pause')}
-                            title={isPaused ? i18n.t('agent_config.btn_resume') : i18n.t('agent_config.btn_pause')}
-                            className={`p-1.5 rounded-lg transition-all ${isPaused ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
+                            onClick={isPaused || isOffline ? onResume : onPause}
+                            aria-label={isPaused || isOffline ? i18n.t('agent_config.btn_resume') : i18n.t('agent_config.btn_pause')}
+                            title={isPaused || isOffline ? i18n.t('agent_config.btn_resume') : i18n.t('agent_config.btn_pause')}
+                            className={`p-1.5 rounded-lg transition-all ${isPaused || isOffline ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
                         >
-                            {isPaused ? <Play size={14} /> : <Pause size={14} />}
+                            {isPaused || isOffline ? <Play size={14} /> : <Pause size={14} />}
                         </button>
                         </div>
                     </div>

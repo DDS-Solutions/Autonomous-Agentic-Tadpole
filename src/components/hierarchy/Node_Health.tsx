@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { Shield, RefreshCw, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { Shield, RefreshCw, AlertTriangle, CheckCircle2, X, Play } from 'lucide-react';
 import { i18n } from '../../i18n';
 import type { Agent } from '../../types';
 import { agent_api_service } from '../../services/agent_api_service';
@@ -32,11 +32,13 @@ interface Node_Health_Props {
  */
 export const Node_Health: React.FC<Node_Health_Props> = ({ agent, on_close }) => {
     const [is_resetting, set_is_resetting] = useState(false);
+    const [is_resuming, set_is_resuming] = useState(false);
     const update_agent = use_agent_store(s => s.update_agent);
 
     const failure_count = agent.failure_count || 0;
+    const is_suspended = agent.status === 'suspended';
     const is_throttled = failure_count >= 3;
-    const is_healthy = failure_count === 0;
+    const is_healthy = failure_count === 0 && !is_suspended;
 
     const handle_reset = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -56,6 +58,25 @@ export const Node_Health: React.FC<Node_Health_Props> = ({ agent, on_close }) =>
             console.error('Failed to reset agent:', error);
         } finally {
             set_is_resetting(false);
+        }
+    };
+
+    const handle_resume = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (is_resuming) return;
+
+        set_is_resuming(true);
+        try {
+            const success = await agent_api_service.resume_agent(agent.id);
+            if (success) {
+                update_agent(agent.id, { 
+                    status: 'idle'
+                });
+            }
+        } catch (error) {
+            console.error('Failed to resume agent:', error);
+        } finally {
+            set_is_resuming(false);
         }
     };
 
@@ -79,7 +100,9 @@ export const Node_Health: React.FC<Node_Health_Props> = ({ agent, on_close }) =>
             <div className="flex-1 flex flex-col gap-4">
                 <div className="flex items-center justify-between bg-zinc-900/40 p-2 rounded border border-zinc-800/30">
                     <div className="flex items-center gap-2">
-                        {is_healthy ? (
+                        {is_suspended ? (
+                            <AlertTriangle size={16} className="text-amber-500" />
+                        ) : is_healthy ? (
                             <CheckCircle2 size={16} className="text-emerald-500" />
                         ) : is_throttled ? (
                             <AlertTriangle size={16} className="text-red-500 animate-pulse" />
@@ -87,13 +110,13 @@ export const Node_Health: React.FC<Node_Health_Props> = ({ agent, on_close }) =>
                             <AlertTriangle size={16} className="text-amber-500" />
                         )}
                         <span className={`text-xs font-bold uppercase tracking-wide ${
-                            is_healthy ? 'text-emerald-400' : is_throttled ? 'text-red-400' : 'text-amber-400'
+                            is_suspended ? 'text-amber-400' : is_healthy ? 'text-emerald-400' : is_throttled ? 'text-red-400' : 'text-amber-400'
                         }`}>
-                            {is_healthy ? i18n.t('healthy') : is_throttled ? i18n.t('throttled') : i18n.t('degraded')}
+                            {is_suspended ? (i18n.t('status_suspended') || 'Suspended') : is_healthy ? i18n.t('healthy') : is_throttled ? i18n.t('throttled') : i18n.t('degraded')}
                         </span>
                     </div>
                     <div className="text-[10px] font-mono text-zinc-500">
-                        {i18n.t('failures_label', { count: failure_count })}
+                        {is_suspended ? 'Quarantined' : i18n.t('failures_label', { count: failure_count })}
                     </div>
                 </div>
 
@@ -112,12 +135,22 @@ export const Node_Health: React.FC<Node_Health_Props> = ({ agent, on_close }) =>
                     );
                 })()}
 
-                <div className="mt-auto">
+                <div className="mt-auto flex flex-col gap-2">
+                    {is_suspended && (
+                        <button
+                            onClick={handle_resume}
+                            disabled={is_resuming}
+                            className="w-full py-2 px-3 rounded flex items-center justify-center gap-2 text-xs font-bold transition-all bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 active:scale-95"
+                        >
+                            <Play size={14} className={is_resuming ? 'animate-spin' : ''} />
+                            {is_resuming ? 'Resuming...' : 'Resume Agent'}
+                        </button>
+                    )}
                     <button
                         onClick={handle_reset}
-                        disabled={is_healthy || is_resetting}
+                        disabled={(is_healthy && !is_suspended) || is_resetting}
                         className={`w-full py-2 px-3 rounded flex items-center justify-center gap-2 text-xs font-bold transition-all ${
-                            is_healthy 
+                            is_healthy && !is_suspended
                                 ? 'bg-zinc-800/50 text-zinc-600 cursor-not-allowed border border-zinc-800'
                                 : 'bg-green-600/10 hover:bg-green-600/20 text-green-400 border border-green-500/30 active:scale-95'
                         }`}

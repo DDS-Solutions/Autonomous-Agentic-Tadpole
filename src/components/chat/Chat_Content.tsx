@@ -25,6 +25,9 @@ import { Chat_Lineage_Breadcrumb } from './Chat_Lineage_Breadcrumb';
 import { Chat_Scope_Selector } from './Chat_Scope_Selector';
 import { Chat_Message_List } from './Chat_Message_List';
 import { Chat_Input_Bar } from './Chat_Input_Bar';
+import { AlertTriangle, Play } from 'lucide-react';
+import { agent_api_service } from '../../services/agent_api_service';
+import { use_agent_registry_store } from '../../stores/agent_registry_store';
 import { Buffered_Transcript_View } from '../transcript/Buffered_Transcript_View';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 
@@ -160,6 +163,10 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
         }
     }, [messages]);
 
+    const targeted_agent = active_scope === 'agent'
+        ? (sorted_agents || []).find(a => (selected_agent_id && a.id === selected_agent_id) || a.name === target_agent)
+        : null;
+
     return (
         <div className="w-full h-full flex flex-col relative" {...container_props}>
             {!is_detached && <div className="neural-grid opacity-[0.05] absolute inset-0 pointer-events-none" />}
@@ -273,6 +280,27 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                     />
                 )}
             </div>
+
+            {active_scope === 'agent' && targeted_agent?.status === 'suspended' && (
+                <div className="mx-4 mb-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs text-amber-300 relative z-20 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <span className="flex items-center gap-1.5">
+                        <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                        <span>Agent <strong>{targeted_agent.name}</strong> is administratively suspended.</span>
+                    </span>
+                    <button
+                        onClick={async () => {
+                            if (targeted_agent.id) {
+                                await agent_api_service.resume_agent(targeted_agent.id);
+                                use_agent_registry_store.getState().update_agent(targeted_agent.id, { status: 'idle' });
+                            }
+                        }}
+                        className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-200 font-semibold transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                        <Play size={12} />
+                        Resume Agent
+                    </button>
+                </div>
+            )}
 
             <Chat_Input_Bar
                 active_scope={active_scope}
