@@ -73,7 +73,7 @@ impl SecurityManager for DefaultSecurityManager {
         }
 
         // 3. [Dynamic Policy] Check SQLite-backed PermissionPolicy
-        let policy_mode = {
+        let mut policy_mode = {
             let mode = runner.state.security.permission_policy.get_mode(&fc.name, &ctx.agent_id).await;
             if mode == crate::security::permissions::PermissionMode::Prompt && normalized_name != fc.name {
                 let norm_mode = runner.state.security.permission_policy.get_mode(&normalized_name, &ctx.agent_id).await;
@@ -86,6 +86,20 @@ impl SecurityManager for DefaultSecurityManager {
                 mode
             }
         };
+
+        // If the mode defaulted to Prompt (no explicit rule in permission_policies)
+        // and Auto-Approve Safe Skills is enabled, allow safe read-only skills to pass through.
+        let has_explicit = runner.state.security.permission_policy.has_explicit_policy(&fc.name, &ctx.agent_id)
+            || runner.state.security.permission_policy.has_explicit_policy(&normalized_name, &ctx.agent_id);
+
+        if policy_mode == crate::security::permissions::PermissionMode::Prompt && !has_explicit {
+            let is_safe = is_safe_skill(&fc.name, &normalized_name, runner);
+            let auto_approve = runner.state.governance.auto_approve_safe_skills.load(std::sync::atomic::Ordering::Relaxed);
+            if is_safe && auto_approve {
+                tracing::info!("⚡ [Security] Auto-confirming safe skill pass-through for '{}'", fc.name);
+                policy_mode = crate::security::permissions::PermissionMode::Allow;
+            }
+        }
 
         match policy_mode {
             crate::security::permissions::PermissionMode::Deny => {
@@ -138,5 +152,63 @@ impl SecurityManager for DefaultSecurityManager {
     }
 }
 
+/// Determines whether a skill or tool call represents a safe, read-only inspection operation.
+fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> bool {
+    let is_builtin_safe = matches!(
+        name,
+        "read_file"
+            | "read_codebase_file"
+            | "list_files"
+            | "list_dir"
+            | "grep_search"
+            | "get_current_time"
+            | "calculate"
+            | "share_finding"
+            | "update_working_memory"
+            | "get_file_contents"
+            | "get_project_status"
+            | "get_agent_metrics"
+            | "get_current_mission_status"
+            | "search_global_vault"
+            | "list_skill_metadata"
+    ) || matches!(
+        normalized_name,
+        "read_file"
+            | "read_codebase_file"
+            | "list_files"
+            | "list_dir"
+            | "grep_search"
+            | "get_current_time"
+            | "calculate"
+            | "share_finding"
+            | "update_working_memory"
+            | "get_file_contents"
+            | "get_project_status"
+            | "get_agent_metrics"
+            | "get_current_mission_status"
+            | "search_global_vault"
+            | "list_skill_metadata"
+    );
+
+    if is_builtin_safe {
+        return true;
+    }
+
+    if let Some(manifest) = runner.state.registry.skill_registry.get(name).or_else(|| runner.state.registry.skill_registry.get(normalized_name)) {
+        if !manifest.requires_oversight && manifest.danger_level == crate::agent::skill_manifest::DangerLevel::Low {
+            return true;
+        }
+    }
+
+    let snapshot = runner.state.registry.skills.snapshot();
+    if let Some(skill) = snapshot.skills.get(name).or_else(|| snapshot.skills.get(normalized_name)) {
+        if !skill.oversight_required {
+            return true;
+        }
+    }
+
+    false
+}
 
 // Metadata: [security]
+

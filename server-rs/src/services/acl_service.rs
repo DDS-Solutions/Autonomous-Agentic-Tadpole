@@ -17,14 +17,17 @@ pub struct AclService;
 impl AclServiceTrait for AclService {
     /// Checks if a tool is allowed for a specific agent/role.
     fn is_tool_allowed(&self, agent_id: &str, _role: &str, authority: RoleAuthorityLevel, tool_name: &str) -> bool {
-        // CEO/Executive logic
+        // CEO/Executive logic: Strict Whitelist (Zero Direct Execution)
         if agent_id == AGENT_CEO || authority == RoleAuthorityLevel::Executive {
-            match tool_name {
-                "issue_alpha_directive" | "share_finding" | "search_global_vault" | "update_working_memory" | "complete_mission" | "recruit" => true,
-                "spawn_subagent" => false, // CEO must use alpha_directive or high-level recruit
-                "read_file" | "write_file" | "delete_file" => false, // CEO doesn't do I/O
-                _ => true,
-            }
+            matches!(
+                tool_name,
+                "issue_alpha_directive"
+                    | "share_finding"
+                    | "search_global_vault"
+                    | "update_working_memory"
+                    | "complete_mission"
+                    | "recruit"
+            )
         } else if agent_id == AGENT_COO {
             match tool_name {
                 "spawn_subagent" => true, // COO spawns Alpha
@@ -34,7 +37,7 @@ impl AclServiceTrait for AclService {
         } else if agent_id == AGENT_ALPHA {
             tool_name != "issue_alpha_directive" // Alpha Commander can spawn subagents & recruit
         } else if authority == RoleAuthorityLevel::Observer {
-            matches!(tool_name, "read_file" | "list_files" | "search_global_vault")
+            matches!(tool_name, "read_file" | "list_files" | "search_global_vault" | "get_current_time")
         } else {
             // Tactical Specialists: cannot spawn subagents or issue alpha directives
             !matches!(tool_name, "issue_alpha_directive" | "spawn_subagent")
@@ -47,8 +50,8 @@ impl AclServiceTrait for AclService {
 
         match agent_id {
             AGENT_CEO => {
-                protocols.push("CEO PROTOCOL: You are a STRATEGIC ROUTER. You MUST delegate via 'issue_alpha_directive' for all complex missions. You are FORBIDDEN from using 'spawn_subagent' directly.".to_string());
-                protocols.push("TOOL FORMAT: Never use <execute_tool> tags. Use your native tool-calling interface for 'recruit' or 'issue_alpha_directive'.".to_string());
+                protocols.push("CEO ROUTER MANDATE: You are the Sovereign Strategic Router with ZERO direct execution capacity. For ANY factual inquiry, time/date request, filesystem task, code analysis, or operational execution, you are STRICTLY FORBIDDEN from attempting direct resolution. You MUST immediately invoke 'issue_alpha_directive' to delegate to Tadpole Alpha.".to_string());
+                protocols.push("TOOL RESTRICTIONS: You are FORBIDDEN from calling 'spawn_subagent' directly. Never use <execute_tool> tags or markdown placeholders. Use your native tool-calling interface for 'issue_alpha_directive'.".to_string());
             }
             AGENT_COO => {
                 protocols.push("COO PROTOCOL: You MUST delegate the mission to the Alpha Node. Use 'spawn_subagent' with agent_id 'alpha'. Direct specialist recruitment is SYSTEM-BLOCKED.".to_string());
@@ -94,5 +97,17 @@ mod tests {
         assert!(!acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "spawn_subagent"));
         assert!(acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "read_file"));
         assert!(acl.is_tool_allowed(AGENT_ALPHA, "Commander", RoleAuthorityLevel::Specialist, "spawn_subagent"));
+    }
+
+    #[test]
+    fn test_get_current_time_permissions() {
+        let acl = AclService;
+        // CEO cannot directly invoke clock tools (must delegate)
+        assert!(!acl.is_tool_allowed(AGENT_CEO, "CEO", RoleAuthorityLevel::Executive, "get_current_time"));
+        // COO, Alpha, and Specialists can query clock
+        assert!(acl.is_tool_allowed(AGENT_COO, "COO", RoleAuthorityLevel::Specialist, "get_current_time"));
+        assert!(acl.is_tool_allowed(AGENT_ALPHA, "Commander", RoleAuthorityLevel::Specialist, "get_current_time"));
+        assert!(acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "get_current_time"));
+        assert!(acl.is_tool_allowed("observer_1", "Observer", RoleAuthorityLevel::Observer, "get_current_time"));
     }
 }

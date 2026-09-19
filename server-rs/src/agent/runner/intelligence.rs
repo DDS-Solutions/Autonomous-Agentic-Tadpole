@@ -205,6 +205,14 @@ impl AgentRunner {
                         // from extraction failures) are recoverable via re-prompting.
                         if matches!(e, AppError::BadRequest(_) | AppError::InternalServerError(_)) {
                             let detail = e.to_string();
+                            // Provider request errors (e.g. missing model, bad auth, connection) are not recoverable via re-prompting
+                            if detail.contains("model is required")
+                                || detail.contains("invalid_request_error")
+                                || detail.contains("ConnectionRefused")
+                                || detail.contains("dns error") {
+                                return Err((e, usage));
+                            }
+
                             let mut anneal_attempts = 0;
                             let mut anneal_text = String::new();
                             let mut anneal_calls = Vec::new();

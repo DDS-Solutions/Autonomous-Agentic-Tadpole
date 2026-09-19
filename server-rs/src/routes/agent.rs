@@ -101,7 +101,7 @@ impl From<&EngineAgent> for AgentResponse {
             provider: agent.models.model.provider.to_string(),
             budget_usd: agent.economics.budget_usd,
             cost_usd: agent.economics.cost_usd,
-            is_healthy: agent.health.failure_count < 5,
+            is_healthy: agent.health.failure_count < 5 && agent.health.status != "suspended",
             is_bankrupt: agent.economics.cost_usd >= agent.economics.budget_usd && agent.economics.budget_usd > 0.0,
             skills: agent.capabilities.skills.clone(),
             workflows: agent.capabilities.workflows.clone(),
@@ -116,6 +116,7 @@ impl From<&EngineAgent> for AgentResponse {
 }
 
 /// Centralized persistence and broadcast helper for agent updates.
+/// Enforces transactional integrity: DB persistence must succeed before in-memory state is committed.
 async fn update_and_persist_agent<F>(
     state: &Arc<AppState>,
     agent_id: &str,
@@ -124,29 +125,31 @@ async fn update_and_persist_agent<F>(
 where
     F: FnOnce(&mut EngineAgent),
 {
-    let mut agent = state
+    let mut updated = state
         .registry
         .agents
-        .get_mut(agent_id)
-        .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?;
+        .get(agent_id)
+        .ok_or_else(|| AppError::NotFound(format!("Agent '{}' not found", agent_id)))?
+        .clone();
 
-    f(&mut agent);
+    f(&mut updated);
 
-    // Sync to DB
-    let agent_clone = agent.clone();
-    drop(agent); // Release DashMap lock before async I/O
-
-    crate::agent::persistence::save_agent_db(&state.resources.pool, &agent_clone)
+    // Sync to DB first before committing to memory
+    let new_ver = crate::agent::persistence::save_agent_db(&state.resources.pool, &updated)
         .await?;
+    updated.version = new_ver;
 
-    // Broadcast update
+    // Commit only after durable persistence succeeds
+    state.registry.agents.insert(agent_id.to_string(), updated.clone());
+
+    // Broadcast update with guaranteed up-to-date version
     state.emit_event(serde_json::json!({
         "type": "agent:update",
         "agent_id": agent_id,
-        "data": agent_clone
+        "data": updated.clone()
     }));
 
-    Ok(agent_clone)
+    Ok(updated)
 }
 
 /// GET /v1/agents
@@ -164,12 +167,16 @@ pub async fn get_agents(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let agents: Vec<AgentResponse> = state
+    let mut agents: Vec<AgentResponse> = state
         .registry
         .agents
         .iter()
         .map(|kv| AgentResponse::from(kv.value()))
         .collect();
+
+    // Deterministic sorting by agent ID before pagination slicing
+    agents.sort_by(|a, b| a.id.cmp(&b.id));
+
     Ok(Json(PaginatedResponse::from_vec(
         agents,
         &params,
@@ -182,12 +189,18 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
     if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
         tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
         old_handle.abort();
+        state.emit_event(serde_json::json!({
+            "type": "agent:task_preempted",
+            "agent_id": agent_id.clone(),
+            "message": "Task preempted by incoming dispatch directive"
+        }));
     }
 
     // Spawn Runner with AbortHandle registration
     let agent_id_for_spawn = agent_id.clone();
     let state_clone = state.clone();
     let join_handle = tokio::spawn(async move {
+        let my_id = tokio::task::try_id();
         let runner = AgentRunner::new(state_clone.clone());
         if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
             tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
@@ -208,11 +221,18 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
             }));
         }
         
-        // Auto-cleanup handle
-        state_clone.comms.active_runners.remove(&agent_id_for_spawn);
+        // Auto-cleanup handle: Conditionally evict only if the handle still matches this execution task ID
+        if let Some(current_id) = my_id {
+            state_clone.comms.active_runners.remove_if(&agent_id_for_spawn, |_, handle| {
+                handle.task_id == current_id
+            });
+        }
     });
 
-    state.comms.active_runners.insert(agent_id, join_handle.abort_handle());
+    state.comms.active_runners.insert(
+        agent_id,
+        crate::state::hubs::comm::RunnerHandle::new(join_handle.abort_handle(), join_handle.id()),
+    );
 }
 
 /// POST /v1/agents/:id/tasks
@@ -235,18 +255,29 @@ pub async fn send_task(
     headers: axum::http::HeaderMap,
     Json(mut payload): Json<TaskPayload>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Forward traceparent for distributed tracing
-    if payload.traceparent.is_none() {
-        if let Some(tp) = headers.get("traceparent").and_then(|v| v.to_str().ok()) {
-            payload.traceparent = Some(tp.to_string());
-        }
+    // Authoritative edge header takes precedence over body
+    if let Some(tp) = headers.get("traceparent").and_then(|v| v.to_str().ok()) {
+        payload.traceparent = Some(tp.to_string());
     }
 
     // Auth & Existence Check & Auto-Wakeup
     match state.registry.agents.get(&agent_id) {
         None => return Err(AppError::NotFound(format!("Agent '{}' not found", agent_id))),
         Some(agent) if agent.health.status == "suspended" => {
-            return Err(AppError::BadRequest(format!("Agent '{}' is currently suspended.", agent_id)));
+            let role_header = headers.get("x-tadpole-role").and_then(|v| v.to_str().ok());
+            let is_operator_role = role_header == Some("overlord") || role_header == Some("admin");
+            let is_operator_user = payload.user_id.as_deref() == Some("0") || payload.user_id.as_deref() == Some("overlord");
+            let is_authorized_operator = payload.auto_resume == Some(true) || is_operator_role || is_operator_user;
+
+            if is_authorized_operator {
+                drop(agent);
+                tracing::info!("🔋 [AgentDispatch] Suspended agent {} auto-resumed by operator directive", agent_id);
+                let _ = update_and_persist_agent(&state, &agent_id, |a| {
+                    a.health.status = "idle".to_string();
+                }).await;
+            } else {
+                return Err(AppError::BadRequest(format!("Agent '{}' is currently suspended.", agent_id)));
+            }
         },
         Some(agent) if agent.health.status == "offline" => {
             drop(agent);
@@ -303,29 +334,39 @@ pub async fn send_task(
 #[tracing::instrument(skip(state, new_agent), fields(agent_id = %new_agent.identity.id), name = "agent_registry::create")]
 pub async fn create_agent(
     State(state): State<Arc<AppState>>,
-    Json(new_agent): Json<EngineAgent>,
+    Json(mut new_agent): Json<EngineAgent>,
 ) -> Result<impl IntoResponse, AppError> {
-    let agent_id = new_agent.identity.id.trim();
-    if agent_id.is_empty() {
+    let agent_id_owned = new_agent.identity.id.trim().to_string();
+    if agent_id_owned.is_empty() {
         return Err(AppError::BadRequest("Agent ID cannot be empty.".to_string()));
     }
 
     // 🛡️ [M17: Collision Guard] Reject duplicate agent ID registrations
-    if state.registry.agents.contains_key(agent_id) {
+    if state.registry.agents.contains_key(&agent_id_owned) {
         return Err(AppError::Conflict(format!(
             "Agent with ID '{}' already exists in the swarm registry.",
-            agent_id
+            agent_id_owned
         )));
     }
 
-    crate::agent::persistence::save_agent_db(&state.resources.pool, &new_agent)
+    // 🛡️ Sanitize system-controlled properties against mass assignment
+    new_agent.economics.cost_usd = 0.0;
+    new_agent.health.failure_count = 0;
+    new_agent.health.last_failure_at = None;
+    new_agent.state.current_task = None;
+
+    let new_ver = crate::agent::persistence::save_agent_db(&state.resources.pool, &new_agent)
         .await?;
- 
-    let agent_id_owned = agent_id.to_string();
-    state
-        .registry
-        .agents
-        .insert(agent_id_owned.clone(), new_agent.clone());
+    new_agent.version = new_ver;
+
+    // 🛡️ Atomic insertion check to prevent TOCTOU race
+    if let Some(prev) = state.registry.agents.insert(agent_id_owned.clone(), new_agent.clone()) {
+        state.registry.agents.insert(agent_id_owned.clone(), prev);
+        return Err(AppError::Conflict(format!(
+            "Concurrent registration conflict for agent '{}'",
+            agent_id_owned
+        )));
+    }
 
     let agent_path = format!("/v1/agents/{}", agent_id_owned);
     state.emit_event(serde_json::json!({
@@ -521,7 +562,8 @@ async fn reset_agent_to_idle(state: &Arc<AppState>, aid: &str) {
     if let Some(ref mut a) = clone {
         a.health.status = "idle".to_string();
         match crate::agent::persistence::save_agent_db(&state.resources.pool, a).await {
-            Ok(()) => {
+            Ok(new_ver) => {
+                a.version = new_ver;
                 if let Some(mut entry) = state.registry.agents.get_mut(aid) {
                     *entry = a.clone();
                 }
@@ -563,8 +605,55 @@ pub async fn delete_agent(
     ))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::types::{EngineAgent, TaskPayload};
 
+    #[test]
+    fn test_agent_response_suspended_is_not_healthy() {
+        let mut agent = EngineAgent::default();
+        agent.health.status = "suspended".to_string();
+        agent.health.failure_count = 0;
 
+        let res = AgentResponse::from(&agent);
+        assert!(!res.is_healthy, "Suspended agent must have is_healthy == false even with 0 failures");
+        assert_eq!(res.status, "suspended");
+    }
 
+    #[test]
+    fn test_agent_response_idle_is_healthy() {
+        let mut agent = EngineAgent::default();
+        agent.health.status = "idle".to_string();
+        agent.health.failure_count = 0;
+
+        let res = AgentResponse::from(&agent);
+        assert!(res.is_healthy, "Idle agent with 0 failures must be healthy");
+        assert_eq!(res.status, "idle");
+    }
+
+    #[test]
+    fn test_agent_response_failure_count_threshold() {
+        let mut agent = EngineAgent::default();
+        agent.health.status = "idle".to_string();
+        agent.health.failure_count = 5;
+
+        let res = AgentResponse::from(&agent);
+        assert!(!res.is_healthy, "Agent with 5 failures must not be healthy");
+    }
+
+    #[test]
+    fn test_task_payload_auto_resume_deserialization() {
+        let json_camel = r#"{"message": "hello", "autoResume": true, "userId": "0"}"#;
+        let payload: TaskPayload = serde_json::from_str(json_camel).unwrap();
+        assert_eq!(payload.auto_resume, Some(true));
+        assert_eq!(payload.user_id.as_deref(), Some("0"));
+
+        let json_snake = r#"{"message": "hello", "auto_resume": true}"#;
+        let payload_snake: TaskPayload = serde_json::from_str(json_snake).unwrap();
+        assert_eq!(payload_snake.auto_resume, Some(true));
+    }
+}
 
 // Metadata: [agent]
+

@@ -83,8 +83,10 @@ impl AgentRunner {
             // ### 🔗 Swarm Connectivity: Cleanup
             // Clear the active mission link so the agent returns to an idle state in the visualizer.
             agent.state.active_mission = None;
-
-            // Status is handled by update_status() at the end of the run
+            agent.state.current_task = None;
+            if agent.health.status != "suspended" {
+                agent.health.status = "idle".to_string();
+            }
 
             // Record to persistent budget guard
             let budget_guard = self.state.security.budget_guard.clone();
@@ -97,9 +99,17 @@ impl AgentRunner {
             let pool = self.state.resources.pool.clone();
             let agent_clone = agent.clone();
             let agent_id_for_persist = ctx.agent_id.clone();
+            let registry_ref = self.state.clone();
             tokio::spawn(async move {
-                if let Err(e) = crate::agent::persistence::save_agent_db(&pool, &agent_clone).await {
-                    tracing::error!("❌ [Finalize] Failed to persist agent {} to DB: {}", agent_id_for_persist, e);
+                match crate::agent::persistence::save_agent_db(&pool, &agent_clone).await {
+                    Ok(new_ver) => {
+                        if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
+                            entry.version = new_ver;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ [Finalize] Failed to persist agent {} to DB: {}", agent_id_for_persist, e);
+                    }
                 }
             });
 
@@ -116,6 +126,17 @@ impl AgentRunner {
             final_delivery =
                 "(Agent completed its actions without a final conversational response.)"
                     .to_string();
+        } else if let Some(placeholder) = detect_unresolved_placeholders(&final_delivery) {
+            tracing::warn!(
+                "⚠️ [Finalize] Detected unresolved placeholder/confabulation '{}' in output of agent {}",
+                placeholder,
+                ctx.agent_id
+            );
+            final_delivery = format!(
+                "{}\n\n⚠️ [System Note: The preceding response contained ungrounded template placeholder '{}'. System has logged this discrepancy.]",
+                final_delivery,
+                placeholder
+            );
         }
 
         self.broadcast_agent_message(&ctx.agent_id, &ctx.mission_id, &final_delivery);
@@ -254,16 +275,24 @@ impl AgentRunner {
             // ### 🔗 Swarm Connectivity: Cleanup
             // Clear the active mission link so the agent returns to an idle state in the visualizer.
             agent.state.active_mission = None;
+            agent.state.current_task = None;
+            if agent.health.status != "suspended" {
+                agent.health.status = "idle".to_string();
+            }
 
             let agent_data = agent.clone();
             drop(entry); // Release DashMap lock before async calls
 
             // Sync to DB
-            if let Err(e) =
-                crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data)
-                    .await
-            {
-                tracing::error!("❌ [Finalize] Failed to persist failed agent {} to DB: {}", ctx.agent_id, e);
+            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
+                Ok(new_ver) => {
+                    if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
+                        entry.version = new_ver;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("❌ [Finalize] Failed to persist failed agent {} to DB: {}", ctx.agent_id, e);
+                }
             }
 
             self.state.emit_event(serde_json::json!({
@@ -328,14 +357,23 @@ impl AgentRunner {
         if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
             let agent = entry.value_mut();
             agent.state.active_mission = None;
-            agent.health.status = "idle".to_string();
+            if agent.health.status != "suspended" {
+                agent.health.status = "idle".to_string();
+            }
 
             let agent_data = agent.clone();
             drop(entry);
 
             // Sync to DB
-            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
-                tracing::error!("❌ [Finalize] Failed to persist aborted agent {} to DB: {}", ctx.agent_id, e);
+            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
+                Ok(new_ver) => {
+                    if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
+                        entry.version = new_ver;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("❌ [Finalize] Failed to persist aborted agent {} to DB: {}", ctx.agent_id, e);
+                }
             }
 
             self.state.emit_event(serde_json::json!({
@@ -368,6 +406,27 @@ impl AgentRunner {
 
         Ok(())
     }
+}
+
+/// Scans output for unresolved prompt placeholders or hallucinated template tags.
+pub fn detect_unresolved_placeholders(text: &str) -> Option<&'static str> {
+    const SUSPICIOUS_PATTERNS: &[&str] = &[
+        "[Current System Date]",
+        "[Current System Time]",
+        "[Current Date]",
+        "[Current Time]",
+        "[Current System",
+        "**[Current System",
+        "<execute_tool>",
+        "<tool_call>",
+    ];
+
+    for &pattern in SUSPICIOUS_PATTERNS {
+        if text.contains(pattern) {
+            return Some(pattern);
+        }
+    }
+    None
 }
 
 
@@ -422,6 +481,23 @@ mod tests {
         assert_eq!(agent.economics.tokens_used, 150);
         assert!(agent.economics.cost_usd > 0.0);
         assert_eq!(agent.health.failure_count, 0);
+    }
+
+    #[test]
+    fn test_detect_unresolved_placeholders() {
+        use super::detect_unresolved_placeholders;
+        assert_eq!(
+            detect_unresolved_placeholders("The real, current time is: **[Current System Date]** at **[Current System Time]**"),
+            Some("[Current System Date]")
+        );
+        assert_eq!(
+            detect_unresolved_placeholders("Please run <execute_tool> now."),
+            Some("<execute_tool>")
+        );
+        assert_eq!(
+            detect_unresolved_placeholders("The current time is 2026-09-19 14:50:00 EDT."),
+            None
+        );
     }
 }
 

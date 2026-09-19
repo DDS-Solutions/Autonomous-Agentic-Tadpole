@@ -272,11 +272,19 @@ impl AgentRunner {
             // Multi-tiered lookup: exact tool_registry -> normalized tool_registry -> exact skills -> normalized skills -> on-disk deterministic script trapping
             let result = async {
                 if let Some(handler) = self.state.registry.tool_registry.get(&fc.name).or_else(|| self.state.registry.tool_registry.get(&normalized_name)) {
-                    match tokio::time::timeout(std::time::Duration::from_secs(60), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
+                    let tool_timeout_secs = if matches!(
+                        normalized_name.as_str(),
+                        "issue_alpha_directive" | "spawn_subagent" | "send_mission_directive" | "recruit_specialist"
+                    ) {
+                        300
+                    } else {
+                        60
+                    };
+                    match tokio::time::timeout(std::time::Duration::from_secs(tool_timeout_secs), handler.execute(&tool_ctx, fc.args.clone(), usage)).await {
                         Ok(res) => res,
                         Err(_) => {
-                            tracing::error!("🚨 [Runner] Tool '{}' execution TIMED OUT after 60s", fc.name);
-                            Err(ToolExecutionError::ExecutionFailed(format!("Tool '{}' execution timed out after 60 seconds", fc.name)))
+                            tracing::error!("🚨 [Runner] Tool '{}' execution TIMED OUT after {}s", fc.name, tool_timeout_secs);
+                            Err(ToolExecutionError::ExecutionFailed(format!("Tool '{}' execution timed out after {} seconds", fc.name, tool_timeout_secs)))
                         }
                     }
                 } else {
@@ -551,8 +559,11 @@ impl AgentRunner {
             drop(entry); // Release DashMap lock
 
             // Sync to DB
-            crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data)
+            let new_ver = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data)
                 .await?;
+            if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
+                entry.version = new_ver;
+            }
 
             self.state.emit_event(serde_json::json!({
                 "type": "agent:update",

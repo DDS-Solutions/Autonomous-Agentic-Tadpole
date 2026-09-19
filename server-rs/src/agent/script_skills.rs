@@ -31,7 +31,7 @@ use crate::error::AppError;
 /// Represents a point-in-time state of the capability registry.
 /// Uses DashMaps internally to allow for optimistic partial updates while
 /// supporting atomic full-state swaps.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RegistryState {
     pub skills: DashMap<String, SkillDefinition>,
     pub workflows: DashMap<String, WorkflowDefinition>,
@@ -65,6 +65,10 @@ fn default_oversight() -> bool {
     true
 }
 
+fn default_active() -> bool {
+    true
+}
+
 /// Represents a dynamic workflow loaded from `data/workflows/*.md`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowDefinition {
@@ -83,6 +87,7 @@ pub struct HookDefinition {
     pub description: String,
     pub hook_type: String, // e.g., "pre_validation", "post_analysis"
     pub content: String,
+    #[serde(default = "default_active")]
     pub active: bool,
     #[serde(default = "default_category")]
     pub category: String,
@@ -135,6 +140,14 @@ impl ScriptSkillsRegistry {
         fs::create_dir_all(&agent_workflows_dir).await.map_err(AppError::Io)?;
         fs::create_dir_all(&agent_hooks_dir).await.map_err(AppError::Io)?;
 
+        // Clean up any stale temporary files from previous unexpected crashes
+        Self::cleanup_stale_temp_files(&skills_dir).await;
+        Self::cleanup_stale_temp_files(&agent_skills_dir).await;
+        Self::cleanup_stale_temp_files(&workflows_dir).await;
+        Self::cleanup_stale_temp_files(&agent_workflows_dir).await;
+        Self::cleanup_stale_temp_files(&hooks_dir).await;
+        Self::cleanup_stale_temp_files(&agent_hooks_dir).await;
+
         let registry = Self {
             base_dir,
             skills_dir,
@@ -185,11 +198,31 @@ impl ScriptSkillsRegistry {
         self.state.read().clone()
     }
 
+    /// Performs an immutable Copy-on-Write mutation of the registry state.
+    fn mutate_state<F>(&self, f: F)
+    where
+        F: FnOnce(&RegistryState),
+    {
+        let current = self.state.read();
+        let new_state = RegistryState {
+            skills: current.skills.clone(),
+            workflows: current.workflows.clone(),
+            hooks: current.hooks.clone(),
+        };
+        drop(current);
+        f(&new_state);
+        *self.state.write() = Arc::new(new_state);
+    }
+
     /// Spawns a background hot-reload loop that periodically scans for newly synthesized skills/directives
     /// and performs zero-downtime atomic state reloads.
     pub fn spawn_hot_reload_loop(registry: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            let mut interval = tokio::time::interval_at(
+                tokio::time::Instant::now() + std::time::Duration::from_secs(10),
+                std::time::Duration::from_secs(10),
+            );
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 interval.tick().await;
                 if let Err(e) = registry.reload_all().await {
@@ -211,14 +244,14 @@ impl ScriptSkillsRegistry {
         // We use tokio::join! to perform directory scans in parallel, 
         // significantly reducing startup/reload latency.
         let (
-            std_skills, 
-            gen_skills, 
-            built_in_skills, 
-            std_wf, 
-            built_in_wf, 
-            gen_wf, 
-            std_hooks, 
-            gen_hooks
+            std_skills_res, 
+            gen_skills_res, 
+            built_in_skills_res, 
+            std_wf_res, 
+            built_in_wf_res, 
+            gen_wf_res, 
+            std_hooks_res, 
+            gen_hooks_res
         ) = tokio::join!(
             Self::load_skills_from_dir(&self.skills_dir, "user", false),
             Self::load_skills_from_dir(&self.agent_skills_dir, "ai", true),
@@ -230,19 +263,58 @@ impl ScriptSkillsRegistry {
             Self::load_hooks_from_dir(&self.agent_hooks_dir, "ai")
         );
 
-        let total_skills = std_skills.len() + gen_skills.len() + built_in_skills.len();
-        let total_workflows = std_wf.len() + built_in_wf.len() + gen_wf.len();
-        let total_hooks = std_hooks.len() + gen_hooks.len();
+        let std_skills = std_skills_res?;
+        let gen_skills = gen_skills_res?;
+        let built_in_skills = built_in_skills_res?;
+        let std_wf = std_wf_res?;
+        let built_in_wf = built_in_wf_res?;
+        let gen_wf = gen_wf_res?;
+        let std_hooks = std_hooks_res?;
+        let gen_hooks = gen_hooks_res?;
 
-        // Merge results into the next state
+        // Precedence: Built-in (.agent/) > Agent-Generated (agent_generated/) > User (execution/, directives/, hooks/)
+        // 1. Insert User capabilities
         for (k, v) in std_skills { next_state.skills.insert(k, v); }
-        for (k, v) in gen_skills { next_state.skills.insert(k, v); }
-        for (k, v) in built_in_skills { next_state.skills.insert(k, v); }
         for (k, v) in std_wf { next_state.workflows.insert(k, v); }
-        for (k, v) in built_in_wf { next_state.workflows.insert(k, v); }
-        for (k, v) in gen_wf { next_state.workflows.insert(k, v); }
         for (k, v) in std_hooks { next_state.hooks.insert(k, v); }
-        for (k, v) in gen_hooks { next_state.hooks.insert(k, v); }
+
+        // 2. Insert Agent-Generated capabilities (shadows user)
+        for (k, v) in gen_skills {
+            if next_state.skills.contains_key(&k) {
+                tracing::warn!("⚠️ [ScriptSkills] Capability collision: agent skill '{}' shadows user definition", k);
+            }
+            next_state.skills.insert(k, v);
+        }
+        for (k, v) in gen_wf {
+            if next_state.workflows.contains_key(&k) {
+                tracing::warn!("⚠️ [ScriptSkills] Capability collision: agent workflow '{}' shadows user definition", k);
+            }
+            next_state.workflows.insert(k, v);
+        }
+        for (k, v) in gen_hooks {
+            if next_state.hooks.contains_key(&k) {
+                tracing::warn!("⚠️ [ScriptSkills] Capability collision: agent hook '{}' shadows user definition", k);
+            }
+            next_state.hooks.insert(k, v);
+        }
+
+        // 3. Insert Built-in capabilities (highest precedence, shadows all)
+        for (k, v) in built_in_skills {
+            if next_state.skills.contains_key(&k) {
+                tracing::warn!("⚠️ [ScriptSkills] Capability collision: built-in skill '{}' shadows lower-precedence definition", k);
+            }
+            next_state.skills.insert(k, v);
+        }
+        for (k, v) in built_in_wf {
+            if next_state.workflows.contains_key(&k) {
+                tracing::warn!("⚠️ [ScriptSkills] Capability collision: built-in workflow '{}' shadows lower-precedence definition", k);
+            }
+            next_state.workflows.insert(k, v);
+        }
+
+        let total_skills = next_state.skills.len();
+        let total_workflows = next_state.workflows.len();
+        let total_hooks = next_state.hooks.len();
 
         // ATOMIC SWAP: No downtime for readers
         let mut write_guard = self.state.write();
@@ -256,37 +328,59 @@ impl ScriptSkillsRegistry {
         Ok(())
     }
 
-    async fn load_skills_from_dir(dir: &Path, category: &str, is_agent_dir: bool) -> Vec<(String, SkillDefinition)> {
+    async fn load_skills_from_dir(dir: &Path, category: &str, is_agent_dir: bool) -> Result<Vec<(String, SkillDefinition)>, AppError> {
         let mut results = Vec::new();
-        let mut pending_scripts = Vec::new();
+        let mut pending_scripts: Vec<(String, String, PathBuf)> = Vec::new();
 
-        if let Ok(mut entries) = fs::read_dir(dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        if !fs::try_exists(dir).await.unwrap_or(false) {
+            return Ok(results);
+        }
 
-                if ext == "json" {
-                    match read_file_bounded(&path, 5_000_000).await {
-                        Ok(content) => match serde_json::from_str::<SkillDefinition>(&content) {
-                            Ok(mut skill) => {
-                                if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
-                                    tracing::warn!("🚫 [ScriptSkills] Rejecting skill '{}' ({:?}) — invalid execution command: {}", skill.name, path, e);
+        let mut entries = fs::read_dir(dir).await.map_err(AppError::Io)?;
+        while let Some(entry) = entries.next_entry().await.map_err(AppError::Io)? {
+            let path = entry.path();
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+            if ext == "json" {
+                let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if file_name.ends_with("_metadata.json")
+                    || file_name == "api_metadata.json"
+                    || file_name == "package.json"
+                    || file_name == "tsconfig.json"
+                    || file_name.starts_with('.')
+                {
+                    continue;
+                }
+
+                match read_file_bounded(&path, 5_000_000).await {
+                    Ok(content) => match serde_json::from_str::<SkillDefinition>(&content) {
+                        Ok(mut skill) => {
+                            if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
+                                tracing::warn!("🚫 [ScriptSkills] Rejecting skill '{}' ({:?}) — invalid execution command: {}", skill.name, path, e);
+                                continue;
+                            }
+                            if let Some(ref verify_cmd) = skill.verification_script {
+                                if let Err(e) = crate::utils::security::validate_shell_command(verify_cmd) {
+                                    tracing::warn!("🚫 [ScriptSkills] Rejecting skill '{}' ({:?}) — invalid verification command: {}", skill.name, path, e);
                                     continue;
                                 }
-                                skill.category = category.to_string();
-                                results.push((skill.name.clone(), skill));
                             }
-                            Err(e) => {
-                                tracing::warn!("⚠️ [ScriptSkills] Failed to parse skill JSON at {:?}: {}", path, e);
-                            }
-                        },
-                        Err(e) => {
-                            tracing::warn!("⚠️ [ScriptSkills] Failed to read skill file at {:?}: {}", path, e);
+                            skill.category = category.to_string();
+                            results.push((skill.name.clone(), skill));
                         }
+                        Err(e) => {
+                            tracing::warn!("⚠️ [ScriptSkills] Failed to parse skill JSON at {:?}: {}", path, e);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!("⚠️ [ScriptSkills] Failed to read skill file at {:?}: {}", path, e);
                     }
-                } else if ext == "py" || ext == "sh" || ext == "ps1" {
-                    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                    if !stem.is_empty() && !stem.starts_with("__") {
+                }
+            } else if ext == "py" || ext == "sh" || ext == "ps1" {
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                if !stem.is_empty() && !stem.starts_with("__") {
+                    // Prevent duplicate stems across extensions
+                    if !pending_scripts.iter().any(|(s, _, _)| s == &stem) {
                         pending_scripts.push((stem, ext.to_string(), path));
                     }
                 }
@@ -318,6 +412,12 @@ impl ScriptSkillsRegistry {
                 _ => format!("python {}", rel_path),
             };
 
+            // Security gate: validate synthesized command
+            if let Err(e) = crate::utils::security::validate_shell_command(&execution_command) {
+                tracing::warn!("🚫 [ScriptSkills] Rejecting synthesized skill '{}' ({:?}) — command validation failed: {}", stem, path, e);
+                continue;
+            }
+
             let skill = SkillDefinition {
                 id: None,
                 name: stem.clone(),
@@ -339,186 +439,253 @@ impl ScriptSkillsRegistry {
             results.push((stem, skill));
         }
 
-        results
+        Ok(results)
     }
 
-    async fn load_built_in_skills(dir: &Path) -> Vec<(String, SkillDefinition)> {
+    async fn load_built_in_skills(dir: &Path) -> Result<Vec<(String, SkillDefinition)>, AppError> {
         let mut results = Vec::new();
-        if let Ok(mut entries) = fs::read_dir(dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                if path.is_dir() {
-                    let skill_md = path.join("SKILL.md");
-                    if skill_md.exists() {
-                        if let Ok(content) = read_file_bounded(&skill_md, 1_000_000).await {
-                            if let Some(skill) = parse_skill_md(&content) {
-                                if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
-                                    tracing::warn!("🚫 [ScriptSkills] Rejecting built-in skill '{}' ({:?}) — invalid execution command: {}", skill.name, skill_md, e);
-                                    continue;
-                                }
-                                results.push((skill.name.clone(), skill));
+        if !fs::try_exists(dir).await.unwrap_or(false) {
+            return Ok(results);
+        }
+
+        let mut entries = fs::read_dir(dir).await.map_err(AppError::Io)?;
+        while let Some(entry) = entries.next_entry().await.map_err(AppError::Io)? {
+            let path = entry.path();
+            if path.is_dir() {
+                let skill_md = path.join("SKILL.md");
+                if fs::try_exists(&skill_md).await.unwrap_or(false) {
+                    if let Ok(content) = read_file_bounded(&skill_md, 1_000_000).await {
+                        if let Some(skill) = parse_skill_md(&content) {
+                            if let Err(e) = crate::utils::security::validate_shell_command(&skill.execution_command) {
+                                tracing::warn!("🚫 [ScriptSkills] Rejecting built-in skill '{}' ({:?}) — invalid execution command: {}", skill.name, skill_md, e);
+                                continue;
                             }
+                            results.push((skill.name.clone(), skill));
                         }
                     }
                 }
             }
         }
-        results
+        Ok(results)
     }
 
-    async fn load_workflows_from_dir(dir: &Path, category: &str) -> Vec<(String, WorkflowDefinition)> {
+    async fn load_workflows_from_dir(dir: &Path, category: &str) -> Result<Vec<(String, WorkflowDefinition)>, AppError> {
         let mut results = Vec::new();
-        if let Ok(mut entries) = fs::read_dir(dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Ok(content) = read_file_bounded(&path, 2_000_000).await {
-                        let name = match path.file_stem() {
-                            Some(s) => s.to_string_lossy().to_string(),
-                            None => continue,
-                        };
-                        results.push((name.clone(), WorkflowDefinition {
-                            id: None,
-                            name,
-                            content,
-                            doc_url: None,
-                            tags: None,
-                            category: category.to_string(),
-                        }));
+        if !fs::try_exists(dir).await.unwrap_or(false) {
+            return Ok(results);
+        }
+
+        let mut entries = fs::read_dir(dir).await.map_err(AppError::Io)?;
+        while let Some(entry) = entries.next_entry().await.map_err(AppError::Io)? {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("md") {
+                if let Ok(content) = read_file_bounded(&path, 2_000_000).await {
+                    let name = match path.file_stem() {
+                        Some(s) => s.to_string_lossy().to_string(),
+                        None => continue,
+                    };
+                    let wf_def = WorkflowDefinition {
+                        id: None,
+                        name: name.clone(),
+                        content,
+                        doc_url: None,
+                        tags: None,
+                        category: category.to_string(),
+                    };
+                    let normalized = name.to_lowercase().replace(' ', "_").replace('-', "_");
+                    if normalized != name {
+                        results.push((normalized, wf_def.clone()));
+                    }
+                    results.push((name, wf_def));
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    async fn load_hooks_from_dir(dir: &Path, category: &str) -> Result<Vec<(String, HookDefinition)>, AppError> {
+        let mut results = Vec::new();
+        if !fs::try_exists(dir).await.unwrap_or(false) {
+            return Ok(results);
+        }
+
+        let mut entries = fs::read_dir(dir).await.map_err(AppError::Io)?;
+        while let Some(entry) = entries.next_entry().await.map_err(AppError::Io)? {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Ok(content) = read_file_bounded(&path, 500_000).await {
+                    if let Ok(mut hook) = serde_json::from_str::<HookDefinition>(&content) {
+                        hook.category = category.to_string();
+                        results.push((hook.name.clone(), hook));
                     }
                 }
             }
         }
-        results
-    }
-
-    async fn load_hooks_from_dir(dir: &Path, category: &str) -> Vec<(String, HookDefinition)> {
-        let mut results = Vec::new();
-        if let Ok(mut entries) = fs::read_dir(dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Ok(content) = read_file_bounded(&path, 500_000).await {
-                        if let Ok(mut hook) = serde_json::from_str::<HookDefinition>(&content) {
-                            hook.category = category.to_string();
-                            results.push((hook.name.clone(), hook));
-                        }
-                    }
-                }
-            }
-        }
-        results
+        Ok(results)
     }
 
     /// ### 🛡️ Security: Atomic Write Pattern
-    /// Persists a skill by writing to a temporary file and performing a 
-    /// rename, ensuring disk integrity even on power failure or crash.
+    /// Persists a skill by writing to a temporary file, syncing to disk, and performing an atomic rename.
     pub async fn save_skill(&self, skill: SkillDefinition) -> Result<(), AppError> {
         crate::utils::security::validate_shell_command(&skill.execution_command)?;
+        if let Some(ref verify_cmd) = skill.verification_script {
+            crate::utils::security::validate_shell_command(verify_cmd)?;
+        }
         let safe_name = crate::utils::security::sanitize_id(&skill.name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.skills_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid skill name or path".to_string()))?;
 
         let content = serde_json::to_string_pretty(&skill).map_err(|e| AppError::InternalServerError(e.to_string()))?;
         self.atomic_write(&path, content.as_bytes()).await?;
 
-        // Update local state without waiting for full reload (Optimistic UI)
-        self.snapshot().skills.insert(skill.name.clone(), skill);
+        // Update local state via immutable Copy-on-Write swap
+        self.mutate_state(|s| {
+            s.skills.insert(skill.name.clone(), skill);
+        });
         Ok(())
     }
 
     pub async fn save_agent_skill(&self, mut skill: SkillDefinition) -> Result<(), AppError> {
         crate::utils::security::validate_shell_command(&skill.execution_command)?;
+        if let Some(ref verify_cmd) = skill.verification_script {
+            crate::utils::security::validate_shell_command(verify_cmd)?;
+        }
         let safe_name = crate::utils::security::sanitize_id(&skill.name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.agent_skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.agent_skills_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid agent skill name or path".to_string()))?;
 
         skill.category = "ai".to_string();
         let content = serde_json::to_string_pretty(&skill).map_err(|e| AppError::InternalServerError(e.to_string()))?;
         self.atomic_write(&path, content.as_bytes()).await?;
 
-        self.snapshot().skills.insert(skill.name.clone(), skill);
+        self.mutate_state(|s| {
+            s.skills.insert(skill.name.clone(), skill);
+        });
         Ok(())
     }
 
     pub async fn save_agent_workflow(&self, mut workflow: WorkflowDefinition) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(&workflow.name);
         let filename = format!("{}.md", safe_name);
-        let path = crate::utils::security::validate_path(&self.agent_workflows_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.agent_workflows_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid agent workflow name or path".to_string()))?;
 
         workflow.category = "ai".to_string();
         self.atomic_write(&path, workflow.content.as_bytes()).await?;
 
-        self.snapshot().workflows.insert(workflow.name.clone(), workflow);
+        self.mutate_state(|s| {
+            s.workflows.insert(workflow.name.clone(), workflow);
+        });
         Ok(())
     }
 
     pub async fn save_agent_hook(&self, mut hook: HookDefinition) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(&hook.name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.agent_hooks_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.agent_hooks_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid agent hook name or path".to_string()))?;
 
         hook.category = "ai".to_string();
         let content = serde_json::to_string_pretty(&hook).map_err(|e| AppError::InternalServerError(e.to_string()))?;
         self.atomic_write(&path, content.as_bytes()).await?;
 
-        self.snapshot().hooks.insert(hook.name.clone(), hook);
+        self.mutate_state(|s| {
+            s.hooks.insert(hook.name.clone(), hook);
+        });
         Ok(())
     }
 
     pub async fn delete_skill(&self, name: &str) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.skills_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
-        if path.exists() {
-            fs::remove_file(path).await.map_err(AppError::Io)?;
+        // Delete from user skills directory if present
+        if let Ok(path) = crate::utils::security::validate_path(&self.skills_dir, &filename) {
+            if fs::try_exists(&path).await.unwrap_or(false) {
+                fs::remove_file(path).await.map_err(AppError::Io)?;
+            }
         }
-        self.snapshot().skills.remove(name);
+
+        // Also delete from agent skills directory if present
+        if let Ok(agent_path) = crate::utils::security::validate_path(&self.agent_skills_dir, &filename) {
+            if fs::try_exists(&agent_path).await.unwrap_or(false) {
+                fs::remove_file(agent_path).await.map_err(AppError::Io)?;
+            }
+        }
+
+        self.mutate_state(|s| {
+            s.skills.remove(name);
+        });
         Ok(())
     }
 
     pub async fn save_workflow(&self, workflow: WorkflowDefinition) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(&workflow.name);
         let filename = format!("{}.md", safe_name);
-        let path = crate::utils::security::validate_path(&self.workflows_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.workflows_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid workflow name or path".to_string()))?;
 
         self.atomic_write(&path, workflow.content.as_bytes()).await?;
 
-        self.snapshot().workflows.insert(workflow.name.clone(), workflow);
+        self.mutate_state(|s| {
+            s.workflows.insert(workflow.name.clone(), workflow);
+        });
         Ok(())
     }
 
     pub async fn delete_workflow(&self, name: &str) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(name);
         let filename = format!("{}.md", safe_name);
-        let path = crate::utils::security::validate_path(&self.workflows_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
-        if path.exists() {
-            fs::remove_file(path).await.map_err(AppError::Io)?;
+        if let Ok(path) = crate::utils::security::validate_path(&self.workflows_dir, &filename) {
+            if fs::try_exists(&path).await.unwrap_or(false) {
+                fs::remove_file(path).await.map_err(AppError::Io)?;
+            }
         }
-        self.snapshot().workflows.remove(name);
+
+        if let Ok(agent_path) = crate::utils::security::validate_path(&self.agent_workflows_dir, &filename) {
+            if fs::try_exists(&agent_path).await.unwrap_or(false) {
+                fs::remove_file(agent_path).await.map_err(AppError::Io)?;
+            }
+        }
+
+        self.mutate_state(|s| {
+            s.workflows.remove(name);
+        });
         Ok(())
     }
 
     pub async fn save_hook(&self, hook: HookDefinition) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(&hook.name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.hooks_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let path = crate::utils::security::validate_path(&self.hooks_dir, &filename)
+            .map_err(|_| AppError::BadRequest("Invalid hook name or path".to_string()))?;
         let content = serde_json::to_string_pretty(&hook).map_err(|e| AppError::InternalServerError(e.to_string()))?;
         self.atomic_write(&path, content.as_bytes()).await?;
-        self.snapshot().hooks.insert(hook.name.clone(), hook);
+        self.mutate_state(|s| {
+            s.hooks.insert(hook.name.clone(), hook);
+        });
         Ok(())
     }
 
     pub async fn delete_hook(&self, name: &str) -> Result<(), AppError> {
         let safe_name = crate::utils::security::sanitize_id(name);
         let filename = format!("{}.json", safe_name);
-        let path = crate::utils::security::validate_path(&self.hooks_dir, &filename).map_err(|e| AppError::InternalServerError(e.to_string()))?;
-        if path.exists() {
-            fs::remove_file(path).await.map_err(AppError::Io)?;
+        if let Ok(path) = crate::utils::security::validate_path(&self.hooks_dir, &filename) {
+            if fs::try_exists(&path).await.unwrap_or(false) {
+                fs::remove_file(path).await.map_err(AppError::Io)?;
+            }
         }
-        self.snapshot().hooks.remove(name);
+        if let Ok(agent_path) = crate::utils::security::validate_path(&self.agent_hooks_dir, &filename) {
+            if fs::try_exists(&agent_path).await.unwrap_or(false) {
+                fs::remove_file(agent_path).await.map_err(AppError::Io)?;
+            }
+        }
+        self.mutate_state(|s| {
+            s.hooks.remove(name);
+        });
         Ok(())
     }
 
@@ -570,9 +737,40 @@ impl ScriptSkillsRegistry {
     async fn atomic_write(&self, path: &Path, content: &[u8]) -> Result<(), AppError> {
         let unique_id = uuid::Uuid::new_v4();
         let tmp_path = path.with_extension(format!("tmp.{}", unique_id));
-        fs::write(&tmp_path, content).await.map_err(AppError::Io)?;
-        fs::rename(&tmp_path, path).await.map_err(AppError::Io)?;
-        Ok(())
+        let write_res: Result<(), AppError> = async {
+            let mut f = fs::File::create(&tmp_path).await.map_err(AppError::Io)?;
+            tokio::io::AsyncWriteExt::write_all(&mut f, content).await.map_err(AppError::Io)?;
+            f.sync_all().await.map_err(AppError::Io)?;
+            fs::rename(&tmp_path, path).await.map_err(AppError::Io)?;
+            Ok(())
+        }.await;
+
+        if write_res.is_err() {
+            let _ = fs::remove_file(&tmp_path).await;
+        }
+        write_res
+    }
+
+    /// Cleans up any orphaned temporary files created during prior incomplete writes (older than 60s).
+    async fn cleanup_stale_temp_files(dir: &Path) {
+        if let Ok(mut entries) = fs::read_dir(dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                    if name.contains(".tmp.") {
+                        if let Ok(meta) = fs::metadata(&path).await {
+                            if let Ok(modified) = meta.modified() {
+                                if let Ok(elapsed) = modified.elapsed() {
+                                    if elapsed.as_secs() > 60 {
+                                        let _ = fs::remove_file(&path).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -586,25 +784,36 @@ async fn read_file_bounded(path: &Path, max_bytes: u64) -> Result<String, AppErr
 }
 
 /// ### 🧪 Logic: Semantic Skill Extraction (parse_skill_md)
+/// Line-based frontmatter parser that extracts YAML and preserves markdown body horizontal rules.
 pub fn parse_skill_md(content: &str) -> Option<SkillDefinition> {
-    if !content.starts_with("---") {
+    let mut lines = content.lines();
+    // Line 1 must be strictly '---'
+    if lines.next()?.trim() != "---" {
         return None;
     }
 
-    let parts: Vec<&str> = content.split("---").collect();
-    if parts.len() < 3 {
+    let mut yaml_lines = Vec::new();
+    let mut found_closing = false;
+    for line in lines.by_ref() {
+        if line.trim() == "---" {
+            found_closing = true;
+            break;
+        }
+        yaml_lines.push(line);
+    }
+
+    if !found_closing {
         return None;
     }
 
-    let yaml_str = parts[1];
-    let body = parts[2..].join("---");
+    let yaml_str = yaml_lines.join("\n");
+    let body = lines.collect::<Vec<&str>>().join("\n");
 
-    let metadata: serde_json::Value = serde_yaml::from_str(yaml_str).ok()?;
+    let metadata: serde_json::Value = serde_yaml::from_str(&yaml_str).ok()?;
     let name = metadata
         .get("name")
         .and_then(|v| v.as_str())
-        .or_else(|| metadata.get("title").and_then(|v| v.as_str()))
-        .or(None)?;
+        .or_else(|| metadata.get("title").and_then(|v| v.as_str()))?;
         
     let description = metadata
         .get("description")

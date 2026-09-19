@@ -275,7 +275,7 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
     Ok(agents)
 }
 
-async fn execute_save_agent<'c, E>(executor: E, agent: &EngineAgent) -> Result<(), AppError>
+async fn execute_save_agent<'c, E>(executor: E, agent: &EngineAgent) -> Result<u32, AppError>
 where
     E: sqlx::Executor<'c, Database = sqlx::Sqlite>,
 {
@@ -335,7 +335,8 @@ where
             stt_engine = excluded.stt_engine,
             version = agents.version + 1,
             runner_policy = excluded.runner_policy
-            WHERE agents.id = excluded.id AND agents.version = ?"
+            WHERE agents.id = excluded.id AND agents.version = ?
+            RETURNING version"
     )
     .bind(&agent.identity.id)
     .bind(&agent.identity.name)
@@ -380,17 +381,19 @@ where
     .bind(agent.version as i64)
     .bind(sqlx::types::Json(&agent.runner_policy))
     .bind(agent.version as i64)
-    .execute(executor)
+    .fetch_optional(executor)
     .await?;
 
-    if res.rows_affected() == 0 {
-        return Err(AppError::Conflict(format!(
+    match res {
+        Some(row) => {
+            let ver: i64 = row.get("version");
+            Ok(ver as u32)
+        }
+        None => Err(AppError::Conflict(format!(
             "Optimistic concurrency lock failed for agent '{}' (version mismatch)",
             agent.identity.id
-        )));
+        ))),
     }
-
-    Ok(())
 }
 
 async fn auto_subscribe_agent_skills(
@@ -416,24 +419,50 @@ async fn auto_subscribe_agent_skills(
     Ok(())
 }
 
-pub async fn save_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<(), AppError> {
+pub async fn save_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<u32, AppError> {
     let mut tx = pool.begin().await?;
-    execute_save_agent(&mut *tx, agent).await?;
-    sync_manifests_for_agent(&mut tx, agent).await?;
-    auto_subscribe_agent_skills(&mut tx, agent).await?;
+    let new_ver = save_agent_db_in_tx(&mut tx, agent).await?;
     tx.commit().await?;
-    Ok(())
+    Ok(new_ver)
 }
 
 /// Transaction-compatible variant of `save_agent_db`.
 pub async fn save_agent_db_in_tx(
     conn: &mut sqlx::SqliteConnection,
     agent: &EngineAgent,
-) -> Result<(), AppError> {
-    execute_save_agent(&mut *conn, agent).await?;
+) -> Result<u32, AppError> {
+    let new_ver = match execute_save_agent(&mut *conn, agent).await {
+        Ok(v) => v,
+        Err(AppError::Conflict(_)) => {
+            // Reconcile: fetch current DB version and retry once
+            let current_db_version: Option<i64> = sqlx::query_scalar("SELECT version FROM agents WHERE id = ?")
+                .bind(&agent.identity.id)
+                .fetch_optional(&mut *conn)
+                .await?;
+
+            if let Some(db_ver) = current_db_version {
+                tracing::info!(
+                    agent_id = %agent.identity.id,
+                    expected = agent.version,
+                    actual = db_ver,
+                    "🔄 [Persistence] Reconciling stale agent version from database"
+                );
+                let mut reconciled = agent.clone();
+                reconciled.version = db_ver as u32;
+                execute_save_agent(&mut *conn, &reconciled).await?
+            } else {
+                return Err(AppError::Conflict(format!(
+                    "Optimistic concurrency lock failed for agent '{}' (version mismatch)",
+                    agent.identity.id
+                )));
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
     sync_manifests_for_agent(&mut *conn, agent).await?;
     auto_subscribe_agent_skills(&mut *conn, agent).await?;
-    Ok(())
+    Ok(new_ver)
 }
 
 /// Synchronizes an agent's connector configurations with the `sync_manifest` table.

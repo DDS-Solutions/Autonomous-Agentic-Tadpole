@@ -84,7 +84,7 @@ pub async fn validate_token(
 
     if let Some(ref token) = token_opt {
         if let Some(token_name) = match_token(token, &state) {
-            tracing::info!("🔑 [Auth] Authorized request using {}", token_name);
+            tracing::debug!("🔑 [Auth] Authorized request using {}", token_name);
             return Ok(next.run(req).await);
         } else {
             tracing::warn!("🚫 Invalid token provided");

@@ -29,7 +29,6 @@ const SETTINGS_KEY = 'tadpole_settings';
  */
 const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
-    'Tadpole-OS-2026',
 ]);
 
 export type ThemeOption = 'zinc' | 'slate' | 'neutral';

@@ -138,6 +138,8 @@ export interface Task_Payload {
     traceparent?: string;
     parent_node_id?: string;
     enabled_skills?: string[];
+    user_id?: string;
+    auto_resume?: boolean;
 }
 
 export type AgentPatch = Partial<Agent>;

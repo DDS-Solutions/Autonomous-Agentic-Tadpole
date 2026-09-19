@@ -302,6 +302,9 @@ impl AgentRunner {
                     .clone()
                     .unwrap_or_else(|| "ollama".to_string());
                 let mut config = ctx.model_config.clone();
+                if config.model_id.trim().is_empty() {
+                    config.model_id = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gemma4:e4b".to_string());
+                }
                 if config.base_url.as_deref().unwrap_or("").trim().is_empty() {
                     let mut host = std::env::var("OLLAMA_HOST")
                         .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string())
@@ -332,6 +335,9 @@ impl AgentRunner {
                     .clone()
                     .unwrap_or_else(|| "local".to_string());
                 let mut config = ctx.model_config.clone();
+                if config.model_id.trim().is_empty() {
+                    config.model_id = "gemma4:e4b".to_string();
+                }
                 if config.base_url.is_none() {
                     config.base_url = Some("http://localhost:8080/v1".to_string());
                 }

@@ -55,7 +55,7 @@ impl Dispatcher {
 
         // 4. Metrics & External
         let aux_handler = Arc::new(AuxHandler);
-        let aux_tools = &["get_agent_metrics", "notify_discord", "fetch_url", "script_builder", "search_web", "execute_shell", "visual_inspect_ui", "save_to_local_memory", "search_local_memory"];
+        let aux_tools = &["get_current_time", "get_agent_metrics", "notify_discord", "fetch_url", "script_builder", "search_web", "execute_shell", "visual_inspect_ui", "save_to_local_memory", "search_local_memory"];
 
         // 5. Evolution Tools
         let evolution_handler = Arc::new(EvolutionHandler);
@@ -196,6 +196,16 @@ impl CategoricalHandler for AuxHandler {
         let fc = crate::agent::types::ToolCall { name: name.to_string(), args };
 
         match name {
+            "get_current_time" => {
+                let local = chrono::Local::now();
+                let utc = chrono::Utc::now();
+                Ok(format!(
+                    "Authoritative Host Clock:\n- Local Time: {}\n- UTC: {}\n- Epoch Seconds: {}",
+                    local.format("%Y-%m-%d %H:%M:%S %Z"),
+                    utc.to_rfc3339(),
+                    utc.timestamp()
+                ))
+            }
             "get_agent_metrics" => runner.handle_get_agent_metrics(&run_ctx, &fc, usage).await,
             "notify_discord" => runner.handle_notify_discord(&run_ctx, &fc).await,
             "fetch_url" => runner.handle_fetch_url(&run_ctx, &fc, usage).await,

@@ -179,8 +179,9 @@ impl AgentRunner {
         payload: &TaskPayload,
     ) -> Result<crate::agent::types::Mission, AppError> {
         // 🛡️ [Resilience] Ensure agent exists in database (auto-sync if only in registry)
-        if let Some(agent) = self.state.registry.agents.get(agent_id) {
-            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent.value()).await {
+        let agent_to_sync = self.state.registry.agents.get(agent_id).map(|a| a.value().clone());
+        if let Some(agent) = agent_to_sync {
+            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent).await {
                 tracing::warn!("⚠️ [Lifecycle] Pre-flight sync of agent {} to DB failed: {}", agent_id, e);
             }
         }
@@ -322,20 +323,29 @@ impl AgentRunner {
                 "title": mission.title
             }));
             agent.health.status = "busy".to_string();
-            
+            let agent_clone = agent.clone();
+            drop(entry); // Release DashMap lock before async database I/O
+
             // ### 🗄️ Persistence: Database Sync
             // We MUST save to the database immediately so the Orchestrator
             // (Safety Valve) can see that this agent is engaged and doesn't
             // mark the mission as a "ghost".
-            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, agent).await {
-                tracing::error!("❌ [Lifecycle] Failed to persist engaged agent {} to DB: {}", agent_id, e);
+            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_clone).await {
+                Ok(new_ver) => {
+                    if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
+                        entry.version = new_ver;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("❌ [Lifecycle] Failed to persist engaged agent {} to DB: {}", agent_id, e);
+                }
             }
 
             // Broadcast the agent update so other UI components (like the sidebar) sync
             self.state.emit_event(serde_json::json!({
                 "type": "agent:update",
                 "agent_id": agent_id,
-                "data": *agent
+                "data": agent_clone
             }));
         }
 

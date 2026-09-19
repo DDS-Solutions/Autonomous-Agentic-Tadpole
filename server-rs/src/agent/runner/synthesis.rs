@@ -423,6 +423,15 @@ impl AgentRunner {
         let tool_directory_str = self.generate_tool_directory_display(ctx);
         vars.insert("tool_directory", tool_directory_str);
 
+        let local_now = chrono::Local::now();
+        let utc_now = chrono::Utc::now();
+        let temporal_anchor = format!(
+            "Local: {} | UTC: {}",
+            local_now.format("%Y-%m-%d %H:%M:%S %Z"),
+            utc_now.to_rfc3339()
+        );
+        vars.insert("temporal_anchor", temporal_anchor);
+
         vars
     }
 

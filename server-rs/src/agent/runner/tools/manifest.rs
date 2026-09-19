@@ -20,6 +20,14 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
     vec![
         // --- Core Operational Tools ---
         ToolDefinitionData {
+            name: "get_current_time".to_string(),
+            description: "Returns the authoritative local and UTC system date and time from the physical host machine clock.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        ToolDefinitionData {
             name: "spawn_subagent".to_string(),
             description: "Spawns one or more specialized sub-agents to handle tasks in parallel.".to_string(),
             parameters: serde_json::json!({

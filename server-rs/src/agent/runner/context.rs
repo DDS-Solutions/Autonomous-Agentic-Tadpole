@@ -40,13 +40,15 @@ impl AgentRunner {
 
         // 1. Resolve Target Model ID
         let target_model_id = payload.model_id.as_ref()
-            .or(match a.models.active_model_slot {
-                Some(2) => a.models.model_2.as_ref(),
-                Some(3) => a.models.model_3.as_ref(),
-                _ => a.models.model_id.as_ref(),
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| match a.models.active_model_slot {
+                Some(2) => a.models.model_2.as_ref().filter(|s| !s.trim().is_empty()),
+                Some(3) => a.models.model_3.as_ref().filter(|s| !s.trim().is_empty()),
+                _ => a.models.model_id.as_ref().filter(|s| !s.trim().is_empty()),
             })
-            .unwrap_or(&a.models.model.model_id)
-            .clone();
+            .or_else(|| Some(&a.models.model.model_id).filter(|s| !s.trim().is_empty()))
+            .cloned()
+            .unwrap_or_else(|| "gemma4:e4b".to_string());
 
         // 2. Resolve Base Configuration
         let slot_cfg = match a.models.active_model_slot {
@@ -288,7 +290,14 @@ impl AgentRunner {
             if !url.trim().is_empty() { config.base_url = Some(url.clone()); }
         }
         if let Some(eid) = &payload.external_id { config.external_id = Some(eid.clone()); }
-        if let Some(m) = &payload.model_id { config.model_id = m.clone(); }
+        if let Some(m) = &payload.model_id {
+            if !m.trim().is_empty() {
+                config.model_id = m.clone();
+            }
+        }
+        if config.model_id.trim().is_empty() {
+            config.model_id = "gemma4:e4b".to_string();
+        }
     }
 
     /// Resolves and sanitizes the workspace root path.

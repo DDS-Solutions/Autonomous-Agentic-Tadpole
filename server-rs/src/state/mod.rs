@@ -949,14 +949,19 @@ impl AppState {
         match self.resources.pool.begin().await {
             Ok(mut tx) => {
                 for agent in &agents_vec {
-                    if let Err(err) =
-                        crate::agent::persistence::save_agent_db_in_tx(&mut tx, agent).await
-                    {
-                        tracing::error!(
-                            agent_id = %agent.identity.id,
-                            error = %err,
-                            "❌ [State] Failed to persist agent during batched save_agents"
-                        );
+                    match crate::agent::persistence::save_agent_db_in_tx(&mut tx, agent).await {
+                        Ok(new_ver) => {
+                            if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
+                                entry.version = new_ver;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                agent_id = %agent.identity.id,
+                                error = %err,
+                                "❌ [State] Failed to persist agent during batched save_agents"
+                            );
+                        }
                     }
                 }
                 if let Err(err) = tx.commit().await {
@@ -973,14 +978,19 @@ impl AppState {
                 );
                 // Fallback: individual saves (degraded but functional)
                 for agent in &agents_vec {
-                    if let Err(err) =
-                        crate::agent::persistence::save_agent_db(&self.resources.pool, agent).await
-                    {
-                        tracing::error!(
-                            agent_id = %agent.identity.id,
-                            error = %err,
-                            "❌ [State] Failed to persist agent during fallback save_agents"
-                        );
+                    match crate::agent::persistence::save_agent_db(&self.resources.pool, agent).await {
+                        Ok(new_ver) => {
+                            if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
+                                entry.version = new_ver;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                agent_id = %agent.identity.id,
+                                error = %err,
+                                "❌ [State] Failed to persist agent during fallback save_agents"
+                            );
+                        }
                     }
                 }
             }

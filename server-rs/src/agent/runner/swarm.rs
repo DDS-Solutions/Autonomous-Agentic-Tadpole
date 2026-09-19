@@ -166,11 +166,15 @@ impl AgentRunner {
                     )
                 };
 
-                let sub_agent = runner.state.registry.agents.get(&sub_id_clone);
-                let sub_agent_name = sub_agent.as_ref().map(|a| a.identity.name.clone()).unwrap_or_else(|| sub_id_clone.clone());
-                let sub_agent_role = sub_agent.as_ref().map(|a| a.identity.role.clone()).unwrap_or_else(|| "specialist".to_string());
-                let sub_slot = sub_agent.as_ref().and_then(|a| a.models.active_model_slot).map(|s| s as u8).or(Some(2));
-                let budget_cap = sub_agent.as_ref().map(|a| a.economics.budget_usd).filter(|&b| b > 0.0);
+                let (sub_agent_name, sub_agent_role, sub_slot, budget_cap) = {
+                    let sub_agent = runner.state.registry.agents.get(&sub_id_clone);
+                    (
+                        sub_agent.as_ref().map(|a| a.identity.name.clone()).unwrap_or_else(|| sub_id_clone.clone()),
+                        sub_agent.as_ref().map(|a| a.identity.role.clone()).unwrap_or_else(|| "specialist".to_string()),
+                        sub_agent.as_ref().and_then(|a| a.models.active_model_slot).map(|s| s as u8).or(Some(2)),
+                        sub_agent.as_ref().map(|a| a.economics.budget_usd).filter(|&b| b > 0.0),
+                    )
+                };
                 let is_privacy = runner.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed);
                 let socratic = crate::agent::socratic::SocraticContextEnvelope::compile(
                     &sub_id_clone,

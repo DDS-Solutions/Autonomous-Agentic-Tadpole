@@ -197,7 +197,10 @@ fn test_pulse_battery_budget_calculation() {
 async fn test_ghost_mission_topology_preservation() {
     let state = Arc::new(AppState::new_mock().await);
     let handle = tokio::task::spawn(async {});
-    state.comms.active_runners.insert("mission-ghost-anchor".to_string(), handle.abort_handle());
+    state.comms.active_runners.insert(
+        "mission-ghost-anchor".to_string(),
+        crate::state::hubs::comm::RunnerHandle::new(handle.abort_handle(), handle.id()),
+    );
 
     let ghost_missions = state.comms.active_runners.iter()
         .map(|kv| kv.key().clone())

@@ -19,6 +19,7 @@ use crate::agent::types::ToolCall;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use thiserror::Error;
+use tracing::{debug, info, trace, warn};
 
 #[derive(Debug, Error)]
 pub enum ParserError {
@@ -32,6 +33,9 @@ pub enum ParserError {
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
+/// Maximum input length accepted for extraction to prevent denial-of-service on pathological outputs (1 MB).
+const MAX_INPUT_LEN: usize = 1_048_576;
+
 /// Resilient parser for extracting tool calls from raw model output.
 pub struct PolyglotParser;
 
@@ -39,12 +43,12 @@ static XML_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?s)<(?:tool_call|invoke_tool)>(.*?)</(?:tool_call|invoke_tool)>").unwrap()
 });
 
-static GEMMA_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)<\|tool_call\|>call:([a-zA-Z0-9_-]+)(\{.*?\})<\|?tool_call\|>").unwrap()
+static GEMMA_PREFIX_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?s)<\|tool_call\|>call:([a-zA-Z0-9_-]+)").unwrap()
 });
 
-static BARE_CALL_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)(?:\n|^|\s)call:([a-zA-Z0-9_-]+)(\{.*?\})").unwrap());
+static BARE_CALL_PREFIX_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?s)(?:\n|^|\s)call:([a-zA-Z0-9_-]+)").unwrap());
 
 static EXECUTE_TOOL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?s)<execute_tool>\s*<tool_name>(.*?)</tool_name>\s*<tool_input>(.*?)</tool_input>\s*</execute_tool>").unwrap()
@@ -66,30 +70,65 @@ static WORD_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$").
 impl PolyglotParser {
     /// Extracts all tool calls from the raw text, trying multiple formats.
     pub fn extract(text: &str) -> ParserResult<Vec<ToolCall>> {
+        let text = if text.len() > MAX_INPUT_LEN {
+            warn!(
+                target: "server_rs::agent::runner::parser",
+                "[parser] Input length {} exceeds MAX_INPUT_LEN {}, truncating scan",
+                text.len(),
+                MAX_INPUT_LEN
+            );
+            &text[..MAX_INPUT_LEN]
+        } else {
+            text
+        };
+
         let mut calls = Vec::new();
         let mut last_error = None;
 
-        // 1. Try XML-like JSON format: <tool_call>{...}</tool_call>
+        // 1. Try XML-like JSON format: <tool_call>{...}</tool_call> or <invoke_tool>{...}</invoke_tool>
         for cap in XML_TOOL_REGEX.captures_iter(text) {
             if let Some(json_str) = cap.get(1) {
                 match Self::parse_json_call(json_str.as_str()) {
-                    Ok(call) => calls.push(call),
+                    Ok(call) => {
+                        debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted XML tool call '{}'", call.name);
+                        calls.push(call);
+                    }
                     Err(e) => last_error = Some(e),
                 }
             }
         }
 
-        // 2. Try Gemma native format: <|tool_call|>call:name{...}<tool_call|>
-        for cap in GEMMA_TOOL_REGEX.captures_iter(text) {
-            let name = cap
-                .get(1)
-                .map(|m| m.as_str().to_string())
-                .unwrap_or_default();
-            let args_raw = cap.get(2).map(|m| m.as_str()).unwrap_or("{}");
-            match Self::repair_and_parse_json(args_raw) {
-                Ok(args) => calls.push(ToolCall { name, args }),
-                Err(e) => last_error = Some(e),
+        // 2. Try Gemma native format: <|tool_call|>call:name{...}<tool_call|> or <|tool_call|>
+        let mut gemma_offset = 0;
+        while let Some(cap) = GEMMA_PREFIX_REGEX.captures(&text[gemma_offset..]) {
+            let rel_start = cap.get(0).unwrap().start();
+            let abs_start = gemma_offset + rel_start;
+            let abs_match_end = gemma_offset + cap.get(0).unwrap().end();
+            let name = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+
+            if let Some((brace_start, brace_end)) = Self::scan_balanced_object(text, abs_match_end) {
+                // Ensure brace immediately follows name (ignoring optional whitespace)
+                if text[abs_match_end..brace_start].trim().is_empty() {
+                    let args_raw = &text[brace_start..brace_end];
+                    match Self::repair_and_parse_json(args_raw) {
+                        Ok(args) => {
+                            debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted Gemma call '{}'", name);
+                            calls.push(ToolCall { name, args });
+                        }
+                        Err(e) => last_error = Some(e),
+                    }
+                    let mut advance = brace_end;
+                    let lookahead = &text[brace_end..];
+                    if lookahead.starts_with("<|tool_call|>") {
+                        advance += "<|tool_call|>".len();
+                    } else if lookahead.starts_with("<tool_call|>") {
+                        advance += "<tool_call|>".len();
+                    }
+                    gemma_offset = advance.max(abs_start + 1);
+                    continue;
+                }
             }
+            gemma_offset = abs_match_end.max(abs_start + 1);
         }
 
         // 3. Try Groq / Llama 3 / open models function-call format: <function=name>{...}</function> or <function=name>(...)
@@ -99,7 +138,10 @@ impl PolyglotParser {
             let abs_start = search_offset + rel_start;
             if let Some((name, args_str, raw_segment)) = Self::extract_single_function_call(&text[abs_start..]) {
                 match Self::repair_and_parse_json(&args_str) {
-                    Ok(args) => calls.push(ToolCall { name, args }),
+                    Ok(args) => {
+                        debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted function call '{}'", name);
+                        calls.push(ToolCall { name, args });
+                    }
                     Err(e) => last_error = Some(e),
                 }
                 search_offset = abs_start + raw_segment.len().max(1);
@@ -110,20 +152,32 @@ impl PolyglotParser {
 
         // 4. Fallback: Bare call format (only if no calls found yet to avoid false positives)
         if calls.is_empty() {
-            for cap in BARE_CALL_REGEX.captures_iter(text) {
-                let name = cap
-                    .get(1)
-                    .map(|m| m.as_str().to_string())
-                    .unwrap_or_default();
-                let args_raw = cap.get(2).map(|m| m.as_str()).unwrap_or("{}");
-                match Self::repair_and_parse_json(args_raw) {
-                    Ok(args) => calls.push(ToolCall { name, args }),
-                    Err(e) => last_error = Some(e),
+            let mut bare_offset = 0;
+            while let Some(cap) = BARE_CALL_PREFIX_REGEX.captures(&text[bare_offset..]) {
+                let rel_start = cap.get(0).unwrap().start();
+                let abs_start = bare_offset + rel_start;
+                let abs_match_end = bare_offset + cap.get(0).unwrap().end();
+                let name = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+
+                if let Some((brace_start, brace_end)) = Self::scan_balanced_object(text, abs_match_end) {
+                    if text[abs_match_end..brace_start].trim().is_empty() {
+                        let args_raw = &text[brace_start..brace_end];
+                        match Self::repair_and_parse_json(args_raw) {
+                            Ok(args) => {
+                                debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted bare call '{}'", name);
+                                calls.push(ToolCall { name, args });
+                            }
+                            Err(e) => last_error = Some(e),
+                        }
+                        bare_offset = brace_end.max(abs_start + 1);
+                        continue;
+                    }
                 }
+                bare_offset = abs_match_end.max(abs_start + 1);
             }
         }
 
-        // 4. Recovery: Hallucinated <execute_tool> format
+        // 5. Recovery: Hallucinated <execute_tool> format
         for cap in EXECUTE_TOOL_REGEX.captures_iter(text) {
             let name_raw = cap.get(1).map(|m| m.as_str().trim()).unwrap_or_default();
             let input_raw = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
@@ -137,182 +191,83 @@ impl PolyglotParser {
                 input_raw
             };
 
-            // If the name is 'execute_tool' or 'execute_command', the real tool name is likely inside the JSON
-            if name_raw == "execute_tool" || name_raw == "execute_command" {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    // Try to find the real name in the inner object first
-                    let inner_name = v
-                        .get("tool_args")
-                        .or(v.get("params"))
-                        .or(v.get("tool_input"))
-                        .and_then(|i| {
-                            i.get("tool_name")
-                                .or(i.get("command"))
-                                .or(i.get("function"))
-                        })
-                        .and_then(|n| n.as_str());
-
-                    let real_name = inner_name.or_else(|| {
-                        let n = v
-                            .get("tool_name")
-                            .or(v.get("command"))
-                            .or(v.get("function"))
-                            .and_then(|n| n.as_str());
-                        // If it's the same as name_raw, it's not the "real" name we want
-                        if n == Some(name_raw) {
-                            None
-                        } else {
-                            n
-                        }
-                    });
-
-                    let real_args = v
-                        .get("tool_args")
-                        .or(v.get("params"))
-                        .or(v.get("tool_input"))
-                        .map(|i| {
-                            // If we found an inner name, the other fields in this object are likely the args
-                            let mut args = i.clone();
-                            if let Some(obj) = args.as_object_mut() {
-                                obj.remove("tool_name");
-                                obj.remove("command");
-                                obj.remove("function");
-                            }
-                            args
-                        })
-                        .or_else(|| v.get("arguments").cloned());
-
-                    if let Some(name) = real_name {
-                        calls.push(ToolCall {
-                            name: name.to_string(),
-                            args: real_args.unwrap_or_else(|| serde_json::json!({})),
-                        });
-                        continue;
-                    }
+            // First attempt to parse directly or unwrap wrapper
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(call) = Self::unwrap_wrapper(&v) {
+                    debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted execute_tool call '{}' via unwrap_wrapper", call.name);
+                    calls.push(call);
+                    continue;
                 }
             }
 
-            if let Ok(args) = Self::repair_and_parse_json(json_str) {
-                calls.push(ToolCall {
-                    name: name_raw.to_string(),
-                    args,
-                });
+            // Fallback: use name_raw if valid identifier
+            if WORD_PATTERN.is_match(name_raw) {
+                if let Ok(args) = Self::repair_and_parse_json(json_str) {
+                    calls.push(ToolCall {
+                        name: name_raw.to_string(),
+                        args,
+                    });
+                }
             }
         }
 
-        // 5. Last Resort: Scan for any JSON blocks and check if they look like tool calls
+        // 6. Last Resort: Scan for fenced JSON blocks with intent prefixes
         if calls.is_empty() {
-            // Find blocks starting with { and ending with }
             let mut start = 0;
-            while let Some(open) = text[start..].find('{') {
-                let open_idx = start + open;
-                let mut balance = 0;
-                let mut close_idx = None;
-                for (byte_offset, c) in text[open_idx..].char_indices() {
-                    if c == '{' {
-                        balance += 1;
-                    } else if c == '}' {
-                        balance -= 1;
-                    }
-                    if balance == 0 {
-                        close_idx = Some(open_idx + byte_offset + c.len_utf8());
-                        break;
-                    }
-                }
+            while let Some((open_idx, end)) = Self::scan_balanced_object(text, start) {
+                let prefix_trimmed = text[..open_idx].trim_end();
+                let suffix_trimmed = text[end..].trim_start();
+                let is_in_fence = (prefix_trimmed.ends_with("```json") || prefix_trimmed.ends_with("```"))
+                    || suffix_trimmed.starts_with("```");
+                let has_intent_prefix = prefix_trimmed.ends_with("Action:")
+                    || prefix_trimmed.ends_with("Action Plan:")
+                    || prefix_trimmed.ends_with("tool_call:")
+                    || prefix_trimmed.ends_with("invoke:")
+                    || prefix_trimmed.ends_with("tool_name:")
+                    || prefix_trimmed.ends_with("Execute:");
 
-                if let Some(end) = close_idx {
-                    let prefix_trimmed = text[..open_idx].trim_end();
-                    let suffix_trimmed = text[end..].trim_start();
-                    let is_in_fence = (prefix_trimmed.ends_with("```json") || prefix_trimmed.ends_with("```"))
-                        || suffix_trimmed.starts_with("```");
-                    let has_intent_prefix = prefix_trimmed.ends_with("Action:")
-                        || prefix_trimmed.ends_with("Action Plan:")
-                        || prefix_trimmed.ends_with("tool_call:")
-                        || prefix_trimmed.ends_with("invoke:")
-                        || prefix_trimmed.ends_with("tool_name:")
-                        || prefix_trimmed.ends_with("Execute:");
-
-                    if is_in_fence || has_intent_prefix {
-                        let potential_json = &text[open_idx..end];
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(potential_json) {
-                            let name_raw = v
-                                .get("tool_name")
-                                .or_else(|| v.get("command"))
-                                .and_then(|n| n.as_str())
-                                .unwrap_or_default();
-
-                            if !name_raw.is_empty() {
-                                // Handle Wrappers
-                                if name_raw == "execute_tool" || name_raw == "execute_command" {
-                                    let inner_name = v
-                                        .get("tool_args")
-                                        .or(v.get("params"))
-                                        .or(v.get("tool_input"))
-                                        .and_then(|i| {
-                                            i.get("tool_name")
-                                                .or(i.get("command"))
-                                                .or(i.get("function"))
-                                        })
-                                        .and_then(|n| n.as_str());
-
-                                    let real_name = inner_name.or_else(|| {
-                                        let n = v
-                                            .get("tool_name")
-                                            .or(v.get("command"))
-                                            .or(v.get("function"))
-                                            .and_then(|n| n.as_str());
-                                        if n == Some(name_raw) {
-                                            None
-                                        } else {
-                                            n
-                                        }
-                                    });
-
-                                    let real_args = v
-                                        .get("tool_args")
-                                        .or(v.get("params"))
-                                        .or(v.get("tool_input"))
-                                        .cloned()
-                                        .or_else(|| v.get("arguments").cloned());
-
-                                    if let Some(name) = real_name {
-                                        calls.push(ToolCall {
-                                            name: name.to_string(),
-                                            args: real_args.unwrap_or_else(|| serde_json::json!({})),
-                                        });
-                                    } else {
-                                        calls.push(ToolCall {
-                                            name: name_raw.to_string(),
-                                            args: real_args.unwrap_or_else(|| serde_json::json!({})),
-                                        });
-                                    }
-                                } else {
-                                    let args = v
-                                        .get("tool_input")
-                                        .or_else(|| v.get("tool_args"))
-                                        .or_else(|| v.get("params"))
-                                        .cloned()
-                                        .unwrap_or_else(|| {
-                                            let mut obj = v.clone();
-                                            if let Some(map) = obj.as_object_mut() {
-                                                map.remove("tool_name");
-                                                map.remove("command");
-                                            }
-                                            obj
-                                        });
-                                    calls.push(ToolCall {
-                                        name: name_raw.to_string(),
-                                        args,
-                                    });
-                                }
-                            }
+                if is_in_fence || has_intent_prefix {
+                    let potential_json = &text[open_idx..end];
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(potential_json) {
+                        if let Some(call) = Self::tool_call_from_value(&v) {
+                            debug!(target: "server_rs::agent::runner::parser", "[parser] Extracted tool call '{}' from last-resort scan", call.name);
+                            calls.push(call);
                         }
                     }
-                    start = end;
-                } else {
-                    break;
+                }
+                start = end;
+            }
+        }
+
+        // 7. Recovery: Truncated tool call at EOF (unclosed tag due to model token limit)
+        if calls.is_empty() {
+            let tags = ["<tool_call>", "<invoke_tool>", "<|tool_call|>"];
+            for tag in tags {
+                if let Some(idx) = text.rfind(tag) {
+                    let remainder = text[idx + tag.len()..].trim();
+                    if !remainder.is_empty() && (remainder.starts_with('{') || remainder.starts_with("call:")) {
+                        debug!(target: "server_rs::agent::runner::parser", "[parser] Attempting recovery of unclosed EOF tag '{}'", tag);
+                        if let Ok(call) = Self::parse_json_call(remainder) {
+                            info!(target: "server_rs::agent::runner::parser", "[parser] Successfully salvaged truncated EOF tool call '{}'", call.name);
+                            calls.push(call);
+                            break;
+                        }
+                    }
                 }
             }
+        }
+
+        // Deduplicate across extraction formats to prevent double-execution
+        let initial_count = calls.len();
+        let mut seen = std::collections::HashSet::new();
+        calls.retain(|c| seen.insert((c.name.clone(), c.args.to_string())));
+        if calls.len() < initial_count {
+            warn!(
+                target: "server_rs::agent::runner::parser",
+                "[parser] Deduplicated {} redundant tool call(s) across formats (kept {})",
+                initial_count - calls.len(),
+                calls.len()
+            );
         }
 
         if calls.is_empty() {
@@ -324,27 +279,66 @@ impl PolyglotParser {
         Ok(calls)
     }
 
+    /// Accurately scans for a balanced JSON object starting at or after `start`.
+    /// Tracks string literals and escape characters to ignore curly braces inside quotes.
+    /// Returns `Some((open_brace_idx, close_brace_idx_exclusive))`.
+    pub(crate) fn scan_balanced_object(s: &str, start: usize) -> Option<(usize, usize)> {
+        let bytes = s.as_bytes();
+        let open_idx = bytes[start..].iter().position(|&b| b == b'{')? + start;
+        let mut depth: usize = 0;
+        let mut in_string = false;
+        let mut escape = false;
+
+        for (i, &b) in bytes[open_idx..].iter().enumerate() {
+            if in_string {
+                if escape {
+                    escape = false;
+                } else if b == b'\\' {
+                    escape = true;
+                } else if b == b'"' {
+                    in_string = false;
+                }
+            } else {
+                match b {
+                    b'"' => in_string = true,
+                    b'{' => depth += 1,
+                    b'}' => {
+                        if depth > 0 {
+                            depth -= 1;
+                            if depth == 0 {
+                                return Some((open_idx, open_idx + i + 1));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        None
+    }
+
     /// Attempts to parse a JSON object representing a tool call (name + arguments).
     fn parse_json_call(json_str: &str) -> ParserResult<ToolCall> {
         let trimmed = json_str.trim();
 
-        // 1. Try standard JSON object tool call parsing
-        let repaired = Self::repair_json(trimmed);
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&repaired) {
-            let name = v
-                .get("name")
-                .and_then(|n| n.as_str())
-                .map(|s| s.to_string());
-            let args = v
-                .get("arguments")
-                .cloned()
-                .unwrap_or_else(|| serde_json::json!({}));
-            if let Some(name) = name {
-                return Ok(ToolCall { name, args });
+        // 1. Try standard JSON object tool call parsing WITHOUT heuristic repair first
+        // (Heuristic repair with regexes is lossy and corrupts valid code strings)
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(call) = Self::tool_call_from_value(&v) {
+                return Ok(call);
             }
         }
 
-        // 2. Try parsing as bare call format (e.g. call:name{...} or name{...}) inside XML tags
+        // 2. Try parsing with heuristic JSON repair as fallback
+        let repaired = Self::repair_json(trimmed);
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&repaired) {
+            if let Some(call) = Self::tool_call_from_value(&v) {
+                debug!(target: "server_rs::agent::runner::parser", "[parser] Repaired malformed JSON for call '{}'", call.name);
+                return Ok(call);
+            }
+        }
+
+        // 3. Try parsing as bare call format (e.g. call:name{...} or name{...}) inside XML tags
         if let Some(cap) = BARE_PATTERN.captures(trimmed) {
             let name = cap
                 .get(1)
@@ -352,11 +346,13 @@ impl PolyglotParser {
                 .unwrap_or_default();
             let args_raw = cap.get(2).map(|m| m.as_str()).unwrap_or("{}");
             if let Ok(args) = Self::repair_and_parse_json(args_raw) {
-                return Ok(ToolCall { name, args });
+                if WORD_PATTERN.is_match(&name) {
+                    return Ok(ToolCall { name, args });
+                }
             }
         }
 
-        // 3. Try parsing as a single word representing a tool name with no arguments
+        // 4. Try parsing as a single word representing a tool name with no arguments
         if WORD_PATTERN.is_match(trimmed) {
             return Ok(ToolCall {
                 name: trimmed.to_string(),
@@ -364,42 +360,231 @@ impl PolyglotParser {
             });
         }
 
-        // 4. Return the original JSON error if everything else failed
-        let repaired = Self::repair_json(trimmed);
+        // 5. Return the original JSON error if everything else failed
         match serde_json::from_str::<serde_json::Value>(&repaired) {
             Ok(_) => Err(ParserError::MissingName),
             Err(e) => Err(ParserError::InvalidJson(e.to_string())),
         }
     }
 
+    /// Extracts a ToolCall from a serde_json::Value, handling standard schemas, flat arguments, and wrappers.
+    fn tool_call_from_value(v: &serde_json::Value) -> Option<ToolCall> {
+        // Direct name field: {"name": "...", "arguments": ...}
+        if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
+            if !WORD_PATTERN.is_match(name) {
+                trace!(target: "server_rs::agent::runner::parser", "[parser] Rejected invalid tool name '{}'", name);
+                return None;
+            }
+            let args = if let Some(arguments) = v.get("arguments") {
+                if let Some(s) = arguments.as_str() {
+                    serde_json::from_str(s).unwrap_or_else(|_| arguments.clone())
+                } else {
+                    arguments.clone()
+                }
+            } else if let Some(args) = v.get("args").or_else(|| v.get("parameters")).or_else(|| v.get("input")) {
+                args.clone()
+            } else {
+                // Flat arguments: take all fields except "name"
+                let mut map = serde_json::Map::new();
+                if let Some(obj) = v.as_object() {
+                    for (k, val) in obj {
+                        if k != "name" {
+                            map.insert(k.clone(), val.clone());
+                        }
+                    }
+                }
+                serde_json::Value::Object(map)
+            };
+            return Some(ToolCall {
+                name: name.to_string(),
+                args,
+            });
+        }
+
+        // Wrapper format: execute_tool / execute_command or {"tool_name": "..."}
+        Self::unwrap_wrapper(v)
+    }
+
+    /// Extracts a normalized ToolCall from a JSON value that might be wrapped in execute_tool / execute_command structures.
+    fn unwrap_wrapper(v: &serde_json::Value) -> Option<ToolCall> {
+        let name_candidate = v
+            .get("tool_name")
+            .or_else(|| v.get("command"))
+            .or_else(|| v.get("name"))
+            .or_else(|| v.get("action"))
+            .and_then(|n| n.as_str())?;
+
+        let is_wrapper = name_candidate == "execute_tool" || name_candidate == "execute_command";
+
+        let (final_name, raw_args) = if is_wrapper {
+            let inner_obj = v
+                .get("tool_args")
+                .or_else(|| v.get("params"))
+                .or_else(|| v.get("tool_input"))
+                .or_else(|| v.get("input"));
+
+            let inner_name = inner_obj
+                .and_then(|i| {
+                    i.get("tool_name")
+                        .or_else(|| i.get("command"))
+                        .or_else(|| i.get("function"))
+                        .or_else(|| i.get("name"))
+                        .or_else(|| i.get("action"))
+                })
+                .and_then(|n| n.as_str());
+
+            let real_name = match inner_name {
+                Some(n) if n != name_candidate => n,
+                _ => {
+                    let n = v
+                        .get("tool_name")
+                        .or_else(|| v.get("command"))
+                        .or_else(|| v.get("function"))
+                        .and_then(|n| n.as_str());
+                    if n == Some(name_candidate) {
+                        inner_name.unwrap_or(name_candidate)
+                    } else {
+                        n.unwrap_or(name_candidate)
+                    }
+                }
+            };
+
+            let real_args = inner_obj
+                .map(|i| {
+                    let mut args = i.clone();
+                    if let Some(obj) = args.as_object_mut() {
+                        obj.remove("tool_name");
+                        obj.remove("command");
+                        obj.remove("function");
+                        obj.remove("name");
+                        obj.remove("action");
+                    }
+                    args
+                })
+                .or_else(|| v.get("arguments").cloned())
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            (real_name, real_args)
+        } else {
+            let args = v
+                .get("tool_input")
+                .or_else(|| v.get("tool_args"))
+                .or_else(|| v.get("params"))
+                .or_else(|| v.get("arguments"))
+                .or_else(|| v.get("input"))
+                .cloned()
+                .unwrap_or_else(|| {
+                    let mut obj = v.clone();
+                    if let Some(map) = obj.as_object_mut() {
+                        map.remove("tool_name");
+                        map.remove("command");
+                        map.remove("name");
+                        map.remove("action");
+                    }
+                    obj
+                });
+            (name_candidate, args)
+        };
+
+        if !WORD_PATTERN.is_match(final_name) {
+            trace!(target: "server_rs::agent::runner::parser", "[parser] Rejected invalid tool name '{}'", final_name);
+            return None;
+        }
+
+        Some(ToolCall {
+            name: final_name.to_string(),
+            args: raw_args,
+        })
+    }
+
     /// Repairs and parses a raw JSON arguments object.
     fn repair_and_parse_json(json_str: &str) -> ParserResult<serde_json::Value> {
-        let repaired = Self::repair_json(json_str);
+        let trimmed = json_str.trim();
+        // Try raw parse first without repair to avoid corrupting valid code strings
+        if let Ok(v) = serde_json::from_str(trimmed) {
+            return Ok(v);
+        }
+        let repaired = Self::repair_json(trimmed);
         serde_json::from_str(&repaired).map_err(|e| ParserError::InvalidJson(e.to_string()))
     }
 
-    /// Performs heuristic repair on malformed JSON strings.
+    /// Performs heuristic and structural repair on malformed or truncated JSON strings.
     /// - Adds quotes to unquoted keys.
     /// - Removes trailing commas.
-    /// - Normalizes single quotes to double quotes.
+    /// - Closes unclosed string literals truncated at EOF.
+    /// - Resolves trailing colons by appending `null`.
+    /// - Balances unclosed object and array brackets in LIFO order.
     pub fn repair_json(json_str: &str) -> String {
         let mut s = json_str.trim().to_string();
+        if s.is_empty() {
+            return "{}".to_string();
+        }
 
-        // 1. Normalize quotes: replace single quotes with double quotes (dangerous but often needed)
-        // Only if it looks like it's being used for keys or strings.
-        // For simplicity, we'll skip complex quote normalization and focus on unquoted keys.
-
-        // 2. Fix unquoted keys: { key: "value" } -> { "key": "value" }
+        // 1. Fix unquoted keys: { key: "value" } -> { "key": "value" }
         s = KEY_REGEX.replace_all(&s, r#"$1"$2":"#).to_string();
 
-        // 3. Remove trailing commas: [1, 2,] -> [1, 2]
+        // 2. Remove trailing commas before existing closing brackets: [1, 2,] -> [1, 2]
         s = COMMA_REGEX.replace_all(&s, r"$1").to_string();
 
-        // 4. Ensure brackets are balanced (basic healing)
-        if s.starts_with('{') && !s.ends_with('}') {
-            s.push('}');
+        // 3. Structural repair for truncated JSON:
+        let mut in_string = false;
+        let mut escape = false;
+        let mut stack = Vec::new();
+
+        for c in s.chars() {
+            if in_string {
+                if escape {
+                    escape = false;
+                } else if c == '\\' {
+                    escape = true;
+                } else if c == '"' {
+                    in_string = false;
+                }
+            } else {
+                match c {
+                    '"' => in_string = true,
+                    '{' => stack.push('}'),
+                    '[' => stack.push(']'),
+                    '}' => {
+                        if let Some(pos) = stack.iter().rposition(|&x| x == '}') {
+                            stack.remove(pos);
+                        }
+                    }
+                    ']' => {
+                        if let Some(pos) = stack.iter().rposition(|&x| x == ']') {
+                            stack.remove(pos);
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
-        if !s.starts_with('{') && s.ends_with('}') {
+
+        // If string was truncated mid-quote, close the quote
+        if in_string {
+            s.push('"');
+        }
+
+        // Remove any dangling trailing commas or colons before closing
+        let mut trimmed_end = s.trim_end().to_string();
+        while trimmed_end.ends_with(',') || trimmed_end.ends_with(':') {
+            if trimmed_end.ends_with(':') {
+                trimmed_end.push_str(" null");
+                break;
+            } else if trimmed_end.ends_with(',') {
+                trimmed_end.pop();
+                trimmed_end = trimmed_end.trim_end().to_string();
+            }
+        }
+        s = trimmed_end;
+
+        // Close any remaining unclosed brackets in LIFO order
+        while let Some(closing_bracket) = stack.pop() {
+            s.push(closing_bracket);
+        }
+
+        // If string didn't start with { or [ but ended with }, heal the start
+        if !s.starts_with('{') && !s.starts_with('[') && s.ends_with('}') {
             s.insert(0, '{');
         }
 
@@ -414,24 +599,15 @@ impl PolyglotParser {
         let match_start = start_match.get(0)?.start();
         let start_search_idx = start_match.get(0)?.end();
 
-        // Find the first '{' after the tag start
-        let brace_start = s[start_search_idx..].find('{')? + start_search_idx;
+        // Find the balanced '{...}' after the tag start using the string-aware scanner
+        let (brace_start, brace_end) = Self::scan_balanced_object(s, start_search_idx)?;
 
-        let mut brace_count = 0;
-        let mut brace_end = None;
-        for (i, c) in s[brace_start..].char_indices() {
-            if c == '{' {
-                brace_count += 1;
-            } else if c == '}' {
-                brace_count -= 1;
-                if brace_count == 0 {
-                    brace_end = Some(brace_start + i + 1);
-                    break;
-                }
-            }
+        // Ensure the separator between function name and opening brace is only '>', '(', whitespace, or combinations
+        let sep = s[start_search_idx..brace_start].trim();
+        if !sep.is_empty() && sep != ">" && sep != ">(" && sep != "(" {
+            return None;
         }
 
-        let brace_end = brace_end?;
         let args_json = &s[brace_start..brace_end];
 
         // Find the end of the entire matched segment including optional </function> or >
@@ -458,9 +634,36 @@ impl PolyglotParser {
     pub fn scrub_tool_calls(text: &str) -> String {
         let mut s = text.to_string();
         s = XML_TOOL_REGEX.replace_all(&s, "").to_string();
-        s = GEMMA_TOOL_REGEX.replace_all(&s, "").to_string();
-        s = BARE_CALL_REGEX.replace_all(&s, "").to_string();
         s = EXECUTE_TOOL_REGEX.replace_all(&s, "").to_string();
+
+        // Scrub Gemma calls
+        while let Some(cap) = GEMMA_PREFIX_REGEX.captures(&s) {
+            let start = cap.get(0).unwrap().start();
+            let after_name = cap.get(0).unwrap().end();
+            if let Some((_, brace_end)) = Self::scan_balanced_object(&s, after_name) {
+                let mut end = brace_end;
+                let lookahead = &s[brace_end..];
+                if lookahead.starts_with("<|tool_call|>") {
+                    end += "<|tool_call|>".len();
+                } else if lookahead.starts_with("<tool_call|>") {
+                    end += "<tool_call|>".len();
+                }
+                s.replace_range(start..end, "");
+            } else {
+                break;
+            }
+        }
+
+        // Scrub bare calls
+        while let Some(cap) = BARE_CALL_PREFIX_REGEX.captures(&s) {
+            let start = cap.get(0).unwrap().start();
+            let after_name = cap.get(0).unwrap().end();
+            if let Some((_, brace_end)) = Self::scan_balanced_object(&s, after_name) {
+                s.replace_range(start..brace_end, "");
+            } else {
+                break;
+            }
+        }
 
         // Scrub all function tag call blocks
         while let Some((_, _, raw)) = Self::extract_single_function_call(&s) {
@@ -613,6 +816,114 @@ mod tests {
         let calls = PolyglotParser::extract(input).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "list_files");
+    }
+
+    #[test]
+    fn test_repair_truncated_json_string() {
+        let input = r#"{"name": "test", "args": {"code": "print(1)"#;
+        let repaired = PolyglotParser::repair_json(input);
+        let val: serde_json::Value = serde_json::from_str(&repaired).expect("Should parse healed JSON");
+        assert_eq!(val["name"], "test");
+        assert_eq!(val["args"]["code"], "print(1)");
+    }
+
+    #[test]
+    fn test_repair_truncated_json_array() {
+        let input = r#"{"items": [1, 2,"#;
+        let repaired = PolyglotParser::repair_json(input);
+        let val: serde_json::Value = serde_json::from_str(&repaired).expect("Should parse healed JSON");
+        assert_eq!(val["items"], serde_json::json!([1, 2]));
+    }
+
+    #[test]
+    fn test_repair_truncated_json_trailing_colon() {
+        let input = r#"{"name": "run", "args":"#;
+        let repaired = PolyglotParser::repair_json(input);
+        let val: serde_json::Value = serde_json::from_str(&repaired).expect("Should parse healed JSON");
+        assert_eq!(val["name"], "run");
+        assert!(val["args"].is_null());
+    }
+
+    #[test]
+    fn test_valid_json_with_code_string_not_corrupted() {
+        let input = r#"<tool_call>{"name": "write_file", "arguments": {"path": "a.rs", "content": "struct S { name: String } // note, ref: cell"}}</tool_call>"#;
+        let calls = PolyglotParser::extract(input).expect("Valid JSON with Rust struct code must not be corrupted by repair_json");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "write_file");
+        let content = calls[0].args["content"].as_str().unwrap();
+        assert!(content.contains("struct S { name: String }"));
+    }
+
+    #[test]
+    fn test_scan_balanced_object_nested_and_strings() {
+        let input = r#"<function=filter>{"pattern": "}", "depth": 2, "options": {"enabled": true}}</function>"#;
+        let calls = PolyglotParser::extract(input).expect("String literal containing closing brace must not truncate arguments");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "filter");
+        assert_eq!(calls[0].args["pattern"], "}");
+        assert_eq!(calls[0].args["depth"], 2);
+        assert_eq!(calls[0].args["options"]["enabled"], true);
+    }
+
+    #[test]
+    fn test_gemma_nested_json() {
+        let input = r#"I will call tool. <|tool_call|>call:configure{"network": {"proxy": "http://127.0.0.1:8080", "retry": 3}, "active": true}<|tool_call|>"#;
+        let calls = PolyglotParser::extract(input).expect("Gemma call with nested JSON must not be truncated at the first brace");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "configure");
+        assert_eq!(calls[0].args["network"]["retry"], 3);
+        assert_eq!(calls[0].args["active"], true);
+    }
+
+    #[test]
+    fn test_wrapper_stale_args_stripped_and_validated() {
+        let input = r#"Action Plan: ```json { "tool_name": "execute_command", "tool_args": { "command": "recruit", "agent_id": "2", "depth": 1 } } ```"#;
+        let calls = PolyglotParser::extract(input).expect("Execute command wrapper should be resolved");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "recruit");
+        assert!(calls[0].args.get("command").is_none(), "command wrapper field must be pruned from tool args");
+        assert!(calls[0].args.get("tool_name").is_none(), "tool_name wrapper field must be pruned from tool args");
+        assert_eq!(calls[0].args["agent_id"], "2");
+        assert_eq!(calls[0].args["depth"], 1);
+    }
+
+    #[test]
+    fn test_wrapper_invalid_tool_name_rejected() {
+        let input = r#"Action Plan: ```json { "tool_name": "execute_command", "tool_args": { "command": "rm -rf /", "target": "root" } } ```"#;
+        let res = PolyglotParser::extract(input);
+        assert!(res.is_err(), "Non-identifier tool names with spaces or operators must be rejected");
+    }
+
+    #[test]
+    fn test_cross_format_dedup() {
+        let input = r#"
+        <tool_call>{"name": "reboot", "arguments": {"force": true}}</tool_call>
+        <execute_tool>
+          <tool_name>reboot</tool_name>
+          <tool_input>{"force": true}</tool_input>
+        </execute_tool>
+        "#;
+        let calls = PolyglotParser::extract(input).expect("Should extract tool call");
+        assert_eq!(calls.len(), 1, "Duplicate tool call across XML and wrapper formats must be collapsed into one");
+    }
+
+    #[test]
+    fn test_truncated_xml_tag_at_eof_salvaged() {
+        let input = r#"I will execute search now. <tool_call>{"name": "find_file", "arguments": {"pattern": "main.rs"#;
+        let calls = PolyglotParser::extract(input).expect("Truncated tool call at EOF without closing tag must be salvaged");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "find_file");
+        assert_eq!(calls[0].args["pattern"], "main.rs");
+    }
+
+    #[test]
+    fn test_flat_arguments_fallback() {
+        let input = r#"<tool_call>{"name": "get_weather", "location": "Paris", "units": "celsius"}</tool_call>"#;
+        let calls = PolyglotParser::extract(input).expect("Flat arguments must be preserved in args dictionary");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "get_weather");
+        assert_eq!(calls[0].args["location"], "Paris");
+        assert_eq!(calls[0].args["units"], "celsius");
     }
 }
 

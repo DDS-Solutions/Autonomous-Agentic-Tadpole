@@ -456,13 +456,11 @@ pub async fn get_security_quotas(
     let mut total_budget = 0.0;
     let mut total_spent = 0.0;
 
-    tracing::debug!("📊 [Oversight] Calculating global budget from {} agents", state.registry.agents.len());
     for entry in state.registry.agents.iter() {
         total_budget += entry.value().economics.budget_usd;
         total_spent += entry.value().economics.cost_usd;
     }
 
-    tracing::debug!("📊 [Oversight] Fetching quotas from budget_guard...");
     let agent_quotas: Vec<crate::security::metering::Quota> = state
         .security
         .budget_guard
@@ -470,10 +468,8 @@ pub async fn get_security_quotas(
         .await
         .unwrap_or_default();
 
-    tracing::debug!("📊 [Oversight] Gathering system defense stats...");
     let system_defense = state.security.system_monitor.get_system_defense_stats();
     
-    tracing::debug!("📊 [Oversight] Verifying audit trail integrity...");
     let merkle_integrity = match state.security.audit_trail.verify_last_n(10, None).await {
          Ok((v, t)) if t > 0 => (v as f64 / t as f64).min(1.0),
          Ok(_) => 1.0,
@@ -483,7 +479,13 @@ pub async fn get_security_quotas(
          }
     };
 
-    tracing::debug!("📊 [Oversight] Budget: ${} / ${} (Remaining: ${})", total_spent, total_budget, total_budget - total_spent);
+    tracing::debug!(
+        agents = state.registry.agents.len(),
+        total_spent = total_spent,
+        total_budget = total_budget,
+        remaining = total_budget - total_spent,
+        "📊 [Oversight] Quotas evaluated"
+    );
 
     Ok(Json(serde_json::json!({
         "total_budget": total_budget,
@@ -683,7 +685,8 @@ pub async fn get_agent_health(
                 "status": agent.health.status,
                 "failure_count": agent.health.failure_count,
                 "last_failure_at": agent.health.last_failure_at,
-                "is_healthy": agent.health.failure_count < 5,
+                "is_healthy": agent.health.failure_count < 5 && agent.health.status != "suspended",
+                "is_suspended": agent.health.status == "suspended",
                 "is_throttled": agent.health.failure_count >= 3,
                 "is_bankrupt": agent.economics.cost_usd >= agent.economics.budget_usd && agent.economics.budget_usd > 0.0,
             })
@@ -738,8 +741,8 @@ pub async fn update_policy(
     };
 
     sqlx::query(
-        "INSERT INTO permission_policies (tool_name, mode) VALUES (?, ?) 
-                 ON CONFLICT(tool_name) DO UPDATE SET mode = excluded.mode",
+        "INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, NULL, ?) 
+                 ON CONFLICT(tool_name, agent_id) DO UPDATE SET mode = excluded.mode",
     )
     .bind(&payload.tool_name)
     .bind(mode_str)

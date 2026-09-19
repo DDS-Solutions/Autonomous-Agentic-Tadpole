@@ -32,4 +32,20 @@ export const get_entry_time = (entry: LedgerEntry): number => (
     get_safe_date(entry, new Date())?.getTime() ?? 0
 );
 
+/**
+ * Helper to determine if a skill or tool call represents a parent delegation directive
+ * coordinating complex multi-agent flows across the swarm hierarchy.
+ */
+export const is_parent_delegation_directive = (skill_or_tool?: string): boolean => {
+    if (!skill_or_tool) return false;
+    const s = skill_or_tool.toLowerCase().trim();
+    return (
+        s === 'issue_alpha_directive' ||
+        s === 'spawn_subagent' ||
+        s === 'send_mission_directive' ||
+        s === 'recruit_specialist' ||
+        s === 'recruit'
+    );
+};
+
 // Metadata: [oversight_utils]

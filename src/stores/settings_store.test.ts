@@ -194,6 +194,7 @@ describe('settings_store', () => {
         
         expect(is_valid_api_key('tadpole-dev-token-2026')).toBe(true);
         expect(is_valid_api_key('tadpole-os-sidecar-default-2026')).toBe(true);
+        expect(is_valid_api_key('Tadpole-OS-2026')).toBe(true);
     });
 
     it('applies symmetric sanitization in update_setting', async () => {

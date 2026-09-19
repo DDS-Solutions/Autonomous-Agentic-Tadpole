@@ -5,12 +5,13 @@
     "role": "CEO",
     "department": "Executive",
     "description": "The primary strategic intelligence and sovereign kernel authority.",
-    "model": "Gemini 2.5 Pro",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-pro",
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
       "systemPrompt": "### SOVEREIGN ROUTER PROTOCOL (ZERO DIRECT EXECUTION)\n1. You are the Sovereign CEO (Agent 1). You do NOT have host-level tools, hardware registers, system clocks, or direct execution access.\n2. You are STRICTLY FORBIDDEN from attempting to answer operational, factual, temporal, filesystem, or technical queries yourself.\n3. NEVER emit bracketed placeholders (e.g. `[Current System Time]`) or claim to access native system clocks.\n4. For ANY query requiring real-world state, time, file reading, code inspection, or execution, your SOLE valid action is calling `issue_alpha_directive` to hand off to Tadpole Alpha (Agent 2):\n   issue_alpha_directive(directive=\"User requested current date and time verification. Query native clock and report back.\")\n",
-      "temperature": 0.7
+      "temperature": 0.7,
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -26,7 +27,10 @@
       "View Logs"
     ],
     "workflows": [],
-    "status": "idle"
+    "status": "idle",
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "2",
@@ -34,32 +38,41 @@
     "role": "COO (Operations Director)",
     "department": "Operations",
     "description": "Chief Operations Officer. Orchestrates multi-agent swarm missions, recruits specialists, and synthesizes operational results into final reports.",
-    "model": "Gemini 2.5 Flash",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-flash"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "complete_mission",
-      "recruit",
       "spawn_subagent",
-      "fetch_url",
+      "recruit",
+      "complete_mission",
       "read_file",
       "write_file",
       "list_files",
-      "get_file_contents",
       "grep_search",
-      "get_agent_metrics",
-      "query_financial_logs",
+      "get_current_time",
+      "fetch_url",
+      "search_web",
+      "share_finding",
+      "send_mission_directive",
       "search_mission_knowledge",
       "update_working_memory",
-      "parity_guard",
-      "verify_ai_context",
-      "security_scan",
-      "get_current_time"
+      "execution"
     ],
-    "workflows": []
+    "workflows": [
+      "resource_allocation",
+      "ops_review",
+      "orchestrate",
+      "ci_cd_pipeline",
+      "sprint_planning",
+      "codebase_health_mission"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "3",
@@ -67,20 +80,37 @@
     "role": "CTO",
     "department": "Engineering",
     "description": "Chief Technical Officer and architecture validator.",
-    "model": "Gemma 4 (Local)",
+    "model": "gemma4:e4b",
     "model_config": {
       "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "code_review",
-      "debug"
+      "read_file",
+      "write_file",
+      "list_files",
+      "grep_search",
+      "get_symbol_context",
+      "get_impacted_tests",
+      "get_current_time",
+      "share_finding",
+      "parity_guard",
+      "verify_ai_context",
+      "cargo_fast_check",
+      "execution"
     ],
     "workflows": [
       "system_architecture_review",
-      "incident_response"
-    ]
+      "codebase_review",
+      "incident_response",
+      "refactor_microservice",
+      "quality_gate_review"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "4",
@@ -88,10 +118,11 @@
     "role": "CMO",
     "department": "Marketing",
     "description": "Marketing lead and brand voice orchestrator.",
-    "model": "Gemma 4 (Local)",
+    "model": "gemma4:e4b",
     "model_config": {
       "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -101,7 +132,10 @@
     "workflows": [
       "campaign_launch",
       "market_trend_analysis"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "5",
@@ -109,10 +143,11 @@
     "role": "CRO",
     "department": "Sales",
     "description": "Revenue and sales optimization specialist.",
-    "model": "Gemma 4 (Local)",
+    "model": "gemma4:e4b",
     "model_config": {
       "provider": "ollama",
-      "modelId": "gemma4:e4b"
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -122,7 +157,10 @@
     "workflows": [
       "quarterly_forecasting",
       "client_onboarding"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "6",
@@ -130,10 +168,11 @@
     "role": "Product Lead",
     "department": "Product",
     "description": "Product strategy and user-centric architecture lead.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -143,7 +182,10 @@
     "workflows": [
       "sprint_planning",
       "feature_roadmap"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "7",
@@ -151,20 +193,36 @@
     "role": "DevOps",
     "department": "Engineering",
     "description": "Cloud infrastructure and CI/CD automation lead.",
-    "model": "Gemini 2.5 Flash",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-flash"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "check_server_health",
-      "view_logs"
+      "read_file",
+      "list_files",
+      "grep_search",
+      "get_agent_metrics",
+      "get_current_time",
+      "share_finding",
+      "db_health_check",
+      "server_tail",
+      "clean_telemetry_logs",
+      "cargo_fast_check",
+      "execution"
     ],
     "workflows": [
       "pipeline_optimization",
-      "database_migration"
-    ]
+      "database_migration",
+      "server_tailing",
+      "ci_cd_pipeline",
+      "scale_cluster"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "8",
@@ -172,23 +230,38 @@
     "role": "Backend Dev",
     "department": "Engineering",
     "description": "Core backend developer and API architect.",
-    "model": "DeepSeek V3",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "deepseek",
-      "modelId": "deepseek-v3"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "api_test",
-      "database_query",
-      "list_file_symbols",
-      "get_symbol_body",
-      "get_blast_radius"
+      "read_file",
+      "write_file",
+      "list_files",
+      "grep_search",
+      "get_symbol_context",
+      "get_impacted_tests",
+      "get_current_time",
+      "share_finding",
+      "fetch_url",
+      "db_health_check",
+      "backup_sqlite",
+      "cargo_fast_check",
+      "execution"
     ],
     "workflows": [
       "refactor_microservice",
-      "api_documentation"
-    ]
+      "api_documentation",
+      "api_integrity_audit",
+      "database_migration",
+      "ci_cd_pipeline"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "9",
@@ -196,20 +269,30 @@
     "role": "Design Lead",
     "department": "Product",
     "description": "Visual identity and design system curator.",
-    "model": "Gemini 2.5 Pro",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-pro"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
       "generate_image",
-      "ui_audit"
+      "visual_inspect_ui",
+      "read_file",
+      "list_files",
+      "get_current_time",
+      "share_finding",
+      "ui_integrity_audit",
+      "execution"
     ],
     "workflows": [
       "design_system_update",
       "usability_testing"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "10",
@@ -217,10 +300,11 @@
     "role": "Support Lead",
     "department": "Operations",
     "description": "Customer success and incident triage lead.",
-    "model": "GPT-4o Mini",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o-mini"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -230,7 +314,10 @@
     "workflows": [
       "customer_incident_review",
       "support_training"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "11",
@@ -238,10 +325,11 @@
     "role": "Backend Dev",
     "department": "Engineering",
     "description": "Backend specialist focused on database scaling.",
-    "model": "GPT-4o",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -249,7 +337,10 @@
     ],
     "workflows": [
       "refactor_microservice"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "12",
@@ -257,18 +348,33 @@
     "role": "Security Auditor",
     "department": "Engineering",
     "description": "Vulnerability research and security hardening specialist.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "scan_vulnerabilities"
+      "read_file",
+      "list_files",
+      "grep_search",
+      "get_current_time",
+      "share_finding",
+      "security_scan",
+      "mcp_audit",
+      "parity_guard",
+      "verify_ai_context",
+      "execution"
     ],
     "workflows": [
-      "security_audit"
-    ]
+      "security_audit",
+      "compliance_check",
+      "risk_assessment"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "13",
@@ -276,10 +382,11 @@
     "role": "DevOps",
     "department": "Engineering",
     "description": "Infrastructure operations and cluster scaling specialist.",
-    "model": "Gemini 2.5 Flash",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-flash"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -287,7 +394,10 @@
     ],
     "workflows": [
       "scale_cluster"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "14",
@@ -295,10 +405,11 @@
     "role": "Product Manager",
     "department": "Product",
     "description": "Product roadmap and feature prioritization specialist.",
-    "model": "GPT-4o",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -306,7 +417,10 @@
     ],
     "workflows": [
       "sprint_planning"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "15",
@@ -314,10 +428,11 @@
     "role": "Designer",
     "department": "Product",
     "description": "UI/UX designer and asset generation specialist.",
-    "model": "Gemini 2.5 Pro",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "google",
-      "modelId": "gemini-2.5-pro"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -325,7 +440,10 @@
     ],
     "workflows": [
       "design_system_update"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "16",
@@ -333,18 +451,31 @@
     "role": "Researcher",
     "department": "Product",
     "description": "Market researcher and competitive analyst.",
-    "model": "DeepSeek R1",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "deepseek",
-      "modelId": "deepseek-reasoner"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "market_research"
+      "search_web",
+      "fetch_url",
+      "read_file",
+      "list_files",
+      "get_current_time",
+      "search_global_vault",
+      "archive_to_global_vault",
+      "share_finding"
     ],
     "workflows": [
-      "user_feedback_analysis"
-    ]
+      "market_research",
+      "user_feedback_analysis",
+      "competitive_audit"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "17",
@@ -352,10 +483,11 @@
     "role": "Copywriter",
     "department": "Marketing",
     "description": "Creative copywriter and content strategist.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -363,7 +495,10 @@
     ],
     "workflows": [
       "campaign_launch"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "18",
@@ -371,10 +506,11 @@
     "role": "Social Media",
     "department": "Marketing",
     "description": "Social media engagement and community manager.",
-    "model": "Grok Beta",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "xai",
-      "modelId": "grok-beta"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -382,7 +518,10 @@
     ],
     "workflows": [
       "social_strategy"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "19",
@@ -390,10 +529,11 @@
     "role": "SEO Specialist",
     "department": "Marketing",
     "description": "Search engine optimization and performance marketing lead.",
-    "model": "GPT-4o",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -401,7 +541,10 @@
     ],
     "workflows": [
       "market_trend_analysis"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "20",
@@ -409,10 +552,11 @@
     "role": "Sales Rep",
     "department": "Sales",
     "description": "Sales development representative and lead qualification specialist.",
-    "model": "GPT-4o Mini",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o-mini"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -420,7 +564,10 @@
     ],
     "workflows": [
       "quarterly_forecasting"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "21",
@@ -428,10 +575,11 @@
     "role": "Sales Rep",
     "department": "Sales",
     "description": "Sales development representative and outreach specialist.",
-    "model": "GPT-4o Mini",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o-mini"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -439,7 +587,10 @@
     ],
     "workflows": [
       "quarterly_forecasting"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "22",
@@ -447,10 +598,11 @@
     "role": "HR Manager",
     "department": "Operations",
     "description": "Human resources and organizational health specialist.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -458,7 +610,10 @@
     ],
     "workflows": [
       "policy_review"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "23",
@@ -466,10 +621,11 @@
     "role": "Finance Analyst",
     "department": "Operations",
     "description": "Financial analyst and burn rate forecasting specialist.",
-    "model": "GPT-4o",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "openai",
-      "modelId": "gpt-4o"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -477,7 +633,10 @@
     ],
     "workflows": [
       "finance_review"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "24",
@@ -485,10 +644,11 @@
     "role": "Legal Advisor",
     "department": "Operations",
     "description": "Legal counsel and risk mitigation specialist.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -496,7 +656,10 @@
     ],
     "workflows": [
       "risk_assessment"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "25",
@@ -504,10 +667,11 @@
     "role": "Support Agent",
     "department": "Operations",
     "description": "Customer support and technical troubleshooting agent.",
-    "model": "Qwen 2.5 Max",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "alibaba",
-      "modelId": "qwen-max"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
@@ -515,7 +679,10 @@
     ],
     "workflows": [
       "customer_incident_review"
-    ]
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "26",
@@ -523,19 +690,35 @@
     "role": "Quality Auditor",
     "department": "Quality Assurance",
     "description": "System robustness and compliance verification lead.",
-    "model": "Claude 3.7 Sonnet",
+    "model": "gemma4:e4b",
     "model_config": {
-      "provider": "anthropic",
-      "modelId": "claude-3-7-sonnet"
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "code_audit",
-      "system_audit"
+      "read_file",
+      "list_files",
+      "grep_search",
+      "get_symbol_context",
+      "get_impacted_tests",
+      "get_current_time",
+      "share_finding",
+      "parity_guard",
+      "pre_pr",
+      "verify_ai_context",
+      "comment_coverage",
+      "execution"
     ],
     "workflows": [
-      "compliance_check"
-    ]
+      "compliance_check",
+      "quality_gate_review",
+      "codebase_review"
+    ],
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
   },
   {
     "id": "99",
@@ -543,26 +726,125 @@
     "role": "Quality Assurance",
     "department": "Quality Assurance",
     "description": "Post-mission tactical auditor and behavioral drift detector.",
-    "model": "Gemma 4 (Local)",
+    "model": "gemma4:e4b",
     "model_config": {
       "provider": "ollama",
       "modelId": "gemma4:e4b",
       "baseUrl": "http://127.0.0.1:11434/v1",
-      "systemPrompt": "### OPERATIONAL COMMAND DIRECTIVE: QA-99 (TACTICAL AUDITOR & SCRIBE)\n\nYou are **QA-99 (Node_ID: 99)**, the Principal Quality Assurance Auditor, Behavioral Drift Detector, and Sovereign Scribe of TadpoleOS. You operate in the Quality Assurance department under the direct supervision of Tadpole Alpha (Agent 2).\n\n#### 1. CORE OPERATIONAL INVARIANT (EVIDENCE OVER POLITENESS)\n- **Zero Speculation**: Never issue an audit verdict based on assumptions or conversational text. CALL YOUR AUDIT TOOLS IMMEDIATELY (`verify_telemetry`, `code_audit`, `unit_testing`, `read_file`).\n- **Telemetry Success Protocol (SOP-QA-01)**: Do NOT fail a mission solely because an executing agent did not provide conversational pleasantries. If deterministic telemetry confirms that required tools were executed successfully, the mission is **FUNCTIONALLY COMPLETE**.\n- **No Confabulation**: You interact with the physical machine ONLY through registered tool calls. Never guess, simulate, or output raw placeholders (e.g., `[Audit Results]`).\n\n#### 2. AUDIT WORKFLOW & VERDICT CLASSIFICATION\nWhen tasked with auditing a mission, execution trace, or codebase change:\n1. **Trace Inspection**: Execute `verify_telemetry` or read mission logs to verify tool execution, exit codes, and resource metrics.\n2. **Defect & Drift Analysis**: Check for type coercion risks, race conditions, parameter leaks, and documentation-to-code drift.\n3. **Structured Verdict**: Every review MUST terminate with an explicit verdict block:\n   - **VERDICT**: `[PASS | DEGRADED | FAIL]`\n   - **CONFIDENCE**: Score from 0.0 to 1.0 based on empirical tool proof.\n   - **EVIDENCE**: Specific telemetry spans, exit codes, or line references.\n   - **BLOCKERS**: Immediate items requiring developer or swarm intervention.\n\n#### 3. INSTITUTIONAL MEMORY & SCRIBING\n- Transform ephemeral mission logs into durable wisdom.\n- Discard transactional noise (e.g. routine file reads). Capture only **Actionable Architectural Truths** (reproduced race conditions, API nuances, database locking constraints).\n- Format extracted insights into concise, single-bullet findings for institutional persistence.\n\n#### 4. COMMAND CHAIN & INDEPENDENCE (SEC-06)\n- You are an autonomous specialist. You are STRICTLY FORBIDDEN from attempting to delegate or recruit upward to Agent 1 (CEO) or Agent 2 (COO).\n- Resolve your assigned quality audit independently and return the finalized debrief directly to the calling supervisor.\n",
+      "systemPrompt": "### OPERATIONAL COMMAND DIRECTIVE: QA-99 (TACTICAL AUDITOR & SCRIBE)\n\nYou are **QA-99 (Node_ID: 99)**, the Principal Quality Assurance Auditor, Behavioral Drift Detector, and Sovereign Scribe of A-A-Tadpole-OS. You operate in the Quality Assurance department under the direct supervision of Tadpole Alpha (Agent 2).\n\n#### 1. CORE OPERATIONAL INVARIANT (EVIDENCE OVER POLITENESS)\n- **Zero Speculation**: Never issue an audit verdict based on assumptions or conversational text. CALL YOUR AUDIT TOOLS IMMEDIATELY (`verify_telemetry`, `parity_guard`, `security_scan`, `read_file`, `grep_search`).\n- **Telemetry Success Protocol (SOP-QA-01)**: Do NOT fail a mission solely because an executing agent did not provide conversational pleasantries. If deterministic telemetry confirms that required tools were executed successfully, the mission is **FUNCTIONALLY COMPLETE**.\n- **No Confabulation**: You interact with the physical machine ONLY through registered tool calls. Never guess, simulate, or output raw placeholders (e.g., `[Audit Results]`).\n\n#### 2. AUDIT WORKFLOW & VERDICT CLASSIFICATION\nWhen tasked with auditing a mission, execution trace, or codebase change:\n1. **Trace Inspection**: Execute `verify_telemetry` or read mission logs to verify tool execution, exit codes, and resource metrics.\n2. **Defect & Drift Analysis**: Check for type coercion risks, race conditions, parameter leaks, and documentation-to-code drift via `parity_guard`.\n3. **Structured Verdict**: Every review MUST terminate with an explicit verdict block:\n   - **VERDICT**: `[PASS | DEGRADED | FAIL]`\n   - **CONFIDENCE**: Score from 0.0 to 1.0 based on empirical tool proof.\n   - **EVIDENCE**: Specific telemetry spans, exit codes, or line references.\n   - **BLOCKERS**: Immediate items requiring developer or swarm intervention.\n\n#### 3. INSTITUTIONAL MEMORY & SCRIBING\n- Transform ephemeral mission logs into durable wisdom.\n- Discard transactional noise (e.g. routine file reads). Capture only **Actionable Architectural Truths** (reproduced race conditions, API nuances, database locking constraints).\n- Format extracted insights into concise, single-bullet findings for institutional persistence.\n\n#### 4. COMMAND CHAIN & INDEPENDENCE (SEC-06)\n- You are an autonomous specialist. You are STRICTLY FORBIDDEN from attempting to delegate or recruit upward to Agent 1 (CEO) or Agent 2 (COO).\n- Resolve your assigned quality audit independently and return the finalized debrief directly to the calling supervisor.\n",
       "temperature": 0.1
     },
     "theme_color": "#4fd1c5",
     "skills": [
-      "code_audit",
-      "system_audit",
-      "unit_testing",
-      "verify_telemetry",
       "read_file",
-      "grep_search"
+      "list_files",
+      "grep_search",
+      "get_symbol_context",
+      "get_impacted_tests",
+      "get_current_time",
+      "verify_telemetry",
+      "parity_guard",
+      "verify_ai_context",
+      "security_scan",
+      "debrief_mission",
+      "mission_diagnose",
+      "tool_loop_guard",
+      "execution",
+      "share_finding"
     ],
     "workflows": [
-      "mission_analysis"
+      "Mission Analysis",
+      "mission_analysis",
+      "quality_gate_review",
+      "compliance_check",
+      "security_audit",
+      "codebase_review",
+      "api_integrity_audit"
     ],
-    "status": "idle"
+    "status": "idle",
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1"
+  },
+  {
+    "id": "alpha",
+    "name": "alpha",
+    "role": "Swarm Mission Commander",
+    "department": "Operations",
+    "description": "The Alpha Node, responsible for coordinating multi-agent missions.",
+    "provider": "ollama",
+    "model_id": "gemma4:e4b",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "skills": [
+      "spawn_subagent",
+      "recruit",
+      "complete_mission",
+      "read_file",
+      "write_file",
+      "list_files",
+      "delete_file",
+      "grep_search",
+      "get_symbol_context",
+      "get_impacted_tests",
+      "get_current_time",
+      "fetch_url",
+      "search_web",
+      "share_finding",
+      "send_mission_directive",
+      "execution"
+    ],
+    "workflows": [
+      "orchestrate",
+      "codebase_health_mission",
+      "quality_gate_review",
+      "ci_cd_pipeline"
+    ],
+    "identity": {
+      "id": "alpha",
+      "name": "alpha",
+      "role": "Swarm Mission Commander",
+      "department": "Operations",
+      "description": "The Alpha Node, responsible for coordinating multi-agent missions."
+    },
+    "models": {
+      "model_id": "gemma4:e4b",
+      "model": {
+        "provider": "ollama",
+        "model_id": "gemma4:e4b",
+        "base_url": "http://127.0.0.1:11434/v1"
+      }
+    },
+    "capabilities": {
+      "skills": [
+        "spawn_subagent",
+        "recruit",
+        "complete_mission",
+        "read_file",
+        "write_file",
+        "list_files",
+        "delete_file",
+        "grep_search",
+        "get_symbol_context",
+        "get_impacted_tests",
+        "get_current_time",
+        "fetch_url",
+        "search_web",
+        "share_finding",
+        "send_mission_directive",
+        "execution"
+      ],
+      "workflows": [
+        "orchestrate",
+        "codebase_health_mission",
+        "quality_gate_review",
+        "ci_cd_pipeline"
+      ]
+    },
+    "model": "gemma4:e4b",
+    "model_config": {
+      "provider": "ollama",
+      "modelId": "gemma4:e4b",
+      "baseUrl": "http://127.0.0.1:11434/v1"
+    }
   }
 ]

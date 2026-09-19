@@ -108,7 +108,10 @@ static FUNCTION_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?s)<function=([a-zA-Z0-9_-]+)[^\{]*(\{.*?\})[^>]*>?").expect("Static tool-call parser regex MUST be valid."));
 
 impl OpenAIProvider {
-    pub fn new(client: Client, api_key: String, config: ModelConfig) -> Self {
+    pub fn new(client: Client, api_key: String, mut config: ModelConfig) -> Self {
+        if config.model_id.trim().is_empty() {
+            config.model_id = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gemma4:e4b".to_string());
+        }
         Self {
             client,
             config,

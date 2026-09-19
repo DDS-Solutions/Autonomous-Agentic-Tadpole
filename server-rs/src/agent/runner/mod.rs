@@ -153,7 +153,11 @@ impl RunContext {
             message,
             cluster_id: Some(self.mission_id.clone()),
             provider: Some(self.model_config.provider),
-            model_id: Some(self.model_config.model_id.clone()),
+            model_id: if self.model_config.model_id.trim().is_empty() {
+                Some("gemma4:e4b".to_string())
+            } else {
+                Some(self.model_config.model_id.clone())
+            },
             api_key: self.model_config.api_key.clone(),
             base_url: self.model_config.base_url.clone(),
             rpm: self.model_config.rpm,

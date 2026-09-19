@@ -130,17 +130,18 @@ pub enum MissionStatus {
 
 /// ### 📡 Protocol: RoleAuthorityLevel
 /// Defines the authority level of an agent in the swarm.
+/// Strict ordering: Observer (lowest) < Specialist < Management < Executive (highest).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum RoleAuthorityLevel {
-    /// Executive level (CEO, COO) - Strategic oversight and delegation.
-    Executive,
-    /// Management level (Alpha Node) - Tactical coordination.
-    Management,
-    /// Specialist level - Task execution.
-    Specialist,
     /// Observer level - Read-only oversight.
     Observer,
+    /// Specialist level - Task execution.
+    Specialist,
+    /// Management level (Alpha Node) - Tactical coordination.
+    Management,
+    /// Executive level (CEO, COO) - Strategic oversight and delegation.
+    Executive,
 }
 
 impl RoleAuthorityLevel {
@@ -150,10 +151,10 @@ impl RoleAuthorityLevel {
             Self::Executive
         } else if r.contains("coo") || r.contains("orchestrator") || r.contains("commander") || r.contains("alpha") {
             Self::Management
-        } else if r.contains("observer") || r.contains("auditor") {
-            Self::Observer
-        } else {
+        } else if r.contains("specialist") || r.contains("coder") || r.contains("engineer") || r.contains("developer") || r.contains("agent") {
             Self::Specialist
+        } else {
+            Self::Observer
         }
     }
 }
@@ -397,10 +398,14 @@ impl ModelConfig {
         merge_option!(system_prompt);
         merge_option!(temperature);
         merge_option!(max_tokens);
+        merge_option!(top_p);
+        merge_option!(base_url);
+        merge_option!(external_id);
         merge_option!(rpm);
         merge_option!(rpd);
         merge_option!(tpm);
         merge_option!(tpd);
+        merge_option!(max_turns);
         merge_option!(steering_vectors);
         merge_option!(reasoning_depth);
         merge_option!(act_threshold);
@@ -423,14 +428,14 @@ pub struct ProviderConfig {
     pub id: String,
     pub name: String,
     pub icon: Option<String>,
-    #[serde(default, alias = "api_key")]
+    #[serde(default, skip_serializing, alias = "api_key")]
     pub api_key: Option<String>,
     #[serde(default, alias = "base_url")]
     pub base_url: Option<String>,
     pub protocol: ModelProvider,
     #[serde(default, alias = "external_id")]
     pub external_id: Option<String>,
-    #[serde(default, alias = "custom_headers")]
+    #[serde(default, skip_serializing, alias = "custom_headers")]
     pub custom_headers: Option<std::collections::HashMap<String, String>>,
     #[serde(default, alias = "default_config")]
     pub default_config: Option<ModelConfig>,
@@ -551,7 +556,7 @@ pub struct AgentEconomics {
     pub token_usage: TokenUsage,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentHealth {
     pub status: String,
@@ -561,6 +566,17 @@ pub struct AgentHealth {
     pub last_failure_at: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(alias = "heartbeat_at")]
     pub heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl Default for AgentHealth {
+    fn default() -> Self {
+        Self {
+            status: "idle".to_string(),
+            failure_count: 0,
+            last_failure_at: None,
+            heartbeat_at: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
@@ -861,7 +877,7 @@ impl<'de> Deserialize<'de> for EngineAgent {
             (Some(config), _) => config,
             (None, Some(EngineAgentModelInput::Config(config))) => *config,
             (None, Some(EngineAgentModelInput::ModelId(model_id))) => ModelConfig {
-                provider: ModelProvider::from_str(&model_id).unwrap_or(ModelProvider::Openai),
+                provider: ModelProvider::from_str(&model_id).unwrap_or_default(),
                 model_id,
                 ..ModelConfig::default()
             },
@@ -873,11 +889,11 @@ impl<'de> Deserialize<'de> for EngineAgent {
         }
 
         let model_id = match wire.model_id {
-            Some(model_id) => {
+            Some(mid) => {
                 if model.model_id.is_empty() {
-                    // model.model_id = model_id.clone();
+                    model.model_id = mid.clone();
                 }
-                Some(model_id)
+                Some(mid)
             }
             None if !model.model_id.is_empty() => Some(model.model_id.clone()),
             None => None,
@@ -1020,6 +1036,7 @@ pub struct TaskPayload {
     pub safe_mode: Option<bool>,
     pub analysis: Option<bool>,
     pub traceparent: Option<String>,
+    #[serde(default, alias = "userId")]
     pub user_id: Option<String>,
     #[serde(default)]
     pub context_files: Option<Vec<String>>,
@@ -1031,6 +1048,8 @@ pub struct TaskPayload {
     pub primary_goal: Option<String>,
     #[serde(default, alias = "enabledSkills")]
     pub enabled_skills: Option<Vec<String>>,
+    #[serde(default, alias = "autoResume")]
+    pub auto_resume: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]

@@ -112,6 +112,69 @@ async fn test_workflows_registry_save_and_delete() -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
+#[tokio::test]
+async fn test_agent_skill_save_delete_and_reload() -> Result<(), Box<dyn Error>> {
+    let registry = ScriptSkillsRegistry::new().await?;
+
+    let agent_skill_name = format!("agent_skill_{}", Uuid::new_v4());
+    let skill = SkillDefinition {
+        id: None,
+        name: agent_skill_name.clone(),
+        description: "Agent generated skill".to_string(),
+        execution_command: "python execution/agent_generated/skills/test.py".to_string(),
+        schema: serde_json::json!({
+            "type": "object",
+            "properties": {}
+        }),
+        oversight_required: true,
+        doc_url: None,
+        tags: None,
+        full_instructions: None,
+        negative_constraints: None,
+        verification_script: None,
+        category: "ai".to_string(),
+    };
+
+    // Save into agent directory
+    registry.save_agent_skill(skill).await?;
+    assert!(registry.snapshot().skills.contains_key(&agent_skill_name));
+
+    // Delete skill
+    registry.delete_skill(&agent_skill_name).await?;
+    assert!(!registry.snapshot().skills.contains_key(&agent_skill_name));
+
+    // Reload from disk and verify the skill is NOT resurrected
+    let reloaded = ScriptSkillsRegistry::new().await?;
+    assert!(
+        !reloaded.snapshot().skills.contains_key(&agent_skill_name),
+        "Deleted agent skill must NOT be resurrected on reload"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_frontmatter_yaml_with_embedded_dashes() {
+    let content = r#"---
+name: doc_generator
+description: Generates markdown docs
+command: python doc.py
+---
+# Documentation
+Here is section 1.
+
+---
+
+Here is section 2 after a horizontal rule.
+"#;
+
+    let parsed = super::script_skills::parse_skill_md(content).expect("Should parse frontmatter");
+    assert_eq!(parsed.name, "doc_generator");
+    let body = parsed.full_instructions.expect("Should have body");
+    assert!(body.contains("---"), "Body must preserve internal horizontal rule dashes");
+    assert!(body.contains("Here is section 2"));
+}
+
 
 
 

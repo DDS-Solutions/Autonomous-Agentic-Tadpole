@@ -152,10 +152,16 @@ impl PermissionPolicy {
         PermissionMode::Prompt
     }
 
+    /// Checks if a tool has an explicitly defined policy in the cache.
+    pub fn has_explicit_policy(&self, tool_name: &str, agent_id: &str) -> bool {
+        let cache_key = format!("{}:{}", agent_id, tool_name);
+        self.cache.contains_key(&cache_key) || self.cache.contains_key(tool_name)
+    }
+
     /// Manually sets the permission mode for a tool (used for tests and admin updates).
     #[allow(dead_code)]
     pub async fn set_mode(&self, tool_name: &str, mode: PermissionMode) {
-        let _ = sqlx::query("INSERT INTO permission_policies (tool_name, mode) VALUES (?, ?) ON CONFLICT(tool_name) DO UPDATE SET mode = excluded.mode")
+        let _ = sqlx::query("INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, NULL, ?) ON CONFLICT(tool_name, agent_id) DO UPDATE SET mode = excluded.mode")
             .bind(tool_name)
             .bind(mode.to_string())
             .execute(&self.pool)

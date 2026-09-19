@@ -23,7 +23,8 @@ import {
     Cpu,
     Plus,
     WifiOff,
-    ShieldCheck
+    ShieldCheck,
+    Network
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tw_Empty_State, Tooltip } from '../components/ui';
@@ -38,6 +39,7 @@ import { Action_Ledger } from '../components/oversight/Action_Ledger';
 import { i18n } from '../i18n';
 import { LD_Json } from '../components/ui/LD_Json';
 import { get_safe_date } from '../utils/date_utils';
+import { is_parent_delegation_directive } from '../utils/oversight_utils';
 import type { OversightEntry, LedgerEntry } from '../data/mock_oversight';
 import { MOCK_PENDING, MOCK_LEDGER } from '../data/mock_oversight';
 
@@ -237,6 +239,13 @@ export default function Oversight_Dashboard() {
         return selected_cluster_id === 'all' || tool_call.cluster_id === selected_cluster_id;
     });
 
+    const parent_delegation_count = useMemo(() => {
+        return filtered_pending.filter(p => {
+            const skill = p.tool_call?.skill || p.skill;
+            return is_parent_delegation_directive(skill);
+        }).length;
+    }, [filtered_pending]);
+
     return (
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
             {/* GEO Optimization: Structured Data & Semantic Header */}
@@ -337,51 +346,87 @@ export default function Oversight_Dashboard() {
             {/* Pending Queue */}
             {pending.length > 0 && (
                 <div className="bg-zinc-900 border border-yellow-500/30 rounded-lg overflow-hidden">
-                    <div className="bg-yellow-500/10 p-3 border-b border-yellow-500/20 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                        <h2 className="font-semibold text-yellow-100">{i18n.t('oversight.awaiting_approval_title', { count: filtered_pending.length })}</h2>
+                    <div className="bg-yellow-500/10 p-3 border-b border-yellow-500/20 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+                            <h2 className="font-semibold text-yellow-100">{i18n.t('oversight.awaiting_approval_title', { count: filtered_pending.length })}</h2>
+                            <div
+                                data-testid="parent-delegation-header-badge"
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-sm transition-all ${
+                                    parent_delegation_count > 0
+                                        ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40 animate-pulse'
+                                        : 'bg-zinc-800/80 text-zinc-300 border-zinc-700/60'
+                                }`}
+                                title="Parent delegation directives coordinate multi-agent flows across the swarm hierarchy. Approving parent directives first allows subordinate tasks to be generated and processed cleanly."
+                            >
+                                <Network className={`w-3.5 h-3.5 ${parent_delegation_count > 0 ? 'text-cyan-400' : 'text-zinc-400'}`} />
+                                <span>Parent Delegation Directives {parent_delegation_count > 0 ? `(${parent_delegation_count})` : ''} — Coordinating Complex Multi-Agent Flows</span>
+                            </div>
+                        </div>
+                        {parent_delegation_count > 0 && (
+                            <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
+                                Prioritize parent delegation directives first
+                            </span>
+                        )}
                     </div>
                     <div className="divide-y divide-zinc-800">
-                        {filtered_pending.map(entry => (
-                            <div key={entry.id} className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between animate-in fade-in slide-in-from-top-2">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">
-                                            {entry.tool_call?.agent_id || entry.agent_id || i18n.t('oversight.unknown_agent')}
-                                        </span>
-                                        <span className="text-sm font-medium text-green-400 flex items-center gap-1">
-                                            <TerminalIcon className="w-3 h-3" />
-                                            {entry.tool_call?.skill || entry.skill || i18n.t('oversight.capability_proposal')}
-                                        </span>
-                                        <span className="text-xs text-zinc-500">
-                                            {get_safe_date(entry)?.toLocaleTimeString() || '--:--:--'}
-                                        </span>
+                        {filtered_pending.map(entry => {
+                            const is_parent_directive = is_parent_delegation_directive(entry.tool_call?.skill || entry.skill);
+                            return (
+                                <div
+                                    key={entry.id}
+                                    className={`p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between animate-in fade-in slide-in-from-top-2 transition-colors ${
+                                        is_parent_directive ? 'bg-cyan-950/15 border-l-4 border-l-cyan-500' : ''
+                                    }`}
+                                >
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">
+                                                {entry.tool_call?.agent_id || entry.agent_id || i18n.t('oversight.unknown_agent')}
+                                            </span>
+                                            <span className="text-sm font-medium text-green-400 flex items-center gap-1">
+                                                <TerminalIcon className="w-3 h-3" />
+                                                {entry.tool_call?.skill || entry.skill || i18n.t('oversight.capability_proposal')}
+                                            </span>
+                                            {is_parent_directive && (
+                                                <span
+                                                    data-testid="parent-directive-item-badge"
+                                                    className="text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded flex items-center gap-1"
+                                                >
+                                                    <Network className="w-3 h-3 text-cyan-400" />
+                                                    Parent Delegation Directive
+                                                </span>
+                                            )}
+                                            <span className="text-xs text-zinc-500">
+                                                {get_safe_date(entry)?.toLocaleTimeString() || '--:--:--'}
+                                            </span>
+                                        </div>
+                                        <p className="text-zinc-300">{entry.tool_call?.description || entry.description || i18n.t('oversight.awaiting_authorization')}</p>
+                                        <pre className="text-xs bg-black/50 p-2 rounded text-zinc-400 font-mono overflow-auto max-w-2xl">
+                                            {JSON.stringify(entry.tool_call?.params || entry.params || {}, null, 2)}
+                                        </pre>
                                     </div>
-                                    <p className="text-zinc-300">{entry.tool_call?.description || entry.description || i18n.t('oversight.awaiting_authorization')}</p>
-                                    <pre className="text-xs bg-black/50 p-2 rounded text-zinc-400 font-mono overflow-auto max-w-2xl">
-                                        {JSON.stringify(entry.tool_call?.params || entry.params || {}, null, 2)}
-                                    </pre>
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        <Tooltip content={i18n.t('oversight.approve_action_tooltip')} position="top">
+                                            <button
+                                                onClick={() => handle_decide(entry.id, 'approved')}
+                                                className="flex-1 md:flex-none bg-green-500/20 hover:bg-green-500/30 text-green-400 px-4 py-2 rounded border border-green-500/30 font-medium transition-colors"
+                                            >
+                                                {i18n.t('oversight.approve_button')}
+                                            </button>
+                                        </Tooltip>
+                                        <Tooltip content={i18n.t('oversight.reject_action_tooltip')} position="top">
+                                            <button
+                                                onClick={() => handle_decide(entry.id, 'rejected')}
+                                                className="flex-1 md:flex-none bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded border border-red-500/30 font-medium transition-colors"
+                                            >
+                                                {i18n.t('oversight.reject_button')}
+                                            </button>
+                                        </Tooltip>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2 w-full md:w-auto">
-                                    <Tooltip content={i18n.t('oversight.approve_action_tooltip')} position="top">
-                                        <button
-                                            onClick={() => handle_decide(entry.id, 'approved')}
-                                            className="flex-1 md:flex-none bg-green-500/20 hover:bg-green-500/30 text-green-400 px-4 py-2 rounded border border-green-500/30 font-medium transition-colors"
-                                        >
-                                            {i18n.t('oversight.approve_button')}
-                                        </button>
-                                    </Tooltip>
-                                    <Tooltip content={i18n.t('oversight.reject_action_tooltip')} position="top">
-                                        <button
-                                            onClick={() => handle_decide(entry.id, 'rejected')}
-                                            className="flex-1 md:flex-none bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded border border-red-500/30 font-medium transition-colors"
-                                        >
-                                            {i18n.t('oversight.reject_button')}
-                                        </button>
-                                    </Tooltip>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

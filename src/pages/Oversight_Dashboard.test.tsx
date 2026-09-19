@@ -164,6 +164,54 @@ describe('Oversight_Dashboard Page', () => {
         fireEvent.change(select, { target: { value: 'c1' } });
         expect(select).toHaveValue('c1');
     });
+
+    it('displays parent delegation directives indicator in header and item badge', async () => {
+        (tadpole_os_service.get_pending_oversight as Mock).mockResolvedValue([
+            {
+                id: 'p-alpha-1',
+                agent_id: 'agent-alpha',
+                role: 'Commander',
+                skill: 'spawn_subagent',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: {
+                    name: 'spawn_subagent',
+                    params: { mission: 'Inspect codebase' },
+                    agent_id: 'agent-alpha',
+                    skill: 'spawn_subagent'
+                }
+            },
+            {
+                id: 'p-worker-2',
+                agent_id: 'agent-worker',
+                role: 'Worker',
+                skill: 'read_codebase_file',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: {
+                    name: 'read_codebase_file',
+                    params: { file_path: 'README.md' },
+                    agent_id: 'agent-worker',
+                    skill: 'read_codebase_file'
+                }
+            }
+        ]);
+
+        render(<MemoryRouter><Oversight_Dashboard /></MemoryRouter>);
+
+        // Verify header badge displays parent delegation directives info
+        const headerBadge = await screen.findByTestId('parent-delegation-header-badge');
+        expect(headerBadge).toBeInTheDocument();
+        expect(headerBadge).toHaveTextContent(/Parent Delegation Directives \(1\) — Coordinating Complex Multi-Agent Flows/i);
+
+        // Verify priority hint
+        expect(screen.getByText(/Prioritize parent delegation directives first/i)).toBeInTheDocument();
+
+        // Verify item-level badge
+        const itemBadge = screen.getByTestId('parent-directive-item-badge');
+        expect(itemBadge).toBeInTheDocument();
+        expect(itemBadge).toHaveTextContent(/Parent Delegation Directive/i);
+    });
 });
 
 

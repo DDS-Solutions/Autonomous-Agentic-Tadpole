@@ -20,6 +20,23 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
 
+/// Handle representing an active agent runner task with its associated TaskId for race-free eviction.
+#[derive(Debug, Clone)]
+pub struct RunnerHandle {
+    pub abort_handle: tokio::task::AbortHandle,
+    pub task_id: tokio::task::Id,
+}
+
+impl RunnerHandle {
+    pub fn new(abort_handle: tokio::task::AbortHandle, task_id: tokio::task::Id) -> Self {
+        Self { abort_handle, task_id }
+    }
+
+    pub fn abort(&self) {
+        self.abort_handle.abort();
+    }
+}
+
 /// Hub for real-time broadcast and event orchestration.
 pub struct CommunicationHub {
     /// Broadcast system logs to all connected UI WebSockets.
@@ -36,8 +53,8 @@ pub struct CommunicationHub {
     pub oversight_queue: DashMap<String, OversightEntry>,
     /// Resolvers for pending oversight promises.
     pub oversight_resolvers: DashMap<String, oneshot::Sender<bool>>,
-    /// Active AbortHandles for running agents, allowing for definitive task cancellation.
-    pub active_runners: DashMap<String, tokio::task::AbortHandle>,
+    /// Active AbortHandles and TaskIds for running agents, allowing for definitive task cancellation and safe eviction.
+    pub active_runners: DashMap<String, RunnerHandle>,
     /// Monotonic sequence counter for outbound engine events.
     pub event_sequence: std::sync::atomic::AtomicU64,
 }

@@ -68,8 +68,21 @@ export const Node_Header: React.FC<Node_Header_Props> = ({
                     'text-zinc-400 border-zinc-800 bg-zinc-900';
     
     const failure_count = agent.failure_count || 0;
-    const health_color = failure_count >= 3 ? 'text-red-500' : failure_count > 0 ? 'text-amber-500' : 'text-emerald-500';
-    const health_tooltip = failure_count >= 3 ? i18n.t('throttled') : failure_count > 0 ? i18n.t('degraded') : i18n.t('healthy');
+    const is_suspended = agent.status === 'suspended';
+    const health_color = is_suspended
+        ? 'text-amber-500'
+        : failure_count >= 3
+            ? 'text-red-500'
+            : failure_count > 0
+                ? 'text-amber-500'
+                : 'text-emerald-500';
+    const health_tooltip = is_suspended
+        ? `${i18n.t('status_suspended') || 'Suspended'} (Administrative Quarantine)`
+        : failure_count >= 3
+            ? i18n.t('throttled')
+            : failure_count > 0
+                ? i18n.t('degraded')
+                : i18n.t('healthy');
 
     return (
         <div className={`grid grid-cols-[min-content_1fr_min-content] gap-2 items-start ${is_role_dropdown_open ? 'z-50' : 'z-20'}`}>
