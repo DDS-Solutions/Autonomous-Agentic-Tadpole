@@ -181,8 +181,15 @@ impl AgentRunner {
         // 🛡️ [Resilience] Ensure agent exists in database (auto-sync if only in registry)
         let agent_to_sync = self.state.registry.agents.get(agent_id).map(|a| a.value().clone());
         if let Some(agent) = agent_to_sync {
-            if let Err(e) = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent).await {
-                tracing::warn!("⚠️ [Lifecycle] Pre-flight sync of agent {} to DB failed: {}", agent_id, e);
+            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent).await {
+                Ok(new_ver) => {
+                    if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
+                        entry.version = new_ver;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️ [Lifecycle] Pre-flight sync of agent {} to DB failed: {}", agent_id, e);
+                }
             }
         }
 

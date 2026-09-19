@@ -331,6 +331,22 @@ def check_readme_routes(root, code_routes):
             
     return errors
 
+def check_nexus_invariants(root: Path) -> int:
+    guard_script = root / "execution" / "nexus_adversarial_guard.py"
+    if not guard_script.exists():
+        return 0
+    print(f"\nScanning for Dual-Pass Nexus Invariants...")
+    res = subprocess.run([sys.executable, str(guard_script)], cwd=str(root), capture_output=True, text=True, encoding="utf-8")
+    errors = 0
+    if res.returncode == 0:
+        print_result("NEXUS-INVARIANTS", True, "All Dual-Pass Nexus Invariants satisfied")
+    else:
+        for line in res.stdout.strip().split("\n"):
+            if "❌" in line:
+                print_result("NEXUS-INVARIANTS", False, line.strip())
+                errors += 1
+    return errors
+
 def check_parity(root_dir=None, fix=False):
     root = Path(root_dir).resolve() if root_dir else ROOT
     router_path = root / "server-rs" / "src" / "router.rs"
@@ -423,6 +439,7 @@ def check_parity(root_dir=None, fix=False):
     errors += check_doc_file_refs(root)
     errors += check_skills(root)
     errors += check_api_docs_parity(root, fix=fix)
+    errors += check_nexus_invariants(root)
 
     print(f"\nAudit Complete. Errors found: {errors}")
     return errors == 0

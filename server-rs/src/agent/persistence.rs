@@ -431,34 +431,7 @@ pub async fn save_agent_db_in_tx(
     conn: &mut sqlx::SqliteConnection,
     agent: &EngineAgent,
 ) -> Result<u32, AppError> {
-    let new_ver = match execute_save_agent(&mut *conn, agent).await {
-        Ok(v) => v,
-        Err(AppError::Conflict(_)) => {
-            // Reconcile: fetch current DB version and retry once
-            let current_db_version: Option<i64> = sqlx::query_scalar("SELECT version FROM agents WHERE id = ?")
-                .bind(&agent.identity.id)
-                .fetch_optional(&mut *conn)
-                .await?;
-
-            if let Some(db_ver) = current_db_version {
-                tracing::info!(
-                    agent_id = %agent.identity.id,
-                    expected = agent.version,
-                    actual = db_ver,
-                    "🔄 [Persistence] Reconciling stale agent version from database"
-                );
-                let mut reconciled = agent.clone();
-                reconciled.version = db_ver as u32;
-                execute_save_agent(&mut *conn, &reconciled).await?
-            } else {
-                return Err(AppError::Conflict(format!(
-                    "Optimistic concurrency lock failed for agent '{}' (version mismatch)",
-                    agent.identity.id
-                )));
-            }
-        }
-        Err(e) => return Err(e),
-    };
+    let new_ver = execute_save_agent(&mut *conn, agent).await?;
 
     sync_manifests_for_agent(&mut *conn, agent).await?;
     auto_subscribe_agent_skills(&mut *conn, agent).await?;
@@ -606,30 +579,33 @@ pub async fn save_models(base_dir: &std::path::Path, models: Vec<ModelEntry>) ->
 /// mechanism, or `Ok(false)` if the agent is already engaged in another reasoning turn.
 pub async fn claim_agent(pool: &SqlitePool, agent_id: &str) -> Result<bool, AppError> {
     let now = chrono::Utc::now();
-    let res = sqlx::query("UPDATE agents SET status = 'busy', heartbeat_at = ? WHERE id = ? AND status IN ('idle', 'active')")
-        .bind(now)
-        .bind(agent_id)
-        .execute(pool)
-        .await?;
+    let res = sqlx::query(
+        "UPDATE agents SET status = 'busy', heartbeat_at = ?1 
+         WHERE id = ?2 AND status IN ('idle', 'active')"
+    )
+    .bind(now)
+    .bind(agent_id)
+    .execute(pool)
+    .await?;
 
     Ok(res.rows_affected() > 0)
 }
 
 /// ### ⚖️ Governance Rationale: The Swarm Reaper
-/// Identifies and harvests agents marked as 'busy' that have exceeded their heartbeat threshold.
+/// Identifies and harvests agents marked as 'busy' or 'working' that have exceeded their heartbeat threshold.
 /// 
 /// This is the system's "Safety Valve." If an agent process crashes, hangs, or 
 /// context-overflows without completing its mission, this reaper returns 
 /// the agent to the available pool (`idle`) so the swarm can re-negotiate the task. 
 /// 
-/// Prevents permanent "Busy" locks in the database (LIF-03) and ensuring 
+/// Prevents permanent "Busy" or "Working" locks in the database (LIF-03) and ensuring 
 /// swarm availability across high-concurrency mission cycles.
 pub async fn reap_stale_agents(pool: &SqlitePool, threshold_secs: i64) -> Result<u64, AppError> {
     let now = chrono::Utc::now();
     // Use safe subtraction to determine the high-water mark for zombie processes.
     let threshold_time = now - chrono::Duration::seconds(threshold_secs);
 
-    let res = sqlx::query("UPDATE agents SET status = 'idle' WHERE status = 'busy' AND (heartbeat_at IS NULL OR heartbeat_at < ?)")
+    let res = sqlx::query("UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working') AND (heartbeat_at IS NULL OR heartbeat_at < ?)")
         .bind(threshold_time)
         .execute(pool)
         .await?;
@@ -752,14 +728,48 @@ pub async fn complete_sync(
 }
 
 /// Transactionally deletes an agent and cascades deletions to all associated metadata tables.
+/// Enforces strict child-first ordering to comply with SQLite foreign key constraints.
 pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
 
-    sqlx::query("DELETE FROM agents WHERE id = ?")
+    // 1. Delete granular mission execution logs and nodes (depend on mission_history)
+    sqlx::query("DELETE FROM mission_logs WHERE agent_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
         .bind(agent_id)
         .execute(&mut *tx)
         .await?;
 
+    sqlx::query("DELETE FROM swarm_context WHERE agent_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM agent_directives WHERE source_agent_id = ?1 OR target_agent_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM peer_reviews WHERE requester_id = ?1 OR reviewer_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM mission_nodes WHERE mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM mission_quotas WHERE cluster_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    // 2. Delete parent missions referencing agent_id
+    sqlx::query("DELETE FROM mission_history WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    // 3. Delete metadata, tasks, quotas, and manifests
     sqlx::query("DELETE FROM agent_quotas WHERE entity_id = ?")
         .bind(agent_id)
         .execute(&mut *tx)
@@ -793,6 +803,12 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
 
     sqlx::query("DELETE FROM agent_tasks WHERE agent_id = ? OR claimed_by = ?")
         .bind(agent_id)
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
+    // 4. Finally, delete the agent row itself (last, satisfying FKs)
+    sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(agent_id)
         .execute(&mut *tx)
         .await?;
@@ -1010,6 +1026,136 @@ mod tests {
                 .fetch_one(&pool)
                 .await?;
         assert_eq!(final_status, "idle", "Reaped agent should be idle");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_agent_cascade_foreign_keys_on() -> Result<(), AppError> {
+        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
+        sqlx::query("PRAGMA foreign_keys = ON;").execute(&pool).await?;
+
+        // 1. Insert an agent
+        let agent = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "cascade-agent-1".to_string(),
+                name: "Cascade Agent".to_string(),
+                role: "Tester".to_string(),
+                ..Default::default()
+            },
+            version: 1,
+            ..Default::default()
+        };
+        save_agent_db(&pool, &agent).await?;
+
+        // 2. Insert dependent mission, mission_log, swarm_context, and directives
+        let mid = "test-mission-123";
+        sqlx::query("INSERT INTO mission_history (id, agent_id, title, status, budget_usd, cost_usd) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("Test Mission")
+            .bind("pending")
+            .bind(10.0)
+            .bind(0.0)
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("log-1")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("test")
+            .bind("sample text")
+            .bind("info")
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO swarm_context (id, mission_id, agent_id, topic, finding) VALUES (?, ?, ?, ?, ?)")
+            .bind("ctx-1")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("testing")
+            .bind("sample finding")
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("dir-1")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("cascade-agent-1")
+            .bind("self-instruction")
+            .bind("pending")
+            .execute(&pool)
+            .await?;
+
+        // 3. Delete cascade must succeed child-first without foreign key constraint failure
+        delete_agent_cascade(&pool, "cascade-agent-1").await?;
+
+        // 4. Verify all records are wiped cleanly
+        let agent_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = 'cascade-agent-1'")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(agent_count, 0);
+
+        let mission_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mission_history WHERE id = ?")
+            .bind(mid)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(mission_count, 0);
+
+        let log_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mission_logs WHERE mission_id = ?")
+            .bind(mid)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(log_count, 0);
+
+        let context_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM swarm_context WHERE mission_id = ?")
+            .bind(mid)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(context_count, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_occ_conflict_detection_prevents_lost_updates() -> Result<(), AppError> {
+        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
+
+        let agent = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "occ-agent-1".to_string(),
+                name: "OCC Agent".to_string(),
+                role: "Tester".to_string(),
+                ..Default::default()
+            },
+            version: 1,
+            ..Default::default()
+        };
+
+        // Initial save establishes version
+        let v1 = save_agent_db(&pool, &agent).await?;
+        assert_eq!(v1, 1);
+
+        // Branch A updates agent
+        let mut agent_a = agent.clone();
+        agent_a.version = v1;
+        agent_a.identity.name = "Updated by A".to_string();
+        let v2 = save_agent_db(&pool, &agent_a).await?;
+        assert_eq!(v2, 2);
+
+        // Branch B tries to update using stale version 1
+        let mut agent_b = agent.clone();
+        agent_b.version = v1; // Stale!
+        agent_b.identity.name = "Stale Update by B".to_string();
+
+        let conflict_result = save_agent_db(&pool, &agent_b).await;
+        assert!(
+            matches!(conflict_result, Err(AppError::Conflict(_))),
+            "Expected Conflict error on stale OCC version, got: {:?}",
+            conflict_result
+        );
 
         Ok(())
     }

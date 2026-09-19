@@ -77,7 +77,32 @@ impl AgentRunner {
                 let truncated = self.safe_truncate(&content, 8000);
                 Ok(format!("(FILE CONTENT OF {}):\n\n{}", final_filename, truncated))
             }
-            Err(e) => Ok(format!("(READ FAILED: {})", e)),
+            Err(e) => {
+                // 🌉 Codebase Fallback Bridge: Check if candidate exists in project repository root
+                let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                let is_in_repo = root.join(&final_filename).is_file()
+                    || root.join(format!("server-rs/{}", final_filename)).is_file();
+
+                if is_in_repo {
+                    tracing::info!(
+                        "🌉 [Bridge] Agent {} requested codebase file '{}' via read_file — auto-delegating to read_codebase_file",
+                        ctx.agent_id,
+                        final_filename
+                    );
+                    let mut codebase_fc = fc.clone();
+                    if let Some(obj) = codebase_fc.args.as_object_mut() {
+                        obj.insert("path".to_string(), serde_json::Value::String(final_filename.clone()));
+                    } else {
+                        codebase_fc.args = serde_json::json!({ "path": final_filename.clone() });
+                    }
+                    return self.handle_read_codebase_file(ctx, &codebase_fc).await;
+                }
+
+                Ok(format!(
+                    "(READ FAILED in workspace sandbox: {}. Note: If this is a project repository file, invoke 'read_codebase_file' with path '{}'.)",
+                    e, final_filename
+                ))
+            }
         }
     }
 

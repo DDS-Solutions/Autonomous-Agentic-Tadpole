@@ -44,6 +44,15 @@ For the single most complex or critical function/logic block in the code, you mu
 *   (b) **Failure Path (Input Validation):** Providing intentionally bad or incomplete data.
 *   (c) **Edge Case Path:** Testing boundaries (e.g., zero, empty list, maximum allowed value, null/undefined input).
 
+**V. The Mandatory Dual-Pass Nexus Protocol (The Invariant Gate):**
+Whenever you modify, patch, or refactor code in `server-rs`, `src`, or `execution/`, you MUST execute and document a two-pass engineering sequence:
+*   **Pass 1 (Synthesis):** Implement functional code, satisfy types, and verify standard compilation (`cargo check`).
+*   **Pass 2 (Adversarial Stress Test):** Before concluding any code change, actively answer and satisfy these four invariant gates:
+    1.  *Scheduler Invariants:* Can a spawned async task (e.g. `tokio::spawn`) complete or error before the calling thread registers its tracking handle?
+    2.  *Relational Invariants:* What foreign keys reference this table? Is deletion child-first when `PRAGMA foreign_keys = ON`?
+    3.  *Concurrency Invariants:* Does a retry loop quietly turn optimistic concurrency control (OCC) into an untracked Last-Write-Wins clobber?
+    4.  *Trust Boundaries:* Does any authorization, suspension, quota, or role check inspect unauthenticated client request body properties?
+
 **GLOBAL IDENTITY CONTEXT:**
 All HTTP and telemetry requests executed under the agent swarm must identify utilizing the official system identity: `User-Agent: TadpoleOS/1.1.58`.
 

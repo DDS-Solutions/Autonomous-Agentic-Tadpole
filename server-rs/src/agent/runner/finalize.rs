@@ -109,6 +109,20 @@ impl AgentRunner {
                     }
                     Err(e) => {
                         tracing::error!("❌ [Finalize] Failed to persist agent {} to DB: {}", agent_id_for_persist, e);
+                        // In case of OCC conflict, fetch current version and retry saving terminal idle state
+                        let db_ver: Result<i64, _> = sqlx::query_scalar("SELECT version FROM agents WHERE id = ?")
+                            .bind(&agent_id_for_persist)
+                            .fetch_one(&pool)
+                            .await;
+                        if let Ok(ver) = db_ver {
+                            let mut fresh_agent = agent_clone.clone();
+                            fresh_agent.version = ver as u32;
+                            if let Ok(fresh_ver) = crate::agent::persistence::save_agent_db(&pool, &fresh_agent).await {
+                                if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
+                                    entry.version = fresh_ver;
+                                }
+                            }
+                        }
                     }
                 }
             });

@@ -49,7 +49,7 @@ def get_active_log_file() -> Path:
             return all_logs[0]
     return log_file
 
-def run_swarm_mission_and_tail(timeout_secs: int = 75):
+def run_swarm_mission_and_tail(agent_id: str = "2", timeout_secs: int = 75):
     token = get_neural_token()
     if not token:
         print("[!] Error: NEURAL_TOKEN not found in .env")
@@ -58,7 +58,8 @@ def run_swarm_mission_and_tail(timeout_secs: int = 75):
     headers = {
         "User-Agent": "TadpoleOS/1.1.58",
         "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-tadpole-role": "overlord"
     }
 
     # Verify server health first
@@ -84,24 +85,23 @@ def run_swarm_mission_and_tail(timeout_secs: int = 75):
     # Formulate Mission Payload
     payload = {
         "message": (
-            "CEO DIRECTIVE: Initiate a high-scrutiny codebase inspection mission. "
-            "Delegate via 'issue_alpha_directive' to Tadpole Alpha to audit the access control logic in 'server-rs/src/services/acl_service.rs'. "
-            "Instruct Alpha to spawn specialist Linus (ID: 8) to read 'server-rs/src/services/acl_service.rs' using tool 'read_file', "
-            "examine security policies and error handling, share findings via 'share_finding', and report status back to the swarm."
+            "Conduct a high-scrutiny codebase inspection mission focused on the access control logic within the file 'server-rs/src/services/acl_service.rs'. "
+            "Use tool 'read_codebase_file' with path 'server-rs/src/services/acl_service.rs' to load the source, examine security policies and error handling, "
+            "and share findings via 'share_finding' before completing the mission."
         ),
-        "primaryGoal": "Audit server-rs/src/services/acl_service.rs and verify bidirectional swarm toolbelt traversal",
+        "primaryGoal": "Audit server-rs/src/services/acl_service.rs",
         "analysis": True,
         "auto_resume": True
     }
 
     print("\n" + "="*80)
-    print("🚀 DISPATCHING MISSION TO AGENT 1 (Agent of Nine) via POST /v1/agents/1/tasks")
+    print(f"🚀 DISPATCHING MISSION TO AGENT {agent_id} via POST /v1/agents/{agent_id}/tasks")
     print(f"Goal: {payload['primaryGoal']}")
     print("="*80 + "\n")
 
     dispatch_start = time.time()
     try:
-        r = requests.post("http://127.0.0.1:8000/v1/agents/1/tasks", headers=headers, json=payload, timeout=10)
+        r = requests.post(f"http://127.0.0.1:8000/v1/agents/{agent_id}/tasks", headers=headers, json=payload, timeout=10)
         print(f"[+] Task Dispatch HTTP Status: {r.status_code}")
         print(f"[+] Response: {r.text}")
     except Exception as e:
@@ -160,7 +160,8 @@ def run_swarm_mission_and_tail(timeout_secs: int = 75):
     return captured_events
 
 if __name__ == "__main__":
-    run_swarm_mission_and_tail(timeout_secs=90)
+    target = sys.argv[1] if len(sys.argv) > 1 else "2"
+    run_swarm_mission_and_tail(agent_id=target, timeout_secs=100)
 
 # [invoke_and_tail_swarm_mission]
 

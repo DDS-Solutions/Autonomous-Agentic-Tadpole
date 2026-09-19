@@ -2,12 +2,12 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "baseUrl": "https://api.x.ai/v1",
     "defaultConfig": null,
     "externalId": null,
-    "icon": "🌐",
-    "id": "alibaba",
-    "name": "Alibaba DashScope",
+    "icon": "✖️",
+    "id": "xai",
+    "name": "xAI Grok",
     "protocol": "openai",
     "supportsSteeringVectors": false
   },
@@ -26,6 +26,18 @@
   {
     "api_key": null,
     "audioModel": null,
+    "baseUrl": "https://api.deepseek.com",
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "🐋",
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "protocol": "openai",
+    "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
     "baseUrl": "https://api.ollama.com/v1",
     "defaultConfig": null,
     "externalId": null,
@@ -38,12 +50,12 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "https://api.deepseek.com",
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "defaultConfig": null,
     "externalId": null,
-    "icon": "🐋",
-    "id": "deepseek",
-    "name": "DeepSeek",
+    "icon": "🌐",
+    "id": "alibaba",
+    "name": "Alibaba DashScope",
     "protocol": "openai",
     "supportsSteeringVectors": false
   },
@@ -62,18 +74,6 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "http://127.0.0.1:11434/v1",
-    "defaultConfig": null,
-    "externalId": null,
-    "icon": "🦙",
-    "id": "ollama",
-    "name": "Ollama",
-    "protocol": "ollama",
-    "supportsSteeringVectors": false
-  },
-  {
-    "api_key": null,
-    "audioModel": null,
     "baseUrl": "https://api.openai.com/v1",
     "defaultConfig": null,
     "externalId": null,
@@ -86,13 +86,13 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "https://api.x.ai/v1",
+    "baseUrl": "http://127.0.0.1:11434/v1",
     "defaultConfig": null,
     "externalId": null,
-    "icon": "✖️",
-    "id": "xai",
-    "name": "xAI Grok",
-    "protocol": "openai",
+    "icon": "🦙",
+    "id": "ollama",
+    "name": "Ollama",
+    "protocol": "ollama",
     "supportsSteeringVectors": false
   }
 ]

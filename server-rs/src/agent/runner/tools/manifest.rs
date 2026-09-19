@@ -150,12 +150,12 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
         // --- Filesystem Tools ---
         ToolDefinitionData {
             name: "read_file".to_string(),
-            description: "Reads content from a file.".to_string(),
+            description: "Reads content from the local agent workspace sandbox. For central project codebase files (server-rs, execution, etc.), use read_codebase_file.".to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "filename": { "type": "string" },
-                    "path": { "type": "string" }
+                    "filename": { "type": "string", "description": "Relative path to file in workspace" },
+                    "path": { "type": "string", "description": "Alias for filename" }
                 },
                 "required": ["filename"]
             }),
@@ -195,13 +195,14 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
         },
         ToolDefinitionData {
             name: "read_codebase_file".to_string(),
-            description: "Reads a file from the central project codebase.".to_string(),
+            description: "Reads any source or configuration file from the central project codebase repository (e.g. 'server-rs/src/...', 'execution/...').".to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "filename": { "type": "string" }
+                    "path": { "type": "string", "description": "Relative path to file in project repository" },
+                    "filename": { "type": "string", "description": "Alias for path" }
                 },
-                "required": ["filename"]
+                "required": ["path"]
             }),
         },
         ToolDefinitionData {

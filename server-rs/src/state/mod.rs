@@ -955,6 +955,24 @@ impl AppState {
                                 entry.version = new_ver;
                             }
                         }
+                        Err(crate::error::AppError::Conflict(_)) => {
+                            // Reconcile OCC version drift: fetch true DB version so memory recovers
+                            if let Ok(db_ver) = sqlx::query_scalar::<_, i64>("SELECT version FROM agents WHERE id = ?")
+                                .bind(&agent.identity.id)
+                                .fetch_one(&mut *tx)
+                                .await
+                            {
+                                if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
+                                    entry.version = db_ver as u32;
+                                    tracing::warn!(
+                                        agent_id = %agent.identity.id,
+                                        stale_ver = agent.version,
+                                        reconciled_ver = db_ver,
+                                        "⚠️ [State] Reconciled OCC version drift for agent from DB"
+                                    );
+                                }
+                            }
+                        }
                         Err(err) => {
                             tracing::error!(
                                 agent_id = %agent.identity.id,
@@ -982,6 +1000,17 @@ impl AppState {
                         Ok(new_ver) => {
                             if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
                                 entry.version = new_ver;
+                            }
+                        }
+                        Err(crate::error::AppError::Conflict(_)) => {
+                            if let Ok(db_ver) = sqlx::query_scalar::<_, i64>("SELECT version FROM agents WHERE id = ?")
+                                .bind(&agent.identity.id)
+                                .fetch_one(&self.resources.pool)
+                                .await
+                            {
+                                if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
+                                    entry.version = db_ver as u32;
+                                }
                             }
                         }
                         Err(err) => {

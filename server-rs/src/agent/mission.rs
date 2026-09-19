@@ -103,27 +103,36 @@ pub async fn update_mission(
     status: MissionStatus,
     cost_usd: f64,
 ) -> Result<(), AppError> {
-    // Status transition validation
-    if let Some(existing) = get_mission_by_id(pool, mission_id).await? {
-        match (&existing.status, &status) {
-            (MissionStatus::Completed, new_st) if *new_st != MissionStatus::Completed => {
-                return Err(AppError::BadRequest(
-                    "Invalid state transition: Completed mission cannot transition back to an active state".to_string(),
-                ));
-            }
-            (MissionStatus::Failed, new_st) if *new_st != MissionStatus::Failed && *new_st != MissionStatus::Pending => {
-                return Err(AppError::BadRequest(
-                    "Invalid state transition: Failed mission can only transition to Pending for restart".to_string(),
-                ));
-            }
-            _ => {}
+    // 🛡️ [H1 Validation]: Finite and non-negative cost enforcement
+    if !cost_usd.is_finite() || cost_usd < 0.0 {
+        return Err(AppError::BadRequest(
+            "Mission cost increment must be finite and non-negative".to_string(),
+        ));
+    }
+
+    // Status transition validation & existence check (H1)
+    let existing = get_mission_by_id(pool, mission_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Mission '{}' not found in mission history", mission_id)))?;
+
+    match (&existing.status, &status) {
+        (MissionStatus::Completed, new_st) if *new_st != MissionStatus::Completed => {
+            return Err(AppError::BadRequest(
+                "Invalid state transition: Completed mission cannot transition back to an active state".to_string(),
+            ));
         }
+        (MissionStatus::Failed, new_st) if *new_st != MissionStatus::Failed && *new_st != MissionStatus::Pending => {
+            return Err(AppError::BadRequest(
+                "Invalid state transition: Failed mission can only transition to Pending for restart".to_string(),
+            ));
+        }
+        _ => {}
     }
 
     let status_str = status_to_str(&status);
     let now = Utc::now();
 
-    sqlx::query::<sqlx::Sqlite>(
+    let res = sqlx::query::<sqlx::Sqlite>(
         "UPDATE mission_history SET status = ?1, cost_usd = cost_usd + ?2, updated_at = ?3 WHERE id = ?4")
     .bind(status_str)
     .bind(cost_usd)
@@ -131,6 +140,13 @@ pub async fn update_mission(
     .bind(mission_id)
     .execute(pool)
     .await?;
+
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!(
+            "Mission '{}' not found in mission history",
+            mission_id
+        )));
+    }
 
     Ok(())
 }
@@ -153,6 +169,19 @@ pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppErr
             count
         );
     }
+
+    let agent_res = sqlx::query::<sqlx::Sqlite>(
+        "UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working')",
+    )
+    .execute(pool)
+    .await?;
+    if agent_res.rows_affected() > 0 {
+        tracing::info!(
+            "🧹 [Recovery] Reconciled {} orphaned agent status(es) from 'busy'/'working' to 'idle'.",
+            agent_res.rows_affected()
+        );
+    }
+
     Ok(count)
 }
 
@@ -692,6 +721,60 @@ mod tests {
             !ctx.contains("Ignore all previous"),
             "Injected finding must be stripped"
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_mission_invariants() -> Result<(), AppError> {
+        let state = crate::state::AppState::new_mock().await;
+        let pool = &state.resources.pool;
+
+        // 1. Setup agent and mission
+        sqlx::query("INSERT INTO agents (id, name, role, department, description, status, metadata) \
+                     VALUES ('a-inv', 'Inv Agent', 'Tester', 'QA', 'Invariant Test', 'idle', '{}')")
+            .execute(pool)
+            .await
+            .unwrap();
+        let m = create_mission(pool, "a-inv", "Invariant Mission", 50.0)
+            .await
+            .unwrap();
+
+        // 2. Reject nonexistent mission ID with NotFound
+        let not_found_res = update_mission(pool, "nonexistent-id", MissionStatus::Active, 1.0).await;
+        assert!(
+            matches!(not_found_res, Err(AppError::NotFound(_))),
+            "Expected NotFound error on nonexistent mission ID, got: {:?}",
+            not_found_res
+        );
+
+        // 3. Reject negative cost with BadRequest
+        let negative_cost_res = update_mission(pool, &m.id, MissionStatus::Active, -1.5).await;
+        assert!(
+            matches!(negative_cost_res, Err(AppError::BadRequest(_))),
+            "Expected BadRequest on negative cost increment, got: {:?}",
+            negative_cost_res
+        );
+
+        // 4. Reject NaN cost with BadRequest
+        let nan_cost_res = update_mission(pool, &m.id, MissionStatus::Active, f64::NAN).await;
+        assert!(
+            matches!(nan_cost_res, Err(AppError::BadRequest(_))),
+            "Expected BadRequest on NaN cost increment, got: {:?}",
+            nan_cost_res
+        );
+
+        // 5. Valid update succeeds and accumulates cost
+        update_mission(pool, &m.id, MissionStatus::Active, 2.5).await?;
+        let updated = get_mission_by_id(pool, &m.id).await?.unwrap();
+        assert_eq!(updated.status, MissionStatus::Active);
+        assert!((updated.cost_usd - 2.5).abs() < f64::EPSILON);
+
+        // Second valid update increments further
+        update_mission(pool, &m.id, MissionStatus::Completed, 3.5).await?;
+        let completed = get_mission_by_id(pool, &m.id).await?.unwrap();
+        assert_eq!(completed.status, MissionStatus::Completed);
+        assert!((completed.cost_usd - 6.0).abs() < f64::EPSILON);
+
         Ok(())
     }
 }

@@ -290,7 +290,14 @@ impl AgentRunner {
         ctx: &RunContext,
         fc: &crate::agent::types::ToolCall,
         ) -> Result<String, ToolExecutionError> {
-        let path_str = fc.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let path_str = fc
+            .args
+            .get("path")
+            .or_else(|| fc.args.get("filename"))
+            .or_else(|| fc.args.get("file_name"))
+            .or_else(|| fc.args.get("file"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         tracing::info!(
             "🔍 [Sovereignty] Agent {} requesting codebase read: {}",
