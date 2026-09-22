@@ -302,12 +302,10 @@ impl PolyglotParser {
                 match b {
                     b'"' => in_string = true,
                     b'{' => depth += 1,
-                    b'}' => {
-                        if depth > 0 {
-                            depth -= 1;
-                            if depth == 0 {
-                                return Some((open_idx, open_idx + i + 1));
-                            }
+                    b'}' if depth > 0 => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some((open_idx, open_idx + i + 1));
                         }
                     }
                     _ => {}

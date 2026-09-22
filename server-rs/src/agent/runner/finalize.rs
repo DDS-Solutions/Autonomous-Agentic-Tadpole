@@ -435,12 +435,10 @@ pub fn detect_unresolved_placeholders(text: &str) -> Option<&'static str> {
         "<tool_call>",
     ];
 
-    for &pattern in SUSPICIOUS_PATTERNS {
-        if text.contains(pattern) {
-            return Some(pattern);
-        }
-    }
-    None
+    SUSPICIOUS_PATTERNS
+        .iter()
+        .copied()
+        .find(|&pattern| text.contains(pattern))
 }
 
 

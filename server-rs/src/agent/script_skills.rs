@@ -492,7 +492,7 @@ impl ScriptSkillsRegistry {
                         tags: None,
                         category: category.to_string(),
                     };
-                    let normalized = name.to_lowercase().replace(' ', "_").replace('-', "_");
+                    let normalized = name.to_lowercase().replace([' ', '-'], "_");
                     if normalized != name {
                         results.push((normalized, wf_def.clone()));
                     }

@@ -679,7 +679,7 @@ impl AgentRunner {
             && function_calls.is_empty()
             && !output_text.contains("complete_mission")
         {
-            let is_stalled = crate::agent::cascade_router::CascadeRouter::detect_stall_pattern(&output_text).is_some();
+            let is_stalled = crate::agent::cascade_router::CascadeRouter::detect_stall_pattern(output_text).is_some();
 
             if is_stalled {
                 tracing::warn!(
