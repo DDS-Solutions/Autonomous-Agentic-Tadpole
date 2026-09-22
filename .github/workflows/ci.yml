@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'src-tauri/**'
       - 'server-rs/**'
       - 'crates/**'
       - 'execution/**'
@@ -27,6 +28,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'src-tauri/**'
       - 'server-rs/**'
       - 'crates/**'
       - 'execution/**'
@@ -81,7 +83,8 @@ jobs:
             frontend:
               - 'src/**'
               - 'src-tauri/**'
-              - 'tests/invariants/**'
+              - 'tests/**'
+              - '.gitleaks.toml'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig*.json'
@@ -93,9 +96,15 @@ jobs:
               - '.github/workflows/ci.yml'
             python:
               - 'execution/**'
-              - 'tests/unit/**'
+              - 'tests/**'
               - 'directives/**'
               - 'docs/**'
+              - 'package.json'
+              - 'server-rs/Cargo.toml'
+              - 'version.json'
+              - 'SYSTEM_MAP.md'
+              - 'README.md'
+              - '.env*'
               - '.github/workflows/ci.yml'
 
   # ──────────────────────────────────────
@@ -132,7 +141,7 @@ jobs:
         run: npm run test:invariants
 
       - name: Run Tests
-        run: npx vitest run --reporter=verbose
+        run: npx vitest run
 
       - name: Build Frontend
         run: npm run build
@@ -149,6 +158,10 @@ jobs:
     strategy:
       matrix:
         rust: [stable]
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -161,6 +174,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -192,7 +206,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -220,3 +235,22 @@ jobs:
         run: |
           python execution/parity_guard.py
           python execution/verify_ai_context.py .
+
+  # ──────────────────────────────────────
+  #  CI Gate: Unified Status Check
+  # ──────────────────────────────────────
+  ci-gate:
+    name: CI Status Gate
+    needs: [changes, frontend, backend, python]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify All Active Jobs Succeeded
+        run: |
+          if [[ "${{ needs.frontend.result }}" == "failure" || "${{ needs.frontend.result }}" == "cancelled" || \
+                "${{ needs.backend.result }}" == "failure" || "${{ needs.backend.result }}" == "cancelled" || \
+                "${{ needs.python.result }}" == "failure" || "${{ needs.python.result }}" == "cancelled" ]]; then
+            echo "❌ One or more required CI jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "✅ All active CI checks completed successfully."
