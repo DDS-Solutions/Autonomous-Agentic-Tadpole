@@ -23,13 +23,13 @@
 > - **Primary Core**: SQLite handles relational metadata, logs, and fallback memories for non-vector builds.
 > - **Neural Core**: LanceDB handles vector embeddings (Semantic Recall) when enabled.
 > - **Cognitive Core**: The Tiered Memory Controller runs background compression, summarizing episodic memories into semantic knowledge.
-> - **Sync Policy**: All writes are debounced (10s) via `memory.rs`.
+> - **Sync Policy**: All writes are debounced (10s) via `server-rs/src/agent/memory.rs`.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 # 🧠 Tadpole Engine: Persistent Ledger (Long-Term Memory)
 **Intelligence Level**: High (ECC Optimized)
-**Source of Truth**: `server-rs/src/memory.rs`, `directives/LONG_TERM_MEMORY.md`
+**Source of Truth**: `server-rs/src/agent/memory.rs`, `directives/LONG_TERM_MEMORY.md`
 **Last Hardened**: 2026-04-01
 **Standard Compliance**: ECC-MEM (Enhanced Contextual Clarity - Memory Standards)
 

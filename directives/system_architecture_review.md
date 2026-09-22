@@ -39,7 +39,7 @@ Verify that the Tadpole OS codebase adheres to the **Hybrid Sovereign** architec
 ---
 
 ## 🛠️ Tools for Verification
-- **Code Graph**: Review `docs/CODEBASE_MAP.md` for logic accuracy.
+- **Code Graph**: Review `SYSTEM_MAP.md` for logic accuracy.
 - **Parity Guard**: `python execution/parity_guard.py .` to ensure documentation matches implementation reality.
 
 ## 📝 Findings Protocol

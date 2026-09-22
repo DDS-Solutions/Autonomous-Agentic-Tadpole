@@ -22,7 +22,7 @@ Maintain a high-fidelity, "Level 3 Sovereign" API reference. This directive ensu
 
 ### 1. RFC 9457 Compliance (Problem Details)
 - **Check**: Every error response must include `type`, `title`, `status`, and `detail`.
-- **Validation**: Test against the `ProblemDetails` utility in `server-rs/src/routes/error.rs`.
+- **Validation**: Test against the `ProblemDetails` utility in `server-rs/src/error.rs`.
 
 ### 2. HATEOAS Envelopes
 - **Check**: Resource endpoints (Agents, Missions) must include a `_links` object for discoverability.

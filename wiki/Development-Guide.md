@@ -219,7 +219,7 @@ RUST_BACKTRACE=1 cargo test --bin server-rs -- routes::my_test --nocapture
 ### Check audit trail
 
 ```bash
-curl http://127.0.0.1:8000/v1/oversight/audit-trail \
+curl http://127.0.0.1:8000/v1/oversight/security/audit-trail \
   -H "Authorization: Bearer $NEURAL_TOKEN" | jq .data[-5:]
 ```
 

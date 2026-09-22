@@ -202,7 +202,7 @@ curl -X POST http://127.0.0.1:8000/v1/engine/kill \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 
 # Or hard kill (last resort)
-stop_AAtadpole.bat    # Windows
+stop_AA_tadpole.bat    # Windows
 ```
 
 ---
@@ -211,11 +211,11 @@ stop_AAtadpole.bat    # Windows
 
 ```bash
 # List recent audit entries
-curl http://127.0.0.1:8000/v1/oversight/audit-trail \
+curl http://127.0.0.1:8000/v1/oversight/security/audit-trail \
   -H "Authorization: Bearer $NEURAL_TOKEN" | jq .data[-10:]
 
 # Verify chain integrity
-curl http://127.0.0.1:8000/v1/oversight/audit-trail/verify \
+curl http://127.0.0.1:8000/v1/oversight/security/integrity \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 ```
 

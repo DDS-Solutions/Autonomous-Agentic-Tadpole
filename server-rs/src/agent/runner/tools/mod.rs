@@ -154,7 +154,7 @@ impl AgentRunner {
 
         // 3. Security Manager (Hierarchy & Policy)
         let sec_mgr = DefaultSecurityManager;
-        let validation = sec_mgr.pre_validate(self, ctx, fc).await?;
+        let mut validation = sec_mgr.pre_validate(self, ctx, fc).await?;
 
         // 3b. Aletheia Protocol Verification Gate
         let mutation_proposal = MutationProposal {
@@ -184,11 +184,28 @@ impl AgentRunner {
                 }
             }
 
-            let decision = self.state.security.verification_gate.evaluate(
+            let assessment = crate::agent::verification_gate::SystemOneVerificationAssessment {
+                mutation_risk: if fc.name == "delete_file" || fc.name == "database_migration" {
+                    1.8
+                } else if fc.name == "execute_shell" && (fc.args.to_string().contains("rm -rf") || fc.args.to_string().contains("format")) {
+                    2.9
+                } else {
+                    0.2
+                },
+                rule_violation_prob: if fc.args.to_string().contains("DROP TABLE") {
+                    0.95
+                } else {
+                    0.05
+                },
+                confidence: 0.95,
+                notes: Some(format!("System 1 assessment for skill '{}'", fc.name)),
+            };
+
+            let decision = self.state.security.verification_gate.evaluate_with_assessment(
                 &mutation_proposal,
-                true,
+                Some(&assessment),
                 verified_blast_radius,
-                Some("Aletheia live gate evaluation"),
+                Some("Aletheia live System 1 gate evaluation"),
             );
 
             match decision {
@@ -206,6 +223,18 @@ impl AgentRunner {
                         "Aletheia Gate REJECTED mutation '{}': {} (Remediation: {})",
                         fc.name, reason, remediation_hint
                     )));
+                }
+                VerificationDecision::EscalateToOversight { reason, risk_score } => {
+                    tracing::warn!(
+                        "⚠️ [Aletheia] Mutation proposal for '{}' escalated to oversight (Risk: {:.2}): {}",
+                        fc.name, risk_score, reason
+                    );
+                    self.broadcast_sys(
+                        &format!("⚠️ Aletheia Gate Escalation: '{}' requires oversight approval ({})", fc.name, reason),
+                        "warning",
+                        mission_id_opt.clone(),
+                    );
+                    validation.oversight_required = true;
                 }
                 VerificationDecision::Approved => {
                     tracing::info!("✅ [Aletheia] Mutation proposal for '{}' APPROVED", fc.name);

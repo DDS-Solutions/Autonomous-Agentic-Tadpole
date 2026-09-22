@@ -93,7 +93,7 @@ Pre-built batch files are available for Windows users:
 | `start_AA_tadpole.bat` | Start both engine and dashboard |
 | `start_backend.bat` | Engine only |
 | `start_frontend.bat` | Dashboard only |
-| `stop_AAtadpole.bat` | Stop all processes |
+| `stop_AA_tadpole.bat` | Stop all processes |
 
 ---
 
@@ -151,7 +151,7 @@ Open `http://127.0.0.1:8000` — no separate Vite server needed.
 Install Python dependencies (only required for execution scripts):
 
 ```bash
-pip install -r requirements.txt   # if present
+pip install -r execution/requirements.txt   # if present
 # or per-script: pip install httpx python-dotenv
 ```
 

@@ -47,7 +47,7 @@ The `ROADMAP.md` Feature Specs table is the authoritative index of all active sp
 ---
 
 ## 📊 Roadmap Management
-Update `docs/CODEBASE_MAP.md` to reflect upcoming architectural changes. All major roadmap items require a dedicated `system_architecture_review.md` before development begins.
+Update `SYSTEM_MAP.md` to reflect upcoming architectural changes. All major roadmap items require a dedicated `system_architecture_review.md` before development begins.
 
 ## 🚦 Approval
 Strategic roadmap pivots must be presented in the monthly `ops_review.md` and authorized by a human overseer.

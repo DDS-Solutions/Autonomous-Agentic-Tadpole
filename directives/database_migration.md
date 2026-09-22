@@ -21,7 +21,7 @@ Execute schema migrations on `tadpole.db` (SQLite) or `memory.lance` (Vector DB)
 ## 🛫 Pre-Flight Checklist
 - [ ] **Backup**: Create a filesystem snapshot of `data/tadpole.db` and the `data/workspaces/` directory.
 - [ ] **Lock**: Ensure no background `IngestionWorker` or `ContinuityScheduler` jobs are active.
-- [ ] **Schema Check**: Validate the migration SQL against `docs/SYSTEM_SCHEMA.json`.
+- [ ] **Schema Check**: Validate the migration SQL against existing schemas in `server-rs/migrations/` and verified contracts in `server-rs/src/db/contract_tests.rs`.
 
 ---
 

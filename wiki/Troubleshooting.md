@@ -123,7 +123,7 @@ cargo run --manifest-path server-rs/Cargo.toml --features vector-memory
 ```
 
 Or if you just need the fallback SQLite search (no LanceDB):
-The IKS endpoints (`/v1/agents/:id/memory`) still work without this feature.
+The IKS endpoints (`/v1/agents/{id}/memories`) still work without this feature.
 
 ---
 
@@ -203,7 +203,7 @@ npm run version:sync
 1. Check `docs/ARCHITECTURE.md` for design context
 2. Check `docs/OPERATIONS_MANUAL.md` for detailed runbooks
 3. Enable debug logging: `RUST_LOG=debug npm run engine`
-4. Review the audit trail: `/v1/oversight/audit-trail`
+4. Review the audit trail: `/v1/oversight/security/audit-trail`
 5. Run parity guard: `python execution/parity_guard.py`
 6. Open an issue on GitHub with the panic log + steps to reproduce
 

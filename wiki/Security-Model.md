@@ -204,7 +204,7 @@ Set `PRIVACY_MODE=true` in `.env` to restrict all execution to local-only provid
 - [ ] Set `ALLOWED_ORIGINS` to your specific frontend domain
 - [ ] Rotate `NEURAL_TOKEN` quarterly using the rotation runbook
 - [ ] Enable SQLite WAL backups via `execution/backup_sqlite.py`
-- [ ] Review `/v1/oversight/audit-trail` periodically
+- [ ] Review `/v1/oversight/security/audit-trail` periodically
 - [ ] Run `python execution/parity_guard.py` after every deployment
 - [ ] Monitor `/v1/engine/health` `budget.total_spent_usd` for anomalies
 

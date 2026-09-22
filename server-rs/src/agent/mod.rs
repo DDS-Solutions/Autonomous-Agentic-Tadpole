@@ -38,6 +38,7 @@ pub mod blackboard;
 pub mod dag;
 pub mod cascade_router;
 pub mod verification_gate;
+pub mod script_profiler;
 pub mod context_slicer;
 pub mod mission;
 pub mod null_provider;

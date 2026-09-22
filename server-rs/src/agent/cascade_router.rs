@@ -22,6 +22,8 @@ pub enum ModelTier {
     Tier2Reasoning,
 }
 
+use crate::agent::script_profiler::{profile_text, ScriptProfile};
+
 /// Evaluated complexity of an incoming agent turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskComplexity {
@@ -31,13 +33,23 @@ pub enum TaskComplexity {
     Critical,
 }
 
+/// Optional System 1 classification hint evaluated in a single forward pass.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemOneRoutingHint {
+    pub choice: String,
+    pub confidence: f32,
+    pub domain: Option<String>,
+}
+
 /// Structured routing decision returned by the cascade router.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingDecision {
     pub complexity: TaskComplexity,
     pub tier: ModelTier,
     pub provider: String,
     pub model: String,
+    pub confidence: f32,
+    pub script_profile: ScriptProfile,
 }
 
 /// Routing policy for model cascading.
@@ -50,6 +62,7 @@ pub struct CascadePolicy {
     pub max_tier1_token_threshold: usize,
     pub auto_escalate_on_mutation: bool,
     pub critical_keywords: Vec<String>,
+    pub confidence_escalation_threshold: f32,
 }
 
 impl Default for CascadePolicy {
@@ -67,6 +80,7 @@ impl Default for CascadePolicy {
                 "SECURITY_AUDIT".to_string(),
                 "SWARM_SYNTHESIS".to_string(),
             ],
+            confidence_escalation_threshold: 0.85,
         }
     }
 }
@@ -87,28 +101,48 @@ impl CascadeRouter {
         Self { policy }
     }
 
-    /// Evaluates task characteristics and returns a structured `RoutingDecision`.
-    pub fn route_turn(
+    /// Evaluates task characteristics with optional System 1 semantic hint and returns a `RoutingDecision`.
+    pub fn route_turn_semantic(
         &self,
         prompt: &str,
         token_count: usize,
         is_mutating: bool,
         directive_requires_deep_reasoning: bool,
+        hint: Option<&SystemOneRoutingHint>,
     ) -> RoutingDecision {
-        // 1. Evaluate Complexity
-        let complexity = if directive_requires_deep_reasoning
-            || self.policy.critical_keywords.iter().any(|k| prompt.contains(k))
-        {
-            TaskComplexity::Critical
-        } else if is_mutating && self.policy.auto_escalate_on_mutation {
-            TaskComplexity::High
-        } else if token_count > self.policy.max_tier1_token_threshold {
-            TaskComplexity::Medium
+        let script_profile = profile_text(prompt);
+
+        // 1. Evaluate Complexity incorporating System 1 Semantic Hint
+        let (complexity, confidence) = if let Some(h) = hint {
+            let conf = h.confidence;
+            if h.choice == "tier2_reasoning" || conf < self.policy.confidence_escalation_threshold {
+                // Ambiguous confidence or explicit Tier 2 classification -> Escalate
+                (TaskComplexity::Critical, conf)
+            } else if is_mutating && self.policy.auto_escalate_on_mutation {
+                (TaskComplexity::High, conf)
+            } else if token_count > self.policy.max_tier1_token_threshold {
+                (TaskComplexity::Medium, conf)
+            } else {
+                (TaskComplexity::Low, conf)
+            }
         } else {
-            TaskComplexity::Low
+            // Heuristic fallback path
+            let base_conf = 1.0f32;
+            let comp = if directive_requires_deep_reasoning
+                || self.policy.critical_keywords.iter().any(|k| prompt.contains(k))
+            {
+                TaskComplexity::Critical
+            } else if is_mutating && self.policy.auto_escalate_on_mutation {
+                TaskComplexity::High
+            } else if token_count > self.policy.max_tier1_token_threshold {
+                TaskComplexity::Medium
+            } else {
+                TaskComplexity::Low
+            };
+            (comp, base_conf)
         };
 
-        // 2. Map Complexity to Model Tier cleanly
+        // 2. Map Complexity to Model Tier
         let tier = match complexity {
             TaskComplexity::Low | TaskComplexity::Medium => ModelTier::Tier1Fast,
             TaskComplexity::High | TaskComplexity::Critical => ModelTier::Tier2Reasoning,
@@ -121,8 +155,8 @@ impl CascadeRouter {
         };
 
         info!(
-            "🧭 [CascadeRouter] Turn routed to {:?} ({}/{}) [Complexity: {:?}, Tokens: {}]",
-            tier, provider, model, complexity, token_count
+            "🧭 [CascadeRouter] Turn routed to {:?} ({}/{}) [Complexity: {:?}, Script: {}, Conf: {:.2}, Tokens: {}]",
+            tier, provider, model, complexity, script_profile.dominant_script, confidence, token_count
         );
 
         RoutingDecision {
@@ -130,6 +164,42 @@ impl CascadeRouter {
             tier,
             provider,
             model,
+            confidence,
+            script_profile,
+        }
+    }
+
+    /// Evaluates task characteristics using standard heuristic parameters (backwards compatible).
+    pub fn route_turn(
+        &self,
+        prompt: &str,
+        token_count: usize,
+        is_mutating: bool,
+        directive_requires_deep_reasoning: bool,
+    ) -> RoutingDecision {
+        self.route_turn_semantic(prompt, token_count, is_mutating, directive_requires_deep_reasoning, None)
+    }
+
+    /// Detects orchestrator stall signals using typed matching rather than raw regexes.
+    pub fn detect_stall_pattern(output: &str) -> Option<&'static str> {
+        let lower = output.to_ascii_lowercase();
+        if lower.contains("<halting_signal/>") {
+            Some("explicit_halt_signal")
+        } else if lower.contains("waiting for user input")
+            || lower.contains("please provide")
+            || lower.contains("ready to proceed")
+            || lower.contains("what would you like")
+            || lower.contains("provide the specific")
+            || lower.contains("waiting for")
+            || lower.contains("need more information")
+            || lower.contains("please share")
+            || lower.contains("let me know")
+        {
+            Some("waiting_for_input")
+        } else if lower.contains("unable to proceed without") {
+            Some("missing_dependency")
+        } else {
+            None
         }
     }
 
@@ -267,6 +337,38 @@ mod tests {
 
         let credit_esc = router.should_escalate_after_failure(1, "Insufficient credit balance in account");
         assert!(credit_esc.is_none(), "Credit errors should not trigger model escalation");
+    }
+
+    #[test]
+    fn test_cascade_semantic_routing_and_confidence_escalation() {
+        let router = CascadeRouter::default();
+
+        // 1. Semantic hint with high confidence -> routes to Tier 1
+        let hint_fast = SystemOneRoutingHint {
+            choice: "tier1_fast".to_string(),
+            confidence: 0.94,
+            domain: Some("coding".to_string()),
+        };
+        let decision_fast = router.route_turn_semantic("git status", 50, false, false, Some(&hint_fast));
+        assert_eq!(decision_fast.tier, ModelTier::Tier1Fast);
+        assert_eq!(decision_fast.confidence, 0.94);
+
+        // 2. Semantic hint with low confidence (< 0.85) -> auto-escalates to Tier 2
+        let hint_ambiguous = SystemOneRoutingHint {
+            choice: "tier1_fast".to_string(),
+            confidence: 0.72,
+            domain: Some("refactor".to_string()),
+        };
+        let decision_esc = router.route_turn_semantic("reorganize this function", 120, false, false, Some(&hint_ambiguous));
+        assert_eq!(decision_esc.tier, ModelTier::Tier2Reasoning);
+        assert_eq!(decision_esc.complexity, TaskComplexity::Critical);
+    }
+
+    #[test]
+    fn test_cascade_detects_stall_patterns() {
+        assert_eq!(CascadeRouter::detect_stall_pattern("<halting_signal/>"), Some("explicit_halt_signal"));
+        assert_eq!(CascadeRouter::detect_stall_pattern("Please provide the database password"), Some("waiting_for_input"));
+        assert_eq!(CascadeRouter::detect_stall_pattern("Normal code response"), None);
     }
 }
 

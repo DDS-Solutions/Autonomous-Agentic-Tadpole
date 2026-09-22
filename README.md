@@ -168,7 +168,7 @@ On Windows, these helpers wrap the same flow:
 - `start_AA_tadpole.bat`
 - `start_backend.bat`
 - `start_frontend.bat`
-- `stop_AAtadpole.bat`
+- `stop_AA_tadpole.bat`
 
 To run the containerized stack (Engine + Prometheus + Grafana + Jaeger):
 

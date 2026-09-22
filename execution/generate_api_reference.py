@@ -53,6 +53,8 @@ NESTS = {
     "build_system_routes": "/system",
     "build_governance_routes": "/governance",
     "build_sovereign_routes": "/sovereign",
+    "build_knowledge_routes": "/knowledge",
+    "build_iacp_routes": "/iacp",
     "build_engine_public_routes": "",
     "build_engine_protected_routes": "",
 }
@@ -88,8 +90,10 @@ TAG_BY_PREFIX = [
     ("/v1/system", "system"),
     ("/v1/governance", "governance"),
     ("/v1/sovereign", "sovereign"),
+    ("/v1/knowledge", "knowledge"),
+    ("/v1/iacp", "iacp"),
     ("/v1/search/memory", "memory"),
-    ("/v1/memory/search/bm25", "memory"),
+    ("/v1/memory/search", "memory"),
     ("/v1/mcp", "mcp"),
     ("/v1/env-schema", "system"),
     ("/v1/api/pull", "model-manager"),
@@ -236,14 +240,22 @@ def method_from_target(target: str) -> list[tuple[str, str, str | None]]:
         "patch": "PATCH",
     }
 
-    for rust_method, http_method in method_map.items():
-        direct = re.match(rf"{rust_method}\((.+)\)$", target)
-        if direct:
-            methods.append((http_method, direct.group(1), None))
+    # Match chained and direct methods e.g. get(...).put(...) or axum::routing::delete(...)
+    matches = list(re.finditer(r"(?:axum::routing::)?(get|post|put|delete|patch)\(([^()]+)\)", target))
+    if matches:
+        for m in matches:
+            http_method = method_map[m.group(1)]
+            handler = m.group(2).strip()
+            methods.append((http_method, handler, None))
+    else:
+        for rust_method, http_method in method_map.items():
+            direct = re.match(rf"{rust_method}\((.+)\)$", target)
+            if direct:
+                methods.append((http_method, direct.group(1), None))
 
-        qualified = re.match(rf"axum::routing::{rust_method}\((.+)\)$", target)
-        if qualified:
-            methods.append((http_method, qualified.group(1), None))
+            qualified = re.match(rf"axum::routing::{rust_method}\((.+)\)$", target)
+            if qualified:
+                methods.append((http_method, qualified.group(1), None))
 
     return methods
 

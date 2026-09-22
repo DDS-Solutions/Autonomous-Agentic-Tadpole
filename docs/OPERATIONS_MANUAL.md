@@ -36,7 +36,7 @@ Windows helper scripts:
 - `start_AA_tadpole.bat`: starts backend and frontend in separate windows.
 - `start_backend.bat`: starts only the Rust engine.
 - `start_frontend.bat`: starts only the Vite dashboard.
-- `stop_AAtadpole.bat`: stops the local stack.
+- `stop_AA_tadpole.bat`: stops the local stack.
 
 ## Engine Lifecycle
 
@@ -250,6 +250,11 @@ Execution layer paths:
 - `execution/core/`
 - `execution/skills/`
 - `execution/tadpole_mcp_server.py`
+- `execution/parity_guard.py` (`parity_guard`: Documentation-to-code synchronization gate)
+- `execution/verify_ai_context.py` (`verify_ai_context`: AI context note and trace scope verification)
+- `execution/security_scan.py` (`security_scan`: Automated security and vulnerability auditor)
+- `execution/verify_telemetry.py` (`verify_telemetry`: Telemetry stream and pulse validator)
+- `execution/resource_check.json` (`resource_check`: System resource and compute profile check)
 - `execution/tool_loop_guard.py` (10-iteration ceiling & 3-repetition circuit breaker)
 - `execution/evaluate_annealing.py` (Fault registry analyzer & self-annealing proposer)
 - `execution/cargo_fast_check.py` (Fast background compiler checker)

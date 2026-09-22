@@ -46,7 +46,8 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `GET` | `/v1/agents/graph` | `routes::agent::get_swarm_graph_handler` | Protected |
 | `DELETE` | `/v1/agents/{id}` | `routes::agent::delete_agent` | Protected |
 | `PUT` | `/v1/agents/{id}` | `routes::agent::update_agent` | Protected |
-| `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet) .put(routes::agentic_engine::update_context_packet` | Protected |
+| `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet` | Protected |
+| `PUT` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::update_context_packet` | Protected |
 | `GET` | `/v1/agents/{id}/maintenance-report` | `routes::agentic_engine::get_maintenance_report` | Protected |
 | `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
@@ -58,7 +59,8 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `GET` | `/v1/agents/{id}/skills/subscribed` | `routes::agentic_engine::get_subscribed_skills` | Protected |
 | `POST` | `/v1/agents/{id}/skills/{skill_id}/approve` | `routes::agentic_engine::approve_skill` | Protected |
 | `POST` | `/v1/agents/{id}/skills/{skill_id}/subscribe` | `routes::agentic_engine::subscribe_skill` | Protected |
-| `GET` | `/v1/agents/{id}/status-ledger` | `routes::agentic_engine::get_status_ledger) .put(routes::agentic_engine::update_status_ledger` | Protected |
+| `GET` | `/v1/agents/{id}/status-ledger` | `routes::agentic_engine::get_status_ledger` | Protected |
+| `PUT` | `/v1/agents/{id}/status-ledger` | `routes::agentic_engine::update_status_ledger` | Protected |
 | `POST` | `/v1/agents/{id}/tasks` | `routes::agent::send_task` | Protected |
 | `POST` | `/v1/agents/{id}/tasks/{task_id}/claim` | `routes::agentic_engine::claim_task` | Protected |
 | `POST` | `/v1/agents/{id}/tasks/{task_id}/receipts` | `routes::agentic_engine::post_receipt` | Protected |
@@ -127,6 +129,13 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `DELETE` | `/v1/governance/blueprints/{id}` | `routes::governance::delete_blueprint` | Protected |
 | `GET` | `/v1/governance/manifest` | `routes::governance::get_sovereign_manifest` | Protected |
 
+## Iacp
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/v1/iacp/hire` | `routes::iacp::execute_hire` | Protected |
+| `POST` | `/v1/iacp/negotiate` | `routes::iacp::negotiate_hire` | Protected |
+
 ## Infra
 
 | Method | Path | Handler | Notes |
@@ -144,6 +153,20 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `GET` | `/v1/intelligence/impacted-tests` | `routes::intelligence::get_impacted_tests` | Protected |
 | `GET` | `/v1/intelligence/resolve` | `routes::intelligence::resolve_code_context` | Protected |
 
+## Knowledge
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/knowledge` | `routes::knowledge::list_knowledge` | Protected |
+| `POST` | `/v1/knowledge` | `routes::knowledge::write_knowledge` | Protected |
+| `GET` | `/v1/knowledge/edges` | `routes::knowledge::list_knowledge_edges` | Protected |
+| `POST` | `/v1/knowledge/edges` | `routes::knowledge::add_knowledge_edge` | Protected |
+| `GET` | `/v1/knowledge/search` | `routes::knowledge::search_knowledge` | Protected |
+| `POST` | `/v1/knowledge/synthesize` | `routes::knowledge::synthesize_knowledge` | Protected |
+| `DELETE` | `/v1/knowledge/{id}` | `routes::knowledge::delete_knowledge` | Protected |
+| `POST` | `/v1/knowledge/{id}/confirm` | `routes::knowledge::confirm_knowledge` | Protected |
+| `GET` | `/v1/knowledge/{id}/peers` | `routes::knowledge::get_knowledge_peers` | Protected |
+
 ## Mcp
 
 | Method | Path | Handler | Notes |
@@ -156,6 +179,7 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/v1/memory/search/bm25` | `routes::memory::bm25_search_handler` | Protected |
+| `GET` | `/v1/memory/search/hybrid` | `routes::memory::hybrid_rag_search_handler` | Protected |
 | `GET` | `/v1/search/memory` | `routes::memory::global_search` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 
 ## Model Manager
@@ -231,7 +255,6 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `GET` | `/health` | `routes::health::health_check` | Public |
 | `GET` | `/metrics` | `routes::health::metrics_handler` | Protected |
 | `GET` | `/v1/env-schema` | `routes::env_schema::get_env_schema` | Protected |
-| `GET` | `/v1/memory/search/hybrid` | `routes::memory::hybrid_rag_search_handler` | Protected |
 | `GET` | `/v1/system/compute-profile` | `routes::system::get_compute_profile` | Protected |
 | `GET` | `/v1/system/debug/queues` | `routes::system::debug_queues` | Protected |
 | `GET` | `/v1/system/debug/services` | `routes::system::debug_services` | Protected |

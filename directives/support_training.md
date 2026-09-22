@@ -31,7 +31,7 @@ Train and specialize agents to provide industry-leading technical support and tr
 
 ### 3. KB Synthesis
 - **Goal**: Documentation self-generation.
-- **Action**: After every successful support ticket resolution, draft a concise entry for `docs/TROUBLESHOOTING.md`.
+- **Action**: After every successful support ticket resolution, draft a concise entry for `wiki/Troubleshooting.md`.
 
 ---
 

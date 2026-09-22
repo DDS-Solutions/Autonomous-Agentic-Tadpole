@@ -1,7 +1,119 @@
 [
   {
-    "id": "gemma4:26b",
-    "name": "gemma4:26b",
+    "id": "gpt-4o",
+    "name": "gpt-4o",
+    "providerId": "openai",
+    "provider": "openai",
+    "rpm": 50,
+    "tpm": 300000,
+    "rpd": 10000,
+    "tpd": 30000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "flagship",
+        "multimodal"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "deepseek-v3",
+    "name": "deepseek-v3",
+    "providerId": "deepseek",
+    "provider": "deepseek",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 65536,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "open-weights",
+        "efficient"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gpt-4o-mini",
+    "name": "gpt-4o-mini",
+    "providerId": "openai",
+    "provider": "openai",
+    "rpm": 100,
+    "tpm": 500000,
+    "rpd": 20000,
+    "tpd": 50000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [
+        "fast",
+        "cost-effective"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "qwen-max",
+    "name": "qwen-max",
+    "providerId": "alibaba",
+    "provider": "alibaba",
+    "rpm": 60,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 20000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": true,
+      "tags": [
+        "multilingual",
+        "enterprise"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gemma4:e4b",
+    "name": "gemma4:e4b",
     "providerId": "ollama",
     "provider": "ollama",
     "rpm": null,
@@ -16,6 +128,31 @@
       "supportsReasoning": false,
       "supportsHaltingTool": true,
       "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
+    "name": "gemma4:12b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": 100,
+    "tpm": 100000,
+    "rpd": 10000,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
       "maxOutputTokens": 4096,
       "isEmbeddingModel": false,
       "isAgenticRecommended": false,
@@ -50,26 +187,29 @@
     "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
-    "id": "phi3.5:latest",
-    "name": "phi3.5:latest",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": null,
-    "tpm": null,
-    "rpd": null,
-    "tpd": null,
+    "id": "claude-3-7-sonnet",
+    "name": "claude-3-7-sonnet",
+    "providerId": "anthropic",
+    "provider": "anthropic",
+    "rpm": 50,
+    "tpm": 200000,
+    "rpd": 10000,
+    "tpd": 50000000,
     "modality": "llm",
     "capabilities": {
-      "supportsTools": false,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": true,
       "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096,
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
       "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [],
+      "isAgenticRecommended": true,
+      "tags": [
+        "flagship",
+        "reasoning"
+      ],
       "source": "matrix"
     },
     "lastSyncedAt": "2026-09-13T12:00:00Z"
@@ -104,38 +244,10 @@
     "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
-    "id": "claude-3-7-sonnet",
-    "name": "claude-3-7-sonnet",
-    "providerId": "anthropic",
-    "provider": "anthropic",
-    "rpm": 50,
-    "tpm": 200000,
-    "rpd": 10000,
-    "tpd": 50000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": true,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": true,
-      "supportsHaltingTool": true,
-      "contextWindow": 200000,
-      "maxOutputTokens": 8192,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": true,
-      "tags": [
-        "flagship",
-        "reasoning"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "deepseek-v3",
-    "name": "deepseek-v3",
-    "providerId": "deepseek",
-    "provider": "deepseek",
+    "id": "grok-beta",
+    "name": "grok-beta",
+    "providerId": "xai",
+    "provider": "xai",
     "rpm": 60,
     "tpm": 200000,
     "rpd": 10000,
@@ -147,14 +259,91 @@
       "supportsStructuredOutput": true,
       "supportsReasoning": false,
       "supportsHaltingTool": true,
-      "contextWindow": 65536,
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [
+        "realtime"
+      ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gemini-2.5-pro",
+    "name": "gemini-2.5-pro",
+    "providerId": "google",
+    "provider": "google",
+    "rpm": 15,
+    "tpm": 1000000,
+    "rpd": 1500,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": true,
+      "supportsStructuredOutput": true,
+      "supportsReasoning": true,
+      "supportsHaltingTool": true,
+      "contextWindow": 1048576,
       "maxOutputTokens": 8192,
       "isEmbeddingModel": false,
       "isAgenticRecommended": true,
       "tags": [
-        "open-weights",
-        "efficient"
+        "flagship",
+        "pro"
       ],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gemini-2.5-flash",
+    "name": "gemini-2.5-flash",
+    "providerId": "google",
+    "provider": "google",
+    "rpm": 15,
+    "tpm": 1000000,
+    "rpd": 1500,
+    "tpd": 10000000,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
+      "source": "matrix"
+    },
+    "lastSyncedAt": "2026-09-13T12:00:00Z"
+  },
+  {
+    "id": "gemma4:26b",
+    "name": "gemma4:26b",
+    "providerId": "ollama",
+    "provider": "ollama",
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "tpd": null,
+    "modality": "llm",
+    "capabilities": {
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportsStructuredOutput": false,
+      "supportsReasoning": false,
+      "supportsHaltingTool": true,
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "isEmbeddingModel": false,
+      "isAgenticRecommended": false,
+      "tags": [],
       "source": "matrix"
     },
     "lastSyncedAt": "2026-09-13T12:00:00Z"
@@ -210,197 +399,8 @@
     "lastSyncedAt": "2026-09-13T12:00:00Z"
   },
   {
-    "id": "gemini-2.5-flash",
-    "name": "gemini-2.5-flash",
-    "providerId": "google",
-    "provider": "google",
-    "rpm": 15,
-    "tpm": 1000000,
-    "rpd": 1500,
-    "tpd": 10000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "gemini-2.5-pro",
-    "name": "gemini-2.5-pro",
-    "providerId": "google",
-    "provider": "google",
-    "rpm": 15,
-    "tpm": 1000000,
-    "rpd": 1500,
-    "tpd": 10000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": true,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": true,
-      "supportsHaltingTool": true,
-      "contextWindow": 1048576,
-      "maxOutputTokens": 8192,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": true,
-      "tags": [
-        "flagship",
-        "pro"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "qwen-max",
-    "name": "qwen-max",
-    "providerId": "alibaba",
-    "provider": "alibaba",
-    "rpm": 60,
-    "tpm": 200000,
-    "rpd": 10000,
-    "tpd": 20000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 8192,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": true,
-      "tags": [
-        "multilingual",
-        "enterprise"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "grok-beta",
-    "name": "grok-beta",
-    "providerId": "xai",
-    "provider": "xai",
-    "rpm": 60,
-    "tpm": 200000,
-    "rpd": 10000,
-    "tpd": 20000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 131072,
-      "maxOutputTokens": 8192,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [
-        "realtime"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "c2e5757e-ceba-4d8f-b8f4-9c2f12c724c0",
-    "name": "gemma4:12b",
-    "providerId": "ollama",
-    "provider": "ollama",
-    "rpm": 100,
-    "tpm": 100000,
-    "rpd": 10000,
-    "tpd": 10000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": false,
-      "supportsStructuredOutput": false,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 32768,
-      "maxOutputTokens": 4096,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "gpt-4o-mini",
-    "name": "gpt-4o-mini",
-    "providerId": "openai",
-    "provider": "openai",
-    "rpm": 100,
-    "tpm": 500000,
-    "rpd": 20000,
-    "tpd": 50000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": true,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 128000,
-      "maxOutputTokens": 4096,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": false,
-      "tags": [
-        "fast",
-        "cost-effective"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "gpt-4o",
-    "name": "gpt-4o",
-    "providerId": "openai",
-    "provider": "openai",
-    "rpm": 50,
-    "tpm": 300000,
-    "rpd": 10000,
-    "tpd": 30000000,
-    "modality": "llm",
-    "capabilities": {
-      "supportsTools": true,
-      "supportsVision": true,
-      "supportsStructuredOutput": true,
-      "supportsReasoning": false,
-      "supportsHaltingTool": true,
-      "contextWindow": 128000,
-      "maxOutputTokens": 4096,
-      "isEmbeddingModel": false,
-      "isAgenticRecommended": true,
-      "tags": [
-        "flagship",
-        "multimodal"
-      ],
-      "source": "matrix"
-    },
-    "lastSyncedAt": "2026-09-13T12:00:00Z"
-  },
-  {
-    "id": "gemma4:e4b",
-    "name": "gemma4:e4b",
+    "id": "phi3.5:latest",
+    "name": "phi3.5:latest",
     "providerId": "ollama",
     "provider": "ollama",
     "rpm": null,
@@ -409,12 +409,12 @@
     "tpd": null,
     "modality": "llm",
     "capabilities": {
-      "supportsTools": true,
+      "supportsTools": false,
       "supportsVision": false,
       "supportsStructuredOutput": false,
       "supportsReasoning": false,
       "supportsHaltingTool": true,
-      "contextWindow": 128000,
+      "contextWindow": 32768,
       "maxOutputTokens": 4096,
       "isEmbeddingModel": false,
       "isAgenticRecommended": false,

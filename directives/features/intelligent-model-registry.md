@@ -420,9 +420,9 @@ When a user selects a model for an agent:
 | `server-rs/src/main.rs` | Register new `/api/providers/:id/sync` route |
 | `src/types/index.ts` | ADD `ModelCapabilities`, EXTEND `ModelEntry` |
 | `src/stores/model_store.ts` | ADD `sync_provider_models()` action |
-| `src/pages/Model_Manager.tsx` | ADD sync button + capability badges |
-| `src/components/Agent_Config_Panel.tsx` | ADD capability guards |
-| `src/components/Sovereign_Chat.tsx` | ADD vision guard |
+| `src/pages/ModelManager.tsx` | ADD sync button + capability badges |
+| `src/components/AgentConfigPanel.tsx` | ADD capability guards |
+| `src/components/SovereignChat.tsx` | ADD vision guard |
 
 ---
 

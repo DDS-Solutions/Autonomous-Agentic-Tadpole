@@ -28,40 +28,71 @@ def audit_manual():
     
     # 1. Discover Skills
     skills = []
-    # Native
-    native_dir = workspace_root / "server-rs/data/skills"
-    for d in native_dir.iterdir():
-        if d.is_dir() and (d / "skill.json").exists():
-            skills.append(d.name)
+    candidate_native_dirs = [
+        workspace_root / "data/skills",
+        workspace_root / "execution/skills",
+        workspace_root / "server-rs/data/skills",
+    ]
+    for native_dir in candidate_native_dirs:
+        if native_dir.exists():
+            for d in native_dir.iterdir():
+                if d.is_dir() and (d / "skill.json").exists():
+                    skills.append(d.name)
     
-    # Script
+    # Script manifests in execution/*.json
     execution_dir = workspace_root / "execution"
-    for f in execution_dir.glob("*.json"):
-        skills.append(f.stem)
+    if execution_dir.exists():
+        for f in execution_dir.glob("*.json"):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and "execution_command" in data:
+                    skills.append(data.get("name", f.stem))
+            except Exception:
+                pass
         
     # 2. Check for Skill mentions in manual
     missing_skills = []
-    for skill in skills:
+    for skill in set(skills):
         if skill not in manual_content:
             missing_skills.append(skill)
             
-    # 3. Check for specific sections
+    # 3. Check for active operational sections in docs/OPERATIONS_MANUAL.md
     sections = [
-        "Governance",
-        "Communication Hub",
-        "Registry Hub",
-        "Security Hub",
-        "Tool Reference"
+        "Local Startup",
+        "Engine Lifecycle",
+        "Authentication",
+        "Dashboard Operations",
+        "Agent And Swarm Management",
+        "Oversight And Governance",
+        "Model And Provider Management",
+        "Skills, Hybrid RAG, And Execution",
+        "Continuity Jobs",
+        "Observability",
+        "Code Intelligence & Blast Radius Operations",
+        "Database Operations",
+        "Rollback & Recovery Automation",
     ]
     missing_sections = [s for s in sections if f"## {s}" not in manual_content]
     
     # 4. Generate Report
     report = [
+        "> [!IMPORTANT]",
+        "> **AI Assist Note (Knowledge Heritage)**:",
+        "> - **@docs OPERATIONS_MANUAL:Runbooks**",
+        "> - **Failure Path**: Documentation drift or missing operational runbooks.",
+        "> - **Telemetry Link**: Search `[DOC_DRIFT]` in audit logs.",
+        ">",
+        "> ### AI Assist Note",
+        "> Operational drift assessment for Tadpole OS manuals.",
+        ">",
+        "> ### 🔍 Debugging & Observability",
+        "> Traceability via `execution/audit_manual.py`.",
+        "",
         "# Documentation Drift Report",
         "",
         "## Summary",
         f"Audited: `OPERATIONS_MANUAL.md`",
-        f"Date: 2026-04-11",
+        f"Date: 2026-09-22",
         "",
         "## Gaps Found",
         "",
@@ -82,6 +113,9 @@ def audit_manual():
             report.append(f"- [ ] `## {s}`")
     else:
         report.append("- All core sections present.")
+        
+    report.append("")
+    report.append("[//]: # (Metadata: [DOC_DRIFT])")
         
     report_path = workspace_root / "docs/documentation_drift_report.md"
     report_path.write_text("\n".join(report), encoding="utf-8")
