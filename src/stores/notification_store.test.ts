@@ -108,6 +108,71 @@ describe('notification_store', () => {
         vi.runAllTimers();
         expect(use_notification_store.getState().notifications).toHaveLength(0);
     });
+
+    it('automatically dismisses System Alert notifications after 10 seconds', () => {
+        const store = use_notification_store.getState();
+        store.add_notification({
+            severity: 'warning',
+            title: 'System Alert',
+            message: 'Governance Pulse: Budget utilization at 85.0%',
+            persistent: false
+        });
+
+        expect(use_notification_store.getState().notifications).toHaveLength(1);
+
+        // Advance by 9.9 seconds - should still be visible
+        vi.advanceTimersByTime(9900);
+        expect(use_notification_store.getState().notifications).toHaveLength(1);
+
+        // Advance by remaining 100ms - should now be dismissed
+        vi.advanceTimersByTime(100);
+        expect(use_notification_store.getState().notifications).toHaveLength(0);
+    });
+
+    it('deduplicates identical notifications added in rapid succession within 3 seconds', () => {
+        const store = use_notification_store.getState();
+        store.add_notification({
+            severity: 'info',
+            title: 'System Alert',
+            message: 'Budget utilization at 60.5%',
+            persistent: false
+        });
+
+        // Attempting to add an identical notification immediately
+        store.add_notification({
+            severity: 'info',
+            title: 'System Alert',
+            message: 'Budget utilization at 60.5%',
+            persistent: false
+        });
+
+        // Another one immediately
+        store.add_notification({
+            severity: 'info',
+            title: 'System Alert',
+            message: 'Budget utilization at 60.5%',
+            persistent: false
+        });
+
+        expect(use_notification_store.getState().notifications).toHaveLength(1);
+    });
+
+    it('honors custom duration when specified', () => {
+        const store = use_notification_store.getState();
+        store.add_notification({
+            severity: 'info',
+            title: 'Custom Timer',
+            message: 'Dismiss me in 10s',
+            persistent: false,
+            duration: 10000
+        });
+
+        expect(use_notification_store.getState().notifications).toHaveLength(1);
+        vi.advanceTimersByTime(9900);
+        expect(use_notification_store.getState().notifications).toHaveLength(1);
+        vi.advanceTimersByTime(200);
+        expect(use_notification_store.getState().notifications).toHaveLength(0);
+    });
 });
 
 

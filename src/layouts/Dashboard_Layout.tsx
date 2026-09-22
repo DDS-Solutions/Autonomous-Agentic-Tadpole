@@ -144,20 +144,20 @@ export default function Dashboard_Layout() {
         const { add_notification } = use_notification_store.getState();
 
         const unsubscribe = event_bus.subscribe_logs((entry) => {
-            // Only pipe errors or specifically tagged security/governance events to the Hub
+            // Only pipe errors, warnings, or specifically tagged security/quota breach events to the Hub
+            const is_budget_alert = 
+                entry.text.toLowerCase().includes('budget') && 
+                (entry.severity === 'warning' || entry.severity === 'error' || entry.text.toLowerCase().includes('exceeded') || entry.text.toLowerCase().includes('breach'));
+
             const is_high_priority = 
                 entry.severity === 'error' || 
                 entry.severity === 'warning' ||
-                entry.text.toLowerCase().includes('budget') ||
+                is_budget_alert ||
                 entry.text.toLowerCase().includes('security') ||
-                entry.text.toLowerCase().includes('injection');
+                entry.text.toLowerCase().includes('injection') ||
+                entry.text.toLowerCase().includes('sanitizer');
 
             if (is_high_priority) {
-                const is_persistent = 
-                    entry.text.toLowerCase().includes('budget') || 
-                    entry.text.toLowerCase().includes('injection') ||
-                    entry.text.toLowerCase().includes('sanitizer');
-
                 const title = entry.source === 'Agent' 
                     ? (entry.agent_name || entry.agent_id ? `Agent Alert: ${entry.agent_name || entry.agent_id}` : 'Agent Alert')
                     : 'System Alert';
@@ -167,7 +167,8 @@ export default function Dashboard_Layout() {
                     title,
                     message: entry.text,
                     type_id: entry.metadata?.type_id as string,
-                    persistent: is_persistent,
+                    persistent: false,
+                    duration: 10000, // System alert cards fade away after 10 seconds
                 });
             }
         });

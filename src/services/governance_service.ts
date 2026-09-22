@@ -61,22 +61,48 @@ class Governance_Service {
         };
     }
 
+    private in_flight_sync: Promise<GovernanceQuotas> | null = null;
+    private last_logged_efficiency: number | null = null;
+    private last_logged_spent: number | null = null;
+
     private update_quotas(new_quotas: GovernanceQuotas) {
         this.quotas = new_quotas;
         this.listeners.forEach(cb => cb(new_quotas));
         const display_eff = new_quotas.efficiency <= 1.0 ? new_quotas.efficiency * 100 : new_quotas.efficiency;
-        event_bus.emit_log({
-            text: `Governance Pulse: Budget utilization at ${display_eff.toFixed(1)}%`,
-            severity: 'info',
-            source: 'System'
-        });
+
+        const is_initial = this.last_logged_efficiency === null;
+        const eff_changed = this.last_logged_efficiency !== null && Math.abs(display_eff - this.last_logged_efficiency) >= 0.1;
+        const spent_changed = this.last_logged_spent !== null && Math.abs(new_quotas.total_spent - this.last_logged_spent) >= 0.01;
+
+        if (is_initial || eff_changed || spent_changed) {
+            this.last_logged_efficiency = display_eff;
+            this.last_logged_spent = new_quotas.total_spent;
+            const severity = display_eff >= 90 ? 'error' : (display_eff >= 80 ? 'warning' : 'info');
+            event_bus.emit_log({
+                text: `Governance Pulse: Budget utilization at ${display_eff.toFixed(1)}%`,
+                severity,
+                source: 'System'
+            });
+        }
     }
 
     public async sync(): Promise<GovernanceQuotas> {
-        const q = await system_api_service.get_security_quotas();
-        const mapped = this.map_quotas(q as unknown as Record<string, unknown>);
-        this.update_quotas(mapped);
-        return mapped;
+        if (this.in_flight_sync) {
+            return this.in_flight_sync;
+        }
+
+        this.in_flight_sync = (async () => {
+            try {
+                const q = await system_api_service.get_security_quotas();
+                const mapped = this.map_quotas(q as unknown as Record<string, unknown>);
+                this.update_quotas(mapped);
+                return mapped;
+            } finally {
+                this.in_flight_sync = null;
+            }
+        })();
+
+        return this.in_flight_sync;
     }
 
     public async get_manifest(): Promise<string> {

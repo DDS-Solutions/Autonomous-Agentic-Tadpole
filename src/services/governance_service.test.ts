@@ -133,4 +133,39 @@ describe('governance_service - Mission Budget Pulse & Quota Orchestration', () =
         expect(manifest).toBe('# Sovereign Manifest');
         expect(system_api_service.get_sovereign_manifest).toHaveBeenCalledTimes(1);
     });
+
+    it('coalesces concurrent sync calls into a single backend request', async () => {
+        vi.clearAllMocks();
+        (system_api_service.get_security_quotas as Mock).mockImplementation(
+            () => new Promise(resolve => setTimeout(() => resolve(raw_backend_quotas), 20))
+        );
+
+        // 4 concurrent sync calls (simulating multiple tabs/components mounting simultaneously)
+        const [res1, res2, res3, res4] = await Promise.all([
+            governance_service.sync(),
+            governance_service.sync(),
+            governance_service.sync(),
+            governance_service.sync()
+        ]);
+
+        expect(system_api_service.get_security_quotas).toHaveBeenCalledTimes(1);
+        expect(res1).toEqual(res2);
+        expect(res2).toEqual(res3);
+        expect(res3).toEqual(res4);
+    });
+
+    it('suppresses duplicate log emissions when quota efficiency and spent values do not change', async () => {
+        vi.clearAllMocks();
+        (system_api_service.get_security_quotas as Mock).mockResolvedValue(raw_backend_quotas);
+
+        await governance_service.sync();
+        const initialCalls = (event_bus.emit_log as Mock).mock.calls.length;
+
+        // Subsequent sync with identical utilization
+        await governance_service.sync();
+        await governance_service.sync();
+
+        // Emit log count should remain unchanged because values were identical
+        expect((event_bus.emit_log as Mock).mock.calls.length).toBe(initialCalls);
+    });
 });

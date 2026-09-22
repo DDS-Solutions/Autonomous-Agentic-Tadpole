@@ -21,6 +21,7 @@ export interface Notification {
     message: string;
     type_id?: string;
     persistent: boolean;
+    duration?: number;
     timestamp: Date;
 }
 
@@ -51,10 +52,27 @@ export const use_notification_store = create<Notification_State>((set) => ({
     notifications: [],
 
     add_notification: (notification) => {
+        // Deduplication: prevent stacking identical alerts within 3 seconds
+        const current_state = use_notification_store.getState();
+        const is_duplicate = current_state.notifications.some(
+            n => n.title === notification.title && 
+                 n.message === notification.message && 
+                 (Date.now() - new Date(n.timestamp).getTime() < 3000)
+        );
+        if (is_duplicate) {
+            return;
+        }
+
         const id = generate_id();
+        const is_system_alert = notification.title.includes('System Alert') || notification.title.includes('Agent Alert');
+        // System alerts auto-dismiss after 10s; standard toasts after 6s; explicit duration takes precedence
+        const default_duration = is_system_alert ? 10000 : 6000;
+        const duration = notification.duration ?? (notification.persistent && !is_system_alert ? undefined : default_duration);
+
         const new_notification: Notification = {
             ...notification,
             id,
+            duration,
             timestamp: new Date(),
         };
 
@@ -62,14 +80,14 @@ export const use_notification_store = create<Notification_State>((set) => ({
             notifications: [new_notification, ...state.notifications],
         }));
 
-        // Auto-dismiss logic for non-persistent notifications
-        if (!notification.persistent) {
+        // Auto-dismiss logic for timed notifications
+        if (duration && duration > 0) {
             const timer = setTimeout(() => {
                 set((state) => ({
                     notifications: state.notifications.filter((n) => n.id !== id),
                 }));
                 active_timers.delete(id);
-            }, 6000); // 6 seconds for standard toasts
+            }, duration);
             active_timers.set(id, timer);
         }
     },

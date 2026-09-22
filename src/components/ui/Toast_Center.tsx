@@ -44,7 +44,7 @@ const Toast_Item: React.FC<{ notification: Notification }> = ({ notification }) 
             aria-live={notification.severity === 'error' ? 'assertive' : 'polite'}
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+            exit={{ opacity: 0, x: 20, scale: 0.95, transition: { duration: 0.4, ease: "easeOut" } }}
             className={cn(
                 "relative group flex items-start gap-3 p-4 mb-3 min-w-[320px] max-w-md",
                 "bg-black/60 backdrop-blur-xl border rounded-xl shadow-2xl overflow-hidden",
@@ -80,13 +80,27 @@ const Toast_Item: React.FC<{ notification: Notification }> = ({ notification }) 
             <button
                 onClick={() => remove_notification(notification.id)}
                 className="absolute top-3 right-3 p-1 rounded-md text-white/30 hover:text-white hover:bg-white/10 transition-colors"
-                title={notification.persistent ? "Manual Dismiss Required" : "Close"}
+                title={notification.persistent && !notification.duration ? "Manual Dismiss Required" : "Close"}
             >
                 <X className="w-4 h-4" />
             </button>
 
+            {/* Auto-dismiss Progress Bar */}
+            {notification.duration && notification.duration > 0 && (
+                <motion.div
+                    initial={{ width: "100%" }}
+                    animate={{ width: "0%" }}
+                    transition={{ duration: notification.duration / 1000, ease: "linear" }}
+                    className={cn(
+                        "absolute bottom-0 left-0 h-[2px]",
+                        notification.severity === 'error' ? "bg-rose-500/60" :
+                        notification.severity === 'warning' ? "bg-amber-500/60" : "bg-emerald-500/60"
+                    )}
+                />
+            )}
+
             {/* Persistence Indicator */}
-            {notification.persistent && (
+            {notification.persistent && !notification.duration && (
                 <div className="absolute bottom-0 left-0 h-[2px] w-full bg-rose-500/30" />
             )}
         </motion.div>
