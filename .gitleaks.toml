@@ -28,3 +28,40 @@ stopwords = [
     "test_token",
     "dummy_key",
 ]
+
+# ==============================================================================
+# Provider Secret Rules — Single Source of Truth for Gitleaks & Telemetry Scrub
+# Invariant: tests/invariants/inv_003_telemetry_scrub.test.ts dynamically parses
+# these rules and verifies that src/api/utils/scrub.ts redacts all matching patterns.
+# ==============================================================================
+
+[[rules]]
+id = "openai-anthropic-key"
+description = "OpenAI or Anthropic Secret Key"
+regex = '''sk-(?:ant-)?[a-zA-Z0-9-_]{12,}'''
+
+[[rules]]
+id = "google-gemini-key"
+description = "Google Gemini API Key"
+regex = '''AIza[0-9A-Za-z-_]{35}'''
+
+[[rules]]
+id = "groq-api-key"
+description = "Groq API Key"
+regex = '''gsk_[a-zA-Z0-9]{20,}'''
+
+[[rules]]
+id = "huggingface-api-token"
+description = "HuggingFace API Token"
+regex = '''hf_[a-zA-Z0-9]{20,}'''
+
+[[rules]]
+id = "github-classic-pat"
+description = "GitHub Classic Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36}'''
+
+[[rules]]
+id = "github-fine-grained-pat"
+description = "GitHub Fine-Grained Personal Access Token"
+regex = '''github_pat_[a-zA-Z0-9_]{22,}'''
+

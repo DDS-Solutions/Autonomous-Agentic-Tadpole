@@ -15,10 +15,17 @@
  */
 
 /**
+ * Canonical default iterations for PBKDF2-HMAC-SHA256 key derivation.
+ * Conforms to OWASP Password Storage Guidelines (floor >= 600,000).
+ */
+export const DEFAULT_PBKDF2_ITERATIONS = 600000;
+export const DEFAULT_ITERATIONS = DEFAULT_PBKDF2_ITERATIONS;
+
+/**
  * derive_key
  * Derives a cryptographic key from a password.
  */
-export async function derive_key(password: string, salt: Uint8Array, iterations = 100000): Promise<CryptoKey> {
+export async function derive_key(password: string, salt: Uint8Array, iterations = DEFAULT_ITERATIONS): Promise<CryptoKey> {
     const encoder = new TextEncoder();
     const password_data = encoder.encode(password);
 
@@ -51,7 +58,7 @@ export async function derive_key(password: string, salt: Uint8Array, iterations 
 
 /**
  * encrypt_raw
- * Encrypts a string.
+ * Encrypts a string with PBKDF2 key derivation and AES-GCM.
  */
 export async function encrypt_raw(text: string, password: string): Promise<string> {
     const salt = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto.getRandomValues(new Uint8Array(16)) : new Uint8Array(16);
@@ -61,7 +68,8 @@ export async function encrypt_raw(text: string, password: string): Promise<strin
         throw new Error('Neural Secure Context (HTTPS/Localhost) Required for encryption.');
     }
 
-    const key = await derive_key(password, salt);
+    const iterations = DEFAULT_ITERATIONS;
+    const key = await derive_key(password, salt, iterations);
 
     const encoder = new TextEncoder();
     const encrypted = await crypto.subtle.encrypt(
@@ -73,7 +81,9 @@ export async function encrypt_raw(text: string, password: string): Promise<strin
     const result = {
         salt: Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join(''),
         iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
-        data: Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('')
+        data: Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join(''),
+        kdf: 'PBKDF2-SHA256',
+        iterations
     };
 
     return JSON.stringify(result);
@@ -81,16 +91,19 @@ export async function encrypt_raw(text: string, password: string): Promise<strin
 
 /**
  * decrypt_raw
- * Decrypts a string.
+ * Decrypts a string. Supports versioned PBKDF2 envelopes and falls back
+ * to legacy 100,000 iterations if iterations field is absent.
  */
 export async function decrypt_raw(encrypted_json: string, password: string): Promise<string> {
-    const { salt, iv, data } = JSON.parse(encrypted_json);
+    const parsed = JSON.parse(encrypted_json);
+    const { salt, iv, data } = parsed;
+    const iterations = typeof parsed.iterations === 'number' ? parsed.iterations : 100000;
 
     const salt_array = new Uint8Array(salt.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)));
     const iv_array = new Uint8Array(iv.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)));
     const data_array = new Uint8Array(data.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)));
 
-    const key = await derive_key(password, salt_array);
+    const key = await derive_key(password, salt_array, iterations);
 
     try {
         const decrypted = await crypto.subtle.decrypt(

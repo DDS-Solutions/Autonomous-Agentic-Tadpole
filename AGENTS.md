@@ -54,6 +54,12 @@ Whenever you modify, patch, or refactor code in `server-rs`, `src`, or `executio
     3.  *Concurrency Invariants:* Does a retry loop quietly turn optimistic concurrency control (OCC) into an untracked Last-Write-Wins clobber?
     4.  *Trust Boundaries:* Does any authorization, suspension, quota, or role check inspect unauthenticated client request body properties?
 
+**VI. Invariant Discipline & Constant Enforcement:**
+Invariants in `tests/invariants/` are strictly enforcing gates — change constants and invariants in the same pull request:
+*   **Floors are imported:** For floor/boundary invariants (e.g. `DEFAULT_ITERATIONS >= 600000`, `INITIAL_BACKOFF >= 2000`), invariants MUST import named constants from the source module and assert the floor inequality. Upward adjustments pass automatically without test churn; regressions below the floor fail.
+*   **Pins are literals:** Reserve literal-pinning exclusively for exact state machines and vocabularies (e.g. CSP syntax, `'approved' | 'rejected'` decision tokens, prohibited storage APIs).
+*   **Single Source of Truth:** Where external configurations govern security behavior (e.g. `.gitleaks.toml` for secret patterns), invariant suites parse that file directly at runtime to ensure 1:1 synchronization with runtime handlers.
+
 **GLOBAL IDENTITY CONTEXT:**
 All HTTP and telemetry requests executed under the agent swarm must identify utilizing the official system identity: `User-Agent: TadpoleOS/1.1.58`.
 

@@ -86,6 +86,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Run Executable Invariants
+        run: npm run test:invariants
+
       - name: Run Tests
         run: npx vitest run --reporter=verbose
 

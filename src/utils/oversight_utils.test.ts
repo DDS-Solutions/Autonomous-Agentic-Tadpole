@@ -64,7 +64,7 @@ describe('oversight_utils', () => {
                 requires_oversight: true,
                 decision: 'approved',
                 decided_by: 'operator'
-            } as LedgerEntry)).toBe(false);
+            } as unknown as LedgerEntry)).toBe(false);
         });
     });
 

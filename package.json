@@ -30,6 +30,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:invariants": "vitest run tests/invariants/",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:py": "python -m unittest discover -s tests/unit",

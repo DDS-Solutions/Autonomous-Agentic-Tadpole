@@ -261,16 +261,18 @@ const Data_Table: React.FC<{ data: OpenUI_Table }> = React.memo(({ data }) => {
 });
 Data_Table.displayName = 'Data_Table';
 
+export const MAX_RENDER_DEPTH = 10;
+
 // ── Layout Container ─────────────────────────────────────────
 
-const Layout_Container: React.FC<{ data: OpenUI_Layout }> = React.memo(({ data }) => (
+const Layout_Container: React.FC<{ data: OpenUI_Layout; depth: number }> = React.memo(({ data, depth }) => (
     <div
         className={`flex gap-3 ${
             data.direction === 'column' ? 'flex-col' : 'flex-row flex-wrap'
         }`}
     >
         {data.children.map((child, i) => (
-            <OpenUI_Renderer key={i} dsl={child} />
+            <OpenUI_Renderer key={i} dsl={child} depth={depth + 1} />
         ))}
     </div>
 ));
@@ -280,14 +282,23 @@ Layout_Container.displayName = 'Layout_Container';
 
 interface OpenUI_Renderer_Props {
     dsl: OpenUI_DSL;
+    depth?: number;
 }
 
 /**
  * OpenUI_Renderer — Renders a strongly-typed DSL payload into interactive
  * React components inside chat messages. Supports KPI cards, bar charts,
- * sortable tables, and recursive layouts.
+ * sortable tables, and recursive layouts with bounded render depth.
  */
-export const OpenUI_Renderer: React.FC<OpenUI_Renderer_Props> = React.memo(({ dsl }) => {
+export const OpenUI_Renderer: React.FC<OpenUI_Renderer_Props> = React.memo(({ dsl, depth = 0 }) => {
+    if (depth > MAX_RENDER_DEPTH) {
+        return (
+            <div className="p-2 text-[10px] text-amber-400 border border-amber-800/40 rounded-lg bg-amber-950/20 font-mono">
+                [OpenUI: Max Render Depth Exceeded]
+            </div>
+        );
+    }
+
     switch (dsl.kind) {
         case 'kpi_card':
             return <KPI_Card data={dsl} />;
@@ -296,7 +307,7 @@ export const OpenUI_Renderer: React.FC<OpenUI_Renderer_Props> = React.memo(({ ds
         case 'table':
             return <Data_Table data={dsl} />;
         case 'layout':
-            return <Layout_Container data={dsl} />;
+            return <Layout_Container data={dsl} depth={depth} />;
         default: {
             // Exhaustive check — if a new kind is added, TypeScript catches it
             const _exhaustive: never = dsl;

@@ -1,0 +1,34 @@
+name: Scheduled Documentation Drift Audit
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly every Sunday at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc-drift-audit:
+    name: Run Manual Drift Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Documentation Audit
+        run: python execution/audit_manual.py
+
+      - name: Upload Drift Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-drift-report
+          path: docs/documentation_drift_report.md
+          retention-days: 30

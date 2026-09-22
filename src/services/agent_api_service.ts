@@ -180,7 +180,7 @@ export const agent_api_service = {
                 const body: Task_Payload = { message, cluster_id, department, provider: current_provider, model_id: current_model_id, budget_usd, external_id, safe_mode, analysis, parent_node_id, enabled_skills, user_id, auto_resume };
 
                 const provider_api_key = await vault_store.get_api_key(current_provider);
-                const is_actually_locked = vault_store.is_locked && !sessionStorage.getItem('tadpole-vault-master-key');
+                const is_actually_locked = vault_store.is_locked;
                 const is_local = current_provider === PROVIDERS.OLLAMA || current_provider === PROVIDERS.LOCAL;
 
                 if (provider_api_key) {

@@ -83,6 +83,8 @@ describe('crypto-core', () => {
             expect(data).toHaveProperty('salt');
             expect(data).toHaveProperty('iv');
             expect(data).toHaveProperty('data', '0a141e'); // hex representations of 10,20,30
+            expect(data).toHaveProperty('kdf', 'PBKDF2-SHA256');
+            expect(data).toHaveProperty('iterations', 600000);
             expect(subtle_mock.encrypt).toHaveBeenCalledWith(
                 expect.objectContaining({ name: 'AES-GCM' }),
                 mock_key,
@@ -99,25 +101,49 @@ describe('crypto-core', () => {
     });
 
     describe('decrypt_raw', () => {
-        it('decrypts returning original string', async () => {
+        it('decrypts returning original string for legacy envelope lacking iterations', async () => {
              const mock_key = {};
              subtle_mock.importKey.mockResolvedValue({});
              subtle_mock.deriveKey.mockResolvedValue(mock_key);
 
-             // Provide hex representations to decrypt_raw
-             const payload = JSON.parse('{"salt": "0000", "iv": "000000", "data": "74657374"}'); // test
+             // Legacy envelope without iterations field
+             const payload = JSON.parse('{"salt": "0000", "iv": "000000", "data": "74657374"}');
              
-             // Decrypt expects unencoded buffer result which textDecoder reads
              const fake_decrypted_buffer = new TextEncoder().encode('hello world').buffer;
              subtle_mock.decrypt.mockResolvedValue(fake_decrypted_buffer);
 
              const result = await decrypt_raw(JSON.stringify(payload), 'my-pass');
              
              expect(result).toBe('hello world');
-             expect(subtle_mock.decrypt).toHaveBeenCalledWith(
-                 expect.objectContaining({ name: 'AES-GCM' }),
-                 mock_key,
-                 expect.any(Uint8Array)
+             expect(subtle_mock.deriveKey).toHaveBeenCalledWith(
+                 expect.objectContaining({ name: 'PBKDF2', iterations: 100000 }),
+                 expect.anything(),
+                 expect.anything(),
+                 false,
+                 ['encrypt', 'decrypt']
+             );
+        });
+
+        it('decrypts modern envelope specifying 600,000 iterations', async () => {
+             const mock_key = {};
+             subtle_mock.importKey.mockResolvedValue({});
+             subtle_mock.deriveKey.mockResolvedValue(mock_key);
+
+             // Modern versioned envelope
+             const payload = JSON.parse('{"salt": "0000", "iv": "000000", "data": "74657374", "kdf": "PBKDF2-SHA256", "iterations": 600000}');
+             
+             const fake_decrypted_buffer = new TextEncoder().encode('modern secure data').buffer;
+             subtle_mock.decrypt.mockResolvedValue(fake_decrypted_buffer);
+
+             const result = await decrypt_raw(JSON.stringify(payload), 'my-pass');
+             
+             expect(result).toBe('modern secure data');
+             expect(subtle_mock.deriveKey).toHaveBeenCalledWith(
+                 expect.objectContaining({ name: 'PBKDF2', iterations: 600000 }),
+                 expect.anything(),
+                 expect.anything(),
+                 false,
+                 ['encrypt', 'decrypt']
              );
         });
 

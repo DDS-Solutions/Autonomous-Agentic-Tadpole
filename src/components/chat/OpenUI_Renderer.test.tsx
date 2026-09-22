@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { OpenUI_Renderer } from './OpenUI_Renderer';
-import type { OpenUI_KPI_Card, OpenUI_Bar_Chart, OpenUI_Table, OpenUI_Layout } from '../../types';
+import type { OpenUI_KPI_Card, OpenUI_Bar_Chart, OpenUI_Table, OpenUI_Layout, OpenUI_DSL } from '../../types';
 
 describe('OpenUI_Renderer', () => {
     it('renders a KPI card with value, unit, and delta', () => {
@@ -115,5 +115,26 @@ describe('OpenUI_Renderer', () => {
         expect(screen.getByText('Error Rate')).toBeTruthy();
         expect(screen.getByText('3.2%')).toBeTruthy();
         expect(screen.getByText('-8%')).toBeTruthy();
+    });
+
+    it('truncates recursive layout rendering when exceeding MAX_RENDER_DEPTH', () => {
+        // Construct a deeply nested layout (12 levels deep)
+        let deep_layout: OpenUI_DSL = {
+            kind: 'kpi_card',
+            title: 'Deep Leaf',
+            value: 999,
+        };
+        for (let i = 0; i < 12; i++) {
+            deep_layout = {
+                kind: 'layout',
+                direction: 'column',
+                children: [deep_layout],
+            };
+        }
+
+        render(<OpenUI_Renderer dsl={deep_layout} />);
+
+        expect(screen.getByText('[OpenUI: Max Render Depth Exceeded]')).toBeTruthy();
+        expect(screen.queryByText('Deep Leaf')).toBeNull();
     });
 });

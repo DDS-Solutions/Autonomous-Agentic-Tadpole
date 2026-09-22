@@ -219,6 +219,13 @@ export const use_settings_store = create<Settings_State>()(
         {
             name: SETTINGS_KEY,
             storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                settings: {
+                    ...state.settings,
+                    // Keep API token memory-only at rest to protect from disk/localStorage extraction
+                    tadpole_os_api_key: '',
+                }
+            }),
             
             // THE NUCLEAR PURGE: Simplified to avoid infinite loops during initialization
             onRehydrateStorage: () => {

@@ -12,7 +12,12 @@
 
 export function scrub_string(str: string): string {
     return str
-        .replace(/sk-[a-zA-Z0-9-_]{12,}/g, '[REDACTED]')
+        .replace(/sk-(?:ant-)?[a-zA-Z0-9-_]{12,}/g, '[REDACTED]')
+        .replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED]')
+        .replace(/gsk_[a-zA-Z0-9]{20,}/g, '[REDACTED]')
+        .replace(/hf_[a-zA-Z0-9]{20,}/g, '[REDACTED]')
+        .replace(/ghp_[a-zA-Z0-9]{36}/g, '[REDACTED]')
+        .replace(/github_pat_[a-zA-Z0-9_]{22,}/g, '[REDACTED]')
         .replace(/Bearer\s+[a-zA-Z0-9-_.]+/gi, 'Bearer [REDACTED]');
 }
 

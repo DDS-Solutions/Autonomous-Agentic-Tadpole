@@ -137,7 +137,8 @@ describe('settings_store', () => {
 
         const settings = get_settings();
         expect(settings.tadpole_os_url).toBe('http://custom-engine:9000');
-        expect(settings.tadpole_os_api_key).toBe(test_key);
+        // SEC-M4: tadpole_os_api_key is strictly memory-only and blanked at rest in persistent storage
+        expect(settings.tadpole_os_api_key).toBe('');
         expect(settings.privacy_mode).toBe(true);
     });
 
