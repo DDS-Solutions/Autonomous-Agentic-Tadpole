@@ -103,20 +103,17 @@ describe('INV-003: Telemetry Secret Redaction Invariant', () => {
                 const ruleRegex = new RegExp(patternStr);
 
                 // Deterministic synthetic samples for provider rules
-                let sampleSecret = '';
-                if (ruleId === 'openai-anthropic-key') {
-                    sampleSecret = 'sk-1234567890abcdef123456';
-                } else if (ruleId === 'google-gemini-key') {
-                    sampleSecret = 'AIzaSyBdefghijklmnopqrstuvwxyz123456789';
-                } else if (ruleId === 'groq-api-key') {
-                    sampleSecret = 'gsk_1234567890abcdefghijklmnopqrstuvwxyz';
-                } else if (ruleId === 'huggingface-api-token') {
-                    sampleSecret = 'hf_abcdefghijklmnopqrstuvwxyz123456';
-                } else if (ruleId === 'github-classic-pat') {
-                    sampleSecret = 'ghp_0123456789abcdefghijklmnopqrstuvwxyz';
-                } else if (ruleId === 'github-fine-grained-pat') {
-                    sampleSecret = 'github_pat_11ABCD0123456789abcdef_ghijklmnopqrstuvwxyz0123456789';
-                } else {
+                const SAMPLES_BY_RULE: Record<string, string> = {
+                    'openai-anthropic-key': 'sk-1234567890abcdef123456',
+                    'google-gemini-key': 'AIzaSyBdefghijklmnopqrstuvwxyz123456789',
+                    'groq-api-key': 'gsk_1234567890abcdefghijklmnopqrstuvwxyz',
+                    'huggingface-api-token': 'hf_abcdefghijklmnopqrstuvwxyz123456',
+                    'github-classic-pat': 'ghp_0123456789abcdefghijklmnopqrstuvwxyz',
+                    'github-fine-grained-pat': 'github_pat_11ABCD0123456789abcdef_ghijklmnopqrstuvwxyz0123456789',
+                };
+
+                const sampleSecret = SAMPLES_BY_RULE[ruleId];
+                if (!sampleSecret) {
                     throw new Error(`Unmapped gitleaks rule '${ruleId}' in invariant suite: define synthetic validation sample in inv_003.`);
                 }
 
