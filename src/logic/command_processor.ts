@@ -95,11 +95,23 @@ export function sanitize_directive(text: string): string {
 
 /**
  * Word-boundary tactical intent detection.
- * Prevents false positives on normal words (e.g. "build", "preview", "review", "guide", "suit", "seed")
- * and avoids conversational false positives on standalone "see" (e.g. "I see what you mean").
+ * Prevents false positives on normal words (e.g. "build", "preview", "review", "guide", "suit", "seed"),
+ * avoids conversational false positives on standalone "see" (e.g. "I see what you mean"),
+ * and disallows infrastructure / swarm / agent status queries from hijacking the session to the local browser specialist.
  */
 export function check_if_tactical(text: string): boolean {
-    const tactical_pattern = /\b(status|healthy|health|screen|screens|button|buttons|what is this|where is|show me|look at|dom|user interface)\b|\bui\b|\bview\b|\bviews\b|\b(see this|see screen|can you see)\b/i;
+    if (!text || typeof text !== 'string') return false;
+
+    // Infrastructure and swarm queries belong to the orchestrator/telemetry, not UI DOM analysis
+    const infra_pattern = /\b(swarm|cluster|agent|agents|node|nodes|orchestrator|backend|server|database|repo|repository|pipeline|deployment|infra|infrastructure)\b/i;
+    const explicit_ui_visual = /\b(screen|screens|dom|button|buttons|on[- ]screen|in the ui)\b/i;
+
+    if (infra_pattern.test(text) && !explicit_ui_visual.test(text)) {
+        return false;
+    }
+
+    // Require explicit UI/visual keywords; do not hijack on generic 'status' or 'health' alone
+    const tactical_pattern = /\b(screen|screens|button|buttons|what is this|where is|show me|look at|dom|user interface)\b|\bui\b|\bview\b|\bviews\b|\b(see this|see screen|can you see)\b/i;
     return tactical_pattern.test(text);
 }
 

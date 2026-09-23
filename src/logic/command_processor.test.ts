@@ -338,6 +338,18 @@ describe('process_command', () => {
             expect(check_if_tactical('what is the screen status?')).toBe(true);
             expect(check_if_tactical('look at this button')).toBe(true);
         });
+
+        it('should NOT hijack infrastructure or swarm status prompts', () => {
+            expect(check_if_tactical('what is the status of the Tadpole OS Swarm')).toBe(false);
+            expect(check_if_tactical('check cluster status')).toBe(false);
+            expect(check_if_tactical('what is agent health?')).toBe(false);
+            expect(check_if_tactical('backend server status')).toBe(false);
+        });
+
+        it('should allow tactical inspection when screen/dom is explicitly targeted despite infra words', () => {
+            expect(check_if_tactical('can you see the swarm agent on screen?')).toBe(true);
+            expect(check_if_tactical('look at the agent button in the dom')).toBe(true);
+        });
     });
 
     describe('Stateful 2-Step Deploy Flow', () => {

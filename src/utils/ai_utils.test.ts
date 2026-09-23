@@ -11,7 +11,7 @@ Core system module providing specialized functionality for the agent swarm.
 */
 
 import { describe, it, expect } from 'vitest';
-import { sanitize_ui_context, extract_neural_output } from './ai_utils';
+import { sanitize_ui_context, extract_neural_output, prune_repetition_and_truncation } from './ai_utils';
 
 describe('ai_utils', () => {
     describe('sanitize_ui_context', () => {
@@ -74,6 +74,31 @@ describe('ai_utils', () => {
         it('should return fallback if system prompt is present but no assistant tag', () => {
             const raw = 'SYSTEM: Rules\nUSER: Query';
             expect(extract_neural_output(raw, 'Default')).toBe('Default');
+        });
+
+        it('should break degenerative repetition loops and retain only unique leading cycles', () => {
+            const repeating = `The current status of the Tadpole OS Swarm is that it is in a state of active deployment, with multiple agents and a large number of agents. The agent grid is currently being updated, and the neural map is being updated as well. The current status of the Tadpole OS Swarm is that it is in a state of active deployment, with multiple agents and a large number of agents. The agent grid is being updated, and the neural map is being updated as well. The current status of the Tadpole OS Swarm is that it is in a state of active deployment, with multiple agents and a large number`;
+            const result = extract_neural_output(repeating);
+            expect(result).toContain('The current status of the Tadpole OS Swarm is that it is in a state of active deployment');
+            // Ensure repetition is stripped
+            const occurrences = (result.match(/active deployment/g) || []).length;
+            expect(occurrences).toBe(1);
+            // Ensure dangling fragment is trimmed
+            expect(result.endsWith('.')).toBe(true);
+            expect(result).not.toContain('with multiple agents and a large number of agents. The current status');
+        });
+
+        it('should trim ragged token limit truncation back to last terminal punctuation', () => {
+            const truncated = 'Analysis verified all active nodes. The system is operating nominally and a large number';
+            const result = extract_neural_output(truncated);
+            expect(result).toBe('Analysis verified all active nodes.');
+        });
+    });
+
+    describe('prune_repetition_and_truncation', () => {
+        it('should collapse adjacent repeated phrases', () => {
+            const looped = 'Active deployment status. Active deployment status. Active deployment status.';
+            expect(prune_repetition_and_truncation(looped)).toBe('Active deployment status.');
         });
     });
 });
