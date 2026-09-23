@@ -82,18 +82,50 @@ impl CodeSymbolGraph {
         max_nodes: Option<usize>,
     ) -> (Vec<SymbolNode>, bool) {
         let real_path = self.resolve_path(path);
-        let key = index_key(&real_path, symbol_name);
-        let mut affected = Vec::new();
         let limit = max_nodes.unwrap_or(500).clamp(1, 5_000);
+        let mut affected = Vec::new();
         let mut truncated = false;
 
-        if let Some(&start_idx) = self.index.get(&key) {
+        let start_indices: Vec<petgraph::graph::NodeIndex> = if symbol_name == "*" || symbol_name.is_empty() {
+            let prefix = format!("{real_path}\0");
+            let mut indices: Vec<_> = self
+                .index
+                .iter()
+                .filter_map(|(k, &idx)| if k.starts_with(&prefix) { Some(idx) } else { None })
+                .collect();
+            if indices.is_empty() {
+                // Fallback: check node weights if index used relative/normalized path differences
+                for idx in self.graph.node_indices() {
+                    if let Some(node) = self.graph.node_weight(idx) {
+                        let node_real = self.resolve_path(&node.path);
+                        if node_real == real_path || node.path == real_path {
+                            indices.push(idx);
+                        }
+                    }
+                }
+            }
+            indices
+        } else {
+            let key = index_key(&real_path, symbol_name);
+            self.index.get(&key).copied().into_iter().collect()
+        };
+
+        if !start_indices.is_empty() {
             let mut visited = HashSet::new();
             let mut queue = VecDeque::new();
-            queue.push_back((start_idx, 0));
-            visited.insert(start_idx);
+            let mut affected_indices = Vec::new();
 
-            let mut affected_indices = vec![start_idx];
+            for &start_idx in &start_indices {
+                if visited.insert(start_idx) {
+                    affected_indices.push(start_idx);
+                    queue.push_back((start_idx, 0));
+                    if affected_indices.len() >= limit {
+                        truncated = true;
+                        break;
+                    }
+                }
+            }
+
             while let Some((current_idx, depth)) = queue.pop_front() {
                 if affected_indices.len() >= limit {
                     truncated = true;

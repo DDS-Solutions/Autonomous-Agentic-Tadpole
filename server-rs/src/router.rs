@@ -95,11 +95,14 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .layer(tower_http::trace::TraceLayer::new_for_http().make_span_with(
             |request: &axum::http::Request<axum::body::Body>| {
                 let path = request.uri().path();
-                if path.starts_with("/v1/oversight/pending")
-                    || path.starts_with("/v1/oversight/ledger")
-                    || path.starts_with("/v1/oversight/security/")
-                    || path.starts_with("/v1/telemetry/")
-                    || path.starts_with("/v1/system/debug/")
+                if path.starts_with("/v1/oversight")
+                    || path.starts_with("/v1/telemetry")
+                    || path.starts_with("/v1/system/debug")
+                    || path.starts_with("/v1/engine/ws")
+                    || path.starts_with("/v1/engine/live-voice")
+                    || path == "/health"
+                    || path == "/metrics"
+                    || path == "/v1/engine/health"
                 {
                     tracing::Span::none()
                 } else {

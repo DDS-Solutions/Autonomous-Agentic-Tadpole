@@ -108,19 +108,31 @@ impl AgentRunner {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("❌ [Finalize] Failed to persist agent {} to DB: {}", agent_id_for_persist, e);
-                        // In case of OCC conflict, fetch current version and retry saving terminal idle state
-                        let db_ver: Result<i64, _> = sqlx::query_scalar("SELECT version FROM agents WHERE id = ?")
-                            .bind(&agent_id_for_persist)
-                            .fetch_one(&pool)
-                            .await;
-                        if let Ok(ver) = db_ver {
-                            let mut fresh_agent = agent_clone.clone();
-                            fresh_agent.version = ver as u32;
-                            if let Ok(fresh_ver) = crate::agent::persistence::save_agent_db(&pool, &fresh_agent).await {
-                                if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
-                                    entry.version = fresh_ver;
-                                }
+                        tracing::warn!("⚠️ [Finalize] OCC conflict for agent {} on full save: {}. Applying atomic delta update.", agent_id_for_persist, e);
+                        // In case of OCC conflict, apply an atomic terminal update rather than clobbering concurrent mutations
+                        let update_res = sqlx::query(
+                            "UPDATE agents SET 
+                                status = ?, 
+                                current_task = NULL, 
+                                active_mission = NULL,
+                                cost_usd = cost_usd + ?, 
+                                version = version + 1 
+                             WHERE id = ? RETURNING version"
+                        )
+                        .bind(&agent_clone.health.status)
+                        .bind(turn_cost)
+                        .bind(&agent_id_for_persist)
+                        .fetch_optional(&pool)
+                        .await;
+
+                        if let Ok(Some(row)) = update_res {
+                            use sqlx::Row;
+                            let new_ver: i64 = row.get(0);
+                            if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
+                                entry.version = new_ver as u32;
+                                entry.health.status = agent_clone.health.status.clone();
+                                entry.state.current_task = None;
+                                entry.state.active_mission = None;
                             }
                         }
                     }

@@ -204,7 +204,7 @@ pub async fn post_receipt(
 
     let block_type = body.block_type.as_deref().unwrap_or("inline");
 
-    sqlx::query(
+    let res = sqlx::query(
         "UPDATE agent_tasks
          SET current_receipt    = ?1,
              status             = ?2,
@@ -226,6 +226,10 @@ pub async fn post_receipt(
     .execute(&state.resources.pool)
     .await
     .map_err(AppError::Sqlx)?;
+
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!("Task {} for agent {} not found", task_id, agent_id)));
+    }
 
     // Append to receipt_history JSON array
     append_receipt_history(
@@ -533,7 +537,7 @@ pub async fn update_context_packet(
 ) -> Result<impl IntoResponse, AppError> {
     let context_packet_str = serde_json::to_string(&body.context_packet).unwrap_or_else(|_| "{}".to_string());
 
-    sqlx::query(
+    let res = sqlx::query(
         "UPDATE agent_status_ledger
          SET context_version = ?1, context_packet = ?2
          WHERE agent_id = ?3"
@@ -544,6 +548,10 @@ pub async fn update_context_packet(
     .execute(&state.resources.pool)
     .await
     .map_err(AppError::Sqlx)?;
+
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!("Agent status ledger for agent {} not found", agent_id)));
+    }
 
     state.emit_event(serde_json::json!({
         "type": "agent:context_packet_updated",

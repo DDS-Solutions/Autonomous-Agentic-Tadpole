@@ -12,11 +12,12 @@
  * - **Telemetry Link**: Search for `[detached_shell]` in UI traces or check `Portal_Window` spawn logs.
  */
 
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDashboardData } from '../hooks/use_dashboard_data';
 import { get_route_by_path } from '../constants/routes';
 import Error_Boundary from '../components/Error_Boundary';
+import { tadpole_os_socket } from '../services/socket';
 
 // lazy-loaded components to match the main app's architecture
 const System_Log = lazy(() => import('../components/dashboard/System_Log').then(module => ({ default: module.System_Log })));
@@ -106,45 +107,70 @@ export default function Detached_Shell() {
     const tab_id = search_params.get('tabId');
     const path = search_params.get('path');
 
+    // Ensure live WebSocket telemetry is connected in detached windows
+    useEffect(() => {
+        tadpole_os_socket.connect();
+    }, []);
+
     // Mapping of types to components
     const render_content = () => {
         switch (type) {
             case 'chat':
-                return <SovereignChat isDetachedView />;
+                return (
+                    <Error_Boundary name="Detached: Sovereign Chat">
+                        <SovereignChat isDetachedView />
+                    </Error_Boundary>
+                );
                 
             case 'system-log':
                 return (
                     <div className="h-screen bg-zinc-950 p-6 flex flex-col">
-                        <System_Log is_detached_view />
+                        <Error_Boundary name="Detached: System Log">
+                            <System_Log is_detached_view />
+                        </Error_Boundary>
                     </div>
                 );
 
             case 'trace-stream':
                 return (
                     <div className="h-screen bg-zinc-950 p-0 flex flex-col">
-                        <Neural_Waterfall is_detached_view />
+                        <Error_Boundary name="Detached: Neural Waterfall">
+                            <Neural_Waterfall is_detached_view />
+                        </Error_Boundary>
                     </div>
                 );
 
             case 'lineage-stream':
                 return (
                     <div className="h-screen bg-zinc-950 p-0 flex flex-col">
-                        <Lineage_Stream is_detached_view />
+                        <Error_Boundary name="Detached: Lineage Stream">
+                            <Lineage_Stream is_detached_view />
+                        </Error_Boundary>
                     </div>
                 );
 
             case 'swarm-pulse':
                 return (
                     <div className="h-screen bg-zinc-950 p-6 flex flex-col overflow-hidden">
-                        <Swarm_Visualizer is_detached={true} />
+                        <Error_Boundary name="Detached: Swarm Visualizer">
+                            <Swarm_Visualizer is_detached={true} />
+                        </Error_Boundary>
                     </div>
                 );
 
             case 'agent-status':
-                return <Detached_Agent_Status tab_id={tab_id || undefined} />;
+                return (
+                    <Error_Boundary name="Detached: Agent Status">
+                        <Detached_Agent_Status tab_id={tab_id || undefined} />
+                    </Error_Boundary>
+                );
 
             case 'agent-config':
-                return <Detached_Agent_Config id={id} />;
+                return (
+                    <Error_Boundary name="Detached: Agent Config">
+                        <Detached_Agent_Config id={id} />
+                    </Error_Boundary>
+                );
 
             case 'tab': {
                 const route = get_route_by_path(path || '/dashboard');

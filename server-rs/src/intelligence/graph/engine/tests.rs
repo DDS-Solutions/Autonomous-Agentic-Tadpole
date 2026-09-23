@@ -475,4 +475,56 @@ fn test_three_path_edge_case_cycles_depth_and_unicode() {
     assert!(was_truncated, "Truncation flag must be true when node limit reached");
 }
 
+#[test]
+fn test_wildcard_file_blast_radius() {
+    let dir = tempdir().unwrap();
+    let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+
+    let node_a = SymbolNode {
+        name: "func_a".to_string(),
+        path: "src/utils.rs".to_string(),
+        kind: "function".to_string(),
+        signature: "fn func_a()".to_string(),
+        tokens: 10,
+        start_line: 1,
+        end_line: 3,
+    };
+    let node_b = SymbolNode {
+        name: "func_b".to_string(),
+        path: "src/utils.rs".to_string(),
+        kind: "function".to_string(),
+        signature: "fn func_b()".to_string(),
+        tokens: 10,
+        start_line: 4,
+        end_line: 6,
+    };
+    let caller_test = SymbolNode {
+        name: "test_utils".to_string(),
+        path: "tests/utils_test.rs".to_string(),
+        kind: "test".to_string(),
+        signature: "fn test_utils()".to_string(),
+        tokens: 20,
+        start_line: 1,
+        end_line: 10,
+    };
+
+    let idx_a = graph.graph.add_node(node_a);
+    let idx_b = graph.graph.add_node(node_b);
+    let idx_test = graph.graph.add_node(caller_test);
+
+    // caller_test calls func_a
+    graph.graph.add_edge(idx_test, idx_a, SymbolEdge { kind: "call".to_string() });
+
+    graph.index.insert(crate::intelligence::graph::key::index_key("src/utils.rs", "func_a"), idx_a);
+    graph.index.insert(crate::intelligence::graph::key::index_key("src/utils.rs", "func_b"), idx_b);
+    graph.index.insert(crate::intelligence::graph::key::index_key("tests/utils_test.rs", "test_utils"), idx_test);
+
+    // Query with wildcard "*" should aggregate both func_a and func_b plus caller_test
+    let (affected, _) = graph.calculate_blast_radius_bounded("*", "src/utils.rs", None);
+    assert_eq!(affected.len(), 3, "Wildcard '*' must find all symbols in file plus callers");
+    assert!(affected.iter().any(|n| n.name == "func_a"));
+    assert!(affected.iter().any(|n| n.name == "func_b"));
+    assert!(affected.iter().any(|n| n.name == "test_utils"));
+}
+
 // Metadata: [tests]

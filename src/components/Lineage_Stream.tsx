@@ -10,7 +10,7 @@
  * - **Telemetry Link**: Search for `[Lineage_Stream]` or `trace_stream` in UI tracing.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Share2, Clock, GitCommit, ExternalLink, Minimize2 } from 'lucide-react';
 import { use_agent_store } from '../stores/agent_store';
@@ -21,11 +21,38 @@ import clsx from 'clsx';
 import { Tooltip } from './ui';
 import { decodeAAAK, isAAAK } from '../utils/aaak_decoder';
 
+// Failsafe Error Boundary for Lineage Tree
+class LocalErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    
+    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        console.error("[LocalErrorBoundary] Lineage Stream crashed:", error, errorInfo);
+    }
+    
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-4 bg-red-950/20 border border-red-500/20 text-red-400 font-mono text-xs rounded-lg m-4">
+                    ⚠️ Observability Link Degraded: Lineage stream rendering failure.
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 // Recursive component to render the OTel trace tree
 // PERF: Memoize to prevent full tree re-renders on minor status updates
 const Trace_Tree_Node = React.memo(({ node, depth }: { node: Trace_Node; depth: number }): React.ReactElement => {
     const { get_agent } = use_agent_store();
-    const agent_name = get_agent(node.agent_id)?.name || node.agent_id;
+    const agent_name = (node.agent_id && get_agent(node.agent_id)?.name) || node.agent_id || 'System';
 
     // Status colors
     const status_color = node.status === 'running'
@@ -64,7 +91,7 @@ const Trace_Tree_Node = React.memo(({ node, depth }: { node: Trace_Node; depth: 
                         </div>
                         <span className="text-[9px] text-zinc-600 font-mono flex items-center gap-1">
                             <Clock size={10} />
-                            {node.end_time ? `${node.end_time - node.start_time}ms` : i18n.t('trace.running')}
+                            {node.end_time ? `${node.end_time - node.start_time}ms` : (i18n.t('trace.running') || 'Running')}
                         </span>
                     </div>
 
@@ -73,23 +100,23 @@ const Trace_Tree_Node = React.memo(({ node, depth }: { node: Trace_Node; depth: 
                             <GitCommit size={10} /> {i18n.t('trace.span')}: {node.id.toUpperCase()}
                         </span>
                         {node.attributes && Object.keys(node.attributes).length > 0 && (
-                            <span className="text-[8px] font-mono text-zinc-500 truncate max-w-[150px]">
+                            <div className="text-[8px] font-mono text-zinc-500 truncate max-w-[180px]">
                                 {Object.entries(node.attributes).map(([k, v]) => {
-                                    const val = String(v);
+                                    const val = String(v ?? '');
                                     return (
-                                        <div key={k} className="flex gap-1">
-                                            <span>{k}:</span>
+                                        <div key={k} className="flex gap-1 truncate">
+                                            <span className="text-zinc-500">{k}:</span>
                                             {isAAAK(val) ? (
                                                 <Tooltip content={decodeAAAK(val)} position="top">
                                                     <span className="text-zinc-400 cursor-help border-b border-zinc-800">{val}</span>
                                                 </Tooltip>
                                             ) : (
-                                                <span>{val}</span>
+                                                <span className="text-zinc-400 truncate">{val}</span>
                                             )}
                                         </div>
                                     );
                                 })}
-                            </span>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -120,7 +147,7 @@ const Trace_Tree_Node = React.memo(({ node, depth }: { node: Trace_Node; depth: 
  * Refactored for strict snake_case compliance and consistent prop propagation.
  */
 export const Lineage_Stream: React.FC<{ is_detached_view?: boolean }> = ({ is_detached_view = false }): React.ReactElement => {
-    const { active_trace_id, get_trace_tree } = use_trace_store();
+    const { active_trace_id, spans, get_trace_tree, set_active_trace } = use_trace_store();
     const { is_lineage_stream_detached, toggle_lineage_stream_detachment } = use_tab_store();
     const [sidebar_width, set_sidebar_width] = useState(380);
     const stream_ref = useRef<HTMLDivElement>(null);
@@ -136,7 +163,31 @@ export const Lineage_Stream: React.FC<{ is_detached_view?: boolean }> = ({ is_de
         };
     }, []);
 
-    const active_tree = active_trace_id ? get_trace_tree(active_trace_id) : [];
+    // Extract unique traces available in the trace buffer
+    const available_traces = useMemo(() => {
+        const traces = new Set<string>();
+        Object.values(spans || {}).forEach(s => {
+            if (s?.trace_id) traces.add(s.trace_id);
+        });
+        return Array.from(traces);
+    }, [spans]);
+
+    // Fall back to most recent trace_id if active_trace_id is not explicitly set
+    const effective_trace_id = useMemo(() => {
+        if (active_trace_id) return active_trace_id;
+        const all_spans = Object.values(spans || {});
+        for (let i = all_spans.length - 1; i >= 0; i--) {
+            if (all_spans[i]?.trace_id) {
+                return all_spans[i].trace_id;
+            }
+        }
+        return null;
+    }, [active_trace_id, spans]);
+
+    const active_tree = useMemo(() => {
+        if (!effective_trace_id) return [];
+        return get_trace_tree(effective_trace_id);
+    }, [effective_trace_id, get_trace_tree, spans]);
 
     const handle_sidebar_resize_start = (e: React.MouseEvent): void => {
         if (is_detached_view) return;
@@ -162,75 +213,127 @@ export const Lineage_Stream: React.FC<{ is_detached_view?: boolean }> = ({ is_de
     };
 
     return (
-        <div
-            className={clsx(
-                "flex flex-col bg-zinc-950/20 border-l border-zinc-900 overflow-hidden relative group/sidebar",
-                !is_detached_view && "flex-1 sovereign-card mb-4",
-                is_detached_view && "h-full"
-            )}
-            style={{ width: is_detached_view ? '100%' : sidebar_width }}
-            ref={stream_ref}
-        >
-            {!is_detached_view && <div className="neural-grid opacity-[0.05]" />}
-            {!is_detached_view && (
-                <div
-                    onMouseDown={handle_sidebar_resize_start}
-                    className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-emerald-500/20 active:bg-emerald-500/40 transition-colors z-20"
-                />
-            )}
-
-            <Tooltip content={i18n.t('trace.tooltip')} position="left">
-                <div className="relative z-10 p-3 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between transition-colors cursor-help">
-                    <h3 className="sovereign-header-text flex items-center gap-2">
-                        <Activity size={12} className="text-emerald-500" />
-                        {i18n.t('trace.stream_title')}
-                        {active_trace_id && (
-                            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-500 truncate max-w-[120px] ml-2 normal-case tracking-normal">
-                                {active_trace_id}
-                            </span>
-                        )}
-                    </h3>
-                    
-                    <div className="flex items-center gap-3">
-                        <div className="flex gap-1.5 mr-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700"></div>
-                            <div className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700"></div>
-                        </div>
-                        <button
-                            onClick={() => toggle_lineage_stream_detachment()}
-                            className="p-1 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-zinc-200 transition-colors"
-                            title={is_lineage_stream_detached ? i18n.t('trace_stream.recall_tooltip') : i18n.t('trace_stream.detach_tooltip')}
-                        >
-                            {is_lineage_stream_detached ? <Minimize2 size={14} /> : <ExternalLink size={14} />}
-                        </button>
-                    </div>
-                </div>
-            </Tooltip>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar relative">
-                <AnimatePresence>
-                    {(active_tree || []).map((root_node): React.ReactElement => (
-                        <motion.div
-                            key={root_node.id}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0 }}
-                        >
-                            <Trace_Tree_Node node={root_node} depth={0} />
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
-
-                {active_tree.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-48 opacity-20">
-                        <Share2 size={32} className="text-zinc-500 mb-2" />
-                        <span className="sovereign-header-text !text-zinc-600 text-center px-4">
-                            {i18n.t('trace.waiting')}<br />{i18n.t('trace.waiting_hint')}
-                        </span>
-                    </div>
+        <LocalErrorBoundary>
+            <div
+                className={clsx(
+                    "flex flex-col bg-zinc-950/20 border-l border-zinc-900 overflow-hidden relative group/sidebar",
+                    !is_detached_view && "flex-1 sovereign-card mb-4",
+                    is_detached_view && "h-full"
                 )}
+                style={{ width: is_detached_view ? '100%' : sidebar_width }}
+                ref={stream_ref}
+            >
+                {!is_detached_view && <div className="neural-grid opacity-[0.05]" />}
+                {!is_detached_view && (
+                    <div
+                        onMouseDown={handle_sidebar_resize_start}
+                        className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-emerald-500/20 active:bg-emerald-500/40 transition-colors z-20"
+                    />
+                )}
+
+                <Tooltip content={i18n.t('trace.tooltip')} position="bottom">
+                    <div className="relative z-10 p-3 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between transition-colors cursor-help">
+                        <h3 className="sovereign-header-text flex items-center gap-2">
+                            <Activity size={12} className="text-emerald-500" />
+                            {i18n.t('trace.stream_title')}
+                            {available_traces.length > 1 ? (
+                                <select
+                                    aria-label="Select Active Trace"
+                                    value={effective_trace_id || ''}
+                                    onChange={(e) => set_active_trace(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[9px] font-mono bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1.5 py-0.5 max-w-[140px] truncate focus:outline-none focus:border-emerald-500 ml-2"
+                                >
+                                    {available_traces.map(tid => (
+                                        <option key={tid} value={tid}>{tid}</option>
+                                    ))}
+                                </select>
+                            ) : effective_trace_id ? (
+                                <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-500 truncate max-w-[120px] ml-2 normal-case tracking-normal">
+                                    {effective_trace_id}
+                                </span>
+                            ) : null}
+                        </h3>
+                        
+                        <div className="flex items-center gap-3">
+                            <div className="flex gap-1.5 mr-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700"></div>
+                                <div className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700"></div>
+                            </div>
+                            <button
+                                onClick={() => toggle_lineage_stream_detachment()}
+                                className="p-1 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-zinc-200 transition-colors"
+                                title={is_lineage_stream_detached ? i18n.t('trace_stream.recall_tooltip') : i18n.t('trace_stream.detach_tooltip')}
+                            >
+                                {is_lineage_stream_detached ? <Minimize2 size={14} /> : <ExternalLink size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                </Tooltip>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar relative">
+                    <AnimatePresence>
+                        {(active_tree || []).map((root_node): React.ReactElement => (
+                            <motion.div
+                                key={root_node.id}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0 }}
+                            >
+                                <Trace_Tree_Node node={root_node} depth={0} />
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+
+                    {active_tree.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-64 text-center px-4">
+                            <Share2 size={32} className="text-zinc-600 mb-3 animate-pulse" />
+                            <span className="sovereign-header-text !text-zinc-400 font-semibold tracking-wide">
+                                {i18n.t('trace.waiting') || 'AWAITING TELEMETRY'}
+                            </span>
+                            <p className="text-[11px] font-mono text-zinc-500 mt-2 max-w-xs">
+                                {i18n.t('trace.waiting_hint') || 'No active OTel execution trace tree. Launch an agent task or dispatch diagnostic telemetry.'}
+                            </p>
+                            <button
+                                onClick={() => {
+                                    const now = Date.now();
+                                    const trace_id = `diagnostic-${now.toString(16)}`;
+                                    const root_id = `span-diag-root-${now.toString(16)}`;
+                                    const child_id = `span-diag-child-${now.toString(16)}`;
+                                    const store = use_trace_store.getState();
+                                    store.add_span({
+                                        id: root_id,
+                                        trace_id,
+                                        name: 'MissionOrchestration::InfrastructureAudit',
+                                        agent_id: '1',
+                                        mission_id: 'mission-diagnostic',
+                                        start_time: now - 850,
+                                        status: 'running',
+                                        attributes: { type: 'diagnostic_probe', severity: 'info' }
+                                    });
+                                    store.add_span({
+                                        id: child_id,
+                                        trace_id,
+                                        parent_id: root_id,
+                                        name: 'ToolExecution::parity_guard',
+                                        agent_id: '2',
+                                        mission_id: 'mission-diagnostic',
+                                        start_time: now - 520,
+                                        status: 'running',
+                                        attributes: { tool: 'parity_guard', module: 'telemetry' }
+                                    });
+                                    store.set_active_trace(trace_id);
+                                }}
+                                className="mt-4 px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 text-[10px] font-mono rounded transition-colors uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <Activity size={12} className="text-emerald-400" />
+                                Dispatch Diagnostic Telemetry
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
+        </LocalErrorBoundary>
     );
 };
 

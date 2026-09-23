@@ -2,6 +2,30 @@
   {
     "api_key": null,
     "audioModel": null,
+    "baseUrl": "https://generativelanguage.googleapis.com",
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "☁️",
+    "id": "google",
+    "name": "Google Vertex",
+    "protocol": "google",
+    "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
+    "baseUrl": "https://api.deepseek.com",
+    "defaultConfig": null,
+    "externalId": null,
+    "icon": "🐋",
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "protocol": "openai",
+    "supportsSteeringVectors": false
+  },
+  {
+    "api_key": null,
+    "audioModel": null,
     "baseUrl": "https://api.ollama.com/v1",
     "defaultConfig": null,
     "externalId": null,
@@ -9,18 +33,6 @@
     "id": "ollama-cloud",
     "name": "Ollama-Cloud",
     "protocol": "openai",
-    "supportsSteeringVectors": false
-  },
-  {
-    "api_key": null,
-    "audioModel": null,
-    "baseUrl": "https://api.anthropic.com/v1",
-    "defaultConfig": null,
-    "externalId": null,
-    "icon": "🧠",
-    "id": "anthropic",
-    "name": "Anthropic",
-    "protocol": "anthropic",
     "supportsSteeringVectors": false
   },
   {
@@ -50,18 +62,6 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "https://api.deepseek.com",
-    "defaultConfig": null,
-    "externalId": null,
-    "icon": "🐋",
-    "id": "deepseek",
-    "name": "DeepSeek",
-    "protocol": "openai",
-    "supportsSteeringVectors": false
-  },
-  {
-    "api_key": null,
-    "audioModel": null,
     "baseUrl": "https://api.x.ai/v1",
     "defaultConfig": null,
     "externalId": null,
@@ -74,13 +74,13 @@
   {
     "api_key": null,
     "audioModel": null,
-    "baseUrl": "https://generativelanguage.googleapis.com",
+    "baseUrl": "https://api.anthropic.com/v1",
     "defaultConfig": null,
     "externalId": null,
-    "icon": "☁️",
-    "id": "google",
-    "name": "Google Vertex",
-    "protocol": "google",
+    "icon": "🧠",
+    "id": "anthropic",
+    "name": "Anthropic",
+    "protocol": "anthropic",
     "supportsSteeringVectors": false
   },
   {

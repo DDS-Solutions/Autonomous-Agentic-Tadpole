@@ -172,11 +172,11 @@ const Trace_Detail_Panel: React.FC<TraceDetailPanelProps> = ({
                     <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Executing Agent</span>
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-xs text-cyan-400">
-                            {agent_name[0] || '?'}
+                            {(agent_name && agent_name.length > 0) ? agent_name[0] : 'S'}
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-xs font-bold text-zinc-200">{agent_name}</span>
-                            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-tighter block mt-0.5">ID: {span.agent_id}</span>
+                            <span className="text-xs font-bold text-zinc-200">{agent_name || 'System'}</span>
+                            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-tighter block mt-0.5">ID: {span.agent_id || 'system'}</span>
                         </div>
                     </div>
                 </div>
@@ -205,7 +205,7 @@ const Trace_Detail_Panel: React.FC<TraceDetailPanelProps> = ({
 };
 
 export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_detached_view = false }) => {
-    const { active_trace_id, get_trace_tree } = use_trace_store();
+    const { active_trace_id, spans, get_trace_tree } = use_trace_store();
     const { get_agent } = use_agent_store();
     const { is_trace_stream_detached, toggle_trace_stream_detachment } = use_tab_store();
     
@@ -218,6 +218,18 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
     const [scroll_top, set_scroll_top] = useState(0);
     const [viewport_height, set_viewport_height] = useState(400);
     const [render_start_time] = useState(() => Date.now());
+
+    // Fall back to most recent trace_id in spans if no explicit active_trace_id is set
+    const effective_trace_id = useMemo(() => {
+        if (active_trace_id) return active_trace_id;
+        const all_spans = Object.values(spans || {});
+        for (let i = all_spans.length - 1; i >= 0; i--) {
+            if (all_spans[i]?.trace_id) {
+                return all_spans[i].trace_id;
+            }
+        }
+        return null;
+    }, [active_trace_id, spans]);
 
     // Shared Ticker Registry (NW-008)
     const ticker = useMemo(() => {
@@ -245,9 +257,9 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
 
     // Flatten tree and calculate timeline metrics
     const timeline_spans = useMemo(() => {
-        if (!active_trace_id) return [];
+        if (!effective_trace_id) return [];
 
-        const raw_tree = get_trace_tree(active_trace_id);
+        const raw_tree = get_trace_tree(effective_trace_id);
         const flat: (Trace_Node & { depth: number })[] = [];
 
         // SAFETY: Iterative DFS to avoid stack overflow on deep traces
@@ -270,7 +282,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
         }
 
         return flat;
-    }, [active_trace_id, get_trace_tree]);
+    }, [effective_trace_id, get_trace_tree, spans]);
 
     // Ticker-free boundary calculations
     const { min_time, total_duration } = useMemo(() => {
@@ -345,17 +357,18 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
     };
 
     return (
-        <TickerContext.Provider value={ticker}>
-            <div className={clsx(
-                "flex-grow flex overflow-hidden relative group",
-                !is_detached_view && "sovereign-card overflow-hidden h-64 border-t border-[color:var(--color-surface)] shrink-0",
-                is_detached_view && "h-full"
-            )}>
-                {!is_detached_view && <div className="neural-grid opacity-[0.05]" />}
-                
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <Tooltip content={i18n.t('trace_stream.tooltip')} position="left">
-                        <div className="relative z-10 p-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-background)] flex items-center justify-between transition-colors cursor-help">
+        <LocalErrorBoundary>
+            <TickerContext.Provider value={ticker}>
+                <div className={clsx(
+                    "flex-grow flex overflow-hidden relative group",
+                    !is_detached_view && "sovereign-card overflow-hidden h-64 border-t border-[color:var(--color-surface)] shrink-0",
+                    is_detached_view && "h-full"
+                )}>
+                    {!is_detached_view && <div className="neural-grid opacity-[0.05]" />}
+                    
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <Tooltip content={i18n.t('trace_stream.tooltip')} position="bottom">
+                            <div className="relative z-10 p-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-background)] flex items-center justify-between transition-colors cursor-help">
                             <h3 className="sovereign-header-text flex items-center gap-2">
                                 <Network size={12} strokeWidth={1.5} className="text-cyan-500" />
                                 {i18n.t('trace_stream.title')}
@@ -368,7 +381,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                             
                             <div className="flex items-center gap-2">
                                 {/* Zoom Slider */}
-                                {active_trace_id && timeline_spans.length > 0 && (
+                                {effective_trace_id && timeline_spans.length > 0 && (
                                     <div className="flex items-center gap-2 mr-3 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1">
                                         <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Zoom</span>
                                         <input 
@@ -405,16 +418,53 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                         onScroll={handle_scroll}
                         className="flex-grow overflow-x-auto overflow-y-auto p-4 custom-scrollbar relative z-10"
                     >
-                        {!active_trace_id || timeline_spans.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full opacity-30 text-center px-6">
-                                <Network size={24} strokeWidth={1.5} className="mb-3 text-cyan-500/50" />
-                                <p className="sovereign-header-text !text-zinc-500">
+                        {!effective_trace_id || timeline_spans.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                                <Network size={28} strokeWidth={1.5} className="mb-3 text-cyan-500/70 animate-pulse" />
+                                <p className="sovereign-header-text !text-zinc-400 font-semibold tracking-wide">
                                      LINK READY :: AWAITING TELEMETRY
                                 </p>
+                                <p className="text-[11px] font-mono text-zinc-500 mt-2 max-w-sm">
+                                    No active execution trace stream. Launch a mission or dispatch an agent task to visualize live spans.
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        const now = Date.now();
+                                        const trace_id = `diagnostic-${now.toString(16)}`;
+                                        const root_id = `span-diag-root-${now.toString(16)}`;
+                                        const child_id = `span-diag-child-${now.toString(16)}`;
+                                        const store = use_trace_store.getState();
+                                        store.add_span({
+                                            id: root_id,
+                                            trace_id,
+                                            name: 'MissionOrchestration::InfrastructureAudit',
+                                            agent_id: '1',
+                                            mission_id: 'mission-diagnostic',
+                                            start_time: now - 850,
+                                            status: 'running',
+                                            attributes: { type: 'diagnostic_probe', severity: 'info' }
+                                        });
+                                        store.add_span({
+                                            id: child_id,
+                                            trace_id,
+                                            parent_id: root_id,
+                                            name: 'ToolExecution::parity_guard',
+                                            agent_id: '2',
+                                            mission_id: 'mission-diagnostic',
+                                            start_time: now - 520,
+                                            status: 'running',
+                                            attributes: { tool: 'parity_guard', module: 'telemetry' }
+                                        });
+                                        store.set_active_trace(trace_id);
+                                    }}
+                                    className="mt-4 px-3 py-1.5 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/30 hover:border-cyan-500/60 text-cyan-400 text-[10px] font-mono rounded transition-colors uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                                >
+                                    <Activity size={12} className="text-cyan-400" />
+                                    Dispatch Diagnostic Telemetry
+                                </button>
                             </div>
                         ) : (
-                            <LocalErrorBoundary>
-                                <div style={{ width: `${ROW_HEADER_WIDTH_PX + 32 + timeline_width}px`, height: `${total_list_height}px` }} className="relative pr-8">
+                            <div style={{ width: `${ROW_HEADER_WIDTH_PX + 32 + timeline_width}px`, height: `${total_list_height}px` }} className="relative pr-8">
                                     {/* Unified timeline grid background */}
                                     <div 
                                         className="absolute inset-y-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] pointer-events-none"
@@ -432,13 +482,12 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                                             min_time={min_time}
                                             total_duration={total_duration}
                                             zoom_factor={zoom_factor}
-                                            agent_name={get_agent(span.agent_id)?.name || span.agent_id}
+                                            agent_name={get_agent(span.agent_id)?.name || span.agent_id || 'System'}
                                             on_select={set_selected_span_id}
                                             is_selected={selected_span_id === span.id}
                                         />
                                     ))}
                                 </div>
-                            </LocalErrorBoundary>
                         )}
                     </div>
                 </div>
@@ -447,7 +496,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                 {selected_span && !is_details_detached && (
                     <Trace_Detail_Panel 
                         span={selected_span} 
-                        agent_name={get_agent(selected_span.agent_id)?.name || selected_span.agent_id}
+                        agent_name={get_agent(selected_span.agent_id)?.name || selected_span.agent_id || 'System'}
                         is_detached={false}
                         on_close={() => set_selected_span_id(null)}
                         on_detach={() => set_is_details_detached(true)}
@@ -494,7 +543,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                     >
                         <Trace_Detail_Panel 
                             span={selected_span} 
-                            agent_name={get_agent(selected_span.agent_id)?.name || selected_span.agent_id}
+                            agent_name={get_agent(selected_span.agent_id)?.name || selected_span.agent_id || 'System'}
                             is_detached={true}
                             on_close={() => {
                                   set_is_details_detached(false);
@@ -505,6 +554,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
                 )}
             </div>
         </TickerContext.Provider>
+    </LocalErrorBoundary>
     );
 };
 

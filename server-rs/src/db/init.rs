@@ -52,7 +52,8 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
             agent_id TEXT NOT NULL,
             text TEXT NOT NULL,
             mission_id TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
          )"
     )
     .execute(&pool)
@@ -66,7 +67,9 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
             budget REAL NOT NULL,
             task_description TEXT NOT NULL,
             status TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (hiring_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_agent_id) REFERENCES agents(id) ON DELETE CASCADE
          )"
     )
     .execute(&pool)

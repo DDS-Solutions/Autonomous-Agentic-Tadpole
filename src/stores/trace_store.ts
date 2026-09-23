@@ -77,10 +77,14 @@ export const use_trace_store = create<Trace_Store_State>((set, get) => ({
     active_trace_id: null,
 
     add_span: (span: Trace_Span): void => {
+        const trace_id = span.trace_id || get().active_trace_id || 'system-trace';
         set((state) => ({
             spans: {
                 ...state.spans,
-                [span.id]: span
+                [span.id]: {
+                    ...span,
+                    trace_id
+                }
             }
         }));
     },
@@ -92,7 +96,11 @@ export const use_trace_store = create<Trace_Store_State>((set, get) => ({
             return {
                 spans: {
                     ...state.spans,
-                    [id]: { ...existing, ...updates }
+                    [id]: { 
+                        ...existing, 
+                        ...updates,
+                        trace_id: updates.trace_id || existing.trace_id 
+                    }
                 }
             };
         });

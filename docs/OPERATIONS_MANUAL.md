@@ -493,8 +493,12 @@ The engine provides local diagnostic endpoints under `/v1/system/debug` for anal
   - Gated reconciliation: `ALLOW_MIGRATION_RECONCILE=true` must be explicitly set to reconcile legacy database schemas before marking newer migrations.
   - Native backup utilities: Shell scripts `scripts/backup_db.ps1` (PowerShell) and `scripts/backup_db.sh` (Bash) perform zero-downtime SQLite online backups with SHA-256 integrity verification.
   - Persistence validation: `python scripts/verify_persistence.py` independently verifies table presence, row counts, and migration status.
-- **Automated 7-Day Telemetry Pruning**: `FileTelemetrySink` automatically rotates JSONL event logs daily (`logs/events_YYYY-MM-DD.jsonl`) and unlinks log files older than 7 days on boundary checks.
+## Tracing & Telemetry Stream Operations
 
-
+The Tadpole OS telemetric bridge streams live OpenTelemetry-compatible spans over WebSockets (`/v1/engine/ws`) and internal channels to power the Neural Waterfall execution timeline (`src/components/Neural_Waterfall.tsx`):
+- **Live Distributed Spans**: Root `AgentExecution` spans and child `ToolExecution` spans capture `trace_id`, `parent_id`, `agent_id`, and timing metrics.
+- **Dynamic Field Recording**: The `TelemetryLayer::on_record` hook updates dynamic span metadata (including W3C `traceparent` bindings and `trace_id` assignment) to prevent disconnected tree hierarchies.
+- **Detached Telemetry Streams**: Detached windows (`/detached-view?type=trace-stream`) automatically synchronize state via cross-tab `BroadcastChannel('trace_store_sync')` and establish dedicated WebSocket streams.
+- **Diagnostic Telemetry**: When the engine is idle, operators can dispatch synthetic diagnostic telemetry directly from the standby interface to verify end-to-end timeline rendering, ticker intervals, and zoom multiplier controls.
 
 [//]: # (Metadata: [OPERATIONS_MANUAL])

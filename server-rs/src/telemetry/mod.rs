@@ -92,7 +92,11 @@ where
         let name = metadata.name();
 
         // Capture parentId if it exists in the attributes or context
-        let parent_id = attrs.parent().map(|p| format!("{:x}", p.into_u64()));
+        let parent_id = attrs
+            .parent()
+            .cloned()
+            .or_else(|| _ctx.lookup_current().map(|s| s.id()))
+            .map(|p| format!("{:x}", p.into_u64()));
 
         // Try to get traceId from attributes first (our standard convention)
         let trace_id: Option<String> = None;
@@ -119,6 +123,21 @@ where
         // Override trace_id if it was explicitly provided in the attributes or captured in the span
         if let Some(attr_trace_id) = event["span"]["attributes"].get("trace_id") {
             event["span"]["trace_id"] = attr_trace_id.clone();
+        } else {
+            // Inherit from parent span if available in extensions
+            let inherited_trace_id = _ctx.lookup_current().and_then(|parent| {
+                parent.extensions().get::<String>().cloned()
+            });
+            if let Some(inherited) = inherited_trace_id {
+                event["span"]["trace_id"] = ::serde_json::json!(inherited);
+            }
+        }
+
+        // Store trace_id in span extensions so child spans can inherit it
+        if let Some(span_ref) = _ctx.span(id) {
+            if let Some(tid) = event["span"]["trace_id"].as_str() {
+                span_ref.extensions_mut().insert(tid.to_string());
+            }
         }
 
         // Capture request_id for top-level span correlation
@@ -137,6 +156,47 @@ where
         }
 
         // Broadcast the "start" of the span
+        let _ = TELEMETRY_TX.send(event);
+    }
+
+    fn on_record(
+        &self,
+        id: &span::Id,
+        values: &span::Record<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let mut attributes = ::serde_json::json!({});
+        let mut visitor = FieldVisitor::new(&mut attributes, &self.redactor);
+        values.record(&mut visitor);
+
+        let update = attributes.as_object().cloned().unwrap_or_default();
+        let mut event_update = ::serde_json::Map::new();
+
+        if let Some(trace_id) = update.get("trace_id") {
+            event_update.insert("trace_id".to_string(), trace_id.clone());
+            if let Some(span_ref) = _ctx.span(id) {
+                if let Some(tid) = trace_id.as_str() {
+                    span_ref.extensions_mut().insert(tid.to_string());
+                }
+            }
+        }
+        if let Some(agent_id) = update.get("agent_id") {
+            event_update.insert("agent_id".to_string(), agent_id.clone());
+        }
+        if let Some(mission_id) = update.get("mission_id") {
+            event_update.insert("mission_id".to_string(), mission_id.clone());
+        }
+        if let Some(request_id) = update.get("request_id") {
+            event_update.insert("request_id".to_string(), request_id.clone());
+        }
+        event_update.insert("attributes".to_string(), ::serde_json::Value::Object(update));
+
+        let event = ::serde_json::json!({
+            "type": "trace:span_update",
+            "span_id": format!("{:x}", id.into_u64()),
+            "update": event_update
+        });
+
         let _ = TELEMETRY_TX.send(event);
     }
 

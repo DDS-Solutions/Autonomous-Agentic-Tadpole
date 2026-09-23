@@ -131,54 +131,90 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, is_pulse_active:
             tokio::select! {
                 // 1. Handle System Logs (LogEntry)
                 result = log_rx.recv() => {
-                    if let Ok(msg) = result {
-                        if let Ok(json_str) = serde_json::to_string(&msg) {
-                            if sender.send(Message::Text(json_str.into())).await.is_err() {
-                                break;
+                    match result {
+                        Ok(msg) => {
+                            if let Ok(json_str) = serde_json::to_string(&msg) {
+                                if sender.send(Message::Text(json_str.into())).await.is_err() {
+                                    break;
+                                }
                             }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!("WebSocket log receiver lagged by {} messages", n);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::warn!("WebSocket log channel closed; terminating send task");
+                            break;
                         }
                     }
                 }
 
                 // 2. Handle Engine Events (serde_json::Value)
                 result = event_rx.recv() => {
-                    if let Ok(msg) = result {
-                        if let Ok(json_str) = serde_json::to_string(&msg) {
-                            if sender.send(Message::Text(json_str.into())).await.is_err() {
-                                break;
+                    match result {
+                        Ok(msg) => {
+                            if let Ok(json_str) = serde_json::to_string(&msg) {
+                                if sender.send(Message::Text(json_str.into())).await.is_err() {
+                                    break;
+                                }
                             }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!("WebSocket event receiver lagged by {} messages", n);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::warn!("WebSocket event channel closed; terminating send task");
+                            break;
                         }
                     }
                 }
 
                 // 3. Handle High-Speed Telemetry (serde_json::Value)
                 result = telemetry_rx.recv() => {
-                    if let Ok(msg) = result {
-                        if let Ok(json_str) = serde_json::to_string(&msg) {
-                            if sender.send(Message::Text(json_str.into())).await.is_err() {
-                                break;
+                    match result {
+                        Ok(msg) => {
+                            if let Ok(json_str) = serde_json::to_string(&msg) {
+                                if sender.send(Message::Text(json_str.into())).await.is_err() {
+                                    break;
+                                }
                             }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!("WebSocket telemetry receiver lagged by {} messages", n);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::warn!("WebSocket telemetry channel closed; terminating send task");
+                            break;
                         }
                     }
                 }
 
                 // 4. Handle Real-Time Audio Streams (Vec<u8> binary chunks)
                 result = audio_rx.recv() => {
-                    if let Ok(msg) = result {
-                        // Prepend header 0x01 (Audio)
-                        let mut bin = Vec::with_capacity(msg.len() + 1);
-                        bin.push(0x01);
-                        bin.extend_from_slice(&msg);
-                        if sender.send(Message::Binary(bin.into())).await.is_err() {
+                    match result {
+                        Ok(msg) => {
+                            // Prepend header 0x01 (Audio)
+                            let mut bin = Vec::with_capacity(msg.len() + 1);
+                            bin.push(0x01);
+                            bin.extend_from_slice(&msg);
+                            if sender.send(Message::Binary(bin.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!("WebSocket audio receiver lagged by {} messages", n);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::warn!("WebSocket audio channel closed; terminating send task");
                             break;
                         }
                     }
                 }
 
                 // 5. Handle High-Speed Binary Pulses (MessagePack encoded)
-                result = pulse_rx.recv() => {
-                    if is_pulse_active {
-                        if let Ok(pulse) = result {
+                result = pulse_rx.recv(), if is_pulse_active => {
+                    match result {
+                        Ok(pulse) => {
                             // MessagePack binary encoding
                             if let Ok(encoded) = rmp_serde::encode::to_vec_named(&*pulse) {
                                 // Prepend header 0x02 (Swarm Pulse)
@@ -189,6 +225,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, is_pulse_active:
                                     break;
                                 }
                             }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!("WebSocket pulse receiver lagged by {} messages", n);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::warn!("WebSocket pulse channel closed; terminating send task");
+                            break;
                         }
                     }
                 }
@@ -270,7 +313,7 @@ pub async fn live_voice_handler(
         .into_response())
 }
 
-async fn handle_live_socket(mut client_ws: WebSocket, _state: Arc<AppState>) {
+async fn handle_live_socket(mut client_ws: WebSocket, state: Arc<AppState>) {
     let api_key = match std::env::var("GOOGLE_API_KEY") {
         Ok(key) => key,
         Err(_) => {
@@ -293,10 +336,11 @@ async fn handle_live_socket(mut client_ws: WebSocket, _state: Arc<AppState>) {
     let (gemini_ws, _) = match connect_async::<String>(gemini_url).await {
         Ok(conn) => conn,
         Err(e) => {
-            tracing::error!("❌ [LiveWS] Failed to connect to Gemini: {}", e);
+            let sanitized_err = state.security.secret_redactor.redact(&e.to_string());
+            tracing::error!("❌ [LiveWS] Failed to connect to Gemini: {}", sanitized_err);
             let _ = client_ws
                 .send(Message::Text(
-                    format!("Error: Failed to connect to Gemini: {}", e).into(),
+                    "Error: Failed to connect to Gemini upstream service".into(),
                 ))
                 .await;
             return;

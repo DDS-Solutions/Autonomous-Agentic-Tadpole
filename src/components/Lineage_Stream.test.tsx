@@ -18,7 +18,9 @@ import { Lineage_Stream } from './Lineage_Stream';
 // Mock stores
 const mock_trace_state = {
     active_trace_id: 'trace-123' as string | null,
-    get_trace_tree: vi.fn()
+    spans: {} as Record<string, any>,
+    get_trace_tree: vi.fn(),
+    set_active_trace: vi.fn()
 };
 
 vi.mock('../stores/trace_store', () => ({
@@ -70,8 +72,8 @@ describe('Lineage_Stream Verification', () => {
         mock_trace_state.get_trace_tree.mockReturnValue([]);
         
         render(<Lineage_Stream />);
-        expect(screen.getByText(/trace.waiting/)).toBeInTheDocument();
-        expect(screen.getByText(/trace.waiting_hint/)).toBeInTheDocument();
+        expect(screen.getByText('trace.waiting')).toBeInTheDocument();
+        expect(screen.getByText('trace.waiting_hint')).toBeInTheDocument();
     });
 
     it('renders a hierarchical trace tree', () => {
@@ -145,6 +147,29 @@ describe('Lineage_Stream Verification', () => {
         fireEvent.mouseMove(document, { clientX: 900 });
         fireEvent.mouseUp(document);
         // Resizing logic verified by lack of errors and coverage of event handlers
+    });
+
+    it('falls back to effective_trace_id from spans when active_trace_id is null', () => {
+        mock_trace_state.active_trace_id = null;
+        mock_trace_state.spans = {
+            'span-fallback': { id: 'span-fallback', trace_id: 'trace-auto-resolved' }
+        };
+        mock_trace_state.get_trace_tree.mockReturnValue([
+            {
+                id: 'span-fallback',
+                trace_id: 'trace-auto-resolved',
+                name: 'Auto Discovered Span',
+                agent_id: 'system',
+                start_time: 100,
+                end_time: 200,
+                status: 'success',
+                children: []
+            }
+        ]);
+
+        render(<Lineage_Stream />);
+        expect(screen.getByText('Auto Discovered Span')).toBeInTheDocument();
+        expect(mock_trace_state.get_trace_tree).toHaveBeenCalledWith('trace-auto-resolved');
     });
 });
 

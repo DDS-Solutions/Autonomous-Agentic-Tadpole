@@ -302,6 +302,18 @@ async fn test_task_claim_and_receipts() {
         .await
         .unwrap();
     assert_eq!(status, "done");
+
+    // 5. Failure path: Post receipt to non-existent task returns 404 Not Found
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/v1/agents/{}/tasks/non-existent-task-999/receipts", agent_id))
+        .header(AUTHORIZATION, valid_auth(&state))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_vec(&receipt_payload).unwrap()))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -385,6 +397,17 @@ async fn test_context_packet_endpoints() {
     let data: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(data["contextVersion"], 42);
     assert_eq!(data["contextPacket"]["api_key_override"], "temp-test-key");
+
+    // 5. Failure path: PUT context-packet for non-existent agent returns 404 Not Found
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/v1/agents/non-existent-agent-999/context-packet")
+        .header(AUTHORIZATION, valid_auth(&state))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_vec(&put_payload).unwrap()))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

@@ -428,6 +428,12 @@ pub async fn update_agent_quota(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateQuotaPayload>,
 ) -> Result<impl IntoResponse, AppError> {
+    if !payload.budget_usd.is_finite() || payload.budget_usd < 0.0 {
+        return Err(AppError::BadRequest(
+            "Budget quota must be a non-negative finite number".to_string(),
+        ));
+    }
+
     state
         .security
         .budget_guard
@@ -549,6 +555,12 @@ pub async fn update_mission_quota(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateQuotaPayload>,
 ) -> Result<impl IntoResponse, AppError> {
+    if !payload.budget_usd.is_finite() || payload.budget_usd < 0.0 {
+        return Err(AppError::BadRequest(
+            "Budget quota must be a non-negative finite number".to_string(),
+        ));
+    }
+
     state
         .security
         .budget_guard
@@ -952,6 +964,50 @@ pub async fn get_token_burn(
     }))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[tokio::test]
+    async fn test_update_agent_quota_rejects_negative_or_nan() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+
+        // 1. Negative budget
+        let res_neg = update_agent_quota(
+            Path("agent-1".to_string()),
+            State(state.clone()),
+            Json(UpdateQuotaPayload {
+                budget_usd: -50.0,
+                reset_period: None,
+            }),
+        )
+        .await;
+        assert!(matches!(res_neg, Err(AppError::BadRequest(_))));
+
+        // 2. NaN budget
+        let res_nan = update_agent_quota(
+            Path("agent-1".to_string()),
+            State(state.clone()),
+            Json(UpdateQuotaPayload {
+                budget_usd: f64::NAN,
+                reset_period: None,
+            }),
+        )
+        .await;
+        assert!(matches!(res_nan, Err(AppError::BadRequest(_))));
+
+        // 3. Infinite budget
+        let res_inf = update_agent_quota(
+            Path("agent-1".to_string()),
+            State(state.clone()),
+            Json(UpdateQuotaPayload {
+                budget_usd: f64::INFINITY,
+                reset_period: None,
+            }),
+        )
+        .await;
+        assert!(matches!(res_inf, Err(AppError::BadRequest(_))));
+    }
+}
 
 // Metadata: [oversight]
