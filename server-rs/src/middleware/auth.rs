@@ -46,6 +46,21 @@ pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str>
     } else if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
         Some("NEURAL_TOKEN_NEW")
     } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
+        // Enforce server-authoritative grace window if rotation metadata is present
+        if let (Some(rotated_at), Some(grace_secs)) = (state.security.token_rotated_at, state.security.token_grace_secs) {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if now.saturating_sub(rotated_at) > grace_secs {
+                tracing::warn!(
+                    "[auth] Expired NEURAL_TOKEN_OLD rejected: rotated {}s ago, grace window is {}s",
+                    now.saturating_sub(rotated_at),
+                    grace_secs
+                );
+                return None;
+            }
+        }
         Some("NEURAL_TOKEN_OLD")
     } else {
         None

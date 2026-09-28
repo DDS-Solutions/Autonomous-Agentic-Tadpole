@@ -67,6 +67,13 @@ describe('INV-003: Telemetry Secret Redaction Invariant', () => {
             expect(scrubbed).not.toContain('eyJhbGci');
             expect(scrubbed).toContain('Bearer [REDACTED]');
         });
+
+        it('redacts AWS access keys (AKIA...)', () => {
+            const raw = 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE; region = us-east-1';
+            const scrubbed = scrub_string(raw);
+            expect(scrubbed).not.toContain('AKIAIOSFODNN7EXAMPLE');
+            expect(scrubbed).toContain('[REDACTED]');
+        });
     });
 
     describe('scrub_secrets payload sanitization', () => {

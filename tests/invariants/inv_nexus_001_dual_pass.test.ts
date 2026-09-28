@@ -26,20 +26,22 @@ describe('INV-NEXUS-001: Mandatory Dual-Pass Protocol & Invariant Gates', () => 
         expect(existsSync(routerPath)).toBe(true);
         const routerContent = readFileSync(routerPath, 'utf-8');
 
-        // Verify build_protected_v1_routes exists
-        expect(routerContent).toMatch(/fn\s+build_protected_v1_routes\s*\(/);
+        // Verify build_protected_v1_routes exists and extract its structural body
+        const fnMatch = routerContent.match(/fn\s+build_protected_v1_routes\s*\([^)]*\)\s*->\s*Router[^{]*\{([\s\S]*?)\n\}/);
+        expect(fnMatch).not.toBeNull();
+        const protectedBody = fnMatch![1];
 
-        // Verify validate_token is applied as route layer
-        expect(routerContent).toMatch(/middleware::auth::validate_token/);
+        // Verify validate_token is applied as route layer directly inside build_protected_v1_routes
+        expect(protectedBody).toMatch(/middleware::auth::validate_token/);
 
-        // Verify core sub-routers are nested within protected routes
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/agents["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/oversight["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/infra["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/model-manager["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/skills["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/governance["']/);
-        expect(routerContent).toMatch(/\.nest\(\s*["']\/intelligence["']/);
+        // Verify core sub-routers are structurally nested within the protected routes scope
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/agents["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/oversight["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/infra["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/model-manager["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/skills["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/governance["']/);
+        expect(protectedBody).toMatch(/\.nest\(\s*["']\/intelligence["']/);
     });
 
     it('enforces SQLite foreign_keys = ON pragma in server-rs/src/db/init.rs', () => {

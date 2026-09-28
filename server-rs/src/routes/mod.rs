@@ -63,6 +63,8 @@ mod health_endpoint_tests;
 mod shutdown_orchestrator_tests;
 #[cfg(test)]
 mod agentic_engine_tests;
+#[cfg(test)]
+mod intelligence_tests;
 
 
 

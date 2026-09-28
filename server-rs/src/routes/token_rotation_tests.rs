@@ -27,6 +27,16 @@ mod tests {
         new: Option<&str>,
         old: Option<&str>,
     ) -> Router {
+        test_app_with_grace(current, new, old, None, None).await
+    }
+
+    async fn test_app_with_grace(
+        current: &str,
+        new: Option<&str>,
+        old: Option<&str>,
+        rotated_at: Option<u64>,
+        grace_secs: Option<u64>,
+    ) -> Router {
         let mut app_state = AppState::new_minimal_mock().await;
         
         // Inject token rotation configuration
@@ -41,6 +51,8 @@ mod tests {
             deploy_token: current.to_string(),
             deploy_token_old: old.map(|s| s.to_string()),
             deploy_token_new: new.map(|s| s.to_string()),
+            token_rotated_at: rotated_at,
+            token_grace_secs: grace_secs,
             conflict: app_state.security.conflict.clone(),
         };
         app_state.security = Arc::new(new_security_hub);
@@ -95,6 +107,44 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_auth_accepts_old_token_within_grace() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // Rotated 100 seconds ago with 300 second grace period (still valid)
+        let app = test_app_with_grace("current-123", Some("new-456"), Some("old-789"), Some(now - 100), Some(300)).await;
+
+        let request = Request::builder()
+            .uri("/protected")
+            .header("Authorization", "Bearer old-789")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_auth_rejects_old_token_after_grace_expired() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // Rotated 500 seconds ago with 300 second grace period (expired)
+        let app = test_app_with_grace("current-123", Some("new-456"), Some("old-789"), Some(now - 500), Some(300)).await;
+
+        let request = Request::builder()
+            .uri("/protected")
+            .header("Authorization", "Bearer old-789")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

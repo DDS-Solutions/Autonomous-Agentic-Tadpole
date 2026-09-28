@@ -10,23 +10,32 @@ groups:
       summary: "Tadpole Engine is offline"
       description: "The Tadpole OS engine has been unresponsive for more than 30 seconds."
 
-  - alert: HighLatency
-    expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5
-    for: 2m
-    labels:
-      severity: warning
-    annotations:
-      summary: "High API Latency"
-      description: "p99 API latency is greater than 500ms for more than 2 minutes."
-
-  - alert: BudgetExhausted
-    expr: tadpole_budget_percent_used > 80
+  - alert: EngineDegraded
+    expr: tadpole_health_state == 0
     for: 1m
     labels:
       severity: critical
     annotations:
-      summary: "Daily budget limit warning"
-      description: "Tadpole swarm daily LLM budget usage has exceeded 80%."
+      summary: "Tadpole Engine state degraded"
+      description: "Engine health state telemetry indicates degraded system subsystems."
+
+  - alert: HighLatency
+    expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5 or tool_latency_p99 > 500
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API / Tool Latency"
+      description: "p99 API or tool execution latency is greater than 500ms for more than 2 minutes."
+
+  - alert: BudgetExhausted
+    expr: tadpole_budget_percent_used > 80 or oversight_cost_usd > 100
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Swarm budget limit warning"
+      description: "Tadpole swarm LLM budget usage has exceeded threshold."
 
   - alert: SQLiteLocked
     expr: tadpole_sqlite_busy_duration_seconds > 10

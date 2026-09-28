@@ -81,11 +81,11 @@ export const Telemetry_Packet_Header = {
 export type Telemetry_Packet_Header = typeof Telemetry_Packet_Header[keyof typeof Telemetry_Packet_Header];
 
 /** Maximum number of reconnect attempts before giving up. */
-const MAX_RETRIES = 10;
+export const MAX_RETRIES = 10;
 /** Initial backoff delay in ms. */
-const INITIAL_BACKOFF = 2000;
+export const INITIAL_BACKOFF = 2000;
 /** Maximum backoff delay in ms. */
-const MAX_BACKOFF = 30000;
+export const MAX_BACKOFF = 30000;
 
 /** Connection states for the socket. */
 export type Connection_State = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error';

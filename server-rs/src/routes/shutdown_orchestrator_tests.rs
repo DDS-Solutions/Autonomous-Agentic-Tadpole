@@ -44,6 +44,8 @@ mod tests {
             deploy_token: "test-token-123".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
             verification_gate: app_state.security.verification_gate.clone(),
             conflict: app_state.security.conflict.clone(),
         };
@@ -89,6 +91,8 @@ mod tests {
             deploy_token: "test-token-123".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
             verification_gate: app_state.security.verification_gate.clone(),
             conflict: app_state.security.conflict.clone(),
         };

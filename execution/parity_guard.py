@@ -35,6 +35,7 @@ import yaml
 import json
 import sys
 import io
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Any
@@ -63,17 +64,24 @@ def normalize_path(path):
 
 def scan_router(router_path):
     """Extracts routes from the Axum router.rs file, handling multi-level nesting."""
+    if not router_path.is_file():
+        print_result("ROUTER-SCAN", False, f"router.rs not found at {router_path}")
+        return None
     try:
         sys.path.insert(0, str(ROOT / "execution"))
         from generate_api_reference import discover_routes
 
-        return [
+        routes = [
             {"path": route.path, "method": route.method, "handler": route.handler}
             for route in discover_routes()
         ]
+        if not routes:
+            print_result("ROUTER-SCAN", False, "discover_routes returned 0 routes. Layout may have drifted.")
+            return None
+        return routes
     except Exception as exc:
         print_result("ROUTER-SCAN", False, f"Failed to import route generator: {exc}")
-        return []
+        return None
 
 def scan_openapi(openapi_path):
     """Parses paths from openapi.yaml."""
@@ -111,6 +119,10 @@ def check_env_vars(root):
                     env_example_vars.add(key)
     
     errors = 0
+    if not env_vars_in_code:
+        print_result("ENV-VAR", False, "No environment variables found in server-rs/src (scanner failure)")
+        errors += 1
+
     for var in env_vars_in_code:
         if var not in env_example_vars:
             print_result("ENV-VAR", False, f"std::env::var(\"{var}\") used in code but missing from .env.example")
@@ -246,7 +258,15 @@ def check_skills(root):
                         print_result("SKILL-MANIFEST", False, f"[{name}] invalid python execution command")
                         errors += 1
                 else:
-                    print_result("SKILL-MANIFEST", True, f"[{name}] {exec_cmd} verified")
+                    parts = exec_cmd.split(' ')
+                    cmd_exe = parts[0]
+                    if len(parts) >= 2 and (root / parts[1]).exists():
+                        print_result("SKILL-MANIFEST", True, f"[{name}] {exec_cmd} verified")
+                    elif cmd_exe in {"echo"} or shutil.which(cmd_exe):
+                        print_result("SKILL-MANIFEST", True, f"[{name}] executable '{cmd_exe}' verified")
+                    else:
+                        print_result("SKILL-MANIFEST", False, f"[{name}] unknown or missing executable: {exec_cmd}")
+                        errors += 1
             except json.JSONDecodeError as e:
                 print_result("SKILL-MANIFEST", False, f"Failed to parse {file} as JSON: {e}")
                 errors += 1
@@ -277,16 +297,26 @@ def check_api_docs_parity(root, fix=False):
             print_result("DOCS-PARITY", False, f"Sync failed: {result.stderr}")
             return 1
     else:
-        # Check if synced (Heuristic: check mtimes)
-        openapi_mtime = os.path.getmtime(root / "docs" / "openapi.yaml")
-        api_ref_mtime = os.path.getmtime(root / "docs" / "API_REFERENCE.md")
-        
-        if openapi_mtime > api_ref_mtime + 5: # 5s buffer
-            print_result("DOCS-PARITY", False, "API_REFERENCE.md is out of sync with openapi.yaml. Run with FIX=1 to sync.")
-            return 1
-        else:
-            print_result("DOCS-PARITY", True, "API_REFERENCE.md is synchronized")
+        # Content verification: check that discovered routes exist in both openapi.yaml and API_REFERENCE.md
+        try:
+            sys.path.insert(0, str(root / "execution"))
+            from generate_api_reference import discover_routes
+            routes = discover_routes()
+            api_ref_path = root / "docs" / "API_REFERENCE.md"
+            openapi_path = root / "docs" / "openapi.yaml"
+            if not api_ref_path.exists() or not openapi_path.exists():
+                print_result("DOCS-PARITY", False, "API_REFERENCE.md or openapi.yaml missing")
+                return 1
+            api_ref_content = api_ref_path.read_text(encoding="utf-8")
+            missing = [r.path for r in routes if r.path not in api_ref_content]
+            if missing:
+                print_result("DOCS-PARITY", False, f"API_REFERENCE.md missing {len(missing)} routes (e.g. {missing[0]})")
+                return 1
+            print_result("DOCS-PARITY", True, f"API_REFERENCE.md is synchronized ({len(routes)} routes verified)")
             return 0
+        except Exception as e:
+            print_result("DOCS-PARITY", False, f"Failed verifying API docs parity: {e}")
+            return 1
 
 def check_readme_routes(root, code_routes):
     print(f"\nChecking README.md API Routes Parity...")
@@ -334,17 +364,21 @@ def check_readme_routes(root, code_routes):
 def check_nexus_invariants(root: Path) -> int:
     guard_script = root / "execution" / "nexus_adversarial_guard.py"
     if not guard_script.exists():
-        return 0
+        print_result("NEXUS-INVARIANTS", False, "nexus_adversarial_guard.py missing")
+        return 1
     print(f"\nScanning for Dual-Pass Nexus Invariants...")
     res = subprocess.run([sys.executable, str(guard_script)], cwd=str(root), capture_output=True, text=True, encoding="utf-8")
     errors = 0
     if res.returncode == 0:
         print_result("NEXUS-INVARIANTS", True, "All Dual-Pass Nexus Invariants satisfied")
     else:
-        for line in res.stdout.strip().split("\n"):
-            if "❌" in line:
+        errors += 1
+        output = (res.stdout or "") + "\n" + (res.stderr or "")
+        for line in output.strip().split("\n"):
+            if "❌" in line or "Traceback" in line or "Error" in line:
                 print_result("NEXUS-INVARIANTS", False, line.strip())
-                errors += 1
+        if not any("❌" in line for line in output.splitlines()):
+            print_result("NEXUS-INVARIANTS", False, f"nexus_adversarial_guard failed with exit code {res.returncode}")
     return errors
 
 def check_parity(root_dir=None, fix=False):
@@ -355,16 +389,21 @@ def check_parity(root_dir=None, fix=False):
     
     print(f"--- Tadpole OS Parity Audit ---\n")
     
+    errors = 0
+
     # 1. Capture Ground Truth (Code)
     code_routes = scan_router(router_path)
-    print(f"Found {len(code_routes)} routes in router.rs")
+    if code_routes is None or len(code_routes) == 0:
+        print_result("ROUTER-SCAN", False, "Failed to discover routes or router is empty")
+        errors += 1
+        code_routes = []
+    else:
+        print(f"Found {len(code_routes)} routes in router.rs")
     
     # 2. Capture Source of Truth (OpenAPI)
     raw_doc_paths = scan_openapi(openapi_path)
     # Normalize keys for comparison (e.g. /v1/agents/{id} -> /v1/agents/{PARAM})
     doc_paths = {normalize_path(k): v for k, v in raw_doc_paths.items()}
-    
-    errors = 0
     
     # Check Code -> OpenAPI parity
     for route in code_routes:

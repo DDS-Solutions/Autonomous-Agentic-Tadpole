@@ -71,7 +71,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .merge(metrics_route)
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
-        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             crate::middleware::boot::wait_for_system_ready,
@@ -390,6 +390,7 @@ fn build_skills_routes() -> Router<Arc<AppState>> {
             "/hooks/{name}",
             axum::routing::delete(routes::skills::delete_hook),
         )
+        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
 }
 
 fn build_system_routes() -> Router<Arc<AppState>> {
@@ -506,6 +507,7 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
             app_state,
             middleware::auth::validate_token,
         ))
+        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
 }
 
 // Memory feature gates

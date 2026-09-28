@@ -63,8 +63,17 @@ impl IntelligenceService {
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn list_graph(&self, path_prefix: Option<String>, max_nodes: Option<usize>) -> Result<GraphResponse, AppError> {
+        let workspace_root = self.state.resources.base_dir.clone();
+        let prefix_clean = path_prefix.map(|p| p.replace('\\', "/"));
+        if let Some(ref prefix) = prefix_clean {
+            if crate::utils::security::validate_path(&workspace_root, prefix).is_err() {
+                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+            }
+        }
+
         let graph_swap = self.state.resources.get_symbol_graph().await;
         let swap_clone = Arc::clone(&graph_swap);
+        let limit = max_nodes.unwrap_or(20_000).min(20_000);
 
         let (nodes, links, anomalies) = tokio::task::spawn_blocking(move || {
             let guard = swap_clone.load();
@@ -75,23 +84,26 @@ impl IntelligenceService {
             // 1. Filter nodes based on optional path prefix
             for idx in guard.graph.node_indices() {
                 if let Some(node) = guard.graph.node_weight(idx) {
-                    let matches = if let Some(ref prefix) = path_prefix {
+                    let matches = if let Some(ref prefix) = prefix_clean {
                         let real_path = guard.obfuscated_to_real_path.get(&node.path)
                             .map(|p| p.as_str())
                             .unwrap_or(&node.path);
-                        real_path.starts_with(prefix) || node.path.starts_with(prefix)
+                        let prefix_dir = if prefix.ends_with('/') { prefix.clone() } else { format!("{}/", prefix) };
+                        real_path == prefix.as_str() || real_path.starts_with(&prefix_dir) || &node.path == prefix || node.path.starts_with(&prefix_dir)
                     } else {
                         true
                     };
 
                     if matches {
                         nodes.push(node.clone());
+                        if nodes.len() >= limit {
+                            break;
+                        }
                     }
                 }
             }
 
             // Apply max_nodes clamp if provided
-            let limit = max_nodes.unwrap_or(20_000).min(20_000);
             if nodes.len() > limit {
                 nodes.truncate(limit);
             }
@@ -124,7 +136,7 @@ impl IntelligenceService {
             }
 
             let anomalies = guard.find_anomalies();
-            let filtered_anomalies = if let Some(ref prefix) = path_prefix {
+            let filtered_anomalies = if let Some(ref prefix) = prefix_clean {
                 anomalies
                     .into_iter()
                     .filter(|a| a.contains(prefix))
@@ -369,18 +381,28 @@ impl IntelligenceService {
             let n = node.name.to_lowercase();
             let k = node.kind.to_lowercase();
 
-            let is_test = p.contains("test")
-                || p.contains("spec")
-                || p.starts_with("tests/")
-                || p.ends_with(".test.ts")
-                || p.ends_with(".test.tsx")
-                || p.ends_with(".test.js")
-                || p.ends_with(".test.jsx")
-                || p.ends_with("_test.rs")
-                || p.ends_with("_test.py")
-                || n.starts_with("test_")
+            let path_obj = std::path::Path::new(&p);
+            let file_name = path_obj.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            let is_in_test_dir = p.starts_with("tests/") 
+                || p.contains("/tests/")
+                || p.starts_with("test/") 
+                || p.contains("/test/");
+            let is_test_file = file_name.ends_with(".test.ts")
+                || file_name.ends_with(".test.tsx")
+                || file_name.ends_with(".test.js")
+                || file_name.ends_with(".test.jsx")
+                || file_name.ends_with(".spec.ts")
+                || file_name.ends_with(".spec.tsx")
+                || file_name.ends_with(".spec.js")
+                || file_name.ends_with("_test.rs")
+                || file_name.ends_with("_tests.rs")
+                || file_name.ends_with("_test.py")
+                || file_name.starts_with("test_");
+            let is_test_symbol = n.starts_with("test_")
                 || n.ends_with("_test")
                 || k == "test";
+
+            let is_test = is_in_test_dir || is_test_file || is_test_symbol;
 
             if is_test {
                 tests.insert(node.path);

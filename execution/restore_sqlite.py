@@ -87,7 +87,8 @@ def get_row_counts(db_path: Path) -> dict:
             # Skip SQLite internal tables
             if t.startswith("sqlite_"):
                 continue
-            cursor.execute(f'SELECT COUNT(*) FROM "{t}";')
+            safe_t = t.replace('"', '""')
+            cursor.execute(f'SELECT COUNT(*) FROM "{safe_t}";')
             counts[t] = cursor.fetchone()[0]
         conn.close()
     except Exception as e:
@@ -110,10 +111,11 @@ def check_live_engine(port: int = 8000) -> bool:
 def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force: bool = False):
     # 🛡️ [M19: Live-Engine Guard] Prevent restore over active SQLite connection pool
     if check_live_engine() and not force:
-        print("❌ Error: Tadpole OS engine is currently running (active /health response detected).", file=sys.stderr)
-        print("   Restoring SQLite while the engine is live can cause database corruption or lock contention.", file=sys.stderr)
-        print("   Please stop the server-rs process before restoring, or pass --force to proceed anyway.", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError(
+            "Tadpole OS engine is currently running (active /health response detected). "
+            "Restoring SQLite while the engine is live can cause database corruption or lock contention. "
+            "Please stop the server-rs process before restoring, or pass force=True to proceed."
+        )
 
     backup_path = Path(backup_file_path)
     if not backup_path.exists():
@@ -124,13 +126,11 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
         if alt_path.exists():
             backup_path = alt_path
         else:
-            print(f"❌ Error: Backup file not found at {backup_file_path}", file=sys.stderr)
-            sys.exit(1)
+            raise FileNotFoundError(f"Backup file not found at {backup_file_path}")
 
     print(f"🔍 Verifying backup {backup_path.name}...")
     if not verify_checksum(backup_path, allow_unverified=allow_unverified):
-        print("❌ Error: Backup SHA-256 checksum mismatch. Backup file may be corrupted or tampered with.", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Backup SHA-256 checksum mismatch for {backup_path.name}.")
 
     # Verify internal integrity
     try:
@@ -139,11 +139,9 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
         result = cursor.fetchone()[0]
         verify.close()
         if result != "ok":
-            print(f"❌ Error: Backup integrity check failed: {result}", file=sys.stderr)
-            sys.exit(1)
+            raise ValueError(f"Backup integrity check failed: {result}")
     except Exception as e:
-        print(f"❌ Error checking integrity: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Error checking integrity of {backup_path.name}: {e}")
 
     db_path = resolve_default_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,8 +162,7 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
                 dest.close()
                 src.close()
         except Exception as e:
-            print(f"❌ Failed to backup current database before restore: {e}", file=sys.stderr)
-            sys.exit(1)
+            raise RuntimeError(f"Failed to backup current database before restore: {e}")
 
     print(f"⚡ Restoring database to {db_path}...")
     try:
@@ -189,10 +186,21 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
                 mismatch = True
                 
         if mismatch:
-            print("❌ Restore completed with verification warnings. Please check the logs.", file=sys.stderr)
-        else:
-            print("✅ Restore completed successfully. All row counts match.")
+            # Trigger automatic rollback on row count mismatch
+            print("🚨 Row count parity failed! Rolling back from .db.bak...", file=sys.stderr)
+            bak_path = db_path.with_suffix(".db.bak")
+            if bak_path.exists():
+                src = sqlite3.connect(bak_path)
+                dest = sqlite3.connect(db_path)
+                src.backup(dest)
+                dest.close()
+                src.close()
+                cleanup_wal_sidecars(db_path)
+            raise ValueError(f"Row count mismatch between backup and restored database at {db_path}.")
             
+        print("✅ Restore completed successfully. All row counts match.")
+        return 0
+        
     except Exception as e:
         print(f"❌ Restore failed: {str(e)}", file=sys.stderr)
         # Attempt to roll back from the .bak file
@@ -209,7 +217,7 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
                 print("✅ Rolled back successfully.", file=sys.stderr)
             except Exception as rollback_err:
                 print(f"🚨 CRITICAL: Rollback failed: {rollback_err}", file=sys.stderr)
-        sys.exit(1)
+        raise
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -219,6 +227,11 @@ if __name__ == "__main__":
         print("Usage: python restore_sqlite.py <backup_path_or_filename> [--allow-unverified] [--force]")
         sys.exit(1)
         
-    restore_sqlite(args[0], allow_unverified=allow_unverified_flag, force=force_flag)
+    try:
+        restore_sqlite(args[0], allow_unverified=allow_unverified_flag, force=force_flag)
+        sys.exit(0)
+    except Exception as err:
+        print(f"❌ Restore operation aborted: {err}", file=sys.stderr)
+        sys.exit(1)
 
 # Metadata: [restore_sqlite]

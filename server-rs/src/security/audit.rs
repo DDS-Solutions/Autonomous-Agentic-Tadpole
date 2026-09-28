@@ -95,6 +95,12 @@ impl MerkleAuditTrail {
 
         let verifying_key = signing_key.as_ref().map(|k| k.verifying_key());
 
+        if signing_key.is_none() {
+            tracing::warn!("⚠️ [SecurityAudit] AUDIT_PRIVATE_KEY is not set or invalid. Running in unsigned hash-chain mode (entries will lack Ed25519 digital signatures).");
+        } else {
+            tracing::info!("🔒 [SecurityAudit] AUDIT_PRIVATE_KEY configured. Digital signatures active on tamper-evident audit ledger.");
+        }
+
         Self {
             pool,
             signing_key,

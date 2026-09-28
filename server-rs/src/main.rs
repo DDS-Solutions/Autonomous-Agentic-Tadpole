@@ -139,13 +139,10 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    // 3. Launch Background Tasks: Telemetry, budget tracking, and swarm health checks.
-    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
-
-    // 4. Build Router
+    // 3. Build Router
     let app = router::create_router(app_state.clone());
 
-    // 5. Start the Server
+    // 4. Start the Server
     tracing::info!(
         "🚀 Tadpole OS Engine v{} listening on {}",
         env!("CARGO_PKG_VERSION"),
@@ -170,13 +167,16 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
         }
     };
 
+    // 5. Launch Background Tasks only after successful socket bind
+    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
+
     // Notify that boot sequence is complete so requests can proceed
     app_state.notify_boot_complete();
 
     // Periodic Registry Persistence Sync (every 30s) to mitigate data loss under unhandled aborts
     let sync_state = app_state.clone();
     let mut sync_shutdown_rx = shutdown_rx.clone();
-    tokio::spawn(async move {
+    let sync_handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         interval.tick().await;
         loop {
@@ -196,26 +196,35 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
 
     // --- [STAGE: RUN] ---
     // Start the Axum server and listen for incoming connections.
-    axum::serve(
+    let serve_res = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    .await;
+
+    if let Err(ref e) = serve_res {
+        tracing::error!("🚨 [Main] Server runtime error: {:?}", e);
+    }
+
+    // --- [STAGE: SHUTDOWN] ---
+    tracing::info!("🛑 Tadpole OS Engine shutting down gracefully.");
 
     // Signal all background tasks to shut down gracefully
     let _ = shutdown_tx.send(true);
 
-    // --- [STAGE: SHUTDOWN] ---
+    // Await completion of periodic sync task to eliminate concurrent write races on disk/DB
+    if let Err(e) = sync_handle.await {
+        tracing::warn!("⚠️ [Main] Background sync task join error: {:?}", e);
+    }
 
-    tracing::info!("🛑 Tadpole OS Engine shutting down gracefully.");
-    // 6. Persistence: Save all systemic registries and flush buffers before exiting.
-    // This ensures that metering costs, agent status, and infrastructure configs are fully persisted.
+    // 6. Final Persistence: Save all systemic registries and flush buffers unconditionally before exiting.
     app_state.flush_all().await;
     app_state.save_agents().await;
     app_state.save_providers().await;
     app_state.save_models().await;
-    Ok(())
+
+    serve_res.map_err(|e| anyhow::anyhow!("Server terminated with error: {:?}", e))
 }
 
 async fn shutdown_signal() {

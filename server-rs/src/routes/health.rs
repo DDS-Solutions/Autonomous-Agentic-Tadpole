@@ -21,7 +21,7 @@ use axum::{extract::State, Json};
 use serde::Serialize;
 use std::sync::Arc;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct DatabaseHealth {
     pub status: String,           // "healthy" | "degraded" | "failed"
     pub pool_size: u32,
@@ -30,15 +30,15 @@ pub struct DatabaseHealth {
     pub busy_timeout_ms: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct BudgetHealth {
     pub total_spent_usd: f64,
     pub daily_limit_usd: f64,
     pub percent_used: f64,
-    pub status: String,           // "ok" | "warning" | "critical"
+    pub status: String,           // "ok" | "warning" | "critical" | "unmetered"
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct SwarmHealth {
     pub connected_bunkers: usize,
     pub total_agents: usize,
@@ -47,7 +47,7 @@ pub struct SwarmHealth {
 }
 
 /// Heartbeat status response containing system telemetry and feature flags.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct HealthResponse {
     /// Operational status string.
     pub status: String,
@@ -66,11 +66,24 @@ pub struct HealthResponse {
     pub uptime_seconds: u64,
 }
 
+static HEALTH_CACHE: parking_lot::RwLock<Option<(std::time::Instant, HealthResponse)>> = parking_lot::RwLock::new(None);
+const HEALTH_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// A simple heartbeat endpoint that mirrors the old `router.get("/health")` in Express.
 #[tracing::instrument(skip(state), name = "system::health")]
 pub async fn health_check(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    // 0. Check in-memory debounce/cache first to protect DB connection pool from exhaustion
+    {
+        let cache = HEALTH_CACHE.read();
+        if let Some((instant, ref cached)) = *cache {
+            if instant.elapsed() < HEALTH_CACHE_TTL {
+                return Ok((StatusCode::OK, Json(cached.clone())));
+            }
+        }
+    }
+
     #[allow(unused_mut)]
     let mut features = Vec::new();
 
@@ -91,18 +104,41 @@ pub async fn health_check(
     let pool_size = state.resources.pool.size();
     let pool_idle = state.resources.pool.num_idle() as u32;
     
-    // Resolve WAL file size
-    let wal_size_mb = match tokio::fs::metadata("data/tadpole.db-wal").await {
-        Ok(meta) => (meta.len() as f64) / (1024.0 * 1024.0),
-        Err(_) => 0.0,
+    // Resolve WAL file size dynamically from configured DATABASE_URL
+    let wal_path = if let Ok(db_url) = std::env::var("DATABASE_URL") {
+        let clean = db_url.trim()
+            .trim_start_matches("sqlite://")
+            .trim_start_matches("sqlite:");
+        let path_str = clean.split('?').next().unwrap_or(clean);
+        if path_str == ":memory:" || path_str.is_empty() {
+            None
+        } else {
+            Some(format!("{}-wal", path_str))
+        }
+    } else {
+        Some(state.resources.base_dir.join("data").join("tadpole.db-wal").to_string_lossy().to_string())
     };
+
+    let wal_size_mb = match wal_path {
+        Some(ref path) => match tokio::fs::metadata(path).await {
+            Ok(meta) => (meta.len() as f64) / (1024.0 * 1024.0),
+            Err(_) => 0.0,
+        },
+        None => 0.0,
+    };
+
+    let busy_timeout_ms: u64 = sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
+        .fetch_one(&state.resources.pool)
+        .await
+        .map(|v| v.max(0) as u64)
+        .unwrap_or(10_000);
 
     let database = DatabaseHealth {
         status: db_status,
         pool_size,
         pool_idle,
         wal_size_mb,
-        busy_timeout_ms: 30000,
+        busy_timeout_ms,
     };
 
     // 2. Compute Budget Health
@@ -120,18 +156,18 @@ pub async fn health_check(
     .await
     .unwrap_or(0.0);
 
-    let percent_used = if daily_limit_usd > 0.0 {
-        (total_spent_usd / daily_limit_usd) * 100.0
+    let (percent_used, budget_status) = if daily_limit_usd <= 0.0 {
+        (0.0, "unmetered".to_string())
     } else {
-        0.0
-    };
-
-    let budget_status = if daily_limit_usd > 0.0 && percent_used > 80.0 {
-        "critical".to_string()
-    } else if daily_limit_usd > 0.0 && percent_used > 50.0 {
-        "warning".to_string()
-    } else {
-        "ok".to_string()
+        let pct = (total_spent_usd / daily_limit_usd) * 100.0;
+        let status = if pct > 80.0 {
+            "critical".to_string()
+        } else if pct > 50.0 {
+            "warning".to_string()
+        } else {
+            "ok".to_string()
+        };
+        (pct, status)
     };
 
     let budget = BudgetHealth {
@@ -160,19 +196,26 @@ pub async fn health_check(
     // 4. Calculate Uptime
     let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds().max(0) as u64;
 
+    let response = HealthResponse {
+        status: "tadpole_online_rust".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        heartbeat: chrono::Utc::now().to_rfc3339(),
+        active_agents: total_agents,
+        features,
+        database,
+        budget,
+        swarm,
+        uptime_seconds,
+    };
+
+    {
+        let mut cache = HEALTH_CACHE.write();
+        *cache = Some((std::time::Instant::now(), response.clone()));
+    }
+
     Ok((
         StatusCode::OK,
-        Json(HealthResponse {
-            status: "tadpole_online_rust".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            heartbeat: chrono::Utc::now().to_rfc3339(),
-            active_agents: total_agents,
-            features,
-            database,
-            budget,
-            swarm,
-            uptime_seconds,
-        }),
+        Json(response),
     ))
 }
 

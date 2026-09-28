@@ -100,7 +100,7 @@ impl EnvSchema {
 
             // Variable assignment line: NAME=value
             if let Some(eq_pos) = trimmed.find('=') {
-                let var_name = &trimmed[..eq_pos];
+                let var_name = trimmed[..eq_pos].trim();
 
                 // Parse decorators
                 let mut required = false;
@@ -147,6 +147,25 @@ impl EnvSchema {
     }
 
     /// Parse the `.env.schema` file using a lightweight line-based parser.
+    /// Checks if a sensitive token meets minimum length (>= 32 chars) and is not a known placeholder string.
+    pub fn is_valid_token_value(val: &str) -> bool {
+        let trimmed = val.trim();
+        if trimmed.len() < 32 {
+            return false;
+        }
+        let lower = trimmed.to_lowercase();
+        if lower.contains("your-")
+            || lower.contains("secret-token")
+            || lower.contains("changeme")
+            || lower.contains("placeholder")
+            || lower.contains("replace-me")
+        {
+            return false;
+        }
+        true
+    }
+
+    /// Load and parse a `.env.schema` file from disk.
     /// Understands `@required`, `@sensitive`, `@type=...`, `@default=...` decorators.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
@@ -160,7 +179,21 @@ impl EnvSchema {
             .iter()
             .map(|entry| {
                 let is_set = std::env::var(&entry.name)
-                    .map(|v| !v.trim().is_empty())
+                    .map(|v| {
+                        let trimmed = v.trim();
+                        if trimmed.is_empty() {
+                            return false;
+                        }
+                        if entry.name == "NEURAL_TOKEN"
+                            || entry.name == "NEURAL_ENGINE_ACCESS_TOKEN"
+                            || entry.name == "AUDIT_PRIVATE_KEY"
+                        {
+                            if !Self::is_valid_token_value(trimmed) {
+                                return false;
+                            }
+                        }
+                        true
+                    })
                     .unwrap_or(false);
 
                 ValidationResult {
@@ -198,17 +231,54 @@ impl EnvSchema {
     }
 }
 
-/// Run startup validation. Logs a clear banner and returns any fatal errors.
-pub fn validate_and_report(schema_path: &Path) -> anyhow::Result<()> {
-    if !schema_path.exists() {
-        tracing::warn!(
-            "⚠️  [EnvSchema] No .env.schema found at {:?} — skipping validation.",
-            schema_path
-        );
-        return Ok(());
+/// Resolves the `.env.schema` path across WORKSPACE_ROOT, CWD, and parent directories.
+pub fn resolve_schema_path(explicit_path: Option<&Path>) -> Option<std::path::PathBuf> {
+    if let Some(p) = explicit_path {
+        if p.exists() {
+            return Some(p.to_path_buf());
+        }
     }
 
-    let schema = EnvSchema::load(schema_path)?;
+    if let Ok(ws) = std::env::var("WORKSPACE_ROOT") {
+        let p = Path::new(&ws).join(".env.schema");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    let local = Path::new(".env.schema");
+    if local.exists() {
+        return Some(local.to_path_buf());
+    }
+
+    let parent = Path::new("../.env.schema");
+    if parent.exists() {
+        return Some(parent.to_path_buf());
+    }
+
+    None
+}
+
+/// Run startup validation. Logs a clear banner and returns any fatal errors.
+pub fn validate_and_report(schema_path: &Path) -> anyhow::Result<()> {
+    let resolved = resolve_schema_path(Some(schema_path));
+    let path = match resolved {
+        Some(p) => p,
+        None => {
+            let msg = format!(
+                "No .env.schema found at {:?} (or in WORKSPACE_ROOT / parent directories).",
+                schema_path
+            );
+            if cfg!(debug_assertions) {
+                tracing::warn!("⚠️  [EnvSchema] {} — skipping validation in dev mode.", msg);
+                return Ok(());
+            } else {
+                anyhow::bail!("🚨 FATAL: {} Engine refuses to boot without environment validation.", msg);
+            }
+        }
+    };
+
+    let schema = EnvSchema::load(&path)?;
     let results = schema.validate();
 
     tracing::info!("╔══════════════════════════════════════════════════════╗");
@@ -346,6 +416,22 @@ TEST_SET_SCHEMA_VAR_456=
         assert_eq!(results[0].name, "TEST_SET_SCHEMA_VAR_456");
         assert!(results[0].is_set);
         std::env::remove_var("TEST_SET_SCHEMA_VAR_456");
+    }
+
+    #[test]
+    fn test_env_schema_token_validation() {
+        assert!(!EnvSchema::is_valid_token_value("short"));
+        assert!(!EnvSchema::is_valid_token_value("your-secret-token-here-1234567890"));
+        assert!(!EnvSchema::is_valid_token_value("placeholder-token-0123456789012345"));
+        assert!(EnvSchema::is_valid_token_value("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"));
+    }
+
+    #[test]
+    fn test_env_schema_whitespace_trimming() {
+        let schema_raw = "  NEURAL_TOKEN   =  ";
+        let schema = EnvSchema::parse_str(schema_raw);
+        assert_eq!(schema.entries.len(), 1);
+        assert_eq!(schema.entries[0].name, "NEURAL_TOKEN");
     }
 }
 

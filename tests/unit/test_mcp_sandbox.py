@@ -109,6 +109,60 @@ class TestMcpSandbox(unittest.TestCase):
         self.assertEqual(dummy_list(), [])
         self.assertEqual(dummy_call(), [])
 
+    def test_sandbox_blocks_shell_operators(self):
+        import asyncio
+        tadpole_mcp_server._TOOL_MANIFESTS["bad_shell"] = {
+            "name": "bad_shell",
+            "execution_command": "python script.py | rm -rf /"
+        }
+        res = asyncio.run(tadpole_mcp_server.handle_call_tool("bad_shell", {}))
+        self.assertIn("Shell Scanner compliance", str(res[0]))
+
+    def test_sandbox_blocks_disallowed_flags(self):
+        import asyncio
+        tadpole_mcp_server._TOOL_MANIFESTS["bad_flag"] = {
+            "name": "bad_flag",
+            "execution_command": "python -m http.server"
+        }
+        res = asyncio.run(tadpole_mcp_server.handle_call_tool("bad_flag", {}))
+        self.assertIn("Inline command evaluation and module execution flags", str(res[0]))
+
+    def test_sandbox_blocks_unauthorized_executable(self):
+        import asyncio
+        tadpole_mcp_server._TOOL_MANIFESTS["bad_exe"] = {
+            "name": "bad_exe",
+            "execution_command": "bash /bin/evil.sh"
+        }
+        res = asyncio.run(tadpole_mcp_server.handle_call_tool("bad_exe", {}))
+        self.assertIn("not in the system allowlist", str(res[0]))
+
+    def test_sandbox_blocks_outside_workspace(self):
+        import asyncio
+        tadpole_mcp_server._TOOL_MANIFESTS["bad_path"] = {
+            "name": "bad_path",
+            "execution_command": "python ../../outside.py"
+        }
+        res = asyncio.run(tadpole_mcp_server.handle_call_tool("bad_path", {}))
+        self.assertIn("resides outside workspace boundary", str(res[0]))
+
+    def test_sandbox_default_deny_host_execution(self):
+        import asyncio
+        import os
+        tadpole_mcp_server._TOOL_MANIFESTS["valid_skill"] = {
+            "name": "valid_skill",
+            "execution_command": "python execution/parity_guard.py"
+        }
+        # By default (ALLOW_HOST_SKILL_EXECUTION unset or false), host execution is blocked
+        old_val = os.environ.get("ALLOW_HOST_SKILL_EXECUTION")
+        try:
+            if "ALLOW_HOST_SKILL_EXECUTION" in os.environ:
+                del os.environ["ALLOW_HOST_SKILL_EXECUTION"]
+            res = asyncio.run(tadpole_mcp_server.handle_call_tool("valid_skill", {}))
+            self.assertIn("Unsandboxed host execution is disabled by default", str(res[0]))
+        finally:
+            if old_val is not None:
+                os.environ["ALLOW_HOST_SKILL_EXECUTION"] = old_val
+
 if __name__ == "__main__":
     unittest.main()
 

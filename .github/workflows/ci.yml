@@ -14,8 +14,15 @@ on:
       - 'directives/**'
       - 'docs/**'
       - 'scripts/**'
+      - 'monitoring/**'
+      - 'README.md'
+      - 'SYSTEM_MAP.md'
       - 'version.json'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'GEMINI.md'
       - '.env.example'
+      - '.env.schema'
       - '.gitleaks.toml'
       - 'server-rs/deny.toml'
       - 'package.json'
@@ -23,6 +30,10 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.ts'
       - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'eslint.config.js'
+      - 'playwright.config.ts'
+      - 'wasm-codec/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -37,8 +48,15 @@ on:
       - 'directives/**'
       - 'docs/**'
       - 'scripts/**'
+      - 'monitoring/**'
+      - 'README.md'
+      - 'SYSTEM_MAP.md'
       - 'version.json'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'GEMINI.md'
       - '.env.example'
+      - '.env.schema'
       - '.gitleaks.toml'
       - 'server-rs/deny.toml'
       - 'package.json'
@@ -46,6 +64,10 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.ts'
       - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'eslint.config.js'
+      - 'playwright.config.ts'
+      - 'wasm-codec/**'
       - '.github/workflows/ci.yml'
 
 concurrency:
@@ -89,16 +111,22 @@ jobs:
               - 'package-lock.json'
               - 'tsconfig*.json'
               - 'vite.config.ts'
+              - 'eslint.config.js'
+              - 'playwright.config.ts'
               - '.github/workflows/ci.yml'
             backend:
               - 'server-rs/**'
               - 'crates/**'
+              - '.env.schema'
               - '.github/workflows/ci.yml'
             python:
+              - 'server-rs/**'
               - 'execution/**'
               - 'tests/**'
               - 'directives/**'
               - 'docs/**'
+              - 'scripts/**'
+              - 'monitoring/**'
               - 'package.json'
               - 'server-rs/Cargo.toml'
               - 'version.json'
@@ -194,6 +222,13 @@ jobs:
         working-directory: server-rs
         run: cargo clippy -- -D warnings
 
+      - name: Cargo Deny Check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --config deny.toml
+        working-directory: server-rs
+
   # ──────────────────────────────────────
   #  Python: Unit Tests & Hygiene
   # ──────────────────────────────────────
@@ -236,6 +271,12 @@ jobs:
           python execution/parity_guard.py
           python execution/verify_ai_context.py .
 
+      - name: Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   # ──────────────────────────────────────
   #  CI Gate: Unified Status Check
   # ──────────────────────────────────────
@@ -247,6 +288,10 @@ jobs:
     steps:
       - name: Verify All Active Jobs Succeeded
         run: |
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "❌ Path detection job 'changes' failed or was cancelled (${{ needs.changes.result }})."
+            exit 1
+          fi
           if [[ "${{ needs.frontend.result }}" == "failure" || "${{ needs.frontend.result }}" == "cancelled" || \
                 "${{ needs.backend.result }}" == "failure" || "${{ needs.backend.result }}" == "cancelled" || \
                 "${{ needs.python.result }}" == "failure" || "${{ needs.python.result }}" == "cancelled" ]]; then

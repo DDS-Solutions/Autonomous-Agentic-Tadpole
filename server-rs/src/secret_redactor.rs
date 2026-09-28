@@ -30,23 +30,28 @@ use std::sync::Arc;
 /// (like "sk") would cause excessive false-positive redactions.
 const MIN_SECRET_LEN: usize = 8;
 
+/// Index of the JSON key pattern in PATTERNS (special handling to preserve key name).
+const JSON_KEY_PATTERN_IDX: usize = 2;
+
 /// Static patterns for common secret formats (Neural Shield).
 static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
     let patterns = vec![
-        // 1. Bearer tokens in headers or strings
+        // 0. Bearer tokens in headers or strings
         r"(?i)bearer\s+[a-zA-Z0-9\-\._~+/]+=*",
-        // 2. Authorization headers
+        // 1. Authorization headers
         r"(?i)authorization:\s*[^\s,]+",
-        // 3. JSON keys: "apiKey": "...", "token": "...", etc.
+        // 2. JSON keys: "apiKey": "...", "token": "...", etc.
         r#"(?i)("?(?:api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
-        // 4. OpenAI
+        // 3. OpenAI
         r"(?i)sk-[a-zA-Z0-9]{20,}",
-        // 5. Google Gemini
+        // 4. Google Gemini
         r"(?i)AIza[0-9A-Za-z-_]{30,}",
-        // 6. GitHub
+        // 5. GitHub Classic PAT
         r"(?i)ghp_[a-zA-Z0-9]{30,}",
-        // 7. Anthropic
-        r"(?i)sk-ant-api03-[a-zA-Z0-9\-_]{90,}",
+        // 6. GitHub Fine-Grained PAT
+        r"(?i)github_pat_[a-zA-Z0-9_]{22,}",
+        // 7. Anthropic (aligned with standard prefix and modern length)
+        r"(?i)sk-ant-[a-zA-Z0-9\-_]{20,}",
         // 8. Groq
         r"(?i)gsk_[a-zA-Z0-9]{50,}",
         // 9. AWS Keys
@@ -96,12 +101,15 @@ impl SecretRedactor {
     pub fn from_env() -> Self {
         let sensitive_vars = [
             "NEURAL_TOKEN",
+            "NEURAL_TOKEN_OLD",
+            "NEURAL_TOKEN_NEW",
             "NEURAL_ENGINE_ACCESS_TOKEN",
             "AUDIT_PRIVATE_KEY",
             "GOOGLE_API_KEY",
             "GROQ_API_KEY",
             "OPENAI_API_KEY",
             "ANTHROPIC_API_KEY",
+            "REPLICATE_API_KEY",
             "INCEPTION_API_KEY",
             "DEEPSEEK_API_KEY",
             "DISCORD_WEBHOOK",
@@ -125,7 +133,7 @@ impl SecretRedactor {
     }
 
     /// Returns a new copy of the input where any known secret is replaced
-    /// with `[REDACTED]`. Performs a simple substring scan AND pattern matching.
+    /// with `[REDACTED]`. Performs a simple substring scan AND sequential pattern matching.
     pub fn scrub(&self, text: &str) -> String {
         if self.is_noop {
             return text.to_string();
@@ -139,19 +147,15 @@ impl SecretRedactor {
             }
         }
 
-        // 2. Scrub via Neural Shield (Regex) — single-pass evaluation
-        let (set, regexes) = &*PATTERNS;
-        let matches = set.matches(&result);
-        if matches.matched_any() {
-            for (idx, re) in regexes.iter().enumerate() {
-                if matches.matched(idx) {
-                    // Special handling for JSON keys to preserve the key but redact the value
-                    if idx == 2 {
-                        result = re.replace_all(&result, r#"$1$2[REDACTED]$3"#).to_string();
-                    } else {
-                        result = re.replace_all(&result, "[REDACTED]").to_string();
-                    }
+        // 2. Scrub via Neural Shield (Regex) — sequential evaluation against mutating string
+        let (_set, regexes) = &*PATTERNS;
+        for (idx, re) in regexes.iter().enumerate() {
+            if idx == JSON_KEY_PATTERN_IDX {
+                if let std::borrow::Cow::Owned(redacted) = re.replace_all(&result, r#"$1$2[REDACTED]$3"#) {
+                    result = redacted;
                 }
+            } else if let std::borrow::Cow::Owned(redacted) = re.replace_all(&result, "[REDACTED]") {
+                result = redacted;
             }
         }
 
@@ -182,6 +186,14 @@ impl SecretRedactor {
             }
         }
         PATTERNS.0.is_match(text)
+    }
+
+    /// Creates a redactor with only Neural Shield static patterns (no env secrets).
+    pub fn empty() -> Self {
+        Self {
+            secrets: Arc::new(Vec::new()),
+            is_noop: false,
+        }
     }
 
     /// Creates a no-op redactor for testing.
@@ -240,8 +252,37 @@ mod tests {
         let input = "anything goes";
         assert_eq!(redactor.redact(input), input);
     }
+
+    #[test]
+    fn test_github_pat_and_anthropic_scrubbing() {
+        let redactor = SecretRedactor::empty();
+        // Fine-grained GitHub PAT
+        let gh_input = "Exported token: github_pat_11ABCD0123456789abcdef_ghijklmnopqrstuvwxyz0123456789 in logs";
+        let gh_output = redactor.scrub(gh_input);
+        assert!(!gh_output.contains("github_pat_"));
+        assert!(gh_output.contains("[REDACTED]"));
+
+        // Anthropic key
+        let ant_input = "anthropic key: sk-ant-api03-abcdef1234567890abcdef123456";
+        let ant_output = redactor.scrub(ant_input);
+        assert!(!ant_output.contains("sk-ant-"));
+        assert!(ant_output.contains("[REDACTED]"));
+
+        // AWS key
+        let aws_input = "aws: AKIAIOSFODNN7EXAMPLE";
+        let aws_output = redactor.scrub(aws_input);
+        assert!(!aws_output.contains("AKIAIOSFODNN7EXAMPLE"));
+        assert!(aws_output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_json_key_and_sequential_scrubbing() {
+        let redactor = SecretRedactor::empty();
+        let json_input = r#"{"api_key": "sk-123456789012345678901234", "other": "fine"}"#;
+        let json_output = redactor.scrub(json_input);
+        assert!(json_output.contains(r#""api_key": "[REDACTED]""#));
+        assert!(!json_output.contains("sk-123456789012345678901234"));
+    }
 }
-
-
 
 // Metadata: [secret_redactor]

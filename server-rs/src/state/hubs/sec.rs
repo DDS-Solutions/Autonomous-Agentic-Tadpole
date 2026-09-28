@@ -45,6 +45,10 @@ pub struct SecurityHub {
     pub deploy_token_old: Option<String>,
     /// New token generated during grace period.
     pub deploy_token_new: Option<String>,
+    /// Epoch timestamp (seconds) when NEURAL_TOKEN was rotated.
+    pub token_rotated_at: Option<u64>,
+    /// Configured grace period duration in seconds for old token.
+    pub token_grace_secs: Option<u64>,
     /// Multi-agent atomic file lease manager for TOCTOU and concurrent write prevention.
     pub conflict: Arc<crate::security::conflict::ConflictManager>,
 }

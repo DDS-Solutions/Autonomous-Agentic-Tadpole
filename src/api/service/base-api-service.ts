@@ -12,17 +12,21 @@
 
 /**
  * Verifies if the target API origin is in the allowed set.
+ * Enforces strict default-deny: permits only local loopback (localhost, 127.0.0.1)
+ * and the official desktop origin (tauri://localhost), rejecting external network hosts
+ * to prevent credential exfiltration.
  */
 export function is_allowed_origin(url: string): boolean {
     try {
         const parsed = new URL(url);
-        return (
-            parsed.hostname === 'localhost' ||
-            parsed.hostname === '127.0.0.1' ||
-            parsed.hostname === '0.0.0.0' ||
-            parsed.protocol === 'https:' ||
-            parsed.protocol === 'http:'
-        );
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'tauri:') {
+            return false;
+        }
+        if (parsed.protocol === 'tauri:' && parsed.hostname === 'localhost') {
+            return true;
+        }
+        const host = parsed.hostname.toLowerCase();
+        return host === 'localhost' || host === '127.0.0.1';
     } catch {
         return false;
     }
@@ -77,6 +81,14 @@ export class BaseApiService {
         const { httpAdapter, settingsPort } = this.config;
         const token = (pre_fetched_token !== undefined ? pre_fetched_token : (settingsPort.getSettings().tadpole_os_api_key || '')).trim();
         return mint_headers(httpAdapter.crypto, token, custom_request_id);
+    }
+
+    /**
+     * Computes jittered exponential backoff delay in milliseconds.
+     */
+    protected compute_backoff(attempt: number): number {
+        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+        return Math.random() * delay;
     }
 
     public async request<T = unknown>(
@@ -178,8 +190,7 @@ export class BaseApiService {
                     const is_retryable = method === 'GET' || method === 'HEAD' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
                     const is_timeout = (combined_signal && combined_signal.aborted && combined_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT');
                     if (is_timeout && is_retryable && attempt < MAX_RETRIES) {
-                        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                        const backoff = Math.random() * delay;
+                        const backoff = this.compute_backoff(attempt);
                         await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
                         return execute_fetch(attempt + 1);
                     }
@@ -192,8 +203,7 @@ export class BaseApiService {
                         }
                         throw err;
                     }
-                    const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                    const backoff = Math.random() * delay;
+                    const backoff = this.compute_backoff(attempt);
                     await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
                     return execute_fetch(attempt + 1);
                 } finally {
@@ -215,8 +225,7 @@ export class BaseApiService {
                             }
                         } catch { /* ignore drain errors */ }
 
-                        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                        const backoff = Math.random() * delay;
+                        const backoff = this.compute_backoff(attempt);
                         await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
                         return execute_fetch(attempt + 1);
                     }

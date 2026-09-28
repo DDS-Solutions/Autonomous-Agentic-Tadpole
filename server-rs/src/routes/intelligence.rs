@@ -46,6 +46,9 @@ pub struct ResolveQuery {
     pub budget: Option<usize>,
 }
 
+pub const MAX_CONTEXT_BUDGET: usize = 32_768;
+pub const MAX_GRAPH_NODES: usize = 20_000;
+
 /// GET /v1/intelligence/graph
 ///
 /// Returns the full high-fidelity symbol graph for visualization.
@@ -54,7 +57,8 @@ pub async fn get_code_graph(
     Query(query): Query<CodeGraphQuery>,
 ) -> Result<Json<GraphResponse>, AppError> {
     let service = IntelligenceService::new(state);
-    let res = service.list_graph(query.path_prefix.clone(), query.max_nodes).await?;
+    let max_nodes = query.max_nodes.map(|m| m.min(MAX_GRAPH_NODES));
+    let res = service.list_graph(query.path_prefix.clone(), max_nodes).await?;
     Ok(Json(res))
 }
 
@@ -66,7 +70,8 @@ pub async fn get_blast_radius(
     Query(query): Query<BlastRadiusQuery>,
 ) -> Result<Json<Vec<SymbolNode>>, AppError> {
     let service = IntelligenceService::new(state);
-    let res = service.blast_radius(&query.name, &query.path, query.limit).await?;
+    let limit = query.limit.map(|l| l.min(MAX_GRAPH_NODES));
+    let res = service.blast_radius(&query.name, &query.path, limit).await?;
     Ok(Json(res))
 }
 
@@ -91,7 +96,7 @@ pub async fn resolve_code_context(
     Query(query): Query<ResolveQuery>,
 ) -> Result<Json<ResolveResponse>, AppError> {
     let service = IntelligenceService::new(state);
-    let budget = query.budget.unwrap_or(4000);
+    let budget = query.budget.unwrap_or(4000).min(MAX_CONTEXT_BUDGET);
     let res = service.resolve_context(&query.name, &query.path, budget).await?;
     Ok(Json(res))
 }

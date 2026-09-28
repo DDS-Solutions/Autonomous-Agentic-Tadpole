@@ -159,6 +159,8 @@ impl AppState {
             deploy_token: "test-token".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
@@ -299,6 +301,8 @@ impl AppState {
             deploy_token: "test-token".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
@@ -357,6 +361,32 @@ impl AppState {
         state
     }
 
+fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
+    if cfg!(test) {
+        return Ok(());
+    }
+    let lower = token.to_lowercase();
+    if lower.contains("your-")
+        || lower.contains("secret-token")
+        || lower.contains("placeholder")
+        || lower.contains("previous-token")
+        || lower.contains("pending-token")
+    {
+        return Err(AppError::Unauthorized(format!(
+            "🚨 FATAL: {} contains insecure placeholder value. Set a cryptographically secure token (openssl rand -hex 32).",
+            var_name
+        )));
+    }
+    if token.len() < 32 {
+        return Err(AppError::Unauthorized(format!(
+            "🚨 FATAL: {} is too short ({} chars). Cryptographic tokens must be at least 32 characters.",
+            var_name,
+            token.len()
+        )));
+    }
+    Ok(())
+}
+
     /// ### 🏁 Boot Sequence: Engine Initialization (new)
     /// Performs the synchronous and asynchronous orchestration required to bring 
     /// the Tadpole OS engine online.
@@ -398,15 +428,37 @@ impl AppState {
         let deploy_token = match std::env::var("NEURAL_ENGINE_ACCESS_TOKEN")
             .or_else(|_| std::env::var("NEURAL_TOKEN"))
         {
-            Ok(token) => token.trim().to_string(),
+            Ok(token) => {
+                let trimmed = token.trim().to_string();
+                Self::validate_boot_token(&trimmed, "NEURAL_TOKEN")?;
+                trimmed
+            }
             Err(_) if cfg!(test) => "ci-test-token-placeholder".to_string(),
             Err(_) => return Err(AppError::Unauthorized(
                 "🚨 FATAL: NEURAL_TOKEN or NEURAL_ENGINE_ACCESS_TOKEN environment variable MUST be set for the engine to start.".to_string()
             )),
         };
 
-        let deploy_token_old = std::env::var("NEURAL_TOKEN_OLD").ok().map(|s| s.trim().to_string());
-        let deploy_token_new = std::env::var("NEURAL_TOKEN_NEW").ok().map(|s| s.trim().to_string());
+        let deploy_token_old = match std::env::var("NEURAL_TOKEN_OLD").ok().map(|s| s.trim().to_string()) {
+            Some(t) if !t.is_empty() => {
+                Self::validate_boot_token(&t, "NEURAL_TOKEN_OLD")?;
+                Some(t)
+            }
+            _ => None,
+        };
+        let deploy_token_new = match std::env::var("NEURAL_TOKEN_NEW").ok().map(|s| s.trim().to_string()) {
+            Some(t) if !t.is_empty() => {
+                Self::validate_boot_token(&t, "NEURAL_TOKEN_NEW")?;
+                Some(t)
+            }
+            _ => None,
+        };
+        let token_rotated_at = std::env::var("NEURAL_TOKEN_ROTATED_AT")
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok());
+        let token_grace_secs = std::env::var("NEURAL_TOKEN_GRACE_SECS")
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok());
 
         // Initialize DB
         let database_url = if cfg!(test) {
@@ -617,6 +669,8 @@ impl AppState {
             deploy_token,
             deploy_token_old,
             deploy_token_new,
+            token_rotated_at,
+            token_grace_secs,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 
@@ -1285,6 +1339,8 @@ impl Default for AppState {
             deploy_token: "test".into(),
             deploy_token_old: None,
             deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
 

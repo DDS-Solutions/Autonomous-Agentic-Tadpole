@@ -117,7 +117,7 @@ neural-audio = ["dep:ort", "dep:hound", "dep:ndarray", "dep:whisper-rs"]
 opt-level = 3 # Maximize execution performance
 lto = "fat"    # Full Link Time Optimization for maximum stripping
 codegen-units = 1 # Better optimizations
-panic = 'abort' # Smaller error handling
+panic = 'unwind' # Preserve stack unwinding for telemetry and panic hooks
 strip = true    # Remove all symbols
 
 [profile.bench]

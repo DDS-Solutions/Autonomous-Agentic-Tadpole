@@ -18,6 +18,7 @@ export function scrub_string(str: string): string {
         .replace(/hf_[a-zA-Z0-9]{20,}/g, '[REDACTED]')
         .replace(/ghp_[a-zA-Z0-9]{36}/g, '[REDACTED]')
         .replace(/github_pat_[a-zA-Z0-9_]{22,}/g, '[REDACTED]')
+        .replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED]')
         .replace(/Bearer\s+[a-zA-Z0-9-_.]+/gi, 'Bearer [REDACTED]');
 }
 
