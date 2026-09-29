@@ -100,6 +100,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
                     || path.starts_with("/v1/system/debug")
                     || path.starts_with("/v1/engine/ws")
                     || path.starts_with("/v1/engine/live-voice")
+                    || path.starts_with("/v1/mcp/sse")
                     || path == "/health"
                     || path == "/metrics"
                     || path == "/v1/engine/health"
@@ -390,7 +391,7 @@ fn build_skills_routes() -> Router<Arc<AppState>> {
             "/hooks/{name}",
             axum::routing::delete(routes::skills::delete_hook),
         )
-        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
 }
 
 fn build_system_routes() -> Router<Arc<AppState>> {

@@ -1,7 +1,13 @@
 """
 @docs ARCHITECTURE:Infrastructure:Execution
 
+### AI Assist Note
+**🛡️ Tadpole Engine: Verification Contract**
 Verification contract: a check that did not run is a FAILED check.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script error, unverified checks, or logic drift in the 3-layer architecture.
+- **Telemetry Link**: Search `[verification_contract]` in system logs.
 
 Every gate in execution/ must import `require_*` from here. The rule is
 non-negotiable: a script that cannot locate its target, cannot load its

@@ -53,7 +53,7 @@ impl AgentRunner {
         let mut final_filename = filename.to_string();
         if !final_filename.is_empty() && adapter.read_file(&final_filename).await.is_err() {
             let breadcrumbs = ctx.last_accessed_files.lock();
-            if let Some(resolved) = breadcrumbs.iter().find(|p| p.ends_with(filename)) {
+            if let Some(resolved) = breadcrumbs.iter().find(|p| std::path::Path::new(p.as_str()).ends_with(filename)) {
                 tracing::info!(
                     "🧩 [Context] Resolved ambiguous path '{}' to '{}' via breadcrumbs",
                     filename,

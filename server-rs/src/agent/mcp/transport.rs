@@ -39,6 +39,17 @@ pub struct SessionQuery {
     pub session_id: String,
 }
 
+struct SessionGuard {
+    session_id: String,
+}
+
+impl Drop for SessionGuard {
+    fn drop(&mut self) {
+        SSE_SESSIONS.remove(&self.session_id);
+        info!("🔗 [MCP Bridge] SSE session closed and pruned: {}", self.session_id);
+    }
+}
+
 /// GET /v1/mcp/sse
 /// Establishes an SSE connection for an external MCP client.
 pub async fn mcp_sse_handler(
@@ -54,17 +65,12 @@ pub async fn mcp_sse_handler(
     let endpoint_url = format!("/v1/mcp/message?session_id={}", session_id);
     let _ = tx.send(Event::default().event("endpoint").data(endpoint_url)).await;
 
-    let session_id_cleanup = session_id.clone();
-    let stream = futures::stream::unfold(rx, move |mut rx| {
-        let sid = session_id_cleanup.clone();
+    let guard = Arc::new(SessionGuard { session_id });
+    let stream = futures::stream::unfold((rx, guard), move |(mut rx, guard)| {
         async move {
             match rx.recv().await {
-                Some(event) => Some((Ok::<_, Infallible>(event), rx)),
-                None => {
-                    SSE_SESSIONS.remove(&sid);
-                    info!("🔗 [MCP Bridge] SSE session closed and pruned: {}", sid);
-                    None
-                }
+                Some(event) => Some((Ok::<_, Infallible>(event), (rx, guard))),
+                None => None,
             }
         }
     });
@@ -79,9 +85,12 @@ pub async fn mcp_message_handler(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, AppError> {
     let session_id = query.session_id;
-    let sender = SSE_SESSIONS.get(&session_id).ok_or_else(|| {
-        AppError::BadRequest("Invalid or expired session_id".to_string())
-    })?;
+    let sender = SSE_SESSIONS
+        .get(&session_id)
+        .map(|s| s.value().clone())
+        .ok_or_else(|| {
+            AppError::BadRequest("Invalid or expired session_id".to_string())
+        })?;
 
     let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("");
     let id = payload.get("id").cloned();
@@ -219,6 +228,7 @@ pub async fn mcp_message_handler(
     let event = Event::default().event("message").data(response.to_string());
     if let Err(e) = sender.send(event).await {
         error!("🚨 [MCP Bridge] Failed to send SSE message: {}", e);
+        SSE_SESSIONS.remove(&session_id);
     }
 
     Ok(Json(json!({ "status": "accepted" })))

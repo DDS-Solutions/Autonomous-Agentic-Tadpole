@@ -123,12 +123,13 @@ def check_env_vars(root):
         print_result("ENV-VAR", False, "No environment variables found in server-rs/src (scanner failure)")
         errors += 1
 
+    SYSTEM_HOST_VARS = {"PATH", "COMSPEC", "PATHEXT", "SystemRoot", "TEMP", "TMP"}
     for var in env_vars_in_code:
-        if var not in env_example_vars:
+        if var in SYSTEM_HOST_VARS or var in env_example_vars:
+            print_result("ENV-VAR", True, f"{var} documented")
+        else:
             print_result("ENV-VAR", False, f"std::env::var(\"{var}\") used in code but missing from .env.example")
             errors += 1
-        else:
-            print_result("ENV-VAR", True, f"{var} documented")
             
     return errors
 
@@ -146,6 +147,9 @@ def check_version_sync(root):
         "docs/API_REFERENCE.md": r'\*\*Version\*\*:\s*([0-9.]+)',
         "SYSTEM_MAP.md": r'\*\*Version\*\*:\s*([0-9.]+)',
         "directives/IDENTITY.md": r'TadpoleOS/([0-9.]+)',
+        "index.html": r'"softwareVersion":\s*"([^"]+)"',
+        "src-tauri/tauri.conf.json": r'"version":\s*"([^"]+)"',
+        "src-tauri/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     }
     errors = 0
     for rel, pattern in targets.items():

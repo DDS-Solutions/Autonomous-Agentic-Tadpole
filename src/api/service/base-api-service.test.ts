@@ -1,3 +1,15 @@
+/**
+ * @docs ARCHITECTURE:Core
+ *
+ * ### AI Assist Note
+ * **Base API Service Security Allowlist Tests**
+ * Tests for origin allowlist validation across loopback, LAN, and desktop schemas.
+ *
+ * ### 🔍 Debugging & Observability
+ * - **Failure Path**: Origin validation regression or unauthorized external host acceptance.
+ * - **Telemetry Link**: Search `[base-api-service]` in audit logs.
+ */
+
 import { describe, it, expect } from 'vitest';
 import { is_allowed_origin } from './base-api-service';
 

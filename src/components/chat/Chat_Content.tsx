@@ -158,7 +158,7 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
         if (scroll_ref.current) {
             scroll_ref.current.scrollTo({
                 top: scroll_ref.current.scrollHeight,
-                behavior: 'smooth'
+                behavior: 'auto'
             });
         }
     }, [messages]);
@@ -290,8 +290,12 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                     <button
                         onClick={async () => {
                             if (targeted_agent.id) {
-                                await agent_api_service.resume_agent(targeted_agent.id);
-                                use_agent_registry_store.getState().update_agent(targeted_agent.id, { status: 'idle' });
+                                try {
+                                    await agent_api_service.resume_agent(targeted_agent.id);
+                                    use_agent_registry_store.getState().update_agent(targeted_agent.id, { status: 'idle' });
+                                } catch (err) {
+                                    console.error('Failed to resume agent:', err);
+                                }
                             }
                         }}
                         className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-200 font-semibold transition-colors flex items-center gap-1 cursor-pointer active:scale-95"

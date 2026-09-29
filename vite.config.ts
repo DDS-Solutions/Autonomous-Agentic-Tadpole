@@ -3,11 +3,11 @@
  * 
  * ### AI Assist Note
  * **@module ViteConfig**
- * Handles reactive state and high-fidelity user interactions.
+ * Build orchestration, dev server security, and Vitest test runner configuration.
  * 
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: UI regression, hook desync, or API timeout.
- * - **Telemetry Link**: Search `[vite_config]` in observability traces.
+ * - **Failure Path**: Build bundle regression, test runner misconfiguration, or dev proxy leak.
+ * - **Telemetry Link**: Search `[vite_config]` in build and test logs.
  */
 
 /**
@@ -28,7 +28,8 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    host: process.env.VITE_HOST || '127.0.0.1',
+    // SEC-PROXY: Strict loopback default. External LAN binding requires explicit TADPOLE_DEV_EXPOSE=1
+    host: process.env.TADPOLE_DEV_EXPOSE === '1' ? (process.env.VITE_HOST || '0.0.0.0') : '127.0.0.1',
     port: 5173,
     strictPort: true,
     proxy: {
@@ -36,10 +37,6 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         ws: true,
-      },
-      '/metrics': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
       },
     },
     watch: {
@@ -159,8 +156,8 @@ export default defineConfig({
     hookTimeout: 10_000,
 
     // ── Misc ──────────────────────────────────────────────────────────────────
-    // Prevents false CI failures when a glob matches no test files.
-    passWithNoTests: true,
+    // Enforces that test suites must discover and execute test files (fail-closed).
+    passWithNoTests: false,
 
     coverage: {
       provider: 'v8',

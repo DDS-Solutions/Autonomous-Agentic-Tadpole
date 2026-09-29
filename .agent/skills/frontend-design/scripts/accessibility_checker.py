@@ -63,8 +63,8 @@ def check_accessibility(file_path: Path) -> list:
     try:
         content = file_path.read_text(encoding='utf-8', errors='ignore')
         
-        # Check for form inputs without labels
-        inputs = re.findall(r'<input[^>]*>', content, re.IGNORECASE)
+        # Check for form inputs without labels (handle JSX arrow functions like onChange={e => ...})
+        inputs = re.findall(r'<input[\s\S]*?(?:/>|(?<!=)>)', content)
         for inp in inputs:
             if 'type="hidden"' not in inp.lower():
                 if 'aria-label' not in inp.lower() and 'id=' not in inp.lower():

@@ -1,0 +1,48 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      motion-ecosystem:
+        patterns:
+          - "framer-motion"
+          - "motion-*"
+      dev-tooling:
+        patterns:
+          - "@types/*"
+          - "tsx"
+          - "eslint*"
+          - "typescript*"
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "cargo"
+    directory: "/server-rs"
+    schedule:
+      interval: "weekly"
+    groups:
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+          - "tracing-opentelemetry"
+
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "glib"
+
+  - package-ecosystem: "cargo"
+    directory: "/wasm-codec"
+    schedule:
+      interval: "weekly"

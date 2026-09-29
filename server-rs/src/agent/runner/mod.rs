@@ -258,9 +258,16 @@ impl Drop for MissionCleanupGuard {
             if let Some(ref ctx) = self.ctx {
                 let runner = self.runner.clone();
                 let ctx = ctx.clone();
-                tokio::spawn(async move {
-                    let _ = runner.fail_mission_aborted(&ctx).await;
-                });
+                if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                    handle.spawn(async move {
+                        let _ = runner.fail_mission_aborted(&ctx).await;
+                    });
+                } else {
+                    tracing::warn!(
+                        "MissionCleanupGuard dropped outside active Tokio runtime; aborting async fail for mission {}",
+                        ctx.mission_id
+                    );
+                }
             }
         }
     }
@@ -442,6 +449,7 @@ impl AgentRunner {
                 )
                 .await
                 {
+                    cleanup_guard.completed = true;
                     return self
                         .run_deterministic_workflow(&agent_id, payload, &mut state)
                         .await;

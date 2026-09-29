@@ -90,12 +90,21 @@ pub async fn auth_brute_force_limiter(
                 entry.key()
             );
         }
-    } else if response.status().is_success() {
-        // Reset failures on success
-        AUTH_FAILURE_LOG.remove(&client_ip);
     }
 
     Ok(response)
+}
+
+/// Records a verified authentication success, resetting the failure count for this IP.
+/// This must ONLY be invoked after cryptographic verification of credentials,
+/// preventing unauthenticated requests (e.g. to public /health endpoints) from resetting brute-force counters.
+pub fn record_auth_success(client_ip: &str) {
+    if AUTH_FAILURE_LOG.remove(client_ip).is_some() {
+        tracing::debug!(
+            "🔓 [Security] Auth failure counter reset after verified login for IP: {}",
+            client_ip
+        );
+    }
 }
 
 /// Evicts auth failure records that have exceeded the block duration.
@@ -149,13 +158,30 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
 
-        // 3. Success should also be blocked (entire IP is blocked)
+        // 3. Success route should also be blocked when IP is locked out
         let req = Request::builder()
             .uri("/success")
             .body(Body::empty())
             .unwrap();
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // 4. Calling record_auth_success resets the block
+        record_auth_success("unknown");
+        let req = Request::builder().uri("/success").body(Body::empty()).unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 5. Verify that unauthenticated 200 OK does NOT reset failure count on non-blocked state
+        let req = Request::builder().uri("/fail").body(Body::empty()).unwrap();
+        let _ = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(AUTH_FAILURE_LOG.get("unknown").map(|e| e.0), Some(1));
+
+        let req = Request::builder().uri("/success").body(Body::empty()).unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        // Failure count must remain 1, NOT cleared by unauthenticated /success
+        assert_eq!(AUTH_FAILURE_LOG.get("unknown").map(|e| e.0), Some(1));
 
         // Cleanup the static log for other tests if needed
         AUTH_FAILURE_LOG.clear();

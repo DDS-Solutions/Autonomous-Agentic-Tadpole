@@ -13,6 +13,8 @@
 let crypto_worker: Worker | null = null;
 const pending_requests = new Map<string, { resolve: (val: string) => void, reject: (err: Error) => void }>();
 
+const WORKER_TIMEOUT_MS = 15000;
+
 /**
  * get_worker
  * Initializes or retrieves the cryptographic WebWorker singleton.
@@ -32,6 +34,11 @@ function get_worker(): Worker {
         };
         crypto_worker.onerror = (err) => {
             console.error('[CryptoWorker] Fatal Error:', err);
+            const current_error = new Error('[CryptoWorker] Cryptographic worker encountered a fatal error');
+            for (const [, req] of pending_requests.entries()) {
+                req.reject(current_error);
+            }
+            pending_requests.clear();
         };
     }
     return crypto_worker;
@@ -39,14 +46,30 @@ function get_worker(): Worker {
 
 /**
  * call_worker
- * Dispatches a cryptographic request to the background worker.
+ * Dispatches a cryptographic request to the background worker with a bounded timeout.
  */
 function call_worker(type: 'encrypt' | 'decrypt', payload: { text?: string, password?: string, encrypted_json?: string }): Promise<string> {
-    const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `msg-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const worker = get_worker();
 
     return new Promise((resolve, reject) => {
-        pending_requests.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+            if (pending_requests.has(id)) {
+                pending_requests.delete(id);
+                reject(new Error(`[CryptoWorker] Request timed out after ${WORKER_TIMEOUT_MS}ms`));
+            }
+        }, WORKER_TIMEOUT_MS);
+
+        pending_requests.set(id, {
+            resolve: (val: string) => {
+                clearTimeout(timer);
+                resolve(val);
+            },
+            reject: (err: Error) => {
+                clearTimeout(timer);
+                reject(err);
+            }
+        });
         worker.postMessage({ id, type, payload });
     });
 }

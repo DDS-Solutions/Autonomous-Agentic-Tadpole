@@ -57,6 +57,8 @@ PATHS = {
     "execution/dispatch_mission.py": r'TadpoleOS/([0-9.]+)',
     "server-rs/src/routes/templates.rs": r'TadpoleOS/([0-9.]+)',
     "scripts/deploy-linuxlite.ps1": r'version\s*=\s*"([^"]+)"',
+    "src-tauri/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "index.html": r'"softwareVersion":\s*"([^"]+)"',
 }
 
 def bump_version(current_version, part):

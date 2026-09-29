@@ -76,7 +76,7 @@ KPI_Card.displayName = 'KPI_Card';
 // ── Bar Chart ────────────────────────────────────────────────
 
 const DEFAULT_COLORS = [
-    '#6366f1', '#22d3ee', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6',
+    '#6366f1', '#22d3ee', '#f59e0b', '#ef4444', '#10b981', '#14b8a6',
 ];
 
 const Bar_Chart: React.FC<{ data: OpenUI_Bar_Chart }> = React.memo(({ data }) => {
@@ -262,20 +262,32 @@ const Data_Table: React.FC<{ data: OpenUI_Table }> = React.memo(({ data }) => {
 Data_Table.displayName = 'Data_Table';
 
 export const MAX_RENDER_DEPTH = 10;
+export const MAX_RENDER_CHILDREN = 50;
 
 // ── Layout Container ─────────────────────────────────────────
 
-const Layout_Container: React.FC<{ data: OpenUI_Layout; depth: number }> = React.memo(({ data, depth }) => (
-    <div
-        className={`flex gap-3 ${
-            data.direction === 'column' ? 'flex-col' : 'flex-row flex-wrap'
-        }`}
-    >
-        {data.children.map((child, i) => (
-            <OpenUI_Renderer key={i} dsl={child} depth={depth + 1} />
-        ))}
-    </div>
-));
+const Layout_Container: React.FC<{ data: OpenUI_Layout; depth: number }> = React.memo(({ data, depth }) => {
+    const children = data.children || [];
+    const is_truncated = children.length > MAX_RENDER_CHILDREN;
+    const rendered_children = is_truncated ? children.slice(0, MAX_RENDER_CHILDREN) : children;
+
+    return (
+        <div
+            className={`flex gap-3 ${
+                data.direction === 'column' ? 'flex-col' : 'flex-row flex-wrap'
+            }`}
+        >
+            {rendered_children.map((child, i) => (
+                <OpenUI_Renderer key={i} dsl={child} depth={depth + 1} />
+            ))}
+            {is_truncated && (
+                <div className="p-2 text-[10px] text-amber-400 border border-amber-800/40 rounded-lg bg-amber-950/20 font-mono">
+                    [OpenUI: Child Count Exceeded — Truncated to {MAX_RENDER_CHILDREN} items]
+                </div>
+            )}
+        </div>
+    );
+});
 Layout_Container.displayName = 'Layout_Container';
 
 // ── Main Renderer ────────────────────────────────────────────

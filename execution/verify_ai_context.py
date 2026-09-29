@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 
 # --- Configuration ---
-SKIP_DIRS = {'.git', 'node_modules', 'dist', 'target', 'build', '__pycache__', '.venv', 'venv', '.tmp', 'tmp', 'coverage', 'scratch', 'reports'}
+SKIP_DIRS = {'.git', 'node_modules', 'dist', 'target', 'build', '__pycache__', '.venv', 'venv', '.tmp', 'tmp', 'coverage', 'scratch', 'reports', 'pkg'}
 EXTENSIONS = {'.rs', '.ts', '.tsx', '.js', '.py', '.md'}
 ROOT = Path(__file__).resolve().parent.parent
 

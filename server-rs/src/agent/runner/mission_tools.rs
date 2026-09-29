@@ -363,7 +363,7 @@ impl AgentRunner {
         let mut final_path = target_path.clone();
         if tokio::fs::metadata(&final_path).await.is_err() {
             let breadcrumbs = ctx.last_accessed_files.lock();
-            if let Some(resolved) = breadcrumbs.iter().find(|p| p.ends_with(path_str)) {
+            if let Some(resolved) = breadcrumbs.iter().find(|p| std::path::Path::new(p.as_str()).ends_with(path_str)) {
                 tracing::info!(
                     "🧩 [Context] Resolved ambiguous codebase path '{}' to '{}' via breadcrumbs",
                     path_str,

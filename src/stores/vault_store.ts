@@ -101,6 +101,13 @@ export const use_vault_store = create<Vault_State>()(
                 },
 
                 unlock: async (password: string) => {
+                    if (!password || password.trim().length === 0) {
+                        return {
+                            success: false,
+                            error: 'MASTER KEY CANNOT BE EMPTY'
+                        };
+                    }
+
                     const configs = get().encrypted_configs;
                     const first_key = Object.keys(configs)[0];
 
@@ -188,5 +195,18 @@ export const use_vault_store = create<Vault_State>()(
 
 
 
+
+// Automatically refresh the inactivity timer on direct user interaction
+if (typeof window !== 'undefined') {
+    const onUserActivity = () => {
+        const state = use_vault_store.getState();
+        if (!state.is_locked) {
+            state.reset_inactivity_timer();
+        }
+    };
+    ['mousedown', 'keydown', 'scroll', 'touchstart'].forEach((event) => {
+        window.addEventListener(event, onUserActivity, { passive: true });
+    });
+}
 
 // Metadata: [vault_store]

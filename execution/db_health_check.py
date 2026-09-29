@@ -15,6 +15,7 @@ import os
 import json
 import sys
 import argparse
+from pathlib import Path
 from typing import Dict, Any, List, Union
 
 def print_result(check: str, status: bool, message: str) -> None:
@@ -36,6 +37,17 @@ def check_health(db_path: str) -> Dict[str, Any]:
         if quick_check != "ok":
             conn.close()
             return {"status": "unhealthy", "error": f"PRAGMA quick_check failed: {quick_check}"}
+        
+        # Run foreign_key_check
+        cursor.execute("PRAGMA foreign_key_check;")
+        fk_violations = cursor.fetchall()
+        if fk_violations:
+            conn.close()
+            return {
+                "status": "unhealthy",
+                "error": f"PRAGMA foreign_key_check detected {len(fk_violations)} violation(s)",
+                "violations": fk_violations
+            }
         
         # Check tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -71,7 +83,7 @@ def resolve_default_db_path() -> str:
     """
     Dynamically resolves the database path:
     1. Checks if the 'DATABASE_URL' environment variable is defined. If so, parses out the file path.
-    2. If not, falls back to locating 'data/tadpole.db' relative to the active workspace.
+    2. If not, anchors to 'data/tadpole.db' relative to the repository root.
     """
     db_url = os.getenv("DATABASE_URL")
     if db_url:
@@ -84,23 +96,26 @@ def resolve_default_db_path() -> str:
             return cleaned
         return db_url
 
-    # Check relative to current working directory
-    candidate_cwd = os.path.abspath("data/tadpole.db")
-    if os.path.exists(candidate_cwd):
-        return candidate_cwd
-
-    # Check relative to script's directory parent
+    # Check relative to script's directory parent (repository root)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidate_script = os.path.abspath(os.path.join(script_dir, "..", "data", "tadpole.db"))
     return candidate_script
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tadpole Database Health Check")
-    parser.add_argument("--db", type=str, default=resolve_default_db_path(), help="Path to database")
+    parser.add_argument("project_path", nargs="?", default=None, help="Optional project directory")
+    parser.add_argument("--db", type=str, default=None, help="Path to database")
     parser.add_argument("--output", type=str, help="Path to output log file")
     args = parser.parse_args()
 
-    report = check_health(args.db)
+    db_path = args.db
+    if not db_path:
+        if args.project_path and (Path(args.project_path) / "data" / "tadpole.db").exists():
+            db_path = str(Path(args.project_path) / "data" / "tadpole.db")
+        else:
+            db_path = resolve_default_db_path()
+
+    report = check_health(db_path)
     output_json = json.dumps(report, indent=2)
     
     if args.output:
@@ -111,11 +126,14 @@ if __name__ == "__main__":
         except Exception as e:
             print_result("DB-HEALTH", False, f"Error saving to {args.output}: {e}")
             sys.exit(1)
+        if report.get("status") != "healthy":
+            sys.exit(1)
     else:
         print(output_json)
         if report.get("status") == "healthy":
             print_result("DB-HEALTH", True, "Database is healthy")
         else:
-            print_result("DB-HEALTH", False, "Database is unhealthy")
+            print_result("DB-HEALTH", False, f"Database is unhealthy: {report.get('error', report.get('message'))}")
+            sys.exit(1)
 
 # Metadata: [db_health_check]

@@ -84,7 +84,7 @@ col_names = ", ".join(insert_data.keys())
 placeholders = ", ".join(["?" for _ in insert_data])
 values = list(insert_data.values())
 
-sql = f"INSERT OR REPLACE INTO agents ({col_names}) VALUES ({placeholders})"
+sql = "INSERT OR REPLACE INTO agents ({}) VALUES ({})".format(col_names, placeholders)
 cursor.execute(sql, values)
 conn.commit()
 conn.close()

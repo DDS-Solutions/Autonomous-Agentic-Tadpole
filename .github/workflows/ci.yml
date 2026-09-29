@@ -121,6 +121,8 @@ jobs:
               - '.github/workflows/ci.yml'
             python:
               - 'server-rs/**'
+              - 'src/**'
+              - 'src-tauri/**'
               - 'execution/**'
               - 'tests/**'
               - 'directives/**'

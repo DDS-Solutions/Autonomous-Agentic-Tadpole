@@ -10,27 +10,8 @@
  * - **Telemetry Link**: Search `[base_api_service]` in observability traces.
  */
 
-/**
- * Verifies if the target API origin is in the allowed set.
- * Enforces strict default-deny: permits only local loopback (localhost, 127.0.0.1)
- * and the official desktop origin (tauri://localhost), rejecting external network hosts
- * to prevent credential exfiltration.
- */
-export function is_allowed_origin(url: string): boolean {
-    try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'tauri:') {
-            return false;
-        }
-        if (parsed.protocol === 'tauri:' && parsed.hostname === 'localhost') {
-            return true;
-        }
-        const host = parsed.hostname.toLowerCase();
-        return host === 'localhost' || host === '127.0.0.1';
-    } catch {
-        return false;
-    }
-}
+import { is_allowed_origin } from './origin-policy';
+export { is_allowed_origin };
 import type { ApiServiceConfig, ApiErrorListener, RequestInterceptor, RequestOptions } from '../types';
 import { ApiError, map_api_error_to_subclass } from '../errors';
 import {
@@ -96,7 +77,7 @@ export class BaseApiService {
         options: RequestOptions = {}
     ): Promise<T> {
         const intercepted = await this.request_interceptors.run<T>(path, options);
-        if (intercepted !== null) {
+        if (intercepted != null) {
             return intercepted;
         }
 
@@ -104,74 +85,83 @@ export class BaseApiService {
         const setTimeoutFn = this.config.timers?.setTimeout || setTimeout;
         const clearTimeoutFn = this.config.timers?.clearTimeout || clearTimeout;
 
-        const settings = settingsPort.getSettings();
-        const tadpole_os_url = settings.tadpole_os_url;
-        if (!tadpole_os_url) {
-            throw new Error('Neural Link Configuration Missing: tadpole_os_url is undefined.');
-        }
+        let active_span_id: string | null = null;
+        let span_completed = false;
 
-        let base_url: string;
         try {
-            base_url = validate_and_sanitize_url(tadpole_os_url);
-        } catch (e) {
-            throw new Error(`Neural Link Configuration Error: ${(e as Error).message}`, { cause: e });
-        }
-
-        if (!is_allowed_origin(base_url)) {
-            throw new Error(`Connection to origin refused: ${base_url} is not in the allowed origins list.`);
-        }
-
-        const clean_path = path.startsWith('/') ? path : `/${path}`;
-        const url = `${base_url}${clean_path}`;
-
-        // Setup Timeout controller
-        const timeout_ms = options.timeout ?? DEFAULT_TIMEOUT;
-
-        const { headers: base_headers, context } = this.get_headers(
-            (options.headers as Record<string, string>)?.['X-Request-Id'],
-            settings.tadpole_os_api_key
-        );
-
-        const is_form_data = isFormData(options.body);
-        const final_headers = { ...base_headers };
-        if (is_form_data) {
-            delete (final_headers as Record<string, string>)['Content-Type'];
-        }
-
-        const all_headers = { ...final_headers, ...options.headers };
-        const req_attributes: Record<string, string | number | boolean> = {};
-        if (options.body) {
-            const scrubbed = scrub_secrets(options.body);
-            let body_str: string;
-            if (isFormData(scrubbed)) {
-                const obj: Record<string, unknown> = {};
-                for (const [key, val] of scrubbed.entries()) {
-                    obj[key] = val;
-                }
-                body_str = JSON.stringify(obj);
-            } else {
-                body_str = typeof scrubbed === 'string' ? scrubbed : JSON.stringify(scrubbed);
+            const settings = settingsPort.getSettings();
+            const tadpole_os_url = settings.tadpole_os_url;
+            if (!tadpole_os_url) {
+                throw new Error('Neural Link Configuration Missing: tadpole_os_url is undefined.');
             }
-            req_attributes['http.request.body'] = truncate_payload(body_str);
-        }
-        const scrubbed_headers = scrub_secrets(all_headers);
-        req_attributes['http.request.headers'] = JSON.stringify(scrubbed_headers);
 
-        telemetryPort.addSpan({
-            id: context.span_id,
-            trace_id: context.trace_id,
-            name: `ui_request: ${path.split('?')[0]}`,
-            agent_id: 'frontend',
-            mission_id: 'system',
-            start_time: Date.now(),
-            status: 'running',
-            attributes: req_attributes
-        });
+            let base_url: string;
+            try {
+                base_url = validate_and_sanitize_url(tadpole_os_url);
+            } catch (e) {
+                throw new Error(`Neural Link Configuration Error: ${(e as Error).message}`, { cause: e });
+            }
 
-        try {
+            if (!is_allowed_origin(base_url)) {
+                throw new Error(`Connection to origin refused: ${base_url} is not in the allowed origins list.`);
+            }
+
+            const clean_path = path.startsWith('/') ? path : `/${path}`;
+            const url = `${base_url}${clean_path}`;
+
+            // Setup Timeout controller with fixed deadline to prevent retry amplification
+            const timeout_ms = options.timeout ?? DEFAULT_TIMEOUT;
+            const deadline = Date.now() + timeout_ms;
+
+            const { headers: base_headers, context } = this.get_headers(
+                (options.headers as Record<string, string>)?.['X-Request-Id'],
+                settings.tadpole_os_api_key
+            );
+            active_span_id = context.span_id;
+
+            const is_form_data = isFormData(options.body);
+            const final_headers = { ...base_headers };
+            if (is_form_data) {
+                delete (final_headers as Record<string, string>)['Content-Type'];
+            }
+
+            const all_headers = { ...final_headers, ...options.headers };
+            const req_attributes: Record<string, string | number | boolean> = {};
+            if (options.body) {
+                const scrubbed = scrub_secrets(options.body);
+                let body_str: string;
+                if (isFormData(scrubbed)) {
+                    const obj: Record<string, unknown> = {};
+                    for (const [key, val] of scrubbed.entries()) {
+                        obj[key] = val;
+                    }
+                    body_str = JSON.stringify(obj);
+                } else {
+                    body_str = typeof scrubbed === 'string' ? scrubbed : JSON.stringify(scrubbed);
+                }
+                req_attributes['http.request.body'] = truncate_payload(body_str);
+            }
+            const scrubbed_headers = scrub_secrets(all_headers);
+            req_attributes['http.request.headers'] = JSON.stringify(scrubbed_headers);
+
+            telemetryPort.addSpan({
+                id: context.span_id,
+                trace_id: context.trace_id,
+                name: `ui_request: ${path.split('?')[0]}`,
+                agent_id: 'frontend',
+                mission_id: 'system',
+                start_time: Date.now(),
+                status: 'running',
+                attributes: req_attributes
+            });
+
             const execute_fetch = async (attempt: number): Promise<Response> => {
+                if (Date.now() >= deadline) {
+                    throw new Error(`Request timed out after ${timeout_ms}ms for: ${url}`);
+                }
+                const remaining_ms = Math.max(1, deadline - Date.now());
                 const timeout_controller = new AbortController();
-                const timeout_id = setTimeoutFn(() => timeout_controller.abort('TIMEOUT'), timeout_ms);
+                const timeout_id = setTimeoutFn(() => timeout_controller.abort('TIMEOUT'), remaining_ms);
 
                 const { signal: combined_signal, cleanup: cleanup_signals } = combine_signals(
                     options.signal,
@@ -188,11 +178,13 @@ export class BaseApiService {
                 } catch (err) {
                     const method = (options.method || 'GET').toUpperCase();
                     const is_retryable = method === 'GET' || method === 'HEAD' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
-                    const is_timeout = (combined_signal && combined_signal.aborted && combined_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT');
-                    if (is_timeout && is_retryable && attempt < MAX_RETRIES) {
+                    const is_timeout = (combined_signal && combined_signal.aborted && combined_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT') || Date.now() >= deadline;
+                    if (is_timeout && is_retryable && attempt < MAX_RETRIES && (deadline - Date.now() > 50)) {
                         const backoff = this.compute_backoff(attempt);
-                        await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
-                        return execute_fetch(attempt + 1);
+                        if (Date.now() + backoff < deadline) {
+                            await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
+                            return execute_fetch(attempt + 1);
+                        }
                     }
                     if (is_timeout) {
                         throw new Error(`Request timed out after ${timeout_ms}ms for: ${url}`, { cause: err });
@@ -204,6 +196,9 @@ export class BaseApiService {
                         throw err;
                     }
                     const backoff = this.compute_backoff(attempt);
+                    if (Date.now() + backoff >= deadline) {
+                        throw new Error(`Request timed out after ${timeout_ms}ms for: ${url}`, { cause: err });
+                    }
                     await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
                     return execute_fetch(attempt + 1);
                 } finally {
@@ -214,7 +209,7 @@ export class BaseApiService {
                 if (!response.ok && response.status >= 500) {
                     const method = (options.method || 'GET').toUpperCase();
                     const is_retryable = method === 'GET' || method === 'HEAD' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
-                    if (is_retryable && attempt < MAX_RETRIES) {
+                    if (is_retryable && attempt < MAX_RETRIES && (deadline - Date.now() > 50)) {
                         try {
                             if (response.body) {
                                 if (typeof response.body.cancel === 'function') {
@@ -226,8 +221,10 @@ export class BaseApiService {
                         } catch { /* ignore drain errors */ }
 
                         const backoff = this.compute_backoff(attempt);
-                        await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
-                        return execute_fetch(attempt + 1);
+                        if (Date.now() + backoff < deadline) {
+                            await delay_with_signal(backoff, options.signal || undefined, setTimeoutFn);
+                            return execute_fetch(attempt + 1);
+                        }
                     }
                 }
 
@@ -268,11 +265,21 @@ export class BaseApiService {
                         error_code ? { 'error.code': error_code } : {},
                     )
                 });
+                span_completed = true;
 
                 const base_error = new ApiError(message, type, response.status, error_code, help_link);
                 const mapped_error = map_api_error_to_subclass(base_error);
                 this.emit_api_error(mapped_error);
                 throw mapped_error;
+            }
+
+            const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
+            const content_length_str = response.headers?.get?.('content-length');
+            if (content_length_str) {
+                const content_length = parseInt(content_length_str, 10);
+                if (!Number.isNaN(content_length) && content_length > MAX_RESPONSE_SIZE) {
+                    throw new Error(`Response payload exceeded maximum allowed size of 10MB (${content_length} bytes).`);
+                }
             }
 
             let result: unknown;
@@ -281,9 +288,16 @@ export class BaseApiService {
             } else if (options.response_type === 'blob') {
                 result = await response.blob();
             } else if (options.response_type === 'text') {
-                result = await response.text();
+                const text = await response.text();
+                if (text.length > MAX_RESPONSE_SIZE) {
+                    throw new Error(`Response payload exceeded maximum allowed size of 10MB (${text.length} characters).`);
+                }
+                result = text;
             } else {
                 const text = await response.text();
+                if (text.length > MAX_RESPONSE_SIZE) {
+                    throw new Error(`Response payload exceeded maximum allowed size of 10MB (${text.length} characters).`);
+                }
                 result = text ? JSON.parse(text) : null;
             }
 
@@ -292,16 +306,30 @@ export class BaseApiService {
                 status: 'success',
                 attributes: build_trace_attributes(response)
             });
+            span_completed = true;
 
             return result as T;
         } catch (err) {
+            if (active_span_id && !span_completed) {
+                telemetryPort.updateSpan(active_span_id, {
+                    end_time: Date.now(),
+                    status: 'error',
+                    attributes: {
+                        'error.message': err instanceof Error ? sanitize_error_detail(err.message) : 'Unknown error'
+                    }
+                });
+            }
+
             if (err instanceof ApiError) {
                 throw err;
             }
+
+            let sanitized_error: Error;
             if (err instanceof Error) {
                 const sanitized = sanitize_error_detail(err.message);
                 try {
                     err.message = sanitized;
+                    sanitized_error = err;
                 } catch {
                     try {
                         Object.defineProperty(err, 'message', {
@@ -310,6 +338,7 @@ export class BaseApiService {
                             writable: true,
                             enumerable: true
                         });
+                        sanitized_error = err;
                     } catch {
                         const cloned_err = new Error(sanitized);
                         cloned_err.name = err.name;
@@ -319,11 +348,23 @@ export class BaseApiService {
                                 try { (cloned_err as unknown as Record<string, unknown>)[key] = (err as unknown as Record<string, unknown>)[key]; } catch { /* ignore */ }
                             }
                         }
-                        throw cloned_err;
+                        sanitized_error = cloned_err;
                     }
                 }
+            } else {
+                sanitized_error = new Error(sanitize_error_detail(String(err)));
             }
-            throw err;
+
+            const fallback_api_error = new ApiError(
+                sanitized_error.message,
+                'about:blank',
+                0,
+                'CLIENT_ERROR',
+                null
+            );
+            this.emit_api_error(fallback_api_error);
+
+            throw sanitized_error;
         }
     }
 }

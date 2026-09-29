@@ -26,7 +26,7 @@ export function sanitize_error_detail(detail: string): string {
     sanitized = sanitized.replace(/[a-zA-Z0-9+-.]+:\/\/[^/:\s]+:[^/:\s]+@[^\s/]+/gi, '[CONNECTION_STRING_REDACTED]');
 
     // 2. Absolute file paths (both POSIX and Windows directories)
-    sanitized = sanitized.replace(/(?:\b[a-zA-Z]:\\|\/)(?:[^\\/\s]+[\\/])+[^\s\\/]+/gi, '[PATH_REDACTED]');
+    sanitized = sanitized.replace(/(?<![:\w])(?:\b[a-zA-Z]:\\|\/)(?:[^\\/\s]+[\\/])+[^\s\\/]+/gi, '[PATH_REDACTED]');
 
     // 3. Strip "Error:" prefix from start
     sanitized = sanitized.replace(/^Error:\s*/i, '');

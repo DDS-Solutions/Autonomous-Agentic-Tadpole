@@ -71,7 +71,7 @@ export const get_base_url = (): string => {
     // Dynamically align loopback URL with current window origin if available
     if (typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;
-        if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+        if (host === 'localhost' || host === '127.0.0.1') {
             return `http://${host}:8000`;
         }
     }
@@ -142,7 +142,8 @@ export function is_valid_url(url: string): boolean {
 }
 
 export function is_valid_api_key(api_key: string): boolean {
-    return sanitize_api_key(api_key).length > 0;
+    const sanitized = sanitize_api_key(api_key);
+    return sanitized.length >= 12 && /^[A-Za-z0-9_-]{12,}$/.test(sanitized);
 }
 
 /**
@@ -207,6 +208,12 @@ export const use_settings_store = create<Settings_State>()(
                     final_value = Math.min(2.0, Math.max(0.0, value)) as unknown as Tadpole_Settings[K];
                 } else if (key === 'max_agents' && typeof value === 'number') {
                     final_value = Math.min(100, Math.max(1, Math.floor(value))) as unknown as Tadpole_Settings[K];
+                } else if (key === 'max_clusters' && typeof value === 'number') {
+                    final_value = Math.min(20, Math.max(1, Math.floor(value))) as unknown as Tadpole_Settings[K];
+                } else if (key === 'max_swarm_depth' && typeof value === 'number') {
+                    final_value = Math.min(10, Math.max(1, Math.floor(value))) as unknown as Tadpole_Settings[K];
+                } else if (key === 'default_budget_usd' && typeof value === 'number') {
+                    final_value = Math.max(0, value) as unknown as Tadpole_Settings[K];
                 }
 
                 set({ settings: { ...current, [key]: final_value } });
@@ -227,7 +234,7 @@ export const use_settings_store = create<Settings_State>()(
                 }
             }),
             
-            // THE NUCLEAR PURGE: Simplified to avoid infinite loops during initialization
+            // THE NUCLEAR PURGE: Direct mutation avoiding re-entrant updates during rehydration
             onRehydrateStorage: () => {
                 return (hydrated_state, error) => {
                     if (error) {
@@ -240,9 +247,9 @@ export const use_settings_store = create<Settings_State>()(
                         const url = hydrated_state.settings.tadpole_os_url;
                         if (url && url.toLowerCase().includes('tauri')) {
                             console.warn('[SettingsStore] Legacy internal URL detected in persistent storage. Resetting to standard loopback.');
-                            hydrated_state.update_setting('tadpole_os_url', get_base_url());
+                            hydrated_state.settings.tadpole_os_url = get_base_url();
                         } else if (url !== original_url) {
-                            hydrated_state.update_setting('tadpole_os_url', url);
+                            hydrated_state.settings.tadpole_os_url = url;
                         }
 
                         // Just log completion, don't trigger side effects here
@@ -251,15 +258,13 @@ export const use_settings_store = create<Settings_State>()(
                 };
             },
 
-            // Legacy Migrations for the core settings structure
-            migrate: (persisted_state: unknown, version: number) => {
-                if (version === 0) {
-                    const state = persisted_state as Settings_State;
-                    if (state && state.settings) {
-                        state.settings = sanitize_settings(state.settings);
-                    }
+            // Universal Migrations: sanitize settings across all schema versions
+            migrate: (persisted_state: unknown) => {
+                const state = persisted_state as Settings_State;
+                if (state && state.settings) {
+                    state.settings = sanitize_settings(state.settings);
                 }
-                return persisted_state as Settings_State;
+                return state;
             },
             version: 1,
         }

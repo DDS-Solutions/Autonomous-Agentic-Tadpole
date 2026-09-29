@@ -1,6 +1,13 @@
 """
-Unit tests for nexus_adversarial_guard.py
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**Unit Tests: Nexus Adversarial Guard**
 Tests each adversarial invariant check against synthetic fixtures.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Invariant check evasion or synthetic fixture misfire.
+- **Telemetry Link**: Search `[nexus_adversarial_guard]` in test logs.
 """
 
 import sys

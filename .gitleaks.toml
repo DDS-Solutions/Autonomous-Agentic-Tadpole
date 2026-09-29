@@ -38,12 +38,12 @@ stopwords = [
 [[rules]]
 id = "openai-anthropic-key"
 description = "OpenAI or Anthropic Secret Key"
-regex = '''sk-(?:ant-)?[a-zA-Z0-9-_]{12,}'''
+regex = '''sk-(?:ant-)?[a-zA-Z0-9_-]{12,}'''
 
 [[rules]]
 id = "google-gemini-key"
 description = "Google Gemini API Key"
-regex = '''AIza[0-9A-Za-z-_]{35}'''
+regex = '''AIza[0-9A-Za-z_-]{35}'''
 
 [[rules]]
 id = "groq-api-key"

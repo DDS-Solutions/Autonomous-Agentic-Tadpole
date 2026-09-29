@@ -12,14 +12,14 @@
 
 export function scrub_string(str: string): string {
     return str
-        .replace(/sk-(?:ant-)?[a-zA-Z0-9-_]{12,}/g, '[REDACTED]')
-        .replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED]')
+        .replace(/sk-(?:ant-)?[a-zA-Z0-9_-]{12,}/g, '[REDACTED]')
+        .replace(/AIza[0-9A-Za-z_-]{35}/g, '[REDACTED]')
         .replace(/gsk_[a-zA-Z0-9]{20,}/g, '[REDACTED]')
         .replace(/hf_[a-zA-Z0-9]{20,}/g, '[REDACTED]')
         .replace(/ghp_[a-zA-Z0-9]{36}/g, '[REDACTED]')
         .replace(/github_pat_[a-zA-Z0-9_]{22,}/g, '[REDACTED]')
         .replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED]')
-        .replace(/Bearer\s+[a-zA-Z0-9-_.]+/gi, 'Bearer [REDACTED]');
+        .replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]');
 }
 
 export function isFormData(val: unknown): val is FormData {
@@ -86,7 +86,8 @@ export function scrub_secrets(body: unknown): unknown {
                 return '[UNSCRUBBABLE: Circular/Function]';
             }
             if (serialized.length > 65536) {
-                return `${serialized.substring(0, 1024)}... [TELEMETRY BODY OVERFLOW: LARGE OBJECT REDACTED]`;
+                const rawPrefix = serialized.substring(0, 1024);
+                return `${scrub_string(rawPrefix)}... [TELEMETRY BODY OVERFLOW: LARGE OBJECT REDACTED]`;
             }
             const parsed = JSON.parse(serialized);
             const scrubbed = scrub_secrets_object(parsed);
@@ -125,16 +126,20 @@ export function scrub_secrets_object(obj: unknown): unknown {
     }
     if (typeof obj === 'object') {
         const record = obj as Record<string, unknown>;
+        const result: Record<string, unknown> = {};
         for (const key of Object.keys(record)) {
             const val = record[key];
             if (is_sensitive_key(key)) {
-                record[key] = '[REDACTED]';
+                result[key] = '[REDACTED]';
             } else if (typeof val === 'string') {
-                record[key] = scrub_string(val);
+                result[key] = scrub_string(val);
             } else if (typeof val === 'object') {
-                record[key] = scrub_secrets_object(val);
+                result[key] = scrub_secrets_object(val);
+            } else {
+                result[key] = val;
             }
         }
+        return result;
     }
     return obj;
 }

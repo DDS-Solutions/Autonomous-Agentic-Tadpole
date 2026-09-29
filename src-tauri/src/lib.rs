@@ -1,10 +1,10 @@
 //! @docs ARCHITECTURE:Core
 //!
 //! ### AI Assist Note
-//! **lib**: Core technical resource for the Tadpole OS infrastructure.
+//! **lib**: Core technical resource for the Tadpole OS desktop shell runtime.
 //!
 //! ### 🔍 Debugging & Observability
-//! - **Failure Path**: Unhandled errors, lock contention, or connection staling.
+//! - **Failure Path**: Tauri context generation failure, IPC initialization error, or window creation fault.
 //! - **Telemetry Link**: Search `[lib]` in tracing logs.
 //! - **Trace Scope**: `src-tauri/src/lib.rs`
 

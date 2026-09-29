@@ -30,17 +30,30 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-ENV_FILE = Path(".env")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = ROOT_DIR / ".env"
 
 def load_env_lines():
     if not ENV_FILE.exists():
-        # Try finding in parent directory if run from execution
-        candidate = Path("../.env")
-        if candidate.exists():
-            return candidate, candidate.read_text().splitlines()
-        # Create empty .env if not found
-        return ENV_FILE, []
-    return ENV_FILE, ENV_FILE.read_text().splitlines()
+        cwd_env = Path(".env")
+        if cwd_env.exists():
+            return cwd_env, cwd_env.read_text(encoding="utf-8").splitlines()
+        raise FileNotFoundError(f"Target .env file not found at {ENV_FILE}. Cannot perform token rotation without existing .env configuration.")
+    return ENV_FILE, ENV_FILE.read_text(encoding="utf-8").splitlines()
+
+def atomic_write_env(path: Path, lines: list):
+    """Atomically writes lines to target env file with fsync and restricted permissions."""
+    content = "\n".join(lines) + "\n"
+    tmp_path = path.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        os.chmod(tmp_path, 0o600)
+    except Exception:
+        pass
+    os.replace(tmp_path, path)
 
 def rotate_token(grace_period_secs=300):
     new_token = secrets.token_hex(32)
@@ -79,15 +92,17 @@ def rotate_token(grace_period_secs=300):
     new_lines.append(f"NEURAL_TOKEN_ROTATED_AT={now_epoch}")
     new_lines.append(f"NEURAL_TOKEN_GRACE_SECS={grace_period_secs}")
     
-    path.write_text("\n".join(new_lines) + "\n")
+    atomic_write_env(path, new_lines)
     
+    masked_token = f"{new_token[:6]}...{new_token[-6:]}"
     print("✅ Zero-downtime token rotation initiated.")
-    print(f"   New token: {new_token}")
+    print(f"   New token: {masked_token} (written to {path.name})")
     print(f"   Old token kept valid as NEURAL_TOKEN_OLD.")
     print(f"   Grace period active ({grace_period_secs}s). Please update client configurations.")
     print("   ⚠️ Server restart required: Restart the server process to load newly generated tokens.")
     print("   Confirm rotation after migration by running:")
     print("   python execution/rotate_token.py --confirm")
+    return 0
 
 def confirm_rotation(force=False):
     path, lines = load_env_lines()
@@ -118,20 +133,25 @@ def confirm_rotation(force=False):
             
     if not confirmed:
         print("ℹ️ No active rotation grace period found. Token is already in singular state.")
-        return
+        return 0
 
-    if rotated_at is not None and not force:
+    if not force:
+        if rotated_at is None:
+            print("❌ Cannot confirm rotation: NEURAL_TOKEN_ROTATED_AT timestamp is missing or malformed.", file=sys.stderr)
+            print("   Pass --force to confirm immediately if all clients are already migrated.", file=sys.stderr)
+            return 1
         elapsed = int(time.time()) - rotated_at
         if elapsed < grace_secs:
             remaining = grace_secs - elapsed
-            print(f"❌ Cannot confirm rotation: Grace period still active ({remaining}s remaining of {grace_secs}s).")
-            print("   Pass --force to confirm immediately if all clients are already migrated.")
-            return
+            print(f"❌ Cannot confirm rotation: Grace period still active ({remaining}s remaining of {grace_secs}s).", file=sys.stderr)
+            print("   Pass --force to confirm immediately if all clients are already migrated.", file=sys.stderr)
+            return 1
 
-    path.write_text("\n".join(new_lines) + "\n")
+    atomic_write_env(path, new_lines)
     print("✅ Token rotation confirmed. Fallback tokens removed.")
     print("   Only the active NEURAL_TOKEN is now valid.")
     print("   ⚠️ Server restart required: Restart the server to finalize token revocation.")
+    return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Zero-Downtime Neural Token Rotation Runbook")
@@ -141,8 +161,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.confirm:
-        confirm_rotation(force=args.force)
+        rc = confirm_rotation(force=args.force)
+        sys.exit(rc)
     else:
-        rotate_token(args.grace_secs)
+        rc = rotate_token(args.grace_secs)
+        sys.exit(rc)
 
 # Metadata: [rotate_token]

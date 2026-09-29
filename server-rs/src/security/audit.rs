@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
 /// Represents a single entry in the tamper-evident audit ledger.
@@ -75,6 +76,8 @@ pub struct MerkleAuditTrail {
     verifying_key: Option<VerifyingKey>,
     /// In-memory cache of the last hash to avoid redundant DB reads during tool loops.
     last_hash: Arc<RwLock<Option<String>>>,
+    /// In-memory mutex to ensure atomic sequential ordering under concurrent tool loops.
+    record_mutex: Arc<Mutex<()>>,
 }
 
 impl MerkleAuditTrail {
@@ -106,6 +109,7 @@ impl MerkleAuditTrail {
             signing_key,
             verifying_key,
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         }
     }
 
@@ -132,6 +136,7 @@ impl MerkleAuditTrail {
             signing_key: None,
             verifying_key: None,
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         }
     }
 
@@ -162,6 +167,7 @@ impl MerkleAuditTrail {
             signing_key: None,
             verifying_key: None,
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         }
     }
 
@@ -178,6 +184,7 @@ impl MerkleAuditTrail {
         action: &str,
         params: &str,
     ) -> Result<AuditEntry> {
+        let _lock = self.record_mutex.lock().await;
         let last_hash = self.get_last_hash().await?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -439,6 +446,7 @@ mod tests {
             signing_key: None,
             verifying_key: None,
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         };
 
         // Record 1
@@ -480,6 +488,7 @@ mod tests {
             signing_key: None,
             verifying_key: None,
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         };
 
         audit
@@ -517,6 +526,7 @@ mod tests {
             signing_key: Some(signing_key),
             verifying_key: Some(verifying_key),
             last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
         };
 
         let entry = audit

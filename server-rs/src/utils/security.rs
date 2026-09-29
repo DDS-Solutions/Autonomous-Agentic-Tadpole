@@ -154,42 +154,43 @@ pub fn redact_secrets(input: &str) -> String {
     use once_cell::sync::Lazy;
     use regex::{Regex, RegexSet};
 
-    static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
-        let patterns = vec![
-            r"(?i)bearer\s+[a-zA-Z0-9\-\._~+/]+=*",
-            r"(?i)authorization:\s*[^\s,]+",
-            r#"(?i)("?(?:neural_token|access_token|refresh_token|api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
-            r"(?i)\beyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b",
-            r"(?i)sk-[a-zA-Z0-9]{20,}",
-            r"(?i)sk-(?:ant|proj|svcacct|admin)-[a-zA-Z0-9_\-]{20,}",
-            r"(?i)x-api-key\s*:\s*[^\s,]+",
-            r"(?i)\b(?:neural_token|access_token|refresh_token|[a-zA-Z0-9_]*(?:_api_key|_token|_secret))\b\s*[:=]\s*\S+",
-            r"(?i)AIza[0-9A-Za-z-_]{30,}",
-            r"(?i)gh[pousr]_[a-zA-Z0-9]{30,}",
-            r"(?i)AKIA[0-9A-Z]{16}",
+    struct RedactionRule {
+        raw: &'static str,
+        replacement: &'static str,
+    }
+
+    static PATTERNS: Lazy<(RegexSet, Vec<(Regex, &'static str)>)> = Lazy::new(|| {
+        let rules = vec![
+            RedactionRule { raw: r"(?i)bearer\s+[a-zA-Z0-9\-\._~+/]+=*", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)authorization:\s*[^\s,]+", replacement: "[REDACTED]" },
+            RedactionRule { raw: r#"(?i)("?(?:neural_token|access_token|refresh_token|api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#, replacement: r#"$1$2[REDACTED]$3"# },
+            RedactionRule { raw: r"(?i)\beyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)sk-[a-zA-Z0-9]{20,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)sk-(?:ant|proj|svcacct|admin)-[a-zA-Z0-9_\-]{20,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)x-api-key\s*:\s*[^\s,]+", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)\b(?:neural_token|access_token|refresh_token|[a-zA-Z0-9_]*(?:_api_key|_token|_secret))\b\s*[:=]\s*\S+", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)AIza[0-9A-Za-z_-]{30,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)gsk_[a-zA-Z0-9]{20,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)hf_[a-zA-Z0-9]{20,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)gh[pousr]_[a-zA-Z0-9]{30,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)github_pat_[a-zA-Z0-9_]{22,}", replacement: "[REDACTED]" },
+            RedactionRule { raw: r"(?i)AKIA[0-9A-Z]{16}", replacement: "[REDACTED]" },
         ];
-        let set = RegexSet::new(&patterns).expect("Security patterns must be valid regex.");
-        let regexes = patterns.iter().filter_map(|p| match Regex::new(p) {
-            Ok(re) => Some(re),
-            Err(e) => {
-                tracing::error!("❌ [Security] Failed to compile individual regex '{}': {}", p, e);
-                None
-            }
+        let raw_patterns: Vec<&str> = rules.iter().map(|r| r.raw).collect();
+        let set = RegexSet::new(&raw_patterns).expect("Security patterns must be valid regex.");
+        let compiled: Vec<(Regex, &'static str)> = rules.iter().map(|r| {
+            (Regex::new(r.raw).expect("Individual pattern must compile"), r.replacement)
         }).collect();
-        (set, regexes)
+        (set, compiled)
     });
 
     let mut output = input.to_string();
-    let (set, regexes) = &*PATTERNS;
+    let (set, compiled) = &*PATTERNS;
 
     if set.is_match(&output) {
-        for (idx, re) in regexes.iter().enumerate() {
+        for (idx, (re, replacement)) in compiled.iter().enumerate() {
             if set.matches(&output).matched(idx) {
-                if idx == 2 {
-                    output = re.replace_all(&output, r#"$1$2[REDACTED]$3"#).to_string();
-                } else {
-                    output = re.replace_all(&output, "[REDACTED]").to_string();
-                }
+                output = re.replace_all(&output, *replacement).to_string();
             }
         }
     }

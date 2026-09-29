@@ -161,7 +161,7 @@ impl FilesystemAdapter {
 /// We must create the directory *before* canonicalization, as standard OS 
 /// `realpath` wrappers often fail or return inconsistent results for non-existent 
 /// terminal nodes.
-async fn canonicalize_or_create(path: &Path) -> Result<PathBuf> {
+pub(crate) async fn canonicalize_or_create(path: &Path) -> Result<PathBuf> {
     if !fs::try_exists(path).await.unwrap_or(false) {
         fs::create_dir_all(path).await.map_err(|e| {
             anyhow!(
@@ -182,7 +182,7 @@ async fn canonicalize_or_create(path: &Path) -> Result<PathBuf> {
 
 /// Canonicalize by walking up the path until we find an existing component,
 /// then append the remaining leaf segments. Handles paths that don't exist yet.
-async fn canonicalize_or_create_parent(path: &Path) -> Result<PathBuf> {
+pub(crate) async fn canonicalize_or_create_parent(path: &Path) -> Result<PathBuf> {
     // Walk up the tree to find the nearest existing ancestor
     let mut existing = path.to_path_buf();
     let mut suffix = Vec::new();

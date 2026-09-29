@@ -24,9 +24,7 @@ services:
       - DATABASE_URL=sqlite:/app/data/tadpole.db
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
-      # Mount the workspaces directory (sandboxed at data/workspaces)
-      - ./data/workspaces:/app/data/workspaces
-      # Persist the unified data directory (database, skills, workflows)
+      # Persist the unified data directory (database, skills, workflows, workspaces)
       - ./data:/app/data
       # Persist database backups
       - ./backups:/app/backups
@@ -54,7 +52,7 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in .env}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources

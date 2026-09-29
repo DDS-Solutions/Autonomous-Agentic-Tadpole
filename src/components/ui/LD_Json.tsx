@@ -35,7 +35,7 @@ export const LD_Json: React.FC<LD_Json_Props> = ({ data }) => {
     return (
         <script 
             type="application/ld+json" 
-            dangerouslySetInnerHTML={{ __html: json_string }} 
+            dangerouslySetInnerHTML={{ __html: json_string }} // nosec: JSON-LD sanitized with \\u003c and \\u003e
         />
     );
 };

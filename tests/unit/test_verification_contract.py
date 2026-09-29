@@ -1,6 +1,13 @@
 """
-Unit tests for verification_contract.py
+@docs ARCHITECTURE:Core
+
+### AI Assist Note
+**Unit Tests: Verification Contract**
 Ensures that 'unverified = failure' is strictly enforced across all helpers.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Contract bypass or missing check false-positives.
+- **Telemetry Link**: Search `[verification_contract]` in test logs.
 """
 
 import re

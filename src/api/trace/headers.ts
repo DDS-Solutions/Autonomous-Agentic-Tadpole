@@ -28,23 +28,14 @@ export function mint_headers(
     const request_id = custom_request_id || 
         (typeof crypto.randomUUID === 'function' 
             ? crypto.randomUUID() 
-            : `tr-${Date.now()}`);
-
-    let trace_id: string;
-    if (custom_request_id) {
-        const stripped = custom_request_id.replace(/-/g, '');
-        if (/^[0-9a-f]{32}$/i.test(stripped) && stripped !== '00000000000000000000000000000000') {
-            trace_id = stripped.toLowerCase();
-        } else {
-            trace_id = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+            : Array.from(crypto.getRandomValues(new Uint8Array(16)))
                 .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-        }
-    } else {
-        trace_id = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-    }
+                .join(''));
+
+    // W3C trace_id must always be securely minted from 16 cryptographically random bytes
+    const trace_id = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
     const span_id = Array.from(crypto.getRandomValues(new Uint8Array(8)))
         .map(b => b.toString(16).padStart(2, '0'))

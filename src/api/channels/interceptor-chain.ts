@@ -31,7 +31,7 @@ export class InterceptorChain {
     public async run<T>(path: string, options?: unknown): Promise<T | null> {
         for (const interceptor of this.interceptors) {
             const result = interceptor(path, options);
-            if (result !== null) {
+            if (result != null) {
                 return result as Promise<T>;
             }
         }

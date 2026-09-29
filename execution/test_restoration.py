@@ -2,8 +2,8 @@
 @docs ARCHITECTURE:Infrastructure:Execution
 
 ### AI Assist Note
-**CREATE TABLE agents (**
-Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
+**TestRestoreAgents**: Unit tests for database agent export and restore operations.
+Validates table schema population, JSON data synchronization, and integrity constraints.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.

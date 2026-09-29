@@ -407,7 +407,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                                 className="w-2.5 h-2.5 rounded-full"
                                 style={{
                                     backgroundColor: selected_node.status === NodeStatus.HUB 
-                                        ? '#a855f7' 
+                                        ? THEME_COLORS.PRIMARY 
                                         : (selected_node.status === NodeStatus.BUSY ? THEME_COLORS.SECONDARY : THEME_COLORS.SUCCESS)
                                 }}
                             />

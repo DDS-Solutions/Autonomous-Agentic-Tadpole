@@ -30,44 +30,45 @@ impl AgentRunner {
 
         tool_call.mission_id = mission_id.clone();
 
+        let payload_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call).unwrap_or_default());
+        let params_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call.params).unwrap_or_default());
+
+        let mut sanitized_tool_call = tool_call.clone();
+        if let Ok(redacted_val) = serde_json::from_str::<serde_json::Value>(&params_json) {
+            sanitized_tool_call.params = redacted_val;
+        }
+
         let entry = crate::agent::types::OversightEntry {
             id: entry_id.clone(),
             mission_id: mission_id.clone(),
-            tool_call: Some(tool_call.clone()),
+            tool_call: Some(sanitized_tool_call),
             skill_proposal: None,
             status: "pending".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
         };
 
-        // 1. Create a channel for the decision and register it IMMEDIATELY
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.state
-            .comms
-            .oversight_resolvers
-            .insert(entry_id.clone(), tx);
-
-        // 2. Register in the queue for UI discovery
-        self.state
-            .comms
-            .oversight_queue
-            .insert(entry_id.clone(), entry.clone());
-
-        // 3. [Persistence] Record action attempt in SQLite for audit history
-        let payload_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call).unwrap_or_default());
-        let params_json = crate::utils::security::redact_secrets(&serde_json::to_string(&tool_call.params).unwrap_or_default());
-
         // Verify foreign key integrity for mission_id to prevent failure in ad-hoc/test environments
         let valid_mission_id = if let Some(ref mid) = mission_id {
-            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM mission_history WHERE id = ?)")
+            match sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM mission_history WHERE id = ?)")
                 .bind(mid)
                 .fetch_one(&self.state.resources.pool)
                 .await
-                .unwrap_or(false);
-            if exists { Some(mid.clone()) } else { None }
+            {
+                Ok(true) => Some(mid.clone()),
+                Ok(false) => {
+                    tracing::debug!("Mission ID {} does not exist in mission_history, omitting FK", mid);
+                    None
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to query mission_history for mission {}: {}", mid, e);
+                    None
+                }
+            }
         } else {
             None
         };
 
+        // 1. [Persistence] Record action attempt in SQLite for audit history FIRST
         sqlx::query(
             "INSERT INTO oversight_log (id, mission_id, agent_id, entry_type, skill, params, status, payload) VALUES (?, ?, ?, 'tool_call', ?, ?, 'pending', ?)"
         )
@@ -75,10 +76,23 @@ impl AgentRunner {
         .bind(&valid_mission_id)
         .bind(&tool_call.agent_id)
         .bind(&tool_call.skill)
-        .bind(params_json)
-        .bind(payload_json)
+        .bind(&params_json)
+        .bind(&payload_json)
         .execute(&self.state.resources.pool)
         .await?;
+
+        // 2. Create channel for decision and register in memory only AFTER DB write succeeds
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.state
+            .comms
+            .oversight_resolvers
+            .insert(entry_id.clone(), tx);
+
+        // 3. Register in the queue for UI discovery
+        self.state
+            .comms
+            .oversight_queue
+            .insert(entry_id.clone(), entry.clone());
 
         // 4. Notify the UI
         self.state.emit_event(serde_json::json!({
@@ -98,8 +112,13 @@ impl AgentRunner {
         };
 
         let approved = match tokio::time::timeout(timeout_duration, rx).await {
-            Ok(Ok(decision)) => decision,
+            Ok(Ok(decision)) => {
+                self.state.comms.oversight_queue.remove(&entry_id);
+                decision
+            }
             Ok(Err(_)) => {
+                self.state.comms.oversight_queue.remove(&entry_id);
+                self.state.comms.oversight_resolvers.remove(&entry_id);
                 let _ = sqlx::query("UPDATE oversight_log SET status = 'rejected' WHERE id = ?")
                     .bind(&entry_id)
                     .execute(&self.state.resources.pool)
@@ -108,6 +127,7 @@ impl AgentRunner {
             }
             Err(_) => {
                 tracing::warn!("⏱️ Oversight request '{}' timed out", entry_id);
+                self.state.comms.oversight_queue.remove(&entry_id);
                 self.state.comms.oversight_resolvers.remove(&entry_id);
                 let _ = sqlx::query("UPDATE oversight_log SET status = 'timeout' WHERE id = ?")
                     .bind(&entry_id)

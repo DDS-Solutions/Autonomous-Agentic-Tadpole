@@ -180,6 +180,28 @@ impl HooksManager {
             cmd.env("MISSION_ID", mission_id);
         }
 
+        #[cfg(windows)]
+        {
+            if let Ok(val) = std::env::var("SystemRoot") {
+                cmd.env("SystemRoot", val);
+            }
+            if let Ok(val) = std::env::var("COMSPEC") {
+                cmd.env("COMSPEC", val);
+            }
+            if let Ok(val) = std::env::var("PATHEXT") {
+                cmd.env("PATHEXT", val);
+            }
+            if let Ok(val) = std::env::var("PATH") {
+                cmd.env("PATH", val);
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            if let Ok(val) = std::env::var("PATH") {
+                cmd.env("PATH", val);
+            }
+        }
+
         let ctx_json =
             serde_json::to_string(ctx).map_err(|e| AppError::InternalServerError(e.to_string()))?;
         let params_json = serde_json::to_string(params)

@@ -81,14 +81,18 @@ def backup_sqlite():
                 backup_path.unlink()
             raise RuntimeError(f"Backup integrity check failed: {result}")
         
-        # Checksum for tamper detection
-        backup_bytes = backup_path.read_bytes()
-        sha256 = hashlib.sha256(backup_bytes).hexdigest()
+        # Checksum for tamper detection (streaming in 64KB chunks to prevent OOM)
+        hasher = hashlib.sha256()
+        with open(backup_path, "rb") as f:
+            while chunk := f.read(65536):
+                hasher.update(chunk)
+        sha256 = hasher.hexdigest()
+        file_size = backup_path.stat().st_size
         
         meta = {
             "timestamp": ts,
             "sha256": sha256,
-            "size": len(backup_bytes),
+            "size": file_size,
             "source": str(db_path)
         }
         

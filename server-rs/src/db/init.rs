@@ -115,16 +115,40 @@ pub async fn checkpoint_wal(pool: &SqlitePool) -> Result<()> {
 /// ensuring that existing backups are never deleted prematurely if a backup fails.
 pub async fn run_backup(pool: &SqlitePool, backup_path: &str) -> Result<()> {
     let tmp_path = format!("{}.tmp", backup_path);
+    let prev_path = format!("{}.prev", backup_path);
     let _ = tokio::fs::remove_file(&tmp_path).await;
+    let _ = tokio::fs::remove_file(&prev_path).await;
 
+    // 1. Vacuum into isolated staging file
     sqlx::query("VACUUM INTO ?")
         .bind(&tmp_path)
         .execute(pool)
         .await?;
 
-    let _ = tokio::fs::remove_file(backup_path).await;
-    tokio::fs::rename(&tmp_path, backup_path).await?;
-    Ok(())
+    // 2. Safely rotate existing backup without destructive deletion
+    let backup_exists = tokio::fs::metadata(backup_path).await.is_ok();
+    if backup_exists {
+        tokio::fs::rename(backup_path, &prev_path).await?;
+    }
+
+    // 3. Promote staged file to primary backup destination
+    match tokio::fs::rename(&tmp_path, backup_path).await {
+        Ok(_) => {
+            // Backup promotion succeeded; clean up rotated predecessor
+            if backup_exists {
+                let _ = tokio::fs::remove_file(&prev_path).await;
+            }
+            Ok(())
+        }
+        Err(e) => {
+            // Promotion failed; rollback previous backup to prevent data loss
+            if backup_exists {
+                let _ = tokio::fs::rename(&prev_path, backup_path).await;
+            }
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            Err(e.into())
+        }
+    }
 }
 
 /// Executes PRAGMA integrity_check on the database pool to verify zero database corruption.

@@ -38,6 +38,9 @@ pub struct SwarmPulse {
     pub edges: Vec<PulseConnection>,
 }
 
+pub const PULSE_MAGIC: [u8; 4] = *b"TADP";
+pub const PULSE_VERSION: u16 = 1;
+
 impl SwarmPulse {
     pub fn new(timestamp: f64) -> Self {
         Self {
@@ -45,6 +48,33 @@ impl SwarmPulse {
             nodes: Vec::new(),
             edges: Vec::new(),
         }
+    }
+
+    /// Pure Rust binary encoder with magic header and version prefix.
+    pub fn encode_to_vec(&self) -> Result<Vec<u8>, String> {
+        let payload = postcard::to_allocvec(self)
+            .map_err(|e| format!("Encoding error: {}", e))?;
+        let mut buf = Vec::with_capacity(6 + payload.len());
+        buf.extend_from_slice(&PULSE_MAGIC);
+        buf.extend_from_slice(&PULSE_VERSION.to_be_bytes());
+        buf.extend_from_slice(&payload);
+        Ok(buf)
+    }
+
+    /// Pure Rust binary decoder validating magic header and version.
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<SwarmPulse, String> {
+        if bytes.len() < 6 {
+            return Err("Decoding error: payload too short for magic header".to_string());
+        }
+        if &bytes[0..4] != PULSE_MAGIC {
+            return Err("Decoding error: invalid pulse magic bytes".to_string());
+        }
+        let version = u16::from_be_bytes([bytes[4], bytes[5]]);
+        if version != PULSE_VERSION {
+            return Err(format!("Decoding error: unsupported pulse version {}", version));
+        }
+        postcard::from_bytes(&bytes[6..])
+            .map_err(|e| format!("Decoding error: {}", e))
     }
 }
 
@@ -111,6 +141,27 @@ mod tests {
 
         let decoded = decode_pulse(&encoded).expect("deserialization failed");
         assert_eq!(pulse, decoded);
+
+        // Test magic envelope roundtrip
+        let envelope = pulse.encode_to_vec().expect("envelope serialization failed");
+        assert!(envelope.starts_with(&PULSE_MAGIC));
+        let decoded_envelope = SwarmPulse::decode_from_bytes(&envelope).expect("envelope deserialization failed");
+        assert_eq!(pulse, decoded_envelope);
+    }
+
+    #[test]
+    fn test_pulse_codec_rejection() {
+        let short = vec![1, 2, 3];
+        assert!(SwarmPulse::decode_from_bytes(&short).is_err());
+
+        let invalid_magic = vec![0, 0, 0, 0, 0, 1, 10, 20];
+        assert!(SwarmPulse::decode_from_bytes(&invalid_magic).is_err());
+
+        let mut bad_version = Vec::new();
+        bad_version.extend_from_slice(&PULSE_MAGIC);
+        bad_version.extend_from_slice(&99u16.to_be_bytes());
+        bad_version.extend_from_slice(&[1, 2, 3]);
+        assert!(SwarmPulse::decode_from_bytes(&bad_version).is_err());
     }
 }
 

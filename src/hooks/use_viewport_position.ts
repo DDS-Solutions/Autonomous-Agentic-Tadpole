@@ -46,6 +46,7 @@ export const useViewportPosition = ({
     const coords_ref = useRef({ x: 0, y: 0 });
     const actual_pos_ref = useRef<Position>(position);
 
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const calculate_and_apply = useCallback(() => {
         if (!trigger_ref.current) return;
         const trigger_rect = trigger_ref.current.getBoundingClientRect();

@@ -20,6 +20,8 @@ credentials.json
 token.json
 *.pem
 *.key
+monitoring/prometheus/bearer_token
+!monitoring/prometheus/bearer_token.example
 
 # Git and logs
 .git/

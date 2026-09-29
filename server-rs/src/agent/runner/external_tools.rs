@@ -103,15 +103,46 @@ impl AgentRunner {
         } else {
             self.broadcast_agent(ctx, &format!("🌐 Surface: researching {}...", url), "info");
 
-            let is_local = url.starts_with("http://127.0.0.1")
-                || url.starts_with("http://localhost")
-                || url.starts_with("http://0.0.0.0")
-                || url.starts_with("https://127.0.0.1")
-                || url.starts_with("https://localhost")
-                || url.starts_with("https://0.0.0.0");
+            let parsed_url = match reqwest::Url::parse(url) {
+                Ok(u) => u,
+                Err(e) => {
+                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Invalid URL: {}\n</untrusted_web_content>", safe_url, e));
+                }
+            };
 
-            let mut request = self.state.resources.http_client.get(url);
-            if is_local {
+            let scheme = parsed_url.scheme();
+            if scheme != "http" && scheme != "https" {
+                let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Only http and https schemes are permitted\n</untrusted_web_content>", safe_url));
+            }
+
+            let host_str = parsed_url.host_str().unwrap_or("");
+            let host_lower = host_str.to_ascii_lowercase();
+
+            // 🛡️ [SSRF Defense] Block cloud metadata and dangerous internal addresses
+            if host_lower == "169.254.169.254"
+                || host_lower.starts_with("169.254.")
+                || host_lower == "metadata.google.internal"
+                || host_lower == "instance-data"
+                || host_lower == "0.0.0.0"
+            {
+                let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to cloud metadata or unspecified addresses is prohibited\n</untrusted_web_content>", safe_url));
+            }
+
+            // Strict local check: must be EXACT local host, NOT a subdomain like localhost.attacker.com
+            let is_strict_local = host_lower == "127.0.0.1" || host_lower == "localhost" || host_lower == "::1";
+
+            // Dedicated client with no automatic redirect following to prevent SSRF redirect bounces
+            let client = reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_else(|_| (*self.state.resources.http_client).clone());
+
+            let mut request = client.get(url);
+            if is_strict_local {
                 request = request.header(
                     reqwest::header::AUTHORIZATION,
                     format!("Bearer {}", self.state.security.deploy_token),
@@ -119,25 +150,37 @@ impl AgentRunner {
             }
 
             match request.send().await {
-                Ok(r) => {
-                    let text = r
-                        .text()
-                        .await
-                        .unwrap_or_else(|_| "Error reading text".to_string());
+                Ok(mut r) => {
+                    // Stream response with a strict 1 MB cap to prevent OOM
+                    const MAX_BYTES: usize = 1024 * 1024;
+                    let mut bytes = Vec::new();
+                    while let Ok(Some(chunk)) = r.chunk().await {
+                        if bytes.len() + chunk.len() > MAX_BYTES {
+                            let remaining = MAX_BYTES.saturating_sub(bytes.len());
+                            bytes.extend_from_slice(&chunk[..remaining]);
+                            break;
+                        }
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    let text = String::from_utf8_lossy(&bytes).to_string();
+
                     // 🛡️ [M45: Prompt-Injection Defense] Neutralize boundary escapes and chat template tokens
                     let sanitized = text
                         .replace("</untrusted_web_content>", "&lt;/untrusted_web_content&gt;")
+                        .replace("<untrusted_web_content", "&lt;untrusted_web_content")
                         .replace("<|im_start|>", "")
                         .replace("<|im_end|>", "")
                         .replace("<|endoftext|>", "");
                     let truncated = self.safe_truncate(&sanitized, 8000);
+                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
                     Ok(format!(
                         "<untrusted_web_content url=\"{}\">\n{}\n</untrusted_web_content>",
-                        url, truncated
+                        safe_url, truncated
                     ))
                 }
                 Err(e) => {
-                    Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: {}\n</untrusted_web_content>", url, e))
+                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                    Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: {}\n</untrusted_web_content>", safe_url, e))
                 }
             }
         }
@@ -150,7 +193,8 @@ impl AgentRunner {
         fc: &crate::agent::types::ToolCall,
         _usage: &mut Option<crate::agent::types::TokenUsage>,
     ) -> Result<String, ToolExecutionError> {
-        let limit = fc.args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10);
+        let raw_limit = fc.args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10);
+        let limit = raw_limit.clamp(1, 100);
 
         tracing::info!(
             "📊 [Governance] Agent {} querying financial history (limit: {})...",
@@ -206,14 +250,32 @@ impl AgentRunner {
         // Simple DuckDuckGo HTML fallback for immediate value
         let search_url = format!("https://html.duckduckgo.com/html/?q={}", urlencoding::encode(query));
         
-        match self.state.resources.http_client.get(&search_url).send().await {
-            Ok(r) => {
-                let html = r.text().await.unwrap_or_default();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| (*self.state.resources.http_client).clone());
+
+        match client.get(&search_url).send().await {
+            Ok(mut r) => {
+                const MAX_SEARCH_BYTES: usize = 512 * 1024;
+                let mut bytes = Vec::new();
+                while let Ok(Some(chunk)) = r.chunk().await {
+                    if bytes.len() + chunk.len() > MAX_SEARCH_BYTES {
+                        let remaining = MAX_SEARCH_BYTES.saturating_sub(bytes.len());
+                        bytes.extend_from_slice(&chunk[..remaining]);
+                        break;
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                let html = String::from_utf8_lossy(&bytes).to_string();
                 // Simple regex to extract search result snippets from DDG HTML
                 let re = regex::Regex::new(r#"class="result__snippet"[^>]*>([^<]+)</span>"#).unwrap();
                 let mut snippets = Vec::new();
                 for cap in re.captures_iter(&html) {
-                    snippets.push(cap[1].to_string());
+                    let snippet = cap[1].to_string()
+                        .replace("</untrusted_web_content>", "&lt;/untrusted_web_content&gt;")
+                        .replace("<untrusted_web_content", "&lt;untrusted_web_content");
+                    snippets.push(snippet);
                     if snippets.len() >= 5 { break; }
                 }
 

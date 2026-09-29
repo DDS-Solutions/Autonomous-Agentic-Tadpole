@@ -1,6 +1,6 @@
 {
   "name": "verify_telemetry",
-  "description": "Performs a deterministic audit of mission telemetry to verify functional success, bypassing conversational gaps caused by resource throttling.",
+  "description": "Performs a deterministic audit of mission telemetry files and database logs to verify span integrity and execution completion.",
   "execution_command": "python execution/verify_telemetry.py",
   "schema": {
     "type": "object",

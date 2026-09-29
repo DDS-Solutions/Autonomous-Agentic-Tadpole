@@ -17,16 +17,25 @@ if not exist ".env" (
 :: Read PORT from .env (default 8000)
 set "PORT=8000"
 for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
-    if /i "%%A"=="PORT" set "PORT=%%B"
+    if /i "%%A"=="PORT" set "PORT=%%~B"
 )
 
 :: ─────────────────────────────────────────────────────────────
-:: Pre-flight: check port is free
+:: Pre-flight: check backend port is free (exact boundary matching)
 :: ─────────────────────────────────────────────────────────────
-netstat -ano 2>nul | findstr ":!PORT!.*LISTENING" >nul
+netstat -ano 2>nul | findstr /R /C:":!PORT!  .*LISTENING" >nul
 if !errorlevel! == 0 (
     echo ⚠️  [WARNING] Port !PORT! is already in use. Is a previous instance still running?
-    echo    Run stop_AAtadpole.bat first, then retry.
+    echo    Run stop_AA_tadpole.bat first, then retry.
+    pause
+    exit /b 1
+)
+
+:: Pre-flight: check frontend port 5173 is free
+netstat -ano 2>nul | findstr /R /C:":5173  .*LISTENING" >nul
+if !errorlevel! == 0 (
+    echo ⚠️  [WARNING] Frontend port 5173 is already in use by another process.
+    echo    Run stop_AA_tadpole.bat or free port 5173, then retry.
     pause
     exit /b 1
 )
@@ -71,8 +80,23 @@ echo.
 echo 🎨 Starting Dashboard UI...
 start "Tadpole Dashboard [Frontend]" cmd /k "npm run dev"
 
+:: Verify frontend binds port 5173 (up to 15s)
+set "UI_READY=0"
+for /l %%I in (1,1,15) do (
+    if !UI_READY! == 0 (
+        timeout /t 1 /nobreak >nul
+        netstat -ano 2>nul | findstr /R /C:":5173  .*LISTENING" >nul
+        if !errorlevel! == 0 set "UI_READY=1"
+    )
+)
+
 echo.
-echo ✅ [SUCCESS] Both systems are running.
+if !UI_READY! == 0 (
+    echo ⚠️  [WARNING] Dashboard UI has not bound port 5173 yet. Check "Tadpole Dashboard [Frontend]" window.
+) else (
+    echo ✅ Dashboard UI confirmed on port 5173.
+    echo ✅ [SUCCESS] Both systems are running.
+)
 echo 🌐 Dashboard: http://localhost:5173
 echo 🧠 Engine:    http://localhost:!PORT!
 echo.

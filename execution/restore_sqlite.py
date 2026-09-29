@@ -67,22 +67,27 @@ def verify_checksum(backup_path: Path, allow_unverified: bool = False) -> bool:
             print(f"❌ Error: SHA-256 missing in metadata for {backup_path}. Pass --allow-unverified to bypass.", file=sys.stderr)
             return False
             
-        current_sha = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+        hasher = hashlib.sha256()
+        with open(backup_path, "rb") as f:
+            while chunk := f.read(65536):
+                hasher.update(chunk)
+        current_sha = hasher.hexdigest()
         return current_sha == expected_sha
     except Exception as e:
         print(f"❌ Error reading metadata: {e}", file=sys.stderr)
         return False
 
 def get_row_counts(db_path: Path) -> dict:
-    """Retrieves a dict of table names and their row counts for validation."""
-    counts = {}
+    """Retrieves a dict of table names and their row counts for validation. Fails closed on error."""
     if not db_path.exists():
-        return counts
+        raise FileNotFoundError(f"Database file does not exist: {db_path}")
     try:
-        conn = sqlite3.connect(db_path)
+        src_uri = f"file:{db_path.resolve()}?mode=ro"
+        conn = sqlite3.connect(src_uri, uri=True)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [row[0] for row in cursor.fetchall()]
+        counts = {}
         for t in tables:
             # Skip SQLite internal tables
             if t.startswith("sqlite_"):
@@ -91,22 +96,36 @@ def get_row_counts(db_path: Path) -> dict:
             cursor.execute(f'SELECT COUNT(*) FROM "{safe_t}";')
             counts[t] = cursor.fetchone()[0]
         conn.close()
+        if not counts:
+            raise ValueError(f"No application tables found in database at {db_path}")
+        return counts
     except Exception as e:
-        print(f"⚠️ Failed to get row counts for {db_path}: {e}", file=sys.stderr)
-    return counts
+        raise RuntimeError(f"Failed to get row counts for {db_path}: {e}") from e
 
 def check_live_engine(port: int = 8000) -> bool:
     """Checks if the Tadpole OS server-rs engine is actively running."""
     import urllib.request
+    import urllib.error
+    import socket
     port = int(os.getenv("PORT", str(port)))
     bind_address = os.getenv("BIND_ADDRESS", "127.0.0.1")
+    if bind_address == "0.0.0.0":
+        bind_address = "127.0.0.1"
     url = f"http://{bind_address}:{port}/health"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "TadpoleOS/1.1.58"})
-        with urllib.request.urlopen(req, timeout=1.5) as response:
+        with urllib.request.urlopen(req, timeout=3.0) as response:
             return response.status == 200
+    except urllib.error.HTTPError:
+        # HTTP response status indicates server process is live and listening
+        return True
     except Exception:
-        return False
+        # Fallback to direct TCP socket connection check
+        try:
+            with socket.create_connection((bind_address, port), timeout=1.0):
+                return True
+        except Exception:
+            return False
 
 def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force: bool = False):
     # 🛡️ [M19: Live-Engine Guard] Prevent restore over active SQLite connection pool
@@ -179,8 +198,11 @@ def restore_sqlite(backup_file_path: str, allow_unverified: bool = False, force:
         # Verify row count parity
         restored_counts = get_row_counts(db_path)
         mismatch = False
+        if set(backup_counts.keys()) != set(restored_counts.keys()):
+            print(f"⚠️ Table set mismatch between backup and restored database", file=sys.stderr)
+            mismatch = True
         for t, count in backup_counts.items():
-            restored_count = restored_counts.get(t, 0)
+            restored_count = restored_counts.get(t)
             if restored_count != count:
                 print(f"⚠️ Row count mismatch in table '{t}': backup had {count}, restored has {restored_count}", file=sys.stderr)
                 mismatch = True

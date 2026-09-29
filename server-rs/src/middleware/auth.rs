@@ -83,6 +83,7 @@ pub async fn validate_token(
         return Ok(next.run(req).await);
     }
 
+    let client_ip = crate::middleware::extract_client_ip(&req);
     let mut token_opt = None;
 
     // Check for standard Authorization header first
@@ -100,6 +101,7 @@ pub async fn validate_token(
     if let Some(ref token) = token_opt {
         if let Some(token_name) = match_token(token, &state) {
             tracing::debug!("🔑 [Auth] Authorized request using {}", token_name);
+            crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
             return Ok(next.run(req).await);
         } else {
             tracing::warn!("🚫 Invalid token provided");
@@ -131,6 +133,7 @@ pub async fn validate_token(
             if let Some(token) = protocol.strip_prefix("bearer.") {
                 if let Some(token_name) = match_token(token, &state) {
                     tracing::info!("🔑 [Auth] Authorized WebSocket request using {}", token_name);
+                    crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
                     return Ok(next.run(req).await);
                 }
             }

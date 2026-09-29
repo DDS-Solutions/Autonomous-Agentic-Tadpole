@@ -59,7 +59,7 @@ ENV CARGO_PROFILE_RELEASE_LTO=false
 ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 # ORT_STRATEGY=download is faster and usually works on Ubuntu 24.04
 ENV ORT_STRATEGY=download
-ENV RUSTFLAGS="-C lto=off -C opt-level=z -C debuginfo=0 -C link-arg=-fuse-ld=lld $EXTRA_RUSTFLAGS"
+ENV RUSTFLAGS="-C lto=off -C opt-level=3 -C debuginfo=0 -C link-arg=-fuse-ld=lld $EXTRA_RUSTFLAGS"
 
 RUN cd server-rs && cargo build --target-dir /tmp/target --release $CARGO_BUILD_FLAGS
 
@@ -82,7 +82,7 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --break-system-packages skillspector
+RUN python3 -m pip install --break-system-packages --no-cache-dir skillspector==0.1.3
 
 # Copy binary from builder
 COPY --from=builder /tmp/target/release/server-rs /app/server-rs-bin

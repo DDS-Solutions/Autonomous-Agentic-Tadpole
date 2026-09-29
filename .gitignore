@@ -52,6 +52,8 @@ __pycache__/
 dist/
 coverage/
 reports/
+pkg/
+**/pkg/
 audit_full_report.*
 audit_production_report.md
 test_permissions.txt

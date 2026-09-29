@@ -40,8 +40,10 @@ from datetime import datetime
 
 # Ensure stdout handles UTF-8 on Windows
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    if hasattr(sys.stderr, "buffer"):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # ANSI colors
 class Colors:
@@ -77,7 +79,7 @@ VERIFICATION_SUITE = [
     {
         "category": "Security",
         "checks": [
-            ("Security Scan", ".agent/skills/vulnerability-scanner/scripts/security_scan.py", True),
+            ("Security Scan", "execution/security_scan.py", True),
             ("Dependency Analysis", ".agent/skills/vulnerability-scanner/scripts/dependency_analyzer.py", False),
             ("MCP Audit", "execution/mcp_audit.py", True),
         ]
@@ -87,9 +89,11 @@ VERIFICATION_SUITE = [
     {
         "category": "Code Quality",
         "checks": [
+            ("Documentation Parity", "execution/parity_guard.py", True),
+            ("AI Context Alignment", "execution/verify_ai_context.py", True),
+            ("Nexus Invariant Guard", "execution/nexus_adversarial_guard.py", True),
             ("Lint Check", ".agent/skills/lint-and-validate/scripts/lint_runner.py", True),
             ("Type Coverage", ".agent/skills/lint-and-validate/scripts/type_coverage.py", False),
-            ("Documentation Parity", "execution/parity_guard.py", True),
         ]
     },
     
@@ -97,6 +101,8 @@ VERIFICATION_SUITE = [
     {
         "category": "Data Layer",
         "checks": [
+            ("Database Health Check", "execution/db_health_check.py", True),
+            ("Audit Chain Verification", "execution/verify_audit_chain.py", True),
             ("Schema Validation", ".agent/skills/database-design/scripts/schema_validator.py", False),
         ]
     },
@@ -170,13 +176,13 @@ def run_script(name: str, script_path: Path, project_path: str, url: Optional[st
             print_error(f"{name}: Required script not found at {script_path}")
             return {"name": name, "passed": False, "skipped": False, "duration": 0, "error": f"Required script not found: {script_path}"}
         print_warning(f"{name}: Script not found, skipping (optional)")
-        return {"name": name, "passed": True, "skipped": True, "duration": 0}
+        return {"name": name, "passed": False, "skipped": True, "duration": 0}
     
     print_step(f"Running: {name}")
     start_time = datetime.now()
     
-    # Build command
-    cmd = ["python", str(script_path), project_path]
+    # Build command using current python executable
+    cmd = [sys.executable, str(script_path), project_path]
     if url and ("lighthouse" in script_path.name.lower() or "playwright" in script_path.name.lower()):
         cmd.append(url)
     
@@ -192,6 +198,8 @@ def run_script(name: str, script_path: Path, project_path: str, url: Optional[st
         
         duration = (datetime.now() - start_time).total_seconds()
         passed = result.returncode == 0
+        if result.stderr and "Traceback (most recent call last)" in result.stderr:
+            passed = False
         
         if passed:
             print_success(f"{name}: PASSED ({duration:.1f}s)")
@@ -318,10 +326,28 @@ Examples:
         
         # Skip if requires URL and not provided
         if requires_url and not args.url:
+            for check in suite["checks"]:
+                name = check[0]
+                results.append({
+                    "name": name,
+                    "passed": False,
+                    "skipped": True,
+                    "category": category,
+                    "duration": 0
+                })
             continue
         
         # Skip E2E if flag set
         if args.no_e2e and category == "E2E Testing":
+            for check in suite["checks"]:
+                name = check[0]
+                results.append({
+                    "name": name,
+                    "passed": False,
+                    "skipped": True,
+                    "category": category,
+                    "duration": 0
+                })
             continue
         
         print_header(f"[{category.upper()}]")

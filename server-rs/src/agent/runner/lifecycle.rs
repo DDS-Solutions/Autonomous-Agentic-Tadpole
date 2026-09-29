@@ -119,8 +119,9 @@ impl AgentRunner {
             )));
         }
 
-        let depth = payload.swarm_depth.unwrap_or(0);
         let lineage = payload.swarm_lineage.as_deref().unwrap_or(&[]);
+        let lineage_depth = lineage.len() as u32;
+        let depth = std::cmp::max(payload.swarm_depth.unwrap_or(0), lineage_depth);
 
         // CODE-01 FIX: Use iterator instead of to_string() allocation on hot path.
         if lineage.iter().any(|id| id == agent_id) {
@@ -193,7 +194,10 @@ impl AgentRunner {
             }
         }
 
-        let depth = payload.swarm_depth.unwrap_or(0);
+        let depth = std::cmp::max(
+            payload.swarm_depth.unwrap_or(0),
+            payload.swarm_lineage.as_ref().map(|l| l.len() as u32).unwrap_or(0),
+        );
         // Record telemetry only — never mutate the enforcement limit
         self.state
             .governance
@@ -205,30 +209,27 @@ impl AgentRunner {
         // 🏥 [Health Check] Failure Rate Throttling
         if let Some(agent) = self.state.registry.agents.get(agent_id) {
             if agent.value().health.failure_count >= 5 {
-                let last_fail = agent
-                    .value()
-                    .health
-                    .last_failure_at
-                    .unwrap_or_else(chrono::Utc::now);
-                let cooldown = chrono::Duration::minutes(15);
-                if chrono::Utc::now() - last_fail < cooldown {
-                    tracing::warn!(
-                        "🏥 [Health] Agent {} is degraded (Failure Count: {})",
-                        agent_id,
-                        agent.value().health.failure_count
-                    );
-                    let agent_name = agent.value().identity.name.clone();
-                    self.state.broadcast_agent(
-                        &format!(
-                            "🏥 Health: in self-heal cooldown (Failure Count: {}).",
+                if let Some(last_fail) = agent.value().health.last_failure_at {
+                    let cooldown = chrono::Duration::minutes(15);
+                    if chrono::Utc::now() - last_fail < cooldown {
+                        tracing::warn!(
+                            "🏥 [Health] Agent {} is degraded (Failure Count: {})",
+                            agent_id,
                             agent.value().health.failure_count
-                        ),
-                        "warning",
-                        payload.cluster_id.clone(),
-                        agent_id,
-                        &agent_name,
-                    );
-                    return Err(AppError::BadRequest("Agent Degraded. Self-heal cooldown active.".to_string()));
+                        );
+                        let agent_name = agent.value().identity.name.clone();
+                        self.state.broadcast_agent(
+                            &format!(
+                                "🏥 Health: in self-heal cooldown (Failure Count: {}).",
+                                agent.value().health.failure_count
+                            ),
+                            "warning",
+                            payload.cluster_id.clone(),
+                            agent_id,
+                            &agent_name,
+                        );
+                        return Err(AppError::BadRequest("Agent Degraded. Self-heal cooldown active.".to_string()));
+                    }
                 }
             }
         }

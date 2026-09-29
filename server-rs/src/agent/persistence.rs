@@ -403,14 +403,22 @@ async fn auto_subscribe_agent_skills(
     let now = chrono::Utc::now().timestamp();
     for skill_id in &agent.capabilities.skills {
         let sub_id = format!("sub-{}-{}", skill_id, agent.identity.id);
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(agent.identity.id.as_bytes());
+        hasher.update(b":");
+        hasher.update(skill_id.as_bytes());
+        let scope_hash = hex::encode(hasher.finalize());
+
         sqlx::query(
             "INSERT OR IGNORE INTO skill_subscriptions
              (id, agent_id, skill_id, scope_hash, subscription_status, installed_at, last_updated_at, notes)
-             VALUES (?, ?, ?, 'dummy', 'approved', ?, ?, 'Pre-approved system skill')"
+             VALUES (?, ?, ?, ?, 'pending', ?, ?, 'Awaiting operator approval')"
         )
         .bind(&sub_id)
         .bind(&agent.identity.id)
         .bind(skill_id)
+        .bind(&scope_hash)
         .bind(now)
         .bind(now)
         .execute(&mut *conn)
@@ -482,8 +490,13 @@ async fn sync_manifests_for_agent(
 /// variable (e.g., `GOOGLE_API_KEY`) is present. Environment variables are treated 
 /// as the Sovereign Root of Truth for credentials.
 pub async fn load_providers(base_dir: &std::path::Path) -> Vec<ProviderConfig> {
-    let providers_file = crate::utils::security::validate_path(base_dir, PROVIDERS_FILE)
-        .unwrap_or_else(|_| crate::utils::security::SafePath::from_trusted(base_dir.join(PROVIDERS_FILE)));
+    let providers_file = match crate::utils::security::validate_path(base_dir, PROVIDERS_FILE) {
+        Ok(path) => path,
+        Err(err) => {
+            tracing::error!("⚠️ [Persistence] Security boundary violation validating providers file: {}", err);
+            return crate::agent::registry::get_default_providers();
+        }
+    };
     let mut providers = if providers_file.exists() {
         read_json_file::<Vec<ProviderConfig>>(&providers_file).await.unwrap_or_else(|| {
             tracing::error!(
@@ -545,8 +558,13 @@ pub async fn save_providers(
 
 /// Loads the model registry from disk.
 pub async fn load_models(base_dir: &std::path::Path) -> Vec<ModelEntry> {
-    let models_file = crate::utils::security::validate_path(base_dir, MODELS_FILE)
-        .unwrap_or_else(|_| crate::utils::security::SafePath::from_trusted(base_dir.join(MODELS_FILE)));
+    let models_file = match crate::utils::security::validate_path(base_dir, MODELS_FILE) {
+        Ok(path) => path,
+        Err(err) => {
+            tracing::error!("⚠️ [Persistence] Security boundary violation validating models file: {}", err);
+            return crate::agent::registry::get_default_models();
+        }
+    };
     if models_file.exists() {
         if let Some(models) = read_json_file::<Vec<ModelEntry>>(&models_file).await {
             return models;
@@ -605,7 +623,7 @@ pub async fn reap_stale_agents(pool: &SqlitePool, threshold_secs: i64) -> Result
     // Use safe subtraction to determine the high-water mark for zombie processes.
     let threshold_time = now - chrono::Duration::seconds(threshold_secs);
 
-    let res = sqlx::query("UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working') AND (heartbeat_at IS NULL OR heartbeat_at < ?)")
+    let res = sqlx::query("UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working') AND ((heartbeat_at IS NOT NULL AND heartbeat_at < ?1) OR (heartbeat_at IS NULL AND (created_at IS NULL OR created_at < ?1)))")
         .bind(threshold_time)
         .execute(pool)
         .await?;
@@ -791,10 +809,9 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query("DELETE FROM audit_trail WHERE agent_id = ?")
-        .bind(agent_id)
-        .execute(&mut *tx)
-        .await?;
+    // FORENSIC INTEGRITY: audit_trail is an append-only cryptographic Merkle chain.
+    // Deleting historical entries breaks hash linkage (prev_hash -> current_hash)
+    // and violates audit immutability. Historical audit records are preserved intact.
 
     sqlx::query("DELETE FROM skill_subscriptions WHERE agent_id = ?")
         .bind(agent_id)
@@ -1089,10 +1106,38 @@ mod tests {
             .execute(&pool)
             .await?;
 
+        sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("dir-1")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("cascade-agent-1")
+            .bind("self-instruction")
+            .bind("pending")
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO peer_reviews (id, mission_id, requester_id, reviewer_id, artifact, verdict) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("pr-1")
+            .bind(mid)
+            .bind("cascade-agent-1")
+            .bind("cascade-agent-1")
+            .bind("artifact-data")
+            .bind("approved")
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO agent_quotas (entity_id, entity_type, daily_budget_usd, used_usd) VALUES (?, ?, ?, ?)")
+            .bind("cascade-agent-1")
+            .bind("agent")
+            .bind(50.0)
+            .bind(0.0)
+            .execute(&pool)
+            .await?;
+
         // 3. Delete cascade must succeed child-first without foreign key constraint failure
         delete_agent_cascade(&pool, "cascade-agent-1").await?;
 
-        // 4. Verify all records are wiped cleanly
+        // 4. Verify all records across all tables are wiped cleanly
         let agent_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = 'cascade-agent-1'")
             .fetch_one(&pool)
             .await?;
@@ -1115,6 +1160,63 @@ mod tests {
             .fetch_one(&pool)
             .await?;
         assert_eq!(context_count, 0);
+
+        let directive_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_directives WHERE mission_id = ?")
+            .bind(mid)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(directive_count, 0);
+
+        let pr_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM peer_reviews WHERE mission_id = ?")
+            .bind(mid)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(pr_count, 0);
+
+        let quota_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_quotas WHERE entity_id = 'cascade-agent-1'")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(quota_count, 0);
+
+        let manifest_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_manifest WHERE agent_id = 'cascade-agent-1'")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(manifest_count, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_reap_stale_agents_respects_null_heartbeat_grace_period() -> Result<(), AppError> {
+        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
+
+        // 1. Fresh agent created just now, currently working, heartbeat_at IS NULL
+        let fresh_agent = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "fresh-agent".to_string(),
+                name: "Fresh Worker".to_string(),
+                role: "Worker".to_string(),
+                ..Default::default()
+            },
+            health: crate::agent::types::AgentHealth {
+                status: "working".to_string(),
+                heartbeat_at: None,
+                ..Default::default()
+            },
+            created_at: Some(chrono::Utc::now()),
+            version: 1,
+            ..Default::default()
+        };
+        save_agent_db(&pool, &fresh_agent).await?;
+
+        // Reaping with 30s threshold must NOT harvest the fresh worker
+        let reaped = reap_stale_agents(&pool, 30).await?;
+        assert_eq!(reaped, 0, "Fresh agent within grace window must not be reaped");
+
+        let status: String = sqlx::query_scalar("SELECT status FROM agents WHERE id = 'fresh-agent'")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(status, "working");
 
         Ok(())
     }
