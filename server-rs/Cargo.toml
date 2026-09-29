@@ -103,7 +103,7 @@ specta-typescript = "0.0.8"
 specta = { version = "2.0.0-rc.21", features = ["derive", "chrono", "serde", "export", "serde_json"] }
 urlencoding = "2.1.3"
 url = "2.5"
-which = "4.4.2"
+which = "8.0.6"
 
 [features]
 # default = ["vector-memory", "neural-audio"]
