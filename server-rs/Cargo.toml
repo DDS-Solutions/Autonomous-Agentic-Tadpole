@@ -43,7 +43,7 @@ rand = "0.10.1"
 chacha20 = "0.10.2"
 uuid = { version = "1.8", features = ["v4", "fast-rng", "macro-diagnostics"] }
 chrono = { version = "0.4", features = ["serde"] }
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+ed25519-dalek = { version = "3.0", features = ["rand_core"] }
 zeroize = { version = "1.9.0", features = ["derive"] }
 secrecy = "0.10.3"
 dashmap = "6.0"
