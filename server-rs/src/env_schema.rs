@@ -165,11 +165,25 @@ impl EnvSchema {
         true
     }
 
+    /// Embedded compile-time fallback schema ensures standalone release binaries
+    /// can always validate the schema even without the source tree on disk.
+    pub const EMBEDDED_SCHEMA: &'static str = include_str!("../../.env.schema");
+
     /// Load and parse a `.env.schema` file from disk.
     /// Understands `@required`, `@sensitive`, `@type=...`, `@default=...` decorators.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Ok(Self::parse_str(&content))
+    }
+
+    /// Load from disk if resolved, otherwise fallback seamlessly to the embedded schema.
+    pub fn load_or_embedded(path: &Path) -> Self {
+        if let Some(resolved) = resolve_schema_path(Some(path)) {
+            if let Ok(content) = std::fs::read_to_string(&resolved) {
+                return Self::parse_str(&content);
+            }
+        }
+        Self::parse_str(Self::EMBEDDED_SCHEMA)
     }
 
     /// Validate all schema entries against the current environment.
@@ -262,23 +276,17 @@ pub fn resolve_schema_path(explicit_path: Option<&Path>) -> Option<std::path::Pa
 /// Run startup validation. Logs a clear banner and returns any fatal errors.
 pub fn validate_and_report(schema_path: &Path) -> anyhow::Result<()> {
     let resolved = resolve_schema_path(Some(schema_path));
-    let path = match resolved {
-        Some(p) => p,
+    let (schema, _source_desc) = match resolved {
+        Some(p) => (EnvSchema::load(&p)?, format!("{:?}", p)),
         None => {
-            let msg = format!(
-                "No .env.schema found at {:?} (or in WORKSPACE_ROOT / parent directories).",
+            tracing::info!(
+                "ℹ️  [EnvSchema] No on-disk .env.schema found at {:?}; utilizing compiled-in embedded schema.",
                 schema_path
             );
-            if cfg!(debug_assertions) {
-                tracing::warn!("⚠️  [EnvSchema] {} — skipping validation in dev mode.", msg);
-                return Ok(());
-            } else {
-                anyhow::bail!("🚨 FATAL: {} Engine refuses to boot without environment validation.", msg);
-            }
+            (EnvSchema::parse_str(EnvSchema::EMBEDDED_SCHEMA), "compiled-in embedded schema".to_string())
         }
     };
 
-    let schema = EnvSchema::load(&path)?;
     let results = schema.validate();
 
     tracing::info!("╔══════════════════════════════════════════════════════╗");
@@ -432,6 +440,17 @@ TEST_SET_SCHEMA_VAR_456=
         let schema = EnvSchema::parse_str(schema_raw);
         assert_eq!(schema.entries.len(), 1);
         assert_eq!(schema.entries[0].name, "NEURAL_TOKEN");
+    }
+
+    #[test]
+    fn test_env_schema_embedded_fallback() {
+        let nonexistent = Path::new("nonexistent_schema_file.schema");
+        let schema = EnvSchema::load_or_embedded(nonexistent);
+        assert!(!schema.entries.is_empty(), "Embedded schema should contain parsed entries");
+        assert!(
+            schema.entries.iter().any(|e| e.name == "NEURAL_TOKEN"),
+            "Embedded schema must include NEURAL_TOKEN"
+        );
     }
 }
 

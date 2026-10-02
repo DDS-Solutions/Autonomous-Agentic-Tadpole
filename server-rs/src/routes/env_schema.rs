@@ -30,30 +30,19 @@ use std::sync::Arc;
 
 /// Returns safe metadata about all known environment variables.
 /// Sensitive values are NEVER included — only whether they are set.
-#[tracing::instrument(skip(state), name = "system::get_env_schema")]
+#[tracing::instrument(skip(_state), name = "system::get_env_schema")]
 pub async fn get_env_schema(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     let schema_path = std::path::Path::new(".env.schema");
 
-    match crate::env_schema::EnvSchema::load(schema_path) {
-        Ok(schema) => {
-            let metadata = schema.to_safe_metadata();
-            Ok(Json(serde_json::json!({
-                "status": "ok",
-                "count": metadata.len(),
-                "variables": metadata
-            })))
-        }
-        Err(e) => {
-            let safe_err = state.security.secret_redactor.redact(&format!("{}", e));
-            Ok(Json(serde_json::json!({
-                "status": "error",
-                "message": format!("Failed to load schema: {}", safe_err),
-                "variables": []
-            })))
-        }
-    }
+    let schema = crate::env_schema::EnvSchema::load_or_embedded(schema_path);
+    let metadata = schema.to_safe_metadata();
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "count": metadata.len(),
+        "variables": metadata
+    })))
 }
 
 
