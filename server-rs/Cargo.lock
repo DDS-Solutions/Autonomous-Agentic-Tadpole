@@ -7654,14 +7654,11 @@ dependencies = [
 
 [[package]]
 name = "which"
-version = "4.4.2"
+version = "8.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87ba24419a2078cd2b0f2ede2691b6c66d8e47836da3b6db8265ebad47afbfc7"
+checksum = "bae2f2b2b816647a1cab1acc91f5bd20812d53cb344382635ec2181940c8034f"
 dependencies = [
- "either",
- "home",
- "once_cell",
- "rustix 0.38.44",
+ "libc",
 ]
 
 [[package]]
