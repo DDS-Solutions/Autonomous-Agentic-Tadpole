@@ -127,7 +127,7 @@ scrape_configs:
   - job_name: 'tadpole'
     static_configs:
       - targets: ['127.0.0.1:8000']
-    metrics_path: '/v1/engine/health'
+    metrics_path: '/metrics'
     bearer_token: 'your-neural-token'
 ```
 

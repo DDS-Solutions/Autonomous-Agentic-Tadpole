@@ -81,9 +81,9 @@ let app = create_router(state.into());
 
 ## 401 Unauthorized on All Requests
 
-**Check 1:** Is the token correct?
+**Check 1:** Is the token correct? Test against a protected endpoint:
 ```bash
-curl -v http://127.0.0.1:8000/v1/engine/health \
+curl -v http://127.0.0.1:8000/v1/agents \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 ```
 

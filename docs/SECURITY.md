@@ -46,7 +46,8 @@ Sec-WebSocket-Protocol: bearer.<token>
 
 Unauthenticated public routes are strictly limited to:
 
-- `GET /v1/engine/health`
+- `GET /health` (root engine health ping)
+- `GET /v1/engine/health` (API v1 engine health ping)
 
 All WebSocket connections (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) are protected and require token authentication via the `Sec-WebSocket-Protocol: bearer.<token>` subprotocol header. Route protection is enforced in `server-rs/src/router.rs`.
 

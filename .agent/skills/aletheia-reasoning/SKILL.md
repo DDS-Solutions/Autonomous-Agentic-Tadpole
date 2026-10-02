@@ -1,12 +1,3 @@
->This rewrite transforms the **Aletheia Reasoning Protocol** from a theoretical description into an **operational mandate**. 
-
-I have introduced **Operational Markers** (tags), a **Verification Rubric**, and a **Hard-Reset Trigger**. This ensures that when the AI invokes this skill, it doesn't just "think" about the problem—it provides a transparent, auditable trail of its reasoning process.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
 > This document is part of the "Sovereign Reality" documentation.

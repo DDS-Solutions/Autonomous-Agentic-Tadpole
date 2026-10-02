@@ -32,7 +32,13 @@ npm run dev
 # Vite HMR updates instantly on save
 ```
 
-### 3. VS Code / IDE Setup
+### 3. Git Hooks Setup
+
+```bash
+git config core.hooksPath hooks
+```
+
+### 4. VS Code / IDE Setup
 
 Recommended extensions:
 - `rust-analyzer` — Rust LSP
@@ -84,11 +90,11 @@ Recommended extensions:
 // server-rs/src/routes/my_feature.rs
 use crate::error::AppError;
 use crate::state::AppState;
-use axum::{Extension, Json};
+use axum::{extract::State, Json};
 use std::sync::Arc;
 
 pub async fn get_my_data(
-    Extension(state): Extension<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // ... implementation
     Ok(Json(serde_json::json!({ "data": "hello" })))

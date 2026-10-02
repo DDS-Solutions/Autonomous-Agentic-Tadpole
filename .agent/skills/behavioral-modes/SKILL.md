@@ -1,12 +1,3 @@
->This rewrite upgrades the **Behavioral Modes** skill from a simple list of personas to a **State Machine** for the AI's operational logic. 
-
-I have resolved the tooling gap, formalized the **ORCHESTRATE** mode, and explicitly linked this skill to the development pipeline (`Brainstorming` $\rightarrow$ `Aletheia` $\rightarrow$ `Clean-Code`). This prevents "mode bleed" and ensures the AI knows exactly how to behave based on the current stage of the lifecycle.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
 > This document is part of the "Sovereign Reality" documentation.

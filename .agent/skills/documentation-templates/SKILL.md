@@ -11,15 +11,6 @@
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py` and `.agent/memory/MEMORY.md`.
 
-> This rewrite transforms the **Documentation Templates** from a passive list of blueprints into an **Integrated Memory System**. 
-
-It is now explicitly linked to the `brainstorming` pipeline (where decisions are made) and the `clean-code` standard (where comments are restricted). It also introduces the "Knowledge Heritage" standard, ensuring that every new skill created by the AI follows the exact same metadata format for long-term traceability.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 ---
 name: documentation-templates
 description: Standardized documentation protocols for humans and AI. Manages READMEs, API specs, ADRs, and AI-native `llms.txt` maps.

@@ -1,12 +1,3 @@
->This rewrite transforms the **Code Review Checklist** from a passive list of tips into a **Rigorous Audit Engine**. 
-
-I have integrated it directly into the `REVIEW` mode of the `behavioral-modes` skill and the standards of the `clean-code` skill. I also added a "Sovereign Context" section to handle the difference between new and legacy code, ensuring the AI doesn't waste time over-engineering old files while remaining ruthless with new ones.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
 > This document is part of the "Sovereign Reality" documentation.

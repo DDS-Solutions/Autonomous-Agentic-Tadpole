@@ -1008,18 +1008,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_atomic_claiming_and_reaping() -> Result<(), AppError> {
-        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
 
-        // 1. Setup Schema (abbreviated for the test)
-        sqlx::query("CREATE TABLE agents (id TEXT PRIMARY KEY, status TEXT NOT NULL, heartbeat_at DATETIME)")
-            .execute(&pool)
-            .await?;
-
-        sqlx::query(
-            "INSERT INTO agents (id, status, heartbeat_at) VALUES ('agent-1', 'idle', NULL)",
-        )
-        .execute(&pool)
-        .await?;
+        let agent = crate::agent::types::EngineAgent {
+            identity: crate::agent::types::AgentIdentity {
+                id: "agent-1".to_string(),
+                name: "Agent 1".to_string(),
+                role: "Worker".to_string(),
+                ..Default::default()
+            },
+            health: crate::agent::types::AgentHealth {
+                status: "idle".to_string(),
+                heartbeat_at: None,
+                ..Default::default()
+            },
+            created_at: Some(chrono::Utc::now() - chrono::Duration::seconds(700)),
+            version: 1,
+            ..Default::default()
+        };
+        save_agent_db(&pool, &agent).await?;
 
         // 2. Test Claiming
         let success = claim_agent(&pool, "agent-1").await?;
@@ -1107,7 +1114,7 @@ mod tests {
             .await?;
 
         sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind("dir-1")
+            .bind("dir-2")
             .bind(mid)
             .bind("cascade-agent-1")
             .bind("cascade-agent-1")
@@ -1116,21 +1123,33 @@ mod tests {
             .execute(&pool)
             .await?;
 
-        sqlx::query("INSERT INTO peer_reviews (id, mission_id, requester_id, reviewer_id, artifact, verdict) VALUES (?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO peer_reviews (id, mission_id, requester_id, reviewer_id, content_to_review, status) VALUES (?, ?, ?, ?, ?, ?)")
             .bind("pr-1")
             .bind(mid)
             .bind("cascade-agent-1")
             .bind("cascade-agent-1")
             .bind("artifact-data")
-            .bind("approved")
+            .bind("requested")
             .execute(&pool)
             .await?;
 
-        sqlx::query("INSERT INTO agent_quotas (entity_id, entity_type, daily_budget_usd, used_usd) VALUES (?, ?, ?, ?)")
+        let now = chrono::Utc::now();
+        sqlx::query("INSERT INTO agent_quotas (id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind("quota-1")
             .bind("cascade-agent-1")
-            .bind("agent")
             .bind(50.0)
             .bind(0.0)
+            .bind("daily")
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await?;
+
+        sqlx::query("INSERT INTO sync_manifest (id, agent_id, source_type, source_uri) VALUES (?, ?, ?, ?)")
+            .bind("sm-1")
+            .bind("cascade-agent-1")
+            .bind("fs")
+            .bind("/data")
             .execute(&pool)
             .await?;
 

@@ -300,10 +300,15 @@ BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and
 | `npm run engine` | Run the Rust engine via Cargo |
 | `npm run build` | Type-check and build the frontend |
 | `npm run lint` | Run ESLint |
+| `npm run typecheck:ts7` | Type-check frontend with TypeScript 7 compiler |
 | `npm run test` | Run Vitest |
+| `npm run test:invariants` | Run executable system invariant gates in `tests/invariants/` |
 | `npm run test:coverage` | Run Vitest with coverage |
 | `npm run test:e2e` | Run Playwright end-to-end suite |
 | `npm run test:py` | Run Python unit tests in `tests/unit/` |
+| `npm run test:rust` | Run backend Rust engine test suite via Cargo |
+| `npm run test:wasm` | Run WASM codec test suites |
+| `npm run wasm:build` | Build WASM binary package with wasm-pack |
 | `npm run preview` | Preview the Vite build |
 | `npm run docs:api` | Regenerate `docs/openapi.yaml` and `docs/API_REFERENCE.md` from `server-rs/src/router.rs` |
 | `npm run docs:parity` | Run documentation/API/version parity checks |

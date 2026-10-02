@@ -1,12 +1,3 @@
-> This rewrite elevates the **Brainstorming & Communication Protocol** from a set of guidelines to a **strict operational gateway**. 
-
-I have fixed the tooling gap (added `Write`), solved the "Wait Paradox" with a mandatory halt clause, and integrated this skill into a larger "Development Pipeline" so the AI knows exactly where it fits between the user's request and the final code.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
 > This document is part of the "Sovereign Reality" documentation.

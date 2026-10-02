@@ -17,11 +17,13 @@
 
 | Layer | Framework | Location |
 |-------|-----------|----------|
-| Rust unit + integration | `cargo test` | `server-rs/src/**/*_tests.rs` |
-| React unit | Vitest | `src/**/*.test.ts(x)` |
+| Rust unit + integration | `cargo test` / `npm run test:rust` | `server-rs/src/**/*_tests.rs` |
+| Invariant gates | Vitest (`npm run test:invariants`) | `tests/invariants/` |
+| WASM Codec | `cargo test` / `npm run test:wasm` | `crates/wasm-codec/` |
+| React unit | Vitest (`npm test`) | `src/**/*.test.ts(x)` |
 | Python unit | pytest | `tests/unit/` |
 | React E2E | Playwright | `tests/e2e/` |
-| Type safety | `tsc --noEmit` | `npm run build` |
+| Type safety | `tsc --noEmit` | `npm run typecheck:ts7` |
 
 ---
 
@@ -30,17 +32,21 @@
 ### Run All Tests
 
 ```bash
-cargo test --manifest-path server-rs/Cargo.toml --bin server-rs
+# Via npm script
+npm run test:rust
+
+# Or directly via cargo
+cargo test --manifest-path server-rs/Cargo.toml
 ```
 
 ### Run Specific Test
 
 ```bash
 # A specific test
-cargo test --manifest-path server-rs/Cargo.toml --bin server-rs -- routes::health_endpoint_tests
+cargo test --manifest-path server-rs/Cargo.toml -- routes::health_endpoint_tests
 
 # With output
-cargo test --manifest-path server-rs/Cargo.toml --bin server-rs -- --nocapture
+cargo test --manifest-path server-rs/Cargo.toml -- --nocapture
 ```
 
 ### Test Modules (v1.1.58)
@@ -61,7 +67,7 @@ cargo test --manifest-path server-rs/Cargo.toml --bin server-rs -- --nocapture
 | `security::scanner::tests` | 1 | Shell pattern blocking |
 | `intelligence::graph::engine::tests` | 6 | AST parsing, incremental cache |
 | `intelligence::graph_store::tests` | 4 | Symbol graph DB operations |
-| **Total** | **296** | All passing |
+| **Total** | **488** | All passing |
 
 ### Writing a New Route Test
 
@@ -130,13 +136,47 @@ python -m pytest tests/unit/ --cov=execution --cov-report=term-missing
 
 ```bash
 # Unit tests via Vitest
-npm run test
+npm test
 
 # With coverage
 npm run test:coverage
 
 # Type check (no compilation output)
-npm run build
+npm run typecheck:ts7
+```
+
+---
+
+## Invariant Gate Tests
+
+The codebase enforces strict invariant gates defined in `tests/invariants/`:
+
+```bash
+npm run test:invariants
+```
+
+| Invariant Suite | Invariants Enforced |
+|-----------------|---------------------|
+| `agent_lifecycle.test.ts` | State machine transitions, atomic claiming |
+| `audit_merkle.test.ts` | Tamper detection, hash chain continuity |
+| `auth_boundary.test.ts` | Unauthenticated rejection, WebSocket subprotocol |
+| `boot_gate.test.ts` | Boot-gate barrier before ready signal |
+| `budget_metering.test.ts` | Token cost floor, reservation/commit |
+| `config_defaults.test.ts` | Safe default isolation, strict type coercion |
+| `error_sanitization.test.ts` | Truncation (2048), HTML-escaping, secret redacting |
+| `path_traversal.test.ts` | Base directory confinement, symlink resolution |
+| `retries_occ.test.ts` | Optimistic concurrency control retry guarantees |
+| `rpc_envelope.test.ts` | RPC error format, RFC 9457 problem details |
+| `sidecar_lifecycle.test.ts` | Process supervisory, clean SIGTERM/SIGINT teardown |
+
+---
+
+## WASM Codec Tests
+
+```bash
+npm run test:wasm
+# Or directly via cargo:
+cargo test --manifest-path crates/wasm-codec/Cargo.toml
 ```
 
 ---

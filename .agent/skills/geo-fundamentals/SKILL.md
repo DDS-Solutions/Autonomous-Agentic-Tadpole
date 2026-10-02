@@ -1,12 +1,3 @@
->This rewrite transforms the **GEO Fundamentals** document from a passive knowledge base into a **Hardened Execution Protocol**.
-
-It now treats the `geo_checker.py` script as the "Source of Truth." Instead of the AI guessing if the content is optimized, it must now follow a rigorous **Audit $\rightarrow$ Fix $\rightarrow$ Verify** loop. I have also integrated this skill into the `SHIP` behavioral mode, ensuring that no public-facing content is released without an AI-citation readiness check.
-
-***
-
-# Revised SKILL.md
-
---- File: SKILL.md ---
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
 > This document is part of the "Sovereign Reality" documentation.

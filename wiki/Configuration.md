@@ -47,16 +47,22 @@ All configuration is loaded from `.env` in the workspace root. Schema is validat
 | `NEURAL_TOKEN_NEW` | *(optional)* | Replacement token — valid to pre-validate before rotation |
 | `NEURAL_ENGINE_ACCESS_TOKEN` | *(optional)* | Legacy secondary token accepted alongside NEURAL_TOKEN |
 | `ALLOWED_ORIGINS` | Local dev origins | Comma-separated CORS allow-list |
-| `PRIVACY_MODE` | `false` | `true` = restrict to local-only providers, block cloud APIs |
+| `PRIVACY_MODE` | `true` | `true` = restrict to local-only providers (zero-trust sovereign mode) |
 | `TADPOLE_ALLOW_LOCAL_HTTP` | *(unset)* | Allow insecure `http://` model-provider calls when set |
+| `USE_SANDBOX_DOCKER` | `false` | Run dynamic agent skills in isolated Docker micro-containers |
+| `USE_SANDBOX_WASM` | `false` | Run dynamic agent skills in isolated WebAssembly (Wasmtime) sandboxes |
+| `ALLOW_HOST_SKILL_EXECUTION` | `false` | When `false`, denies bare host execution if container sandboxes are unavailable |
+| `AUTO_APPROVE_SAFE_SKILLS` | `false` | When `false`, enforces human oversight for all skill executions |
 
 ---
 
-## Observability Variables
+## Runtime Sizing Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DISABLE_TELEMETRY` | `false` | `true` = disable OpenTelemetry stdout exporter |
+| `TOKIO_WORKER_THREADS` | available CPUs (min 4) | Tokio async runtime worker threads count |
+| `TOKIO_MAX_BLOCKING_THREADS` | `32` | Max threads for blocking tasks |
+| `TOKIO_THREAD_STACK_SIZE_MB` | `4` | Stack size per worker thread in MB |
 
 ---
 

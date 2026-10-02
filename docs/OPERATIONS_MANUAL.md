@@ -81,7 +81,8 @@ The engine accepts either:
 
 Public routes:
 
-- `GET /v1/engine/health`
+- `GET /health` (root engine health ping)
+- `GET /v1/engine/health` (API v1 engine health ping)
 
 WebSocket routes (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) are protected and require token authentication via the `Sec-WebSocket-Protocol: bearer.<token>` subprotocol header.
 

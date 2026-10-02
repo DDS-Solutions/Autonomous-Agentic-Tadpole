@@ -66,7 +66,7 @@ API routes are registered within [router.rs](../server-rs/src/router.rs) using t
 To protect against documentation drift, enforce code formatting, and prevent dead links before committing, install our pre-commit hook:
 
 ```bash
-cp execution/hooks/pre-commit .git/hooks/pre-commit
+cp hooks/pre-commit .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 

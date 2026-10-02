@@ -41,7 +41,7 @@ Authorization: Bearer <NEURAL_TOKEN>
 WebSocket connections use a subprotocol instead:
 
 ```javascript
-new WebSocket(url, [`tadpole.${NEURAL_TOKEN}`])
+new WebSocket(url, [`bearer.${NEURAL_TOKEN}`])
 ```
 
 ### Implementation Details

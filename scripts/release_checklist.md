@@ -19,7 +19,8 @@ This guide ensures release builds are clean, verified, and complete.
 
 - [ ] Ensure all local changes are committed.
 - [ ] Run `python execution/verify_all.py` and confirm 100% test success.
-- [ ] Run `python execution/verify_ai_context.py` to check context alignment.
+- [ ] Run `npm run context:verify` to check context alignment.
+- [ ] Run `npm run docs:parity` to verify API and configuration parity.
 - [ ] Validate environment variables against schema using `npm run version:sync`.
 
 ## 2. Version Bump & Sync
@@ -27,7 +28,7 @@ This guide ensures release builds are clean, verified, and complete.
 - [ ] Bump version in `version.json` (e.g. `1.1.58`).
 - [ ] Run version synchronization:
   ```bash
-  python execution/sync_version.py
+  npm run version:sync
   ```
   This automatically propagates the new version string to `Cargo.toml`, `package.json`, `package-lock.json`, and all manifest defaults.
 
@@ -39,7 +40,7 @@ This guide ensures release builds are clean, verified, and complete.
   ```
 - [ ] Generate the SBOM for the node frontend:
   ```bash
-  npm run sbom
+  npx @cyclonedx/cyclonedx-npm --output-file sbom-node.json
   ```
 
 ## 4. Release Build

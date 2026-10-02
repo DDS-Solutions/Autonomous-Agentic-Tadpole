@@ -5,20 +5,7 @@
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
 > - **Telemetry Link**: Search `[LONG_TERM_MEMORY]` in audit logs.
 >
-> ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
->
-> ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
-
-> [!IMPORTANT]
->
-> ### AI Assist Note
-> 🧠 Tadpole Engine: Persistent Ledger (Long-Term Memory)
->
-> ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
-> **AI Assist Note (Memory Logic)**:
+> ### AI Assist Note (Memory Logic)
 > This document governs the "Split-Brain" architecture of Tadpole OS.
 > - **Primary Core**: SQLite handles relational metadata, logs, and fallback memories for non-vector builds.
 > - **Neural Core**: LanceDB handles vector embeddings (Semantic Recall) when enabled.

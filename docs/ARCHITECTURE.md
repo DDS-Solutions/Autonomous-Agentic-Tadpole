@@ -170,7 +170,7 @@ The Browser Sentinel operates as a client-side, zero-cloud sentry for real-time 
 
 - Default database: `sqlite:<workspace>/data/tadpole.db`.
 - Override with `DATABASE_URL`.
-- Migrations live in `server-rs/migrations/` (includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, and `20260912000200_a2a_ledger_expiry.sql`).
+- Migrations live in `server-rs/migrations/` (includes `20260822000100_durable_workflows.sql`, `20260912000100_audit_hot_indexes.sql`, `20260912000200_a2a_ledger_expiry.sql`, and `20260918000100_iacp_events_fallback.sql`).
 - Providers and models are persisted during graceful shutdown.
 - Agent records are loaded from SQLite and saved through batched database writes.
 - Audio cache defaults to `data/audio_cache.db`.
