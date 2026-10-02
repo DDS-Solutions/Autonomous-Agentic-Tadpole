@@ -500,6 +500,16 @@ The Tadpole OS telemetric bridge streams live OpenTelemetry-compatible spans ove
 - **Live Distributed Spans**: Root `AgentExecution` spans and child `ToolExecution` spans capture `trace_id`, `parent_id`, `agent_id`, and timing metrics.
 - **Dynamic Field Recording**: The `TelemetryLayer::on_record` hook updates dynamic span metadata (including W3C `traceparent` bindings and `trace_id` assignment) to prevent disconnected tree hierarchies.
 - **Detached Telemetry Streams**: Detached windows (`/detached-view?type=trace-stream`) automatically synchronize state via cross-tab `BroadcastChannel('trace_store_sync')` and establish dedicated WebSocket streams.
-- **Diagnostic Telemetry**: When the engine is idle, operators can dispatch synthetic diagnostic telemetry directly from the standby interface to verify end-to-end timeline rendering, ticker intervals, and zoom multiplier controls.
+- **Diagnostic Telemetry**: When the engine is idle, operators can dispatch diagnostic telemetry directly from the standby interface to verify end-to-end timeline rendering, ticker intervals, and zoom multiplier controls.
+
+## Metrics & Health Diagnostics
+
+The engine exposes health and runtime metrics endpoints:
+- `GET /health` and `GET /v1/engine/health`:
+  - **Loopback Invariant**: Local loopback callers (`127.0.0.1`, `::1`) receive comprehensive diagnostic telemetry including database connection pool size, WAL sizing, daily LLM budget usage, active swarm counts, and system uptime.
+  - **Remote Peer Redaction**: Non-loopback peers receive a redacted `MinimalHealthResponse` (`{"status":"ok","heartbeat":...}`) omitting internal database metrics, active agent allocations, and memory statistics.
+  - **Cache Isolation**: Remote caller redaction is evaluated prior to cache lookups to eliminate cached telemetry disclosure across network trust boundaries.
+- `GET /metrics`:
+  - Returns Prometheus-compatible operational counters, histogram timings, and resource statistics.
 
 [//]: # (Metadata: [OPERATIONS_MANUAL])

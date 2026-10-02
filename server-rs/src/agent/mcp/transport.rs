@@ -68,10 +68,7 @@ pub async fn mcp_sse_handler(
     let guard = Arc::new(SessionGuard { session_id });
     let stream = futures::stream::unfold((rx, guard), move |(mut rx, guard)| {
         async move {
-            match rx.recv().await {
-                Some(event) => Some((Ok::<_, Infallible>(event), (rx, guard))),
-                None => None,
-            }
+            rx.recv().await.map(|event| (Ok::<_, Infallible>(event), (rx, guard)))
         }
     });
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new())

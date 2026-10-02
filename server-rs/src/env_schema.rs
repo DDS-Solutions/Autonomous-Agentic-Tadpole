@@ -198,13 +198,12 @@ impl EnvSchema {
                         if trimmed.is_empty() {
                             return false;
                         }
-                        if entry.name == "NEURAL_TOKEN"
+                        if (entry.name == "NEURAL_TOKEN"
                             || entry.name == "NEURAL_ENGINE_ACCESS_TOKEN"
-                            || entry.name == "AUDIT_PRIVATE_KEY"
+                            || entry.name == "AUDIT_PRIVATE_KEY")
+                            && !Self::is_valid_token_value(trimmed)
                         {
-                            if !Self::is_valid_token_value(trimmed) {
-                                return false;
-                            }
+                            return false;
                         }
                         true
                     })

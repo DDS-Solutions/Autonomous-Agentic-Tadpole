@@ -150,7 +150,7 @@ impl RateLimiter {
             self.tokens_used.fetch_add(actual_tokens - estimated_tokens, Ordering::SeqCst);
         } else {
             let diff = estimated_tokens - actual_tokens;
-            let _ = self.tokens_used.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
+            let _ = self.tokens_used.try_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
                 Some(val.saturating_sub(diff))
             });
         }
@@ -158,7 +158,7 @@ impl RateLimiter {
 
     /// Releases a previously reserved token estimate (e.g. on request failure).
     pub fn release_reservation(&self, estimated_tokens: u32) {
-        let _ = self.tokens_used.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
+        let _ = self.tokens_used.try_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
             Some(val.saturating_sub(estimated_tokens))
         });
     }

@@ -16,10 +16,11 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::{extract::State, Json};
+use axum::response::{IntoResponse, Response};
+use axum::{extract::{ConnectInfo, State}, Json};
 use serde::Serialize;
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 #[derive(Clone, Serialize)]
 pub struct DatabaseHealth {
@@ -44,6 +45,13 @@ pub struct SwarmHealth {
     pub total_agents: usize,
     pub max_swarm_depth: u32,
     pub status: String,
+}
+
+/// Minimal heartbeat returned to non-loopback callers.
+#[derive(Clone, Serialize)]
+pub struct MinimalHealthResponse {
+    pub status: &'static str,
+    pub heartbeat: String,
 }
 
 /// Heartbeat status response containing system telemetry and feature flags.
@@ -73,13 +81,26 @@ const HEALTH_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(3);
 #[tracing::instrument(skip(state), name = "system::health")]
 pub async fn health_check(
     State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
-    // 0. Check in-memory debounce/cache first to protect DB connection pool from exhaustion
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> Result<Response, AppError> {
+    // 0a. Remote client isolation: non-loopback peers receive minimal heartbeat
+    // MUST execute BEFORE checking HEALTH_CACHE to prevent cached telemetry disclosure to remote callers.
+    if !peer.ip().is_loopback() {
+        return Ok((
+            StatusCode::OK,
+            Json(MinimalHealthResponse {
+                status: "ok",
+                heartbeat: chrono::Utc::now().to_rfc3339(),
+            }),
+        ).into_response());
+    }
+
+    // 0b. Check in-memory debounce/cache first to protect DB connection pool from exhaustion
     {
         let cache = HEALTH_CACHE.read();
         if let Some((instant, ref cached)) = *cache {
             if instant.elapsed() < HEALTH_CACHE_TTL {
-                return Ok((StatusCode::OK, Json(cached.clone())));
+                return Ok((StatusCode::OK, Json(cached.clone())).into_response());
             }
         }
     }
@@ -216,7 +237,7 @@ pub async fn health_check(
     Ok((
         StatusCode::OK,
         Json(response),
-    ))
+    ).into_response())
 }
 
 /// GET /metrics

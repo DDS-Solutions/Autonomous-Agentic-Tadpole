@@ -42,14 +42,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
-
-/// Operational statistics for a specific tool.
+/// Operational statistics for a specific tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct McpToolStats {
-    pub invocations: u32,
-    pub success_count: u32,
-    pub failure_count: u32,
-    pub avg_latency_ms: u32,
+    pub invocations: u64,
+    pub success_count: u64,
+    pub failure_count: u64,
+    pub avg_latency_ms: u64,
 }
 
 /// A structured tool definition registered within the MCP ecosystem.
@@ -82,8 +81,10 @@ pub struct McpHost {
     pub stats: Arc<dashmap::DashMap<String, McpToolStats>>,
     event_tx: broadcast::Sender<serde_json::Value>,
     mcp_config_path: Option<PathBuf>,
+    pub workspace_root: PathBuf,
+    cached_config: Arc<parking_lot::RwLock<Option<(std::time::SystemTime, Arc<McpConfig>)>>>,
     pub policy: Arc<PermissionPolicy>,
-    pub prompter: Option<Arc<dyn PermissionPrompter>>,
+    pub prompter: Arc<parking_lot::RwLock<Option<Arc<dyn PermissionPrompter>>>>,
     pub clients: Arc<Mutex<HashMap<String, Arc<Mutex<client::McpClient>>>>>,
     pub redactor: Arc<SecretRedactor>,
 }
@@ -95,6 +96,17 @@ impl McpHost {
         policy: Arc<PermissionPolicy>,
         redactor: Arc<SecretRedactor>,
     ) -> Self {
+        let workspace_root = std::env::var("WORKSPACE_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                let cur = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                if cur.ends_with("server-rs") {
+                    cur.parent().map(PathBuf::from).unwrap_or(cur)
+                } else {
+                    cur
+                }
+            });
+
         let mut registry = McpRegistry::new();
         let stats = Arc::new(dashmap::DashMap::new());
         let clients = Arc::new(Mutex::new(HashMap::new()));
@@ -115,15 +127,73 @@ impl McpHost {
             stats,
             event_tx,
             mcp_config_path,
+            workspace_root,
+            cached_config: Arc::new(parking_lot::RwLock::new(None)),
             policy,
-            prompter: None,
+            prompter: Arc::new(parking_lot::RwLock::new(None)),
             clients,
             redactor,
         }
     }
 
-    pub fn _set_prompter(&mut self, prompter: Arc<dyn PermissionPrompter>) {
-        self.prompter = Some(prompter);
+    pub fn set_prompter(&self, prompter: Arc<dyn PermissionPrompter>) {
+        *self.prompter.write() = Some(prompter);
+    }
+
+    pub fn with_prompter(self, prompter: Arc<dyn PermissionPrompter>) -> Self {
+        *self.prompter.write() = Some(prompter);
+        self
+    }
+
+    /// Loads and caches mcp_config.json anchored to workspace_root with mtime validation and size bounds.
+    pub async fn get_config(&self) -> Result<Arc<McpConfig>, AppError> {
+        let config_path = self.mcp_config_path.as_ref()
+            .ok_or_else(|| AppError::NotFound("MCP config path not configured".to_string()))?;
+
+        let safe_path = crate::utils::security::validate_path(&self.workspace_root, &config_path.to_string_lossy())
+            .map_err(|e| {
+                tracing::warn!("⚠️ [McpHost] MCP config path outside workspace: {}", e);
+                AppError::Forbidden(format!("MCP config path outside workspace: {}", e))
+            })?;
+
+        let metadata = tokio::fs::metadata(&safe_path).await.map_err(|e| {
+            tracing::warn!("⚠️ [McpHost] Failed to stat MCP config file at {:?}: {}", safe_path, e);
+            AppError::Io(e)
+        })?;
+
+        let mtime = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        {
+            let cache = self.cached_config.read();
+            if let Some((cached_mtime, ref cfg)) = *cache {
+                if cached_mtime == mtime {
+                    return Ok(cfg.clone());
+                }
+            }
+        }
+
+        // Bounded read (1 MB max)
+        if metadata.len() > 1_000_000 {
+            return Err(AppError::BadRequest("MCP config file exceeds 1MB limit".to_string()));
+        }
+
+        let content = tokio::fs::read_to_string(&safe_path).await.map_err(|e| {
+            tracing::error!("❌ [McpHost] Failed to read MCP config at {:?}: {}", safe_path, e);
+            AppError::Io(e)
+        })?;
+
+        let config: McpConfig = serde_json::from_str(&content).map_err(|e| {
+            tracing::error!("❌ [McpHost] Malformed MCP config JSON at {:?}: {}", safe_path, e);
+            AppError::BadRequest(format!("Malformed MCP config: {}", e))
+        })?;
+
+        let config_arc = Arc::new(config);
+        {
+            let mut cache = self.cached_config.write();
+            *cache = Some((mtime, config_arc.clone()));
+        }
+
+        Ok(config_arc)
     }
 
     pub async fn list_tools(
@@ -131,57 +201,66 @@ impl McpHost {
         agent_skills: &[String],
         all_skills: &DashMap<String, SkillDefinition>,
     ) -> Vec<McpToolHub> {
-        let mut tools: Vec<McpToolHub> = agent_skills
-            .iter()
-            .filter_map(|skill_name| all_skills.get(skill_name))
-            .map(|skill| {
-                let mut hub = McpToolHub::from(skill.clone());
-                if let Some(s) = self.stats.get(&hub.name) {
-                    hub.stats = s.clone();
-                }
-                hub
-            })
-            .collect();
+        let mut tools: Vec<McpToolHub> = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
 
+        // 1. Native tools (highest precedence)
         {
             let registry = self.registry.lock().await;
             for mut t in registry.list_all() {
                 if let Some(s) = self.stats.get(&t.name) {
                     t.stats = s.clone();
                 }
+                seen_names.insert(t.name.clone());
                 tools.push(t);
             }
         }
 
-        if let Some(ref path) = self.mcp_config_path {
-            let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            if let Ok(safe_path) = crate::utils::security::validate_path(&authorized_base, &path.to_string_lossy()) {
-                if let Ok(content) = tokio::fs::read_to_string(safe_path).await {
-                    if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
-                        for (server_name, _) in config.mcp_servers {
-                            // Discover tools from the server
-                            if let Ok(client) = self.get_or_spawn_client(&server_name).await {
-                                let mut client_lock = client.lock().await;
-                                if let Ok(mcp_tools) = client_lock.list_tools().await {
-                                    for t_val in mcp_tools {
-                                        if let (Some(name), Some(desc)) = (
-                                            t_val.get("name").and_then(|v| v.as_str()),
-                                            t_val.get("description").and_then(|v| v.as_str())
-                                        ) {
-                                            let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
+        // 2. Granted skills (legacy/custom skills)
+        for skill_name in agent_skills {
+            if let Some(skill) = all_skills.get(skill_name) {
+                if seen_names.insert(skill.name.clone()) {
+                    let mut hub = McpToolHub::from(skill.clone());
+                    if let Some(s) = self.stats.get(&hub.name) {
+                        hub.stats = s.clone();
+                    }
+                    tools.push(hub);
+                }
+            }
+        }
 
-                                            // Only add if explicitly allowed or in agent skills
-                                            if agent_skills.contains(&name.to_string()) || agent_skills.iter().any(|s| s == &format!("{}:{}", server_name, name)) {
-                                                tools.push(McpToolHub {
-                                                    name: name.to_string(),
-                                                    description: desc.to_string(),
-                                                    input_schema: schema,
-                                                    source: format!("mcp:{}", server_name),
-                                                    stats: McpToolStats::default(),
-                                                    category: "external".to_string(),
-                                                });
-                                            }
-                                        }
+        // 3. External MCP tools
+        if let Ok(config) = self.get_config().await {
+            let skill_set: std::collections::HashSet<&str> = agent_skills.iter().map(|s| s.as_str()).collect();
+
+            for (server_name, _) in &config.mcp_servers {
+                if let Ok(client) = self.get_or_spawn_client(server_name).await {
+                    let mut client_lock = client.lock().await;
+                    if let Ok(mcp_tools) = client_lock.list_tools().await {
+                        for t_val in mcp_tools {
+                            if let (Some(name), Some(desc)) = (
+                                t_val.get("name").and_then(|v| v.as_str()),
+                                t_val.get("description").and_then(|v| v.as_str()),
+                            ) {
+                                let namespaced = format!("{}:{}", server_name, name);
+                                let canonical_mcp = format!("mcp_{}_{}", server_name, name);
+
+                                // External tool is visible only if explicitly granted
+                                if skill_set.contains(name)
+                                    || skill_set.contains(namespaced.as_str())
+                                    || skill_set.contains(canonical_mcp.as_str())
+                                {
+                                    if seen_names.insert(name.to_string()) {
+                                        let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
+                                        let stats = self.stats.get(name).map(|s| s.clone()).unwrap_or_default();
+                                        tools.push(McpToolHub {
+                                            name: name.to_string(),
+                                            description: desc.to_string(),
+                                            input_schema: schema,
+                                            source: format!("mcp:{}", server_name),
+                                            stats,
+                                            category: "external".to_string(),
+                                        });
                                     }
                                 }
                             }
@@ -194,6 +273,46 @@ impl McpHost {
         tools
     }
 
+    async fn tool_exists(
+        &self,
+        tool_name: &str,
+        all_skills: &DashMap<String, SkillDefinition>,
+    ) -> bool {
+        if self.registry.lock().await.has(tool_name) {
+            return true;
+        }
+        if all_skills.contains_key(tool_name) {
+            return true;
+        }
+        if let Ok(config) = self.get_config().await {
+            if let Some((srv, _)) = tool_name.split_once("::").or_else(|| tool_name.split_once(':')) {
+                if config.mcp_servers.contains_key(srv) {
+                    return true;
+                }
+            } else if tool_name.starts_with("mcp_") {
+                let rest = &tool_name[4..];
+                for srv in config.mcp_servers.keys() {
+                    let prefix = format!("{}_", srv);
+                    if rest.starts_with(&prefix) {
+                        return true;
+                    }
+                }
+            } else {
+                for (srv, _) in &config.mcp_servers {
+                    if let Ok(client) = self.get_or_spawn_client(srv).await {
+                        let mut client_lock = client.lock().await;
+                        if let Ok(tools) = client_lock.list_tools().await {
+                            if tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub async fn call_tool(
         &self,
         tool_name: &str,
@@ -203,41 +322,86 @@ impl McpHost {
     ) -> Result<McpResult, AppError> {
         let start_time = std::time::Instant::now();
 
-        let mode = self.policy.get_mode(tool_name, &ctx.agent_id).await;
+        // 1. Sanitize tool name
+        let clean_name = tool_name.trim();
+        if clean_name.is_empty() || clean_name.len() > 128 || clean_name.contains('\0') {
+            return Err(AppError::BadRequest(format!("Invalid tool name '{}'", tool_name)));
+        }
+
+        // 2. Fast-fail if tool is not registered across native, skill, or configured MCP servers
+        if !self.tool_exists(clean_name, all_skills).await {
+            return Err(AppError::NotFound(format!("Tool '{}' not found", tool_name)));
+        }
+
+        // 3. Permission policy gate (fail closed)
+        let mode = self.policy.get_mode(clean_name, &ctx.agent_id).await;
         match mode {
             PermissionMode::Deny => {
                 return Err(AppError::Forbidden(format!(
                     "Permission denied: Tool {} is explicitly blocked for agent {} by policy.",
-                    tool_name,
+                    clean_name,
                     ctx.agent_id
-                )))
+                )));
             }
             PermissionMode::Prompt => {
-                if let Some(ref prompter) = self.prompter {
-                    let decision = prompter.prompt_user(tool_name, &arguments.to_string())
-                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-                    if decision != PermissionMode::Allow {
-                        return Err(AppError::Forbidden("User rejected tool execution".to_string()));
-                    }
+                let prompter_guard = self.prompter.read();
+                let prompter = prompter_guard.as_ref().ok_or_else(|| {
+                    tracing::error!(tool = %clean_name, "PermissionMode::Prompt configured but no prompter is registered");
+                    AppError::Forbidden(format!(
+                        "Tool '{}' requires interactive approval, but no prompter is configured.",
+                        clean_name
+                    ))
+                })?;
+                let decision = prompter.prompt_user(clean_name, &arguments.to_string())
+                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                if decision != PermissionMode::Allow {
+                    return Err(AppError::Forbidden("User rejected tool execution".to_string()));
                 }
             }
             PermissionMode::Allow => {}
         }
 
-        let mut result = self
-            .execute_tool_internal(tool_name, arguments, ctx, all_skills)
+        let result = self
+            .execute_tool_internal(clean_name, arguments, ctx, all_skills)
             .await;
 
-        // SEC-04: Scrub sensitive data from raw outputs before returning to agent/UI
-        if let Ok(McpResult::Raw(ref mut raw)) = result {
-            *raw = self.redactor.scrub(raw);
-        }
-
         let latency = start_time.elapsed().as_millis() as u64;
-        self.update_stats(tool_name, result.is_ok(), latency);
-        self.emit_pulse(tool_name, result.is_ok(), latency);
+        self.update_stats(clean_name, result.is_ok(), latency);
+        self.emit_pulse(clean_name, result.is_ok(), latency);
 
-        result
+        // SEC-04: Total secret redaction at the boundary across all result variants and error payloads
+        match result {
+            Ok(McpResult::Raw(ref raw)) => Ok(McpResult::Raw(self.redactor.scrub(raw))),
+            Ok(McpResult::SystemDelegate(k, mut v)) => {
+                self.scrub_json_value(&mut v);
+                Ok(McpResult::SystemDelegate(k, v))
+            }
+            Err(AppError::InfrastructureError { provider_id, detail, help_link }) => {
+                Err(AppError::InfrastructureError {
+                    provider_id,
+                    detail: self.redactor.scrub(&detail),
+                    help_link,
+                })
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn scrub_json_value(&self, val: &mut serde_json::Value) {
+        match val {
+            serde_json::Value::String(s) => *s = self.redactor.scrub(s),
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.scrub_json_value(item);
+                }
+            }
+            serde_json::Value::Object(map) => {
+                for (_k, v) in map.iter_mut() {
+                    self.scrub_json_value(v);
+                }
+            }
+            _ => {}
+        }
     }
 
     async fn execute_tool_internal(
@@ -247,6 +411,7 @@ impl McpHost {
         ctx: &crate::agent::types::ToolContext,
         all_skills: &DashMap<String, SkillDefinition>,
     ) -> Result<McpResult, AppError> {
+        // 1. Check native registry
         let handler = {
             let registry = self.registry.lock().await;
             registry.get(tool_name)
@@ -256,6 +421,7 @@ impl McpHost {
             return h.execute(arguments, ctx).await;
         }
 
+        // 2. Check skill registry
         if let Some(skill) = all_skills.get(tool_name) {
             let output = self
                 .execute_legacy_skill(skill.value(), arguments, ctx.workspace_root.clone())
@@ -263,61 +429,93 @@ impl McpHost {
             return Ok(McpResult::Raw(output));
         }
 
-        // Try External MCP Servers
-        if let Some(ref path) = self.mcp_config_path {
-            let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            if let Ok(safe_path) = crate::utils::security::validate_path(&authorized_base, &path.to_string_lossy()) {
-                if let Ok(content) = tokio::fs::read_to_string(safe_path).await {
-                    if let Ok(config) = serde_json::from_str::<McpConfig>(&content) {
-                        for (server_name, _) in config.mcp_servers {
-                            if let Ok(client) = self.get_or_spawn_client(&server_name).await {
-                                let mut client_lock = client.lock().await;
-                                // Check if this server has the tool
-                                if let Ok(mcp_tools) = client_lock.list_tools().await {
-                                    if mcp_tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
-                                        let result = client_lock.call_tool(tool_name, arguments).await
-                                            .map_err(|e| AppError::InfrastructureError {
-                                                provider_id: format!("mcp:{}", server_name),
-                                                detail: e.to_string(),
-                                                help_link: None,
-                                            })?;
+        // 3. Resolve External MCP Server tool
+        if let Ok(config) = self.get_config().await {
+            let mut candidate: Option<(String, String)> = None;
 
-                                        if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-                                            let mut output = String::new();
-                                            for item in content {
-                                                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                                                    output.push_str(text);
-                                                }
-                                            }
-                                            return Ok(McpResult::Raw(output));
-                                        }
-
-                                        return Ok(McpResult::Raw(serde_json::to_string_pretty(&result)
-                                            .map_err(|e| AppError::InternalServerError(e.to_string()))?));
-                                    }
-                                }
+            if let Some((srv, tool)) = tool_name.split_once("::").or_else(|| tool_name.split_once(':')) {
+                if config.mcp_servers.contains_key(srv) {
+                    candidate = Some((srv.to_string(), tool.to_string()));
+                }
+            } else if tool_name.starts_with("mcp_") {
+                let rest = &tool_name[4..];
+                for srv in config.mcp_servers.keys() {
+                    let prefix = format!("{}_", srv);
+                    if rest.starts_with(&prefix) {
+                        let actual = rest[prefix.len()..].to_string();
+                        candidate = Some((srv.clone(), actual));
+                        break;
+                    }
+                }
+            } else {
+                for (srv, _) in &config.mcp_servers {
+                    if let Ok(client) = self.get_or_spawn_client(srv).await {
+                        let mut client_lock = client.lock().await;
+                        if let Ok(tools) = client_lock.list_tools().await {
+                            if tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
+                                candidate = Some((srv.clone(), tool_name.to_string()));
+                                break;
                             }
                         }
                     }
                 }
             }
-        }
 
-        if tool_name.starts_with("mcp_") {
-            let parts: Vec<&str> = tool_name.splitn(3, '_').collect();
-            if parts.len() >= 3 {
-                let server_name = parts[1];
-                let actual_tool_name = parts[2];
+            if let Some((server_name, actual_tool_name)) = candidate {
+                if !actual_tool_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                    return Err(AppError::BadRequest(format!(
+                        "Invalid external tool identifier '{}'",
+                        actual_tool_name
+                    )));
+                }
 
-                let client = self.get_or_spawn_client(server_name).await?;
+                // SEC: Enforce allow-list against agent's granted skills
+                let is_authorized = if ctx.agent_id == "system" || ctx.agent_id == "admin" {
+                    true
+                } else if let Some(agent_entry) = ctx.state.registry.agents.get(&ctx.agent_id) {
+                    let granted = &agent_entry.capabilities.skills;
+                    let namespaced_colon = format!("{}:{}", server_name, actual_tool_name);
+                    let namespaced_double_colon = format!("{}::{}", server_name, actual_tool_name);
+                    let legacy_mcp = format!("mcp_{}_{}", server_name, actual_tool_name);
+
+                    granted.iter().any(|s| {
+                        s == tool_name
+                            || s == &actual_tool_name
+                            || s == &namespaced_colon
+                            || s == &namespaced_double_colon
+                            || s == &legacy_mcp
+                    })
+                } else {
+                    true
+                };
+
+                if !is_authorized {
+                    tracing::warn!(
+                        "🚫 [McpHost] Access denied: tool '{}:{}' is not in granted skills for agent '{}'",
+                        server_name, actual_tool_name, ctx.agent_id
+                    );
+                    return Err(AppError::Forbidden(format!(
+                        "External tool '{}:{}' is not granted to agent '{}'",
+                        server_name, actual_tool_name, ctx.agent_id
+                    )));
+                }
+
+                let client = self.get_or_spawn_client(&server_name).await?;
                 let mut client_lock = client.lock().await;
 
-                let result = client_lock.call_tool(actual_tool_name, arguments).await
-                    .map_err(|e| AppError::InfrastructureError {
-                        provider_id: format!("mcp:{}", server_name),
-                        detail: e.to_string(),
-                        help_link: None,
-                    })?;
+                let call_result = client_lock.call_tool(&actual_tool_name, arguments).await;
+                let result = match call_result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        // Transport or process failure: evict from cache so subsequent calls can recover
+                        self.clients.lock().await.remove(&server_name);
+                        return Err(AppError::InfrastructureError {
+                            provider_id: format!("mcp:{}", server_name),
+                            detail: format!("Failed to execute external tool: {}", e),
+                            help_link: None,
+                        });
+                    }
+                };
 
                 if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
                     let mut output = String::new();
@@ -338,37 +536,35 @@ impl McpHost {
     }
 
     async fn get_or_spawn_client(&self, server_name: &str) -> Result<Arc<Mutex<client::McpClient>>, AppError> {
-        let mut clients = self.clients.lock().await;
-
-        if let Some(client) = clients.get(server_name) {
-            return Ok(client.clone());
+        // Double-checked locking fast path: return cached client if already live
+        {
+            let clients = self.clients.lock().await;
+            if let Some(client) = clients.get(server_name) {
+                return Ok(client.clone());
+            }
         }
 
-        let config_path = self.mcp_config_path.as_ref()
-            .ok_or_else(|| AppError::InternalServerError("MCP config path not set".to_string()))?;
-
-        let authorized_base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let safe_path = crate::utils::security::validate_path(&authorized_base, &config_path.to_string_lossy())
-            .map_err(|e| AppError::Forbidden(e.to_string()))?;
-
-        let content = tokio::fs::read_to_string(safe_path).await.map_err(AppError::Io)?;
-        let config: McpConfig = serde_json::from_str(&content).map_err(|e| AppError::BadRequest(e.to_string()))?;
-
+        let config = self.get_config().await?;
         let server_config = config.mcp_servers.get(server_name)
             .ok_or_else(|| AppError::NotFound(format!("MCP server '{}' not found in config", server_name)))?;
 
-        let full_command = if server_config.args.is_empty() {
-            server_config.command.clone()
-        } else {
-            format!("{} {}", server_config.command, server_config.args.join(" "))
-        };
+        // Validate command safety
+        crate::utils::security::validate_shell_command(&server_config.command)?;
 
-        let mut client = client::McpClient::spawn(&full_command).await
-            .map_err(|e| AppError::InfrastructureError {
-                provider_id: format!("mcp:{}", server_name),
-                detail: format!("Failed to spawn MCP server: {}", e),
-                help_link: None,
-            })?;
+        let resolved_env = server_config.env.as_ref().map(resolve_mcp_env).transpose()?;
+
+        // Slow path: spawn and initialize outside the clients lock
+        let mut client = client::McpClient::spawn(
+            &server_config.command,
+            &server_config.args,
+            resolved_env.as_ref(),
+        ).await
+        .map_err(|e| AppError::InfrastructureError {
+            provider_id: format!("mcp:{}", server_name),
+            detail: format!("Failed to spawn MCP server: {}", e),
+            help_link: None,
+        })?;
+
         client.initialize().await.map_err(|e| AppError::InfrastructureError {
             provider_id: format!("mcp:{}", server_name),
             detail: format!("Failed to initialize MCP client: {}", e),
@@ -376,24 +572,30 @@ impl McpHost {
         })?;
 
         let client_arc = Arc::new(Mutex::new(client));
-        clients.insert(server_name.to_string(), client_arc.clone());
+        {
+            let mut clients = self.clients.lock().await;
+            if let Some(existing) = clients.get(server_name) {
+                return Ok(existing.clone());
+            }
+            clients.insert(server_name.to_string(), client_arc.clone());
+        }
 
         Ok(client_arc)
     }
 
     fn update_stats(&self, tool_name: &str, is_success: bool, latency: u64) {
         let mut entry = self.stats.entry(tool_name.to_string()).or_default();
-        entry.invocations += 1;
+        entry.invocations = entry.invocations.saturating_add(1);
         if is_success {
-            entry.success_count += 1;
+            entry.success_count = entry.success_count.saturating_add(1);
         } else {
-            entry.failure_count += 1;
+            entry.failure_count = entry.failure_count.saturating_add(1);
         }
-        let latency_u32 = latency as u32;
-        if entry.avg_latency_ms == 0 {
-            entry.avg_latency_ms = latency_u32;
+        if entry.invocations == 1 {
+            entry.avg_latency_ms = latency;
         } else {
-            entry.avg_latency_ms = (entry.avg_latency_ms + latency_u32) / 2;
+            // Exponentially weighted moving average (alpha = 0.2)
+            entry.avg_latency_ms = ((entry.avg_latency_ms * 4) + latency) / 5;
         }
     }
 
@@ -431,15 +633,19 @@ impl McpHost {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct McpConfig {
-    #[serde(rename = "mcpServers")]
+    #[serde(rename = "mcpServers", default)]
     pub mcp_servers: std::collections::HashMap<String, McpServerConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct McpServerConfig {
     pub command: String,
+    #[serde(default)]
     pub args: Vec<String>,
+    #[serde(default)]
     pub env: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -508,6 +714,12 @@ pub async fn get_symbol_body(
         .ok_or_else(|| AppError::BadRequest("Missing 'symbol_name'".to_string()))?;
     let full_path = crate::utils::security::validate_path(&ctx.workspace_root, path_str)
         .map_err(|e| AppError::Forbidden(e.to_string()))?;
+
+    let meta = tokio::fs::metadata(&full_path).await.map_err(AppError::Io)?;
+    if meta.len() > 5_000_000 {
+        return Err(AppError::BadRequest("File exceeds 5MB size limit".to_string()));
+    }
+
     let content = tokio::fs::read_to_string(&full_path).await.map_err(AppError::Io)?;
     let mut extractor = SymbolExtractor::new();
     let symbols = extractor.extract_symbols(&full_path, &content);
@@ -521,15 +733,20 @@ pub async fn get_symbol_body(
 #[agent_tool]
 pub async fn run_integrity_check(
     _args: serde_json::Value,
-    _ctx: &crate::agent::types::ToolContext,
+    ctx: &crate::agent::types::ToolContext,
 ) -> Result<McpResult, AppError> {
-    let mut cmd = tokio::process::Command::new("python");
-    cmd.arg("execution/self_audit_tool.py");
+    let script_path = crate::utils::security::validate_path(&ctx.workspace_root, "execution/self_audit_tool.py")
+        .map_err(|e| AppError::Forbidden(e.to_string()))?;
 
-    let output = tokio::time::timeout(std::time::Duration::from_secs(300), cmd.output()).await
+    let mut cmd = tokio::process::Command::new("python");
+    cmd.arg(script_path.as_path());
+    cmd.current_dir(&ctx.workspace_root);
+    cmd.kill_on_drop(true);
+
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
         .map_err(|_| AppError::InfrastructureError {
             provider_id: "integrity_check".to_string(),
-            detail: "Integrity check timed out after 300s".to_string(),
+            detail: "Integrity check timed out after 60s".to_string(),
             help_link: None,
         })?
         .map_err(AppError::Io)?;
@@ -606,9 +823,137 @@ pub async fn get_blast_radius(
     let graph = graph_swap.load();
     let affected = graph.calculate_blast_radius(symbol_name, path);
     
-    Ok(McpResult::Raw(serde_json::to_string_pretty(&affected).unwrap_or_default()))
+    let serialized = serde_json::to_string_pretty(&affected)
+        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+    Ok(McpResult::Raw(serialized))
 }
 
 
+
+/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values.
+/// Returns an explicit configuration error if a required placeholder (without a default) is not set in the environment.
+pub fn resolve_mcp_env(env: &std::collections::HashMap<String, String>) -> Result<std::collections::HashMap<String, String>, AppError> {
+    let mut resolved_map = std::collections::HashMap::new();
+
+    for (key, value) in env {
+        let mut resolved = String::new();
+        let mut remainder = value.as_str();
+
+        while let Some(start) = remainder.find("${") {
+            resolved.push_str(&remainder[..start]);
+            let placeholder_rest = &remainder[start + 2..];
+            let Some(end) = placeholder_rest.find('}') else {
+                resolved.push_str(&remainder[start..]);
+                remainder = "";
+                break;
+            };
+
+            let inner = &placeholder_rest[..end];
+            if inner.is_empty() {
+                resolved.push_str("${}");
+                remainder = &placeholder_rest[end + 1..];
+                continue;
+            }
+
+            // Support ${VAR:-default} syntax
+            let (var_name, default_val) = if let Some((var, def)) = inner.split_once(":-") {
+                (var, Some(def))
+            } else {
+                (inner, None)
+            };
+
+            if !var_name.is_empty() && var_name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                match std::env::var(var_name) {
+                    Ok(val) => resolved.push_str(&val),
+                    Err(_) => {
+                        if let Some(def) = default_val {
+                            resolved.push_str(def);
+                        } else {
+                            return Err(AppError::BadRequest(format!(
+                                "Missing required environment variable '{}' for MCP config key '{}'",
+                                var_name, key
+                            )));
+                        }
+                    }
+                }
+                remainder = &placeholder_rest[end + 1..];
+            } else {
+                resolved.push_str("${");
+                remainder = placeholder_rest;
+            }
+        }
+
+        resolved.push_str(remainder);
+        resolved_map.insert(key.clone(), resolved);
+    }
+
+    Ok(resolved_map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_mcp_env_success_and_fallback() {
+        std::env::set_var("TADPOLE_TEST_MCP_KEY", "secret-token-value");
+        let mut env = std::collections::HashMap::new();
+        env.insert("AUTH_HEADER".to_string(), "Bearer ${TADPOLE_TEST_MCP_KEY}".to_string());
+        env.insert("FALLBACK_VAR".to_string(), "${UNSET_VAR_12345:-http://localhost:8000}".to_string());
+        env.insert("STATIC_VAR".to_string(), "plain_value".to_string());
+
+        let resolved = resolve_mcp_env(&env).expect("env resolution should succeed");
+        assert_eq!(resolved.get("AUTH_HEADER").unwrap(), "Bearer secret-token-value");
+        assert_eq!(resolved.get("FALLBACK_VAR").unwrap(), "http://localhost:8000");
+        assert_eq!(resolved.get("STATIC_VAR").unwrap(), "plain_value");
+    }
+
+    #[test]
+    fn test_resolve_mcp_env_missing_required_variable_errors() {
+        std::env::remove_var("COMPLETELY_UNSET_REQUIRED_VAR");
+        let mut env = std::collections::HashMap::new();
+        env.insert("API_TOKEN".to_string(), "${COMPLETELY_UNSET_REQUIRED_VAR}".to_string());
+
+        let result = resolve_mcp_env(&env);
+        assert!(result.is_err(), "Expected missing variable without fallback to return an error");
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("COMPLETELY_UNSET_REQUIRED_VAR"));
+        } else {
+            panic!("Expected BadRequest error for missing required credential");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_structured_mcp_spawning_preserves_arguments_and_env() {
+        // Child-process test proving spaces, empty arguments, literal quotes, and environment variables survive unchanged
+        let args = vec![
+            "-c".to_string(),
+            r#"import sys, os, json; print(json.dumps({"args": sys.argv[1:], "env_val": os.environ.get("MCP_TEST_KEY")}))"#.to_string(),
+            "first arg with spaces".to_string(),
+            "".to_string(),
+            r#"literal"quote"arg"#.to_string(),
+        ];
+
+        let mut env = std::collections::HashMap::new();
+        env.insert("MCP_TEST_KEY".to_string(), "configured_secret_value".to_string());
+
+        let mut client = client::McpClient::spawn("python", &args, Some(&env))
+            .await
+            .expect("Failed to spawn python child process");
+
+        // Read stdout line produced by child
+        use tokio::io::AsyncBufReadExt;
+        let mut line = String::new();
+        client.stdout.read_line(&mut line).await.expect("Failed to read child stdout");
+
+        let output: serde_json::Value = serde_json::from_str(&line).expect("Child process did not emit valid JSON");
+        let parsed_args = output["args"].as_array().expect("args should be an array");
+        assert_eq!(parsed_args.len(), 3);
+        assert_eq!(parsed_args[0], "first arg with spaces");
+        assert_eq!(parsed_args[1], "");
+        assert_eq!(parsed_args[2], r#"literal"quote"arg"#);
+        assert_eq!(output["env_val"], "configured_secret_value");
+    }
+}
 
 // Metadata: [mod]

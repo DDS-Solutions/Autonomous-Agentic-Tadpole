@@ -59,6 +59,10 @@ impl McpRegistry {
         self.tools.get(name).cloned()
     }
 
+    pub fn has(&self, name: &str) -> bool {
+        self.tools.contains_key(name)
+    }
+
     pub fn list_all(&self) -> Vec<McpToolHub> {
         self.tools.values().map(|h| h.metadata()).collect()
     }

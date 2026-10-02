@@ -31,6 +31,70 @@ const LEGACY_DEV_TOKENS = new Set([
     'my-secure-token-123',
 ]);
 
+export const API_KEY_SESSION_KEY = 'tadpole_api_key_session';
+
+// Strictly memory-isolated session key to prevent storage leakage (INV-SEC-002)
+let memory_session_api_key = '';
+
+export const get_session_api_key = (): string => memory_session_api_key;
+
+export const set_session_api_key = (value: string): void => {
+    memory_session_api_key = typeof value === 'string' ? value : '';
+};
+
+export const clear_session_api_key = (): void => {
+    memory_session_api_key = '';
+    try {
+        sessionStorage.removeItem(API_KEY_SESSION_KEY);
+    } catch {
+        // Storage can be unavailable.
+    }
+};
+
+export const strip_persisted_api_key = (serialized: string): string => {
+    try {
+        const parsed = JSON.parse(serialized);
+        const persisted_settings = parsed?.state?.settings;
+        if (persisted_settings && typeof persisted_settings.tadpole_os_api_key === 'string' && persisted_settings.tadpole_os_api_key) {
+            parsed.state.settings = { ...persisted_settings, tadpole_os_api_key: '' };
+            return JSON.stringify(parsed);
+        }
+    } catch {
+        // Leave malformed data for Zustand's normal error handling.
+    }
+    return serialized;
+};
+
+export const settings_storage = {
+    getItem: (name: string): string | null => {
+        try {
+            const value = globalThis.localStorage?.getItem(name) ?? null;
+            if (!value) return null;
+            const safe_value = strip_persisted_api_key(value);
+            if (safe_value !== value && globalThis.localStorage) {
+                globalThis.localStorage.setItem(name, safe_value);
+            }
+            return safe_value;
+        } catch {
+            return null;
+        }
+    },
+    setItem: (name: string, value: string): void => {
+        try {
+            globalThis.localStorage?.setItem(name, strip_persisted_api_key(value));
+        } catch {
+            // Persistence is optional; keep in-memory store usable.
+        }
+    },
+    removeItem: (name: string): void => {
+        try {
+            globalThis.localStorage?.removeItem(name);
+        } catch {
+            // Persistence is optional.
+        }
+    },
+};
+
 export type ThemeOption = 'zinc' | 'slate' | 'neutral';
 export type DensityOption = 'compact' | 'comfortable';
 export type BackdropThemeOption = 'cyan' | 'emerald' | 'nebula' | 'slate' | 'amber';
@@ -110,7 +174,7 @@ const sanitize_settings = (settings: Tadpole_Settings): Tadpole_Settings => ({
 /** Canonical default configuration state */
 export const get_default_settings = (): Tadpole_Settings => ({
     tadpole_os_url: get_base_url(),
-    tadpole_os_api_key: '',
+    tadpole_os_api_key: sanitize_api_key(get_session_api_key()),
     theme: 'zinc',
     density: 'compact',
     backdrop_theme: 'cyan',
@@ -176,11 +240,14 @@ export const use_settings_store = create<Settings_State>()(
                 const clamped_swarm_depth = Math.min(10, Math.max(1, Math.floor(Number(new_settings.max_swarm_depth) || 5)));
                 const clamped_budget = Math.max(0, Number(new_settings.default_budget_usd) || 0);
 
+                const clean_api_key = sanitize_api_key(new_settings.tadpole_os_api_key || '');
+                set_session_api_key(clean_api_key);
+
                 set({
                     settings: {
                         ...new_settings,
                         tadpole_os_url: clean_url,
-                        tadpole_os_api_key: sanitize_api_key(new_settings.tadpole_os_api_key || ''),
+                        tadpole_os_api_key: clean_api_key,
                         default_temperature: clamped_temperature,
                         max_agents: clamped_agents,
                         max_clusters: clamped_clusters,
@@ -204,6 +271,7 @@ export const use_settings_store = create<Settings_State>()(
                     }
                 } else if (key === 'tadpole_os_api_key' && typeof value === 'string') {
                     final_value = sanitize_api_key(value) as unknown as Tadpole_Settings[K];
+                    set_session_api_key(final_value as string);
                 } else if (key === 'default_temperature' && typeof value === 'number') {
                     final_value = Math.min(2.0, Math.max(0.0, value)) as unknown as Tadpole_Settings[K];
                 } else if (key === 'max_agents' && typeof value === 'number') {
@@ -220,12 +288,13 @@ export const use_settings_store = create<Settings_State>()(
             },
 
             reset_to_defaults: () => {
+                clear_session_api_key();
                 set({ settings: get_default_settings() });
             }
         }),
         {
             name: SETTINGS_KEY,
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => settings_storage),
             partialize: (state) => ({
                 settings: {
                     ...state.settings,
@@ -243,7 +312,10 @@ export const use_settings_store = create<Settings_State>()(
                     }
                     if (hydrated_state) {
                         const original_url = hydrated_state.settings.tadpole_os_url;
-                        hydrated_state.settings = sanitize_settings(hydrated_state.settings);
+                        hydrated_state.settings = {
+                            ...sanitize_settings(hydrated_state.settings),
+                            tadpole_os_api_key: sanitize_api_key(get_session_api_key()),
+                        };
                         const url = hydrated_state.settings.tadpole_os_url;
                         if (url && url.toLowerCase().includes('tauri')) {
                             console.warn('[SettingsStore] Legacy internal URL detected in persistent storage. Resetting to standard loopback.');

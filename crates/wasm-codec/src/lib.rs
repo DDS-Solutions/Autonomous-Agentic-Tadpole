@@ -52,8 +52,7 @@ impl SwarmPulse {
 
     /// Pure Rust binary encoder with magic header and version prefix.
     pub fn encode_to_vec(&self) -> Result<Vec<u8>, String> {
-        let payload = postcard::to_allocvec(self)
-            .map_err(|e| format!("Encoding error: {}", e))?;
+        let payload = postcard::to_allocvec(self).map_err(|e| format!("Encoding error: {}", e))?;
         let mut buf = Vec::with_capacity(6 + payload.len());
         buf.extend_from_slice(&PULSE_MAGIC);
         buf.extend_from_slice(&PULSE_VERSION.to_be_bytes());
@@ -66,15 +65,17 @@ impl SwarmPulse {
         if bytes.len() < 6 {
             return Err("Decoding error: payload too short for magic header".to_string());
         }
-        if &bytes[0..4] != PULSE_MAGIC {
+        if bytes[0..4] != PULSE_MAGIC {
             return Err("Decoding error: invalid pulse magic bytes".to_string());
         }
         let version = u16::from_be_bytes([bytes[4], bytes[5]]);
         if version != PULSE_VERSION {
-            return Err(format!("Decoding error: unsupported pulse version {}", version));
+            return Err(format!(
+                "Decoding error: unsupported pulse version {}",
+                version
+            ));
         }
-        postcard::from_bytes(&bytes[6..])
-            .map_err(|e| format!("Decoding error: {}", e))
+        postcard::from_bytes(&bytes[6..]).map_err(|e| format!("Decoding error: {}", e))
     }
 }
 
@@ -143,9 +144,12 @@ mod tests {
         assert_eq!(pulse, decoded);
 
         // Test magic envelope roundtrip
-        let envelope = pulse.encode_to_vec().expect("envelope serialization failed");
+        let envelope = pulse
+            .encode_to_vec()
+            .expect("envelope serialization failed");
         assert!(envelope.starts_with(&PULSE_MAGIC));
-        let decoded_envelope = SwarmPulse::decode_from_bytes(&envelope).expect("envelope deserialization failed");
+        let decoded_envelope =
+            SwarmPulse::decode_from_bytes(&envelope).expect("envelope deserialization failed");
         assert_eq!(pulse, decoded_envelope);
     }
 
@@ -166,4 +170,3 @@ mod tests {
 }
 
 // Metadata: [wasm_codec]
-

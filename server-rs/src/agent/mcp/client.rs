@@ -15,6 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -49,21 +50,46 @@ pub struct JsonRpcNotification {
 pub struct McpClient {
     #[allow(dead_code)]
     child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    pub(crate) stdin: ChildStdin,
+    pub(crate) stdout: BufReader<ChildStdout>,
     next_id: u64,
 }
 
 impl McpClient {
-    pub async fn spawn(command_line: &str) -> Result<Self, AppError> {
-        info!("🚀 [client] [MCP] Spawning server: {}", command_line);
-        
-        let mut parts = command_line.split_whitespace();
-        let program = parts.next().ok_or_else(|| AppError::BadRequest("Empty command".to_string()))?;
-        let args: Vec<&str> = parts.collect();
+    /// Spawns an MCP server from structured program command, args, and optional env.
+    /// Preserves argument boundaries, avoiding shell parsing and whitespace splitting.
+    pub async fn spawn(
+        program: &str,
+        args: &[String],
+        env: Option<&HashMap<String, String>>,
+    ) -> Result<Self, AppError> {
+        let trimmed_program = program.trim();
+        if trimmed_program.is_empty() {
+            return Err(AppError::BadRequest("Empty command".to_string()));
+        }
+        info!("🚀 [client] [MCP] Spawning server: {}", trimmed_program);
 
-        let mut child = Command::new(program)
-            .args(args)
+        let mut command = Command::new(trimmed_program);
+        command.args(args);
+        command.kill_on_drop(true);
+
+        // SEC: Isolate child process from host parent secrets (INV-SEC-003)
+        // Clear ambient environment and forward only safe system loader variables plus explicit server config env.
+        command.env_clear();
+        const SAFE_SYSTEM_VARS: &[&str] = &[
+            "PATH", "PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE",
+            "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL",
+        ];
+        for key in SAFE_SYSTEM_VARS {
+            if let Ok(val) = std::env::var(key) {
+                command.env(key, val);
+            }
+        }
+        if let Some(env_map) = env {
+            command.envs(env_map);
+        }
+
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit()) // Log stderr to the console

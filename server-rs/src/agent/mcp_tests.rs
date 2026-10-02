@@ -31,7 +31,11 @@ mod tests {
 
     async fn setup_mock_policy() -> Arc<PermissionPolicy> {
         let pool = SqlitePool::connect_lazy("sqlite::memory:").unwrap();
-        Arc::new(PermissionPolicy::new(pool))
+        let policy = PermissionPolicy::new(pool);
+        policy.set_mode("recruit_specialist", crate::security::permissions::PermissionMode::Allow).await;
+        policy.set_mode("list_file_symbols", crate::security::permissions::PermissionMode::Allow).await;
+        policy.set_mode("get_symbol_body", crate::security::permissions::PermissionMode::Allow).await;
+        Arc::new(policy)
     }
 
     #[tokio::test]
