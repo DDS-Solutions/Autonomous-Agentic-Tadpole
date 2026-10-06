@@ -53,7 +53,7 @@ arc-swap = "1.7.1"
 sysinfo = "0.38.4"
 # Database Persistence
 sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "tls-rustls", "sqlite", "chrono", "json", "migrate", "derive", "macros" ] }
-cron = "0.16.0"
+cron = "0.17.0"
 once_cell = "1.21.3"
 regex = "1.10"
 async-trait = "0.1"
