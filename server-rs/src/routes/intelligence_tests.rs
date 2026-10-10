@@ -155,6 +155,79 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
+
+    // 7. Happy Path: Authorized symbol context resolution with token budget
+    #[tokio::test]
+    async fn test_resolve_code_context_authorized() {
+        let (app, _state) = setup_test_app().await;
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/resolve?name=test_sym&path=src/test.ts&budget=4000")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("Valid JSON");
+        assert_eq!(json["budget"], 4000);
+        assert!(json["symbols"].is_array());
+    }
+
+    // 8. Edge Case: Budget clamped to MAX_CONTEXT_BUDGET
+    #[tokio::test]
+    async fn test_resolve_code_context_budget_clamp() {
+        let (app, _state) = setup_test_app().await;
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/resolve?name=test_sym&path=src/test.ts&budget=99999")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("Valid JSON");
+        assert_eq!(json["budget"], 32_768);
+    }
+
+    // 9. Happy Path: Authorized impacted test calculation
+    #[tokio::test]
+    async fn test_get_impacted_tests_authorized() {
+        let (app, _state) = setup_test_app().await;
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/impacted-tests?name=test_sym&path=src/test.ts")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("Valid JSON");
+        assert!(json.is_array());
+    }
+
+    // 10. Failure Path: Resolve path traversal blocked
+    #[tokio::test]
+    async fn test_resolve_path_traversal_blocked() {
+        let (app, _state) = setup_test_app().await;
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/resolve?name=test_sym&path=../../etc/passwd")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
 }
 
 // Metadata: [intelligence_tests]

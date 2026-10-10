@@ -155,7 +155,7 @@ export const useViewportPosition = ({
         if (is_visible && trigger_ref.current) {
             calculate_and_apply();
         }
-    }, [is_visible, calculate_and_apply]);
+    }, [is_visible, calculate_and_apply, trigger_ref]);
 
     return { coords, actual_position, update_position: calculate_and_apply };
 };

@@ -14,7 +14,6 @@ Core system module providing specialized functionality for the agent swarm.
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use tempfile::tempdir;
     use tokio::fs;
     use crate::error::AppError;
@@ -23,7 +22,6 @@ mod tests {
         collision_safe_skill_filename, extract_script_docstring, fnv1a64, parse_skill_md,
     };
     use crate::agent::script_skills::registry::ScriptSkillsRegistry;
-    use crate::agent::script_skills::tier::Tier;
 
     fn temp_registry() -> (tempfile::TempDir, ScriptSkillsRegistry) {
         let temp = tempdir().expect("Failed to create tempdir");

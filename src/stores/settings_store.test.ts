@@ -332,7 +332,7 @@ describe('settings_store', () => {
         };
         (global as any).__MOCK_STORAGE__['tadpole_settings'] = JSON.stringify(legacy_snapshot);
 
-        const { settings_storage, get_settings, use_settings_store } = await import('./settings_store');
+        const { settings_storage, use_settings_store } = await import('./settings_store');
         await use_settings_store.persist.rehydrate();
 
         // Reading via storage must scrub disk
@@ -346,7 +346,7 @@ describe('settings_store', () => {
     });
 
     it('persists UI preferences across reload while keeping API key memory/session only', async () => {
-        const { get_settings, use_settings_store } = await import('./settings_store');
+        const { use_settings_store } = await import('./settings_store');
         await use_settings_store.persist.rehydrate();
 
         use_settings_store.getState().update_setting('theme', 'slate');

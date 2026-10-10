@@ -282,7 +282,7 @@ export const Neural_Waterfall: React.FC<{ is_detached_view?: boolean }> = ({ is_
         }
 
         return flat;
-    }, [effective_trace_id, get_trace_tree, spans]);
+    }, [effective_trace_id, get_trace_tree]);
 
     // Ticker-free boundary calculations
     const { min_time, total_duration } = useMemo(() => {

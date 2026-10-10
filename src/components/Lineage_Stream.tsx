@@ -187,7 +187,7 @@ export const Lineage_Stream: React.FC<{ is_detached_view?: boolean }> = ({ is_de
     const active_tree = useMemo(() => {
         if (!effective_trace_id) return [];
         return get_trace_tree(effective_trace_id);
-    }, [effective_trace_id, get_trace_tree, spans]);
+    }, [effective_trace_id, get_trace_tree]);
 
     const handle_sidebar_resize_start = (e: React.MouseEvent): void => {
         if (is_detached_view) return;

@@ -112,6 +112,15 @@ class IntelligenceApiService {
     }
 
     /**
+     * Calculates test files located in the blast radius of a symbol or file change.
+     */
+    async get_impacted_tests(path: string, name?: string, signal?: AbortSignal): Promise<string[]> {
+        const query_params = new URLSearchParams({ path });
+        if (name) query_params.append('name', name);
+        return api_request<string[]>(`/v1/intelligence/impacted-tests?${query_params.toString()}`, { signal });
+    }
+
+    /**
      * Fetches paginated OKF knowledge entries from the IKS.
      */
     async get_knowledge(params?: {
