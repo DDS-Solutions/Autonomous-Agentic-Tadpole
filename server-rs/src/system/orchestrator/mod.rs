@@ -83,7 +83,22 @@ impl Orchestrator {
         let reaped_count = crate::agent::persistence::reap_stale_agents(pool, 300).await?;
         if reaped_count > 0 {
             warn!("♻️ [Orchestrator] Harvested {} stale agents. Logging systemic drift to AuditActor.", reaped_count);
-            // Future: Push to FAULT_REGISTRY table here
+            // Reconcile in-memory registry to prevent save_agents from overwriting DB status back to busy/working
+            let threshold_time = chrono::Utc::now() - chrono::Duration::seconds(300);
+            for mut entry in self.app_state.registry.agents.iter_mut() {
+                let a = entry.value_mut();
+                if a.health.status == "busy" || a.health.status == "working" || a.health.status == "thinking" {
+                    let is_stale = match a.health.heartbeat_at {
+                        Some(hb) => hb < threshold_time,
+                        None => true,
+                    };
+                    if is_stale {
+                        a.health.status = "idle".to_string();
+                        a.state.current_task = None;
+                        a.state.active_mission = None;
+                    }
+                }
+            }
         }
 
         // (i.e., the agent process died without the mission finishing)
@@ -96,7 +111,7 @@ impl Orchestrator {
              AND id NOT IN (
                  SELECT json_extract(active_mission, '$.id') 
                  FROM agents 
-                 WHERE status IN ('busy', 'active', 'thinking')
+                 WHERE status IN ('busy', 'active', 'thinking', 'working')
              )"
         )
         .fetch_all(pool)

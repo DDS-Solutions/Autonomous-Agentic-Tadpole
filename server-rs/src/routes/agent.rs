@@ -598,7 +598,12 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
             let state = state.clone();
             async move {
                 if let Some(task) = agent.state.current_task.clone() {
-                    if !task.is_empty() {
+                    let is_ephemeral_status = task.starts_with("Executing tool:")
+                        || task.starts_with("Consulting intelligence")
+                        || task.starts_with("Evaluating mutation")
+                        || task.trim().is_empty();
+
+                    if !is_ephemeral_status {
                         let agent_id = agent.identity.id.clone();
                         let cluster_id = agent
                             .state
@@ -622,7 +627,7 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
 
                         spawn_agent_runner(state.clone(), agent_id.clone(), payload);
                     } else {
-                        // Reset to idle since task is empty.
+                        // Reset to idle since task is ephemeral progress status or empty.
                         reset_agent_to_idle(&state, &agent.identity.id).await;
                     }
                 } else {

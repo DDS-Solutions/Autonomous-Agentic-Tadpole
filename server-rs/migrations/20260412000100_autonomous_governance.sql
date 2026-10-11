@@ -39,10 +39,7 @@ INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('get_project
 -- Guardrails
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('bash', 'Prompt');
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('write_to_file', 'Prompt');
-INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('write_file', 'Prompt');
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('delete_file', 'Prompt');
-INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('fetch_url', 'Prompt');
-INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('spawn_subagent', 'Prompt');
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('git_push', 'Prompt');
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('deploy_application', 'Prompt');
 INSERT OR IGNORE INTO permission_policies (tool_name, mode) VALUES ('propose_capability', 'Prompt');

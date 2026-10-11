@@ -2437,13 +2437,26 @@ paths:
     get:
       tags: [intelligence]
       summary: "Get impacted tests"
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: "File path"
+          schema: { type: string }
+        - name: name
+          in: query
+          required: false
+          description: "Symbol name"
+          schema: { type: string }
       responses:
         "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericResponse'
+                type: array
+                items:
+                  type: string
         "401":
           description: Unauthorized
           content:
@@ -4832,10 +4845,11 @@ components:
       items: { $ref: '#/components/schemas/SymbolNode' }
     ResolveResponse:
       type: object
-      required: [symbols, budget, accumulated_tokens]
+      required: [symbols, budget, accumulated_tokens, truncation_estimate]
       properties:
         symbols:
           type: array
           items: { $ref: '#/components/schemas/SymbolNode' }
         budget: { type: integer }
         accumulated_tokens: { type: integer }
+        truncation_estimate: { type: boolean }

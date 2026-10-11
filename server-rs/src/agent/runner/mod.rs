@@ -188,8 +188,40 @@ impl RunContext {
     /// Creates a partial RunContext from an isolated ToolContext.
     /// Used for bridging between Zero-Trust tools and legacy AgentRunner handlers.
     pub fn from_tool_ctx(ctx: &crate::agent::runner::tools::ToolContext) -> Self {
+        let agent = ctx
+            .state
+            .registry
+            .agents
+            .get(&ctx.agent_id)
+            .map(|a| a.value().clone());
+
+        let model_config = agent
+            .as_ref()
+            .map(|a| a.models.model.clone())
+            .unwrap_or_default();
+
+        let (name, role, department, authority_level) = if let Some(ref a) = agent {
+            (
+                a.identity.name.clone(),
+                a.identity.role.clone(),
+                a.identity.department.clone(),
+                crate::agent::types::RoleAuthorityLevel::from_role(&a.identity.role),
+            )
+        } else {
+            (
+                ctx.agent_id.clone(),
+                "Specialist".to_string(),
+                "Operations".to_string(),
+                crate::agent::types::RoleAuthorityLevel::Specialist,
+            )
+        };
+
         Self {
             agent_id: ctx.agent_id.clone(),
+            name,
+            role,
+            department,
+            authority_level,
             mission_id: ctx.mission_id.clone(),
             workspace_root: ctx.workspace_root.clone(),
             fs_adapter: ctx.fs_adapter.clone(),
@@ -197,6 +229,8 @@ impl RunContext {
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
             trace_id: ctx.trace_id.clone(),
+            traceparent: Some(ctx.trace_id.clone()),
+            model_config,
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(ctx.active_node_id.clone())),
             ..Default::default()
         }

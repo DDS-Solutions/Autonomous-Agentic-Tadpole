@@ -664,7 +664,7 @@ pub async fn reap_stale_agents(pool: &SqlitePool, threshold_secs: i64) -> Result
     // Use safe subtraction to determine the high-water mark for zombie processes.
     let threshold_time = now - chrono::Duration::seconds(threshold_secs);
 
-    let res = sqlx::query("UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working') AND ((heartbeat_at IS NOT NULL AND heartbeat_at < ?1) OR (heartbeat_at IS NULL AND (created_at IS NULL OR created_at < ?1)))")
+    let res = sqlx::query("UPDATE agents SET status = 'idle', current_task = NULL, active_mission = NULL WHERE status IN ('busy', 'working', 'thinking') AND ((heartbeat_at IS NOT NULL AND heartbeat_at < ?1) OR (heartbeat_at IS NULL AND (created_at IS NULL OR created_at < ?1)))")
         .bind(threshold_time)
         .execute(pool)
         .await?;

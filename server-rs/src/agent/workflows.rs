@@ -107,15 +107,23 @@ pub async fn load_workflow(
     base_dir: &std::path::Path,
     name: &str,
 ) -> Result<WorkflowExecutionState, AppError> {
-    let path = base_dir
-        .join("data")
-        .join("workflows")
-        .join(format!("{}.md", name));
-    if !path.exists() {
-        return Err(AppError::NotFound(format!("Workflow file not found: {:?}", path)));
-    }
+    let candidate_paths = [
+        base_dir.join("directives").join(format!("{}.md", name)),
+        base_dir.join("directives").join("workflows").join(format!("{}.md", name)),
+        base_dir.join("data").join("workflows").join(format!("{}.md", name)),
+    ];
 
-    let content = tokio::fs::read_to_string(path).await.map_err(AppError::Io)?;
+    let path = candidate_paths
+        .into_iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "Workflow file '{}' not found in directives/ or data/workflows/",
+                name
+            ))
+        })?;
+
+    let content = tokio::fs::read_to_string(&path).await.map_err(AppError::Io)?;
     WorkflowExecutionState::new(name.to_string(), &content)
 }
 

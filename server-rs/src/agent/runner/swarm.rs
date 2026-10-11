@@ -522,19 +522,22 @@ impl AgentRunner {
         let payload = ctx.derive_subtask_payload(final_directive);
 
         // ### 🛡️ [Self-Healing] Alpha Directive Pre-flight
-        // Resolve Agent 2 ("Tadpole Alpha") using the same tiered lookup as
-        // handle_spawn_subagent: Tier 1 by name match, Tier 2 from swarm pool,
-        // Tier 3 fabrication. This prevents silent NotFound failures on fresh boots.
-        let alpha_id = {
-            // Prefer an agent with "alpha", "coo", or "tadpole" in its role/name
-            let registry_match = self.state.registry.agents.iter().find(|kv| {
-                let a = kv.value();
-                let name = a.identity.name.to_lowercase();
-                let role = a.identity.role.to_lowercase();
-                name.contains("alpha") || role.contains("coo") || name.contains("tadpole")
-            }).map(|kv| kv.key().clone());
-
-            registry_match.unwrap_or_else(|| "2".to_string())
+        // Resolve Agent 2 ("Tadpole Alpha" / COO) with strict priority:
+        // Tier 1: Dedicated COO Agent ("2")
+        // Tier 2: Agent matching role "coo" or name "tadpole" (excluding orphan "alpha")
+        // Tier 3: Fall back to AGENT_COO ("2")
+        let alpha_id = if self.state.registry.agents.contains_key(crate::agent::constants::AGENT_COO) {
+            crate::agent::constants::AGENT_COO.to_string()
+        } else if let Some(kv) = self.state.registry.agents.iter().find(|kv| {
+            let id = kv.key().as_str();
+            let a = kv.value();
+            let role = a.identity.role.to_lowercase();
+            let name = a.identity.name.to_lowercase();
+            id == "2" || role.contains("coo") || name.contains("tadpole")
+        }) {
+            kv.key().clone()
+        } else {
+            crate::agent::constants::AGENT_COO.to_string()
         };
 
         // Ensure the resolved agent exists in DB before running
@@ -552,7 +555,24 @@ impl AgentRunner {
             let _ = tx.commit().await;
         }
 
-        let sub_result = Box::pin(self.run(alpha_id, payload)).await?;
+        // Bounded execution timeout for sub-runner to prevent deadlock/hangs
+        let sub_timeout = std::time::Duration::from_secs(240);
+        let runner = self.clone();
+        let mut sub_task = tokio::spawn(async move {
+            runner.run(alpha_id, payload).await
+        });
+        let sub_result = match tokio::time::timeout(sub_timeout, &mut sub_task).await {
+            Ok(Ok(res)) => res?,
+            Ok(Err(join_err)) => {
+                tracing::error!("🚨 [Swarm] Tadpole Alpha task panicked or was cancelled: {}", join_err);
+                return Err(AppError::InternalServerError(format!("Tadpole Alpha execution failed: {}", join_err)));
+            }
+            Err(_) => {
+                sub_task.abort();
+                tracing::error!("🚨 [Swarm] Tadpole Alpha execution timed out after 240s");
+                return Err(AppError::InternalServerError("Tadpole Alpha execution timed out after 240 seconds".to_string()));
+            }
+        };
 
         Ok(format!(
             "Directive issued to Tadpole Alpha. Mission ID: {}\n\nResult: {}",
