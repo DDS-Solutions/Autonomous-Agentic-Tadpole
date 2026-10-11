@@ -168,7 +168,7 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
     };
 
     // 5. Launch Background Tasks only after successful socket bind
-    startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
+    let shutdown_handle = startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
 
     // Notify that boot sequence is complete so requests can proceed
     app_state.notify_boot_complete();
@@ -212,6 +212,11 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
 
     // Signal all background tasks to shut down gracefully
     let _ = shutdown_tx.send(true);
+
+    // Await completion of phased shutdown orchestration
+    if let Err(e) = shutdown_handle.await {
+        tracing::warn!("⚠️ [Main] Shutdown orchestrator join error: {:?}", e);
+    }
 
     // Await completion of periodic sync task to eliminate concurrent write races on disk/DB
     if let Err(e) = sync_handle.await {

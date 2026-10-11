@@ -65,3 +65,4 @@ server-rs/logs.txt
 server-rs/scratch/
 monitoring/prometheus/bearer_token
 !monitoring/prometheus/bearer_token.example
+nexus_bundle/

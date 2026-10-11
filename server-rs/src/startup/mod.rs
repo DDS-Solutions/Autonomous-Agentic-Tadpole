@@ -83,7 +83,13 @@ pub fn init_tracing(disable_otel: bool) {
         .map(|v| v.to_lowercase() == "true")
         .unwrap_or(false);
 
-    if !disable_otel {
+    let otlp_endpoint_var = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok();
+    let enable_otlp = std::env::var("ENABLE_OTLP")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false)
+        || otlp_endpoint_var.is_some();
+
+    if !disable_otel && (enable_stdout || enable_otlp) {
         let provider = if enable_stdout {
             let exporter = opentelemetry_stdout::SpanExporter::default();
             let redacting_exporter = RedactingSpanExporter::new(exporter);
@@ -92,8 +98,8 @@ pub fn init_tracing(disable_otel: bool) {
                 .build()
         } else {
             use opentelemetry_otlp::WithExportConfig;
-            let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:4317".to_string());
+            let otlp_endpoint = otlp_endpoint_var
+                .unwrap_or_else(|| "http://localhost:4317".to_string());
 
             let exporter_result = opentelemetry_otlp::SpanExporter::builder()
                 .with_tonic()
@@ -359,7 +365,7 @@ pub async fn spawn_background_tasks(
     intent: BootstrapIntent,
     service_config: ServiceConfiguration,
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     let context = SystemContext {
         app_state,
         shutdown_rx: shutdown_rx.clone(),
@@ -417,7 +423,7 @@ pub async fn spawn_background_tasks(
 
     // Coordinate phased shutdown sequence in response to global shutdown signal
     let mut global_shutdown_rx = shutdown_rx.clone();
-    tokio::spawn(async move {
+    let shutdown_handle = tokio::spawn(async move {
         loop {
             if global_shutdown_rx.changed().await.is_err() {
                 break;
@@ -533,6 +539,8 @@ pub async fn spawn_background_tasks(
             }
         });
     }
+
+    shutdown_handle
 }
 
 /// Handles version/help administrative queries before full engine initialization.

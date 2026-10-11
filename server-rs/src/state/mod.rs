@@ -560,7 +560,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             auto_approve_safe_skills: AtomicBool::new(
                 std::env::var("AUTO_APPROVE_SAFE_SKILLS")
                     .map(|s| s == "true")
-                    .unwrap_or(true),
+                    .unwrap_or(false),
             ),
             max_agents: AtomicU32::new(
                 std::env::var("MAX_AGENTS")

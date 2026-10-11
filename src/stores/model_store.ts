@@ -33,6 +33,9 @@ export interface Model_Entry {
     rpd?: number;
     tpm?: number;
     tpd?: number;
+    context_window?: number;
+    input_cost_per_m?: number;
+    output_cost_per_m?: number;
     input_tokens?: number;
     output_tokens?: number;
     capabilities?: {
@@ -50,8 +53,8 @@ export interface Model_State {
     deleting_ids: Set<string>;
 
     // Actions
-    add_model: (name: string, provider: string, modality?: Model_Entry['modality'], limits?: Partial<Pick<Model_Entry, 'rpm' | 'rpd' | 'tpm' | 'tpd'>>) => Promise<void>;
-    edit_model: (id: string, name: string, provider: string, modality: Model_Entry['modality'], limits?: Partial<Pick<Model_Entry, 'rpm' | 'rpd' | 'tpm' | 'tpd'>>) => Promise<void>;
+    add_model: (name: string, provider: string, modality?: Model_Entry['modality'], limits?: Partial<Pick<Model_Entry, 'rpm' | 'rpd' | 'tpm' | 'tpd' | 'context_window' | 'input_cost_per_m' | 'output_cost_per_m'>>) => Promise<void>;
+    edit_model: (id: string, name: string, provider: string, modality: Model_Entry['modality'], limits?: Partial<Pick<Model_Entry, 'rpm' | 'rpd' | 'tpm' | 'tpd' | 'context_window' | 'input_cost_per_m' | 'output_cost_per_m'>>) => Promise<void>;
     delete_model: (id: string) => Promise<void>;
     sync_models: () => Promise<void>;
     sync_defaults: (providers_length: number) => void;
@@ -102,7 +105,7 @@ export const use_model_store = create<Model_State>()(
 
             add_model: async (name, provider, modality = 'llm', limits) => {
                 const id = Crypto_Service.generate_id();
-                const new_model = {
+                const new_model: Model_Entry = {
                     id,
                     name,
                     provider,
@@ -110,7 +113,10 @@ export const use_model_store = create<Model_State>()(
                     rpm: limits?.rpm ?? 10,
                     tpm: limits?.tpm ?? 100000,
                     rpd: limits?.rpd ?? 1000,
-                    tpd: limits?.tpd ?? 10000000
+                    tpd: limits?.tpd ?? 10000000,
+                    context_window: limits?.context_window ?? 128000,
+                    input_cost_per_m: limits?.input_cost_per_m ?? 0,
+                    output_cost_per_m: limits?.output_cost_per_m ?? 0
                 };
 
                 set(state => ({
@@ -194,6 +200,9 @@ export const use_model_store = create<Model_State>()(
                             provider,
                             provider_id: (bm.provider_id || bm.providerId || bm.provider || 'local') as string,
                             modality: (bm.modality || 'llm') as Model_Entry['modality'],
+                            context_window: (bm.context_window as number) ?? (bm.contextWindow as number) ?? (bm.capabilities as Model_Entry['capabilities'])?.context_window,
+                            input_cost_per_m: (bm.input_cost_per_m as number) ?? (bm.inputCostPerM as number) ?? 0,
+                            output_cost_per_m: (bm.output_cost_per_m as number) ?? (bm.outputCostPerM as number) ?? 0,
                             input_tokens: bm.input_tokens as number | undefined,
                             output_tokens: bm.output_tokens as number | undefined,
                             capabilities: bm.capabilities as Model_Entry['capabilities']
@@ -225,7 +234,10 @@ export const use_model_store = create<Model_State>()(
                             // This implements the "Prefer Local" strategy to prevent legacy defaults from clobbering user state.
                             const has_local_changes = existing.rpm !== bm.rpm || 
                                                     existing.tpm !== bm.tpm || 
-                                                    existing.modality !== bm.modality;
+                                                    existing.modality !== bm.modality ||
+                                                    existing.context_window !== bm.context_window ||
+                                                    existing.input_cost_per_m !== bm.input_cost_per_m ||
+                                                    existing.output_cost_per_m !== bm.output_cost_per_m;
                             
                             if (has_local_changes) {
                                 console.debug(`[ModelStore] Preserving Local state for Model ${bm.name} (Local-First Strategy)`);

@@ -189,6 +189,11 @@ export const agent_api_service = {
                     if (inventory_model) {
                         if (inventory_model.rpm) body.rpm = inventory_model.rpm;
                         if (inventory_model.tpm) body.tpm = inventory_model.tpm;
+                        if (inventory_model.rpd) body.rpd = inventory_model.rpd;
+                        if (inventory_model.tpd) body.tpd = inventory_model.tpd;
+                        if (inventory_model.context_window) body.context_window = inventory_model.context_window;
+                        if (inventory_model.input_cost_per_m !== undefined) body.input_cost_per_m = inventory_model.input_cost_per_m;
+                        if (inventory_model.output_cost_per_m !== undefined) body.output_cost_per_m = inventory_model.output_cost_per_m;
                     }
                 } else if (!is_local) {
                     const reason = is_actually_locked ? 'Vault is Locked' : `No Key for ${current_provider.toUpperCase()}`;

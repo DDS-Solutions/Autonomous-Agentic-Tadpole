@@ -96,6 +96,8 @@ pub async fn execute_sandboxed(
             docker_cmd.arg("--cpus").arg(cpu.to_string());
         }
 
+        let container_name = format!("tadpole-sbx-{}", uuid::Uuid::new_v4());
+        docker_cmd.arg("--name").arg(&container_name);
         docker_cmd.arg("python:3.10-slim");
         
         // Wrap command args
@@ -104,13 +106,22 @@ pub async fn execute_sandboxed(
             docker_cmd.arg(arg);
         }
 
-        let output = tokio::time::timeout(std::time::Duration::from_secs(60), docker_cmd.output()).await
-            .map_err(|_| AppError::InfrastructureError {
-                provider_id: "sandboxed_python".to_string(),
-                detail: "Docker execution timed out after 60s".to_string(),
-                help_link: None,
-            })?
-            .map_err(AppError::Io)?;
+        docker_cmd.kill_on_drop(true);
+
+        let output = match tokio::time::timeout(std::time::Duration::from_secs(60), docker_cmd.output()).await {
+            Ok(res) => res.map_err(AppError::Io)?,
+            Err(_) => {
+                let _ = tokio::process::Command::new("docker")
+                    .args(["rm", "-f", &container_name])
+                    .output()
+                    .await;
+                return Err(AppError::InfrastructureError {
+                    provider_id: "sandboxed_python".to_string(),
+                    detail: "Docker execution timed out after 60s (container killed)".to_string(),
+                    help_link: None,
+                });
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         if output.status.success() {
@@ -146,6 +157,7 @@ pub async fn execute_sandboxed(
 
         wasm_cmd.env("TADPOLE_SKILL_ARGS", args_json);
         wasm_cmd.current_dir(workspace_root);
+        wasm_cmd.kill_on_drop(true);
 
         let output = tokio::time::timeout(std::time::Duration::from_secs(60), wasm_cmd.output()).await
             .map_err(|_| AppError::InfrastructureError {
@@ -248,16 +260,28 @@ pub async fn execute_sandboxed_shell(
             docker_cmd.arg("--cpus").arg(cpu.to_string());
         }
 
-        docker_cmd.arg("tadpole-os:latest");
-        docker_cmd.arg("sh").arg("-c").arg(command_str);
+        let container_name = format!("tadpole-sbx-{}", uuid::Uuid::new_v4());
+        docker_cmd.arg("--name").arg(&container_name);
 
-        let output = tokio::time::timeout(std::time::Duration::from_secs(60), docker_cmd.output()).await
-            .map_err(|_| AppError::InfrastructureError {
-                provider_id: "sandboxed_shell".to_string(),
-                detail: "Docker shell execution timed out after 60s".to_string(),
-                help_link: None,
-            })?
-            .map_err(AppError::Io)?;
+        let sandbox_image = std::env::var("SANDBOX_IMAGE").unwrap_or_else(|_| "tadpole-os:1.1.58".to_string());
+        docker_cmd.arg(&sandbox_image);
+        docker_cmd.arg("sh").arg("-c").arg(command_str);
+        docker_cmd.kill_on_drop(true);
+
+        let output = match tokio::time::timeout(std::time::Duration::from_secs(60), docker_cmd.output()).await {
+            Ok(res) => res.map_err(AppError::Io)?,
+            Err(_) => {
+                let _ = tokio::process::Command::new("docker")
+                    .args(["rm", "-f", &container_name])
+                    .output()
+                    .await;
+                return Err(AppError::InfrastructureError {
+                    provider_id: "sandboxed_shell".to_string(),
+                    detail: "Docker shell execution timed out after 60s (container killed)".to_string(),
+                    help_link: None,
+                });
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         if output.status.success() {
@@ -288,6 +312,7 @@ pub async fn execute_sandboxed_shell(
         let mut cmd = Command::new(shell);
         cmd.arg(flag).arg(command_str);
         cmd.current_dir(workspace_root);
+        cmd.kill_on_drop(true);
 
         let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
             .map_err(|_| AppError::InfrastructureError {

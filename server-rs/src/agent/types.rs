@@ -366,6 +366,12 @@ pub struct ModelConfig {
     pub connector_configs: Option<Vec<ConnectorConfig>>,
     #[serde(default, alias = "extra_parameters")]
     pub extra_parameters: Option<std::collections::HashMap<String, serde_json::Value>>,
+    #[serde(default, alias = "context_window")]
+    pub context_window: Option<u32>,
+    #[serde(default, alias = "input_cost_per_m")]
+    pub input_cost_per_m: Option<f64>,
+    #[serde(default, alias = "output_cost_per_m")]
+    pub output_cost_per_m: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -483,6 +489,12 @@ pub struct ModelEntry {
     pub capabilities: ModelCapabilities,
     #[serde(default, alias = "last_synced_at")]
     pub last_synced_at: Option<DateTime<Utc>>,
+    #[serde(default, alias = "context_window")]
+    pub context_window: Option<u32>,
+    #[serde(default, alias = "input_cost_per_m")]
+    pub input_cost_per_m: Option<f64>,
+    #[serde(default, alias = "output_cost_per_m")]
+    pub output_cost_per_m: Option<f64>,
 }
 
 impl Validatable for ModelEntry {

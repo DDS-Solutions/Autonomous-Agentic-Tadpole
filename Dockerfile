@@ -38,8 +38,8 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust (pinned to 1.95.0 for modern toolchain and compiler features)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.95.0
+# Install Rust (pinned to 1.99.0 matching rust-toolchain.toml)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.99.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Increase stack size and drastically limit jobs to save memory
@@ -49,6 +49,9 @@ ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 ENV PROTOC=/usr/bin/protoc
 
 WORKDIR /usr/src/app
+
+# Copy schema and toolchain for include_str! and compilation parity
+COPY .env.schema rust-toolchain.toml ./
 
 # Copy the entire backend source
 COPY server-rs/ ./server-rs/
@@ -71,7 +74,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies only (including python-is-python3 alias)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
@@ -80,6 +83,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --break-system-packages --no-cache-dir skillspector==0.1.3
@@ -93,6 +97,9 @@ COPY --from=frontend-builder /usr/src/app/dist /app/dist
 
 # Copy data directory (skills, workflows, context, database)
 COPY data /app/data
+
+# Copy execution layer for deterministic scripts and MCP tools
+COPY execution /app/execution
 
 # Ensure directories exist
 RUN mkdir -p /app/.agent /app/workspaces

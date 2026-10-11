@@ -46,6 +46,9 @@ export function useModelManager() {
         tpm: 100000,
         rpd: 1000,
         tpd: 10000000,
+        context_window: 128000,
+        input_cost_per_m: 0,
+        output_cost_per_m: 0,
         is_custom_modality: false,
         custom_modality: ''
     });
@@ -109,7 +112,10 @@ export function useModelManager() {
             rpm: Math.max(0, node_form.rpm),
             tpm: Math.max(0, node_form.tpm),
             rpd: Math.max(0, node_form.rpd),
-            tpd: Math.max(0, node_form.tpd)
+            tpd: Math.max(0, node_form.tpd),
+            context_window: Math.max(0, node_form.context_window ?? 128000),
+            input_cost_per_m: Math.max(0, node_form.input_cost_per_m ?? 0),
+            output_cost_per_m: Math.max(0, node_form.output_cost_per_m ?? 0)
         };
 
         add_model(node_form.name, node_form.provider, final_modality as Model_Entry['modality'], limits);
@@ -122,6 +128,9 @@ export function useModelManager() {
             tpm: 100000, 
             rpd: 1000, 
             tpd: 10000000,
+            context_window: 128000,
+            input_cost_per_m: 0,
+            output_cost_per_m: 0,
             is_custom_modality: false,
             custom_modality: ''
         });

@@ -184,10 +184,14 @@ impl VerificationGate {
             || assess.confidence < self.confidence_floor
             || assess.mutation_risk >= self.risk_escalation_threshold
         {
-            let reason = format!(
-                "Moderate mutation risk ({:.2}) or low confidence ({:.2}) requires oversight review",
-                assess.mutation_risk, assess.confidence
-            );
+            let reason = if proposal.oversight_required {
+                format!("Skill '{}' requires mandatory operator oversight approval", proposal.skill_name)
+            } else {
+                format!(
+                    "Moderate mutation risk ({:.2}) or low confidence ({:.2}) requires oversight review",
+                    assess.mutation_risk, assess.confidence
+                )
+            };
             warn!("⚠️ [VerificationGate] Mutation '{}' escalated to oversight queue: {}", proposal.skill_name, reason);
             return VerificationDecision::EscalateToOversight {
                 reason,

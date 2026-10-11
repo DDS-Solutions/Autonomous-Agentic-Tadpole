@@ -227,8 +227,12 @@ fn build_agent_routes() -> Router<Arc<AppState>> {
         .route("/graph", get(routes::agent::get_swarm_graph_handler))
         .route("/", get(routes::agent::get_agents))
         .route("/", post(routes::agent::create_agent))
-        .route("/{id}", put(routes::agent::update_agent))
-        .route("/{id}", axum::routing::delete(routes::agent::delete_agent))
+        .route(
+            "/{id}",
+            get(routes::agent::get_agent)
+                .put(routes::agent::update_agent)
+                .delete(routes::agent::delete_agent),
+        )
         .route("/{id}/tasks", post(routes::agent::send_task))
         .route("/{id}/reset", post(routes::agent::reset_agent))
         .route("/{id}/pause", post(routes::agent::pause_agent))

@@ -153,10 +153,10 @@ pub async fn verified_remove<T: Capability>(dir: &Path, expected_name: &str) -> 
     if let Ok(mut entries) = fs::read_dir(dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some(T::EXT) {
-                if try_remove_file::<T>(&path, expected_name).await {
-                    removed = true;
-                }
+            if path.extension().and_then(|s| s.to_str()) == Some(T::EXT)
+                && try_remove_file::<T>(&path, expected_name).await
+            {
+                removed = true;
             }
         }
     }

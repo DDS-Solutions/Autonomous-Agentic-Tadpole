@@ -107,9 +107,15 @@ pub fn validate_path(base: &Path, user_path: &str) -> Result<SafePath, AppError>
     // 🛡️ [Traversal Hardening] Canonicalize the base directory (which must exist)
     let base_abs = strip_unc(base_raw.canonicalize().unwrap_or_else(|_| normalize(&base_raw)));
 
-    // Strip leading path separators to ensure Path::join never replaces base_abs
-    let clean_user_path = user_path.trim_start_matches(['/', '\\']);
-    let joined = normalize(&base_abs.join(clean_user_path));
+    // If user_path is already absolute and within base_abs, do not strip and re-join
+    let user_p = normalize(Path::new(user_path));
+    let joined = if user_p.is_absolute() && user_p.starts_with(&base_abs) {
+        user_p
+    } else {
+        // Strip leading path separators to ensure Path::join never replaces base_abs
+        let clean_user_path = user_path.trim_start_matches(['/', '\\']);
+        normalize(&base_abs.join(clean_user_path))
+    };
 
     // Find the closest existing ancestor for the joined path to resolve potential symlinks
     let mut ancestor = joined.as_path();

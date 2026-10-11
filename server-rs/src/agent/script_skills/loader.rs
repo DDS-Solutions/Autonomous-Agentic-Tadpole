@@ -104,6 +104,9 @@ impl ReloadCache {
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
 
             if ext == "json" {
+                if path.file_name().and_then(|f| f.to_str()) == Some("api_metadata.json") {
+                    continue;
+                }
                 let meta = match fs::metadata(&path).await {
                     Ok(m) => m,
                     Err(_) => continue,
@@ -164,10 +167,11 @@ impl ReloadCache {
                 results.push((skill.name.clone(), skill));
             } else if ext == "py" || ext == "sh" || ext == "ps1" {
                 let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                if !stem.is_empty() && !stem.starts_with("__") {
-                    if !pending_scripts.iter().any(|(s, _, _)| s == &stem) {
-                        pending_scripts.push((stem, ext.to_string(), path));
-                    }
+                if !stem.is_empty()
+                    && !stem.starts_with("__")
+                    && !pending_scripts.iter().any(|(s, _, _)| s == &stem)
+                {
+                    pending_scripts.push((stem, ext.to_string(), path));
                 }
             }
         }

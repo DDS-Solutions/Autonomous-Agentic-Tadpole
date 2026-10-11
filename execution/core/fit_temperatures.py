@@ -20,7 +20,7 @@ import json
 import logging
 import math
 import sys
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger("[fit_temperatures]")
 

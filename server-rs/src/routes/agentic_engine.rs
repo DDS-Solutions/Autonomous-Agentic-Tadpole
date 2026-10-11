@@ -607,9 +607,23 @@ pub async fn subscribe_skill(
     use sqlx::Row;
     let now = chrono::Utc::now().timestamp();
 
-    let manifest = state.registry.skill_registry.get(&skill_id)
-        .ok_or_else(|| AppError::NotFound(format!("Skill '{}' not found in registry", skill_id)))?;
-    let current_scope_hash = compute_skill_scope_hash(&manifest);
+    let current_scope_hash = if let Some(manifest) = state.registry.skill_registry.get(&skill_id) {
+        compute_skill_scope_hash(&manifest)
+    } else if crate::agent::runner::tools::registry::BUILTIN_TOOLS.contains(&skill_id.as_str()) {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"builtin:");
+        hasher.update(skill_id.as_bytes());
+        hex::encode(hasher.finalize())
+    } else if state.registry.skills.snapshot().skills.contains_key(&skill_id) {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"script:");
+        hasher.update(skill_id.as_bytes());
+        hex::encode(hasher.finalize())
+    } else {
+        return Err(AppError::NotFound(format!("Skill '{}' not found in registry", skill_id)));
+    };
 
     let existing = sqlx::query(
         "SELECT id, subscription_status, scope_hash FROM skill_subscriptions WHERE agent_id = ?1 AND skill_id = ?2"
@@ -696,10 +710,23 @@ pub async fn approve_skill(
     use sqlx::Row;
     let now = chrono::Utc::now().timestamp();
 
-    let manifest = state.registry.skill_registry.get(&skill_id)
-        .ok_or_else(|| AppError::NotFound(format!("Skill '{}' not found in registry", skill_id)))?;
-    let current_scope_hash = compute_skill_scope_hash(&manifest);
-    let skill_version = manifest.version.clone();
+    let (current_scope_hash, skill_version) = if let Some(manifest) = state.registry.skill_registry.get(&skill_id) {
+        (compute_skill_scope_hash(&manifest), manifest.version.clone())
+    } else if crate::agent::runner::tools::registry::BUILTIN_TOOLS.contains(&skill_id.as_str()) {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"builtin:");
+        hasher.update(skill_id.as_bytes());
+        (hex::encode(hasher.finalize()), "1.0.0".to_string())
+    } else if state.registry.skills.snapshot().skills.contains_key(&skill_id) {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"script:");
+        hasher.update(skill_id.as_bytes());
+        (hex::encode(hasher.finalize()), "1.0.0".to_string())
+    } else {
+        return Err(AppError::NotFound(format!("Skill '{}' not found in registry", skill_id)));
+    };
 
     let rows_affected = sqlx::query(
         "UPDATE skill_subscriptions

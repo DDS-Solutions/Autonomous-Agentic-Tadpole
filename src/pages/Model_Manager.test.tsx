@@ -230,7 +230,7 @@ describe('Model_Manager Page', () => {
             expect(screen.queryByDisplayValue('gpt-4')).not.toBeInTheDocument();
         });
 
-        it('handles model editing', async () => {
+        it('handles model editing with context and pricing fields', async () => {
             render(<Model_Manager />);
             fireEvent.click(screen.getByLabelText('model_manager.aria_manage_provider'));
             
@@ -240,11 +240,60 @@ describe('Model_Manager Page', () => {
             const name_input = screen.getByDisplayValue('gpt-4');
             fireEvent.change(name_input, { target: { value: 'gpt-4o' } });
             
+            // Inputs in edit mode
+            const context_label = screen.getByText('model_manager.row.label_context');
+            expect(context_label).toHaveAttribute('title', 'model_manager.row.tooltip_context');
+            const context_input = (context_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(context_input, { target: { value: '200000' } });
+
+            const input_cost_label = screen.getByText('model_manager.row.label_input_cost');
+            const input_cost_input = (input_cost_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(input_cost_input, { target: { value: '3.00' } });
+
+            const output_cost_label = screen.getByText('model_manager.row.label_output_cost');
+            const output_cost_input = (output_cost_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(output_cost_input, { target: { value: '15.00' } });
+            
             await act(async () => {
                 fireEvent.click(screen.getByLabelText('provider.forge_item.tooltip_save'));
             });
             
-            expect(mock_edit_model).toHaveBeenCalledWith('m1', 'gpt-4o', 'openai', 'llm', expect.any(Object));
+            expect(mock_edit_model).toHaveBeenCalledWith('m1', 'gpt-4o', 'openai', 'llm', expect.objectContaining({
+                context_window: 200000,
+                input_cost_per_m: 3.0,
+                output_cost_per_m: 15.0,
+            }));
+        });
+
+        it('handles node addition with context and pricing fields', async () => {
+            render(<Model_Manager />);
+            fireEvent.click(screen.getByLabelText('model_manager.aria_manage_provider'));
+            fireEvent.click(screen.getByLabelText('model_manager.inventory.btn_add'));
+            
+            fireEvent.change(screen.getByPlaceholderText('model_manager.add_node.placeholder_name'), { target: { value: 'claude-3-5' } });
+
+            const context_label = screen.getByText('model_manager.add_node.label_context');
+            expect(context_label).toHaveAttribute('title', 'model_manager.add_node.tooltip_context');
+            const context_input = (context_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(context_input, { target: { value: '250000' } });
+
+            const input_cost_label = screen.getByText('model_manager.add_node.label_input_cost');
+            const input_cost_input = (input_cost_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(input_cost_input, { target: { value: '2.5' } });
+
+            const output_cost_label = screen.getByText('model_manager.add_node.label_output_cost');
+            const output_cost_input = (output_cost_label.parentElement as HTMLElement).querySelector('input') as HTMLInputElement;
+            fireEvent.change(output_cost_input, { target: { value: '10.0' } });
+            
+            await act(async () => {
+                fireEvent.click(screen.getByLabelText('model_manager.add_node.aria_confirm_node'));
+            });
+            
+            expect(mock_add_model).toHaveBeenCalledWith('claude-3-5', 'p1', 'llm', expect.objectContaining({
+                context_window: 250000,
+                input_cost_per_m: 2.5,
+                output_cost_per_m: 10.0,
+            }));
         });
 
         it('handles model deletion', async () => {
@@ -264,11 +313,12 @@ describe('Model_Manager Page', () => {
             fireEvent.click(screen.getByText('model_manager.row.show_limits'));
             expect(screen.getByText('model_manager.row.hide_limits')).toBeInTheDocument();
             expect(screen.getByText('model_manager.row.req_min')).toBeInTheDocument();
+            expect(screen.getByText('model_manager.row.label_context')).toBeInTheDocument();
+            expect(screen.getByText('model_manager.row.label_context')).toHaveAttribute('title', 'model_manager.row.tooltip_context');
+            expect(screen.getByText('model_manager.row.label_input_cost')).toBeInTheDocument();
+            expect(screen.getByText('model_manager.row.label_output_cost')).toBeInTheDocument();
         });
     });
 });
-
-
-
 
 // Metadata: [Model_Manager_test]

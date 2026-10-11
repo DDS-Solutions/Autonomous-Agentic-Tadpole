@@ -228,8 +228,8 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --config deny.toml
-        working-directory: server-rs
+          manifest-path: server-rs/Cargo.toml
+          arguments: --config server-rs/deny.toml
 
   # ──────────────────────────────────────
   #  Python: Unit Tests & Hygiene

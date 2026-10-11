@@ -39,8 +39,8 @@ impl AclServiceTrait for AclService {
         } else if authority == RoleAuthorityLevel::Observer {
             matches!(tool_name, "read_file" | "list_files" | "search_global_vault" | "get_current_time")
         } else {
-            // Tactical Specialists: cannot spawn subagents or issue alpha directives
-            !matches!(tool_name, "issue_alpha_directive" | "spawn_subagent")
+            // Tactical Specialists: cannot spawn subagents, recruit, or issue alpha directives
+            !matches!(tool_name, "issue_alpha_directive" | "spawn_subagent" | "recruit")
         }
     }
 
@@ -95,6 +95,7 @@ mod tests {
     fn test_specialist_spawn_subagent_blocked() {
         let acl = AclService;
         assert!(!acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "spawn_subagent"));
+        assert!(!acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "recruit"));
         assert!(acl.is_tool_allowed("specialist_1", "Coder", RoleAuthorityLevel::Specialist, "read_file"));
         assert!(acl.is_tool_allowed(AGENT_ALPHA, "Commander", RoleAuthorityLevel::Specialist, "spawn_subagent"));
     }

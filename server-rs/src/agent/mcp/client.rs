@@ -79,6 +79,7 @@ impl McpClient {
         const SAFE_SYSTEM_VARS: &[&str] = &[
             "PATH", "PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE",
             "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL",
+            "WORKSPACE_ROOT", "ALLOW_HOST_SKILL_EXECUTION", "TADPOLE_SKILL_ARGS", "PRIVACY_MODE",
         ];
         for key in SAFE_SYSTEM_VARS {
             if let Ok(val) = std::env::var(key) {
@@ -110,10 +111,11 @@ impl McpClient {
     pub async fn call(&mut self, method: &str, params: Value) -> Result<Value, AppError> {
         let id = self.next_id;
         self.next_id += 1;
+        let req_id_val = json!(id);
 
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
-            id: json!(id),
+            id: req_id_val.clone(),
             method: method.to_string(),
             params,
         };
@@ -123,20 +125,49 @@ impl McpClient {
         self.stdin.write_all(request_str.as_bytes()).await.map_err(AppError::Io)?;
         self.stdin.flush().await.map_err(AppError::Io)?;
 
-        let mut response_line = String::new();
-        self.stdout.read_line(&mut response_line).await.map_err(AppError::Io)?;
-        debug!("<< [MCP] Received: {}", response_line.trim());
+        let timeout_duration = std::time::Duration::from_secs(60);
 
-        if response_line.is_empty() {
-            return Err(AppError::InfrastructureError {
-                provider_id: "mcp_client".to_string(),
-                detail: "MCP server closed connection".to_string(),
-                help_link: None,
-            });
-        }
+        let response: JsonRpcResponse = loop {
+            let mut response_line = String::new();
+            let bytes_read = tokio::time::timeout(timeout_duration, self.stdout.read_line(&mut response_line))
+                .await
+                .map_err(|_| AppError::InfrastructureError {
+                    provider_id: "mcp_client".to_string(),
+                    detail: format!("MCP call to method '{}' timed out after 60s", method),
+                    help_link: None,
+                })?
+                .map_err(AppError::Io)?;
 
-        let response: JsonRpcResponse = serde_json::from_str(&response_line).map_err(|e| AppError::InternalServerError(e.to_string()))?;
-        
+            if bytes_read == 0 {
+                return Err(AppError::InfrastructureError {
+                    provider_id: "mcp_client".to_string(),
+                    detail: "MCP server closed connection".to_string(),
+                    help_link: None,
+                });
+            }
+
+            if response_line.len() > 10 * 1024 * 1024 {
+                return Err(AppError::InfrastructureError {
+                    provider_id: "mcp_client".to_string(),
+                    detail: "MCP response exceeded maximum allowed size (10MB)".to_string(),
+                    help_link: None,
+                });
+            }
+
+            debug!("<< [MCP] Received: {}", response_line.trim());
+
+            if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&response_line) {
+                // If this message matches our request id, return it
+                if resp.id.as_ref() == Some(&req_id_val) {
+                    break resp;
+                } else {
+                    debug!(">> [MCP] Skipped notification or mismatched message with id: {:?}", resp.id);
+                }
+            } else {
+                debug!(">> [MCP] Ignored non-response line from MCP stdout: {}", response_line.trim());
+            }
+        };
+
         if let Some(error) = response.error {
             return Err(AppError::InfrastructureError {
                 provider_id: "mcp_client".to_string(),

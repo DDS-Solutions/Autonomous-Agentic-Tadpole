@@ -48,8 +48,26 @@ pub async fn auth_brute_force_limiter(
 ) -> Result<Response, StatusCode> {
     let client_ip = extract_client_ip(&req);
 
-    // 1. Skip rate limiting for local loopback (desktop app safety)
-    if client_ip == "127.0.0.1" || client_ip == "::1" {
+    // 1. Skip rate limiting ONLY for direct local loopback connections (not spoofed via proxy headers)
+    let direct_is_loopback = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|addr| {
+            let ip = addr.0.ip();
+            match ip {
+                std::net::IpAddr::V4(v4) => v4.is_loopback(),
+                std::net::IpAddr::V6(v6) => {
+                    v6.is_loopback()
+                        || match v6.to_ipv4_mapped() {
+                            Some(v4) => v4.is_loopback(),
+                            None => false,
+                        }
+                }
+            }
+        })
+        .unwrap_or(false);
+
+    if direct_is_loopback && (client_ip == "127.0.0.1" || client_ip == "::1") {
         return Ok(next.run(req).await);
     }
 

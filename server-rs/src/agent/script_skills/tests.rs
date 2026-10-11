@@ -13,6 +13,7 @@ Core system module providing specialized functionality for the agent swarm.
 //! Unit and invariant test suite for ScriptSkillsRegistry.
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use tempfile::tempdir;
     use tokio::fs;

@@ -25,14 +25,21 @@ pub fn safe_truncate_str(s: &str, max_chars: usize) -> &str {
     }
 }
 
-/// Compacts a tool execution observation. If the raw output exceeds 300 characters,
+pub const DEFAULT_OVERFLOW_THRESHOLD_CHARS: usize = 8192;
+
+/// Compacts a tool execution observation. If the raw output exceeds the threshold (default: 8192 characters),
 /// writes the complete output to `.tmp/tool_overflow/` and returns a compacted reference pointer.
 pub async fn compact_and_offload_observation(
     tool_name: &str,
     raw_output: &str,
     workspace_root: &Path,
 ) -> (String, Option<PathBuf>) {
-    if raw_output.chars().count() <= 300 {
+    let threshold = std::env::var("TOOL_OBSERVATION_THRESHOLD_CHARS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_OVERFLOW_THRESHOLD_CHARS);
+
+    if raw_output.chars().count() <= threshold {
         return (format!("\nTool {} Result: {}", tool_name, raw_output), None);
     }
 
@@ -144,6 +151,33 @@ pub fn compact_conversation_history(role: &str, raw_history: &[String]) -> Vec<S
     clean
 }
 
+/// Prunes overflow files older than max_age to prevent disk exhaustion.
+#[allow(dead_code)]
+pub async fn cleanup_overflow_directory(workspace_root: &Path, max_age: std::time::Duration) -> Result<usize, std::io::Error> {
+    let overflow_dir = workspace_root.join(".tmp").join("tool_overflow");
+    if !overflow_dir.exists() {
+        return Ok(0);
+    }
+    let mut entries = tokio::fs::read_dir(&overflow_dir).await?;
+    let mut removed = 0;
+    let now = std::time::SystemTime::now();
+
+    while let Some(entry) = entries.next_entry().await? {
+        if let Ok(metadata) = entry.metadata().await {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(age) = now.duration_since(modified) {
+                    if age >= max_age {
+                        if let Ok(()) = tokio::fs::remove_file(entry.path()).await {
+                            removed += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,7 +194,7 @@ mod tests {
     #[tokio::test]
     async fn test_compact_and_offload_long_output() {
         let dir = tempdir().unwrap();
-        let long_text = "A".repeat(1000);
+        let long_text = "A".repeat(10000);
         let (out, path) = compact_and_offload_observation("big_tool", &long_text, dir.path()).await;
         
         assert!(path.is_some());
@@ -169,7 +203,7 @@ mod tests {
         let disk_content = tokio::fs::read_to_string(&written_path).await.unwrap();
         assert_eq!(disk_content, long_text);
 
-        assert!(out.contains("[TRUNCATED TOOL OUTPUT: 1000 chars total"));
+        assert!(out.contains("[TRUNCATED TOOL OUTPUT: 10000 chars total"));
         assert!(out.contains(".tmp/tool_overflow/"));
     }
 
@@ -240,33 +274,6 @@ mod tests {
         assert_eq!(removed, 1);
         assert!(!old_file.exists());
     }
-}
-
-/// Prunes overflow files older than max_age to prevent disk exhaustion.
-#[allow(dead_code)]
-pub async fn cleanup_overflow_directory(workspace_root: &Path, max_age: std::time::Duration) -> Result<usize, std::io::Error> {
-    let overflow_dir = workspace_root.join(".tmp").join("tool_overflow");
-    if !overflow_dir.exists() {
-        return Ok(0);
-    }
-    let mut entries = tokio::fs::read_dir(&overflow_dir).await?;
-    let mut removed = 0;
-    let now = std::time::SystemTime::now();
-
-    while let Some(entry) = entries.next_entry().await? {
-        if let Ok(metadata) = entry.metadata().await {
-            if let Ok(modified) = metadata.modified() {
-                if let Ok(age) = now.duration_since(modified) {
-                    if age >= max_age {
-                        if let Ok(()) = tokio::fs::remove_file(entry.path()).await {
-                            removed += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(removed)
 }
 
 // Metadata: [turn_compactor]

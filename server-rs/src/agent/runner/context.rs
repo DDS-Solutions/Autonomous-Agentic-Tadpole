@@ -251,6 +251,9 @@ impl AgentRunner {
             max_turns: slot_cfg.max_turns,
             connector_configs: Some(a.connector_configs.clone()),
             extra_parameters: slot_cfg.extra_parameters.clone(),
+            context_window: m.context_window,
+            input_cost_per_m: m.input_cost_per_m,
+            output_cost_per_m: m.output_cost_per_m,
             ..Default::default()
         };
 
@@ -297,6 +300,18 @@ impl AgentRunner {
         }
         if config.model_id.trim().is_empty() {
             config.model_id = "gemma4:e4b".to_string();
+        }
+
+        if let Some(entry) = self.state.registry.models.get(&config.model_id) {
+            if config.context_window.is_none() {
+                config.context_window = entry.context_window;
+            }
+            if config.input_cost_per_m.is_none() {
+                config.input_cost_per_m = entry.input_cost_per_m;
+            }
+            if config.output_cost_per_m.is_none() {
+                config.output_cost_per_m = entry.output_cost_per_m;
+            }
         }
     }
 

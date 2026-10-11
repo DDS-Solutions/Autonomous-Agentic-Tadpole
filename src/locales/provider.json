@@ -173,7 +173,19 @@
       "label_rpm": "RPM",
       "label_tpm": "TPM",
       "label_rpd": "RPD",
-      "label_tpd": "TPD"
+      "label_tpd": "TPD",
+      "label_context": "# / Context Field",
+      "label_input_cost": "$/M input tokens",
+      "label_output_cost": "$ /M output token",
+      "tooltip_rpm": "Requests Per Minute: Maximum number of API requests permitted per minute.",
+      "tooltip_tpm": "Tokens Per Minute: Maximum token throughput permitted per minute.",
+      "tooltip_rpd": "Requests Per Day: Daily API request quota limit.",
+      "tooltip_tpd": "Tokens Per Day: Daily token consumption quota limit.",
+      "tooltip_context": "Context Window: Maximum context length in tokens per inference cycle.",
+      "tooltip_input_cost": "Input Cost: Price in USD per one million input tokens ($/M).",
+      "tooltip_output_cost": "Output Cost: Price in USD per one million output tokens ($/M).",
+      "aria_confirm_node": "Confirm Add Node",
+      "aria_provider_icon": "Provider Icon"
     },
     "dialogs": {
       "terminate_provider_title": "TERMINATE PROVIDER",
@@ -187,17 +199,28 @@
       "aria_provider_icon": "Provider Icon"
     },
     "row": {
-      "hide_limits": "Hide Rate Limits",
-      "show_limits": "Show Rate Limits",
+      "hide_limits": "HIDE RATE LIMITS & PRICING",
+      "show_limits": "SHOW RATE LIMITS & PRICING",
       "tooltip_edit": "Edit Node",
       "tooltip_delete": "Delete Node",
       "req_min": "RPM",
       "tkn_min": "TPM",
       "req_day": "RPD",
-      "tkn_day": "TPD"
+      "tkn_day": "TPD",
+      "label_context": "# / Context Field",
+      "label_input_cost": "$/M input tokens",
+      "label_output_cost": "$ /M output token",
+      "tooltip_rpm": "Requests Per Minute: Maximum number of API requests permitted per minute.",
+      "tooltip_tpm": "Tokens Per Minute: Maximum token throughput permitted per minute.",
+      "tooltip_rpd": "Requests Per Day: Daily API request quota limit.",
+      "tooltip_tpd": "Tokens Per Day: Daily token consumption quota limit.",
+      "tooltip_context": "Context Window: Maximum context length in tokens per inference cycle.",
+      "tooltip_input_cost": "Input Cost: Price in USD per one million input tokens ($/M).",
+      "tooltip_output_cost": "Output Cost: Price in USD per one million output tokens ($/M)."
     },
     "aria_manage_provider": "Manage {{name}} configurations",
     "aria_terminate_provider": "Terminate {{name}} connection",
     "aria_filter_modality": "Filter model inventory by modality"
   }
 }
+

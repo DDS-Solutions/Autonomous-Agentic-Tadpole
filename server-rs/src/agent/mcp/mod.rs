@@ -75,6 +75,8 @@ impl From<SkillDefinition> for McpToolHub {
     }
 }
 
+type CachedConfigEntry = Option<(std::time::SystemTime, Arc<McpConfig>)>;
+
 /// The primary host for managing tool registration and execution.
 pub struct McpHost {
     pub registry: Arc<Mutex<McpRegistry>>,
@@ -82,7 +84,7 @@ pub struct McpHost {
     event_tx: broadcast::Sender<serde_json::Value>,
     mcp_config_path: Option<PathBuf>,
     pub workspace_root: PathBuf,
-    cached_config: Arc<parking_lot::RwLock<Option<(std::time::SystemTime, Arc<McpConfig>)>>>,
+    cached_config: Arc<parking_lot::RwLock<CachedConfigEntry>>,
     pub policy: Arc<PermissionPolicy>,
     pub prompter: Arc<parking_lot::RwLock<Option<Arc<dyn PermissionPrompter>>>>,
     pub clients: Arc<Mutex<HashMap<String, Arc<Mutex<client::McpClient>>>>>,
@@ -233,7 +235,7 @@ impl McpHost {
         if let Ok(config) = self.get_config().await {
             let skill_set: std::collections::HashSet<&str> = agent_skills.iter().map(|s| s.as_str()).collect();
 
-            for (server_name, _) in &config.mcp_servers {
+            for server_name in config.mcp_servers.keys() {
                 if let Ok(client) = self.get_or_spawn_client(server_name).await {
                     let mut client_lock = client.lock().await;
                     if let Ok(mcp_tools) = client_lock.list_tools().await {
@@ -246,22 +248,21 @@ impl McpHost {
                                 let canonical_mcp = format!("mcp_{}_{}", server_name, name);
 
                                 // External tool is visible only if explicitly granted
-                                if skill_set.contains(name)
+                                if (skill_set.contains(name)
                                     || skill_set.contains(namespaced.as_str())
-                                    || skill_set.contains(canonical_mcp.as_str())
+                                    || skill_set.contains(canonical_mcp.as_str()))
+                                    && seen_names.insert(name.to_string())
                                 {
-                                    if seen_names.insert(name.to_string()) {
-                                        let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
-                                        let stats = self.stats.get(name).map(|s| s.clone()).unwrap_or_default();
-                                        tools.push(McpToolHub {
-                                            name: name.to_string(),
-                                            description: desc.to_string(),
-                                            input_schema: schema,
-                                            source: format!("mcp:{}", server_name),
-                                            stats,
-                                            category: "external".to_string(),
-                                        });
-                                    }
+                                    let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
+                                    let stats = self.stats.get(name).map(|s| s.clone()).unwrap_or_default();
+                                    tools.push(McpToolHub {
+                                        name: name.to_string(),
+                                        description: desc.to_string(),
+                                        input_schema: schema,
+                                        source: format!("mcp:{}", server_name),
+                                        stats,
+                                        category: "external".to_string(),
+                                    });
                                 }
                             }
                         }
@@ -289,8 +290,7 @@ impl McpHost {
                 if config.mcp_servers.contains_key(srv) {
                     return true;
                 }
-            } else if tool_name.starts_with("mcp_") {
-                let rest = &tool_name[4..];
+            } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
                 for srv in config.mcp_servers.keys() {
                     let prefix = format!("{}_", srv);
                     if rest.starts_with(&prefix) {
@@ -298,7 +298,7 @@ impl McpHost {
                     }
                 }
             } else {
-                for (srv, _) in &config.mcp_servers {
+                for srv in config.mcp_servers.keys() {
                     if let Ok(client) = self.get_or_spawn_client(srv).await {
                         let mut client_lock = client.lock().await;
                         if let Ok(tools) = client_lock.list_tools().await {
@@ -437,8 +437,7 @@ impl McpHost {
                 if config.mcp_servers.contains_key(srv) {
                     candidate = Some((srv.to_string(), tool.to_string()));
                 }
-            } else if tool_name.starts_with("mcp_") {
-                let rest = &tool_name[4..];
+            } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
                 for srv in config.mcp_servers.keys() {
                     let prefix = format!("{}_", srv);
                     if rest.starts_with(&prefix) {
@@ -448,7 +447,7 @@ impl McpHost {
                     }
                 }
             } else {
-                for (srv, _) in &config.mcp_servers {
+                for srv in config.mcp_servers.keys() {
                     if let Ok(client) = self.get_or_spawn_client(srv).await {
                         let mut client_lock = client.lock().await;
                         if let Ok(tools) = client_lock.list_tools().await {

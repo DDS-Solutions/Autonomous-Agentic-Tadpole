@@ -283,6 +283,9 @@ pub async fn get_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
             if entry.capabilities.context_window.unwrap_or(0) == 0 {
                 entry.capabilities = CapabilityMatrix::infer_capabilities(&entry.id);
             }
+            if entry.context_window.is_none() {
+                entry.context_window = entry.capabilities.context_window;
+            }
             entry
         })
         .collect();
@@ -309,10 +312,17 @@ pub async fn update_model(
     }
 
     let mut entry = entry;
-    // Enrich with baseline capabilities if not provided
-    if entry.capabilities.context_window.unwrap_or(0) == 0 {
+    entry.id = id.clone();
+    if let Some(cw) = entry.context_window {
+        entry.capabilities.context_window = Some(cw);
+    } else if entry.capabilities.context_window.unwrap_or(0) == 0 {
         entry.capabilities = CapabilityMatrix::infer_capabilities(&id);
     }
+
+    tracing::info!(
+        "🔄 [infra-trace] Model updated: id={}, context_window={:?}, input_cost_per_m={:?}, output_cost_per_m={:?}",
+        id, entry.context_window, entry.input_cost_per_m, entry.output_cost_per_m
+    );
 
     state.registry.models.insert(id.clone(), entry);
     state.save_models().await;

@@ -404,23 +404,37 @@ async fn auto_subscribe_agent_skills(
     for skill_id in &agent.capabilities.skills {
         let sub_id = format!("sub-{}-{}", skill_id, agent.identity.id);
         use sha2::{Digest, Sha256};
+        let is_builtin = crate::agent::runner::tools::registry::BUILTIN_TOOLS.contains(&skill_id.as_str());
         let mut hasher = Sha256::new();
-        hasher.update(agent.identity.id.as_bytes());
-        hasher.update(b":");
-        hasher.update(skill_id.as_bytes());
+        if is_builtin {
+            hasher.update(b"builtin:");
+            hasher.update(skill_id.as_bytes());
+        } else {
+            hasher.update(agent.identity.id.as_bytes());
+            hasher.update(b":");
+            hasher.update(skill_id.as_bytes());
+        }
         let scope_hash = hex::encode(hasher.finalize());
+        let status = if is_builtin { "approved" } else { "pending" };
+        let notes = if is_builtin {
+            "Baseline system capability auto-approved"
+        } else {
+            "Awaiting operator approval"
+        };
 
         sqlx::query(
             "INSERT OR IGNORE INTO skill_subscriptions
              (id, agent_id, skill_id, scope_hash, subscription_status, installed_at, last_updated_at, notes)
-             VALUES (?, ?, ?, ?, 'pending', ?, ?, 'Awaiting operator approval')"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&sub_id)
         .bind(&agent.identity.id)
         .bind(skill_id)
         .bind(&scope_hash)
+        .bind(status)
         .bind(now)
         .bind(now)
+        .bind(notes)
         .execute(&mut *conn)
         .await?;
     }

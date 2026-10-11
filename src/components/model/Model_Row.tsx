@@ -3,7 +3,7 @@
  * 
  * ### AI Assist Note
  * **UI Component**: Granular model configuration node. 
- * Facilitates real-time parameter tweaking (RPM/TPM) and status toggling (Active/Benched) with immediate store persistence.
+ * Facilitates real-time parameter tweaking (RPM/TPM/Context/Pricing) and status toggling with immediate store persistence.
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: Inline edit sync failure if validation rejects a numeric limit, or modality icon mismatch.
@@ -46,7 +46,10 @@ export function Model_Row({
             rpm: model.rpm || 10,
             tpm: model.tpm || 100000,
             rpd: model.rpd || 1000,
-            tpd: model.tpd || 10000000
+            tpd: model.tpd || 10000000,
+            context_window: model.context_window ?? model.capabilities?.context_window ?? 128000,
+            input_cost_per_m: model.input_cost_per_m ?? 0,
+            output_cost_per_m: model.output_cost_per_m ?? 0
         }
     });
     const [show_limits, set_show_limits] = useState(false);
@@ -67,7 +70,10 @@ export function Model_Row({
                     rpm: model.rpm || 10,
                     tpm: model.tpm || 100000,
                     rpd: model.rpd || 1000,
-                    tpd: model.tpd || 10000000
+                    tpd: model.tpd || 10000000,
+                    context_window: model.context_window ?? model.capabilities?.context_window ?? 128000,
+                    input_cost_per_m: model.input_cost_per_m ?? 0,
+                    output_cost_per_m: model.output_cost_per_m ?? 0
                 }
             });
         }
@@ -79,14 +85,14 @@ export function Model_Row({
                 <tr className="bg-green-500/[0.03]">
                     <td className="px-8 py-4">
                         <input
-                            className="bg-zinc-950 border border-green-500/30 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-full focus:outline-none focus:border-green-500 font-mono"
+                            className="bg-[color:var(--color-background)] border border-green-500/30 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-full focus:outline-none focus:border-green-500 font-mono"
                             value={edit_state.name}
                             onChange={e => set_edit_state({ ...edit_state, name: e.target.value })}
                         />
                     </td>
                     <td className="px-8 py-4">
                         <select
-                            className="bg-zinc-950 border border-green-500/30 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400 w-full focus:outline-none cursor-pointer uppercase font-bold"
+                            className="bg-[color:var(--color-background)] border border-green-500/30 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400 w-full focus:outline-none cursor-pointer uppercase font-bold"
                             value={edit_state.is_custom_modality ? 'other' : edit_state.modality}
                             onChange={e => {
                                 if (e.target.value === 'other') {
@@ -104,7 +110,7 @@ export function Model_Row({
                         </select>
                         {edit_state.is_custom_modality && (
                             <input
-                                className="mt-2 bg-zinc-950 border border-green-500/30 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-full focus:outline-none focus:border-green-500 font-mono"
+                                className="mt-2 bg-[color:var(--color-background)] border border-green-500/30 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-full focus:outline-none focus:border-green-500 font-mono"
                                 placeholder={i18n.t('provider.label_modality_other')}
                                 value={edit_state.custom_modality}
                                 onChange={e => set_edit_state({ ...edit_state, custom_modality: e.target.value as Model_Entry['modality'] })}
@@ -113,7 +119,7 @@ export function Model_Row({
                     </td>
                     <td className="px-8 py-4">
                         <select
-                            className="bg-zinc-950 border border-green-500/30 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400 w-full focus:outline-none cursor-pointer uppercase font-bold"
+                            className="bg-[color:var(--color-background)] border border-green-500/30 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400 w-full focus:outline-none cursor-pointer uppercase font-bold"
                             value={edit_state.provider}
                             onChange={e => set_edit_state({ ...edit_state, provider: e.target.value })}
                         >
@@ -138,46 +144,97 @@ export function Model_Row({
                 </tr>
                 <tr className="bg-green-500/[0.02]">
                     <td colSpan={4} className="px-12 py-5 border-b border-green-500/10">
-                        <div className="grid grid-cols-4 gap-8">
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">{i18n.t('model_manager.row.req_min')}</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-400 font-mono focus:outline-none focus:border-green-500/50"
-                                    value={edit_state.limits.rpm}
-                                    onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, rpm: parseInt(e.target.value) || 0 } })}
-                                />
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-4 gap-6">
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_rpm')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_rpm')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.req_min')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.rpm}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, rpm: parseInt(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_tpm')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_tpm')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.tkn_min')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.tpm}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, tpm: parseInt(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_rpd')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_rpd')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.req_day')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.rpd}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, rpd: parseInt(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_tpd')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_tpd')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.tkn_day')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.tpd}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, tpd: parseInt(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">{i18n.t('model_manager.row.tkn_min')}</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-400 font-mono focus:outline-none focus:border-green-500/50"
-                                    value={edit_state.limits.tpm}
-                                    onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, tpm: parseInt(e.target.value) || 0 } })}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">{i18n.t('model_manager.row.req_day')}</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-400 font-mono focus:outline-none focus:border-green-500/50"
-                                    value={edit_state.limits.rpd}
-                                    onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, rpd: parseInt(e.target.value) || 0 } })}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">{i18n.t('model_manager.row.tkn_day')}</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-400 font-mono focus:outline-none focus:border-green-500/50"
-                                    value={edit_state.limits.tpd}
-                                    onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, tpd: parseInt(e.target.value) || 0 } })}
-                                />
+                            <div className="grid grid-cols-3 gap-6 pt-3 border-t border-[color:var(--color-border)]/40">
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_context')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_context')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.label_context')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="1000"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.context_window}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, context_window: parseInt(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_input_cost')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_input_cost')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.label_input_cost')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.input_cost_per_m}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, input_cost_per_m: parseFloat(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_output_cost')} position="top" class_name="w-full">
+                                    <div className="space-y-1.5 w-full">
+                                        <label title={i18n.t('model_manager.row.tooltip_output_cost')} className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1 cursor-help">{i18n.t('model_manager.row.label_output_cost')}</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-green-500/50"
+                                            value={edit_state.limits.output_cost_per_m}
+                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, output_cost_per_m: parseFloat(e.target.value) || 0 } })}
+                                        />
+                                    </div>
+                                </Tooltip>
                             </div>
                         </div>
                     </td>
@@ -188,7 +245,7 @@ export function Model_Row({
 
     return (
         <>
-            <tr className="hover:bg-zinc-900/60 transition-all group border-b border-zinc-800/20 last:border-none">
+            <tr className="hover:bg-[color:var(--color-surface)]/60 transition-all group border-b border-[color:var(--color-border)]/20 last:border-none">
                 <td className="px-8 py-5">
                     <div className="flex items-center gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-green-500/40 group-hover:bg-green-400 transition-colors shadow-[0_0_5px_rgba(59,130,246,0.2)]" />
@@ -209,7 +266,7 @@ export function Model_Row({
                     <ModalityBadge modality={model.modality || 'llm'} />
                 </td>
                 <td className="px-8 py-5">
-                    <span className="text-[11px] font-bold font-mono text-zinc-500 uppercase tracking-tighter bg-zinc-900 border border-white/5 px-2 py-0.5 rounded">
+                    <span className="text-[11px] font-bold font-mono text-zinc-500 uppercase tracking-tighter bg-[color:var(--color-surface)] border border-white/5 px-2 py-0.5 rounded">
                         {model.provider}
                     </span>
                 </td>
@@ -236,24 +293,54 @@ export function Model_Row({
                 </td>
             </tr>
             {show_limits && (
-                <tr id={`limits-${model.id}`} className="bg-zinc-950/80 border-b border-zinc-900/40">
+                <tr id={`limits-${model.id}`} className="bg-[color:color-mix(in_srgb,var(--color-background)_80%,transparent)] border-b border-[color:var(--color-surface)]/40">
                     <td colSpan={4} className="px-12 py-5 animate-in slide-in-from-top-1 duration-200">
-                        <div className="grid grid-cols-4 gap-8">
-                            <div className="space-y-1">
-                                <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.req_min')}</div>
-                                <div className="text-xs font-mono text-zinc-400">{model.rpm || 10}</div>
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-4 gap-6">
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_rpm')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_rpm')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.req_min')}</div>
+                                        <div className="text-xs font-mono text-zinc-300">{model.rpm || 10}</div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_tpm')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_tpm')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.tkn_min')}</div>
+                                        <div className="text-xs font-mono text-zinc-300">{(model.tpm || 100000).toLocaleString()}</div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_rpd')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_rpd')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.req_day')}</div>
+                                        <div className="text-xs font-mono text-zinc-300">{(model.rpd || 1000).toLocaleString()}</div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_tpd')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_tpd')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.tkn_day')}</div>
+                                        <div className="text-xs font-mono text-zinc-300">{(model.tpd || 10000000).toLocaleString()}</div>
+                                    </div>
+                                </Tooltip>
                             </div>
-                            <div className="space-y-1">
-                                <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.tkn_min')}</div>
-                                <div className="text-xs font-mono text-zinc-400">{(model.tpm || 100000).toLocaleString()}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.req_day')}</div>
-                                <div className="text-xs font-mono text-zinc-400">{(model.rpd || 1000).toLocaleString()}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <div className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.tkn_day')}</div>
-                                <div className="text-xs font-mono text-zinc-400">{(model.tpd || 10000000).toLocaleString()}</div>
+                            <div className="grid grid-cols-3 gap-6 pt-3 border-t border-[color:var(--color-border)]/40">
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_context')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_context')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.label_context')}</div>
+                                        <div className="text-xs font-mono text-zinc-300">{(model.context_window ?? model.capabilities?.context_window ?? 128000).toLocaleString()} <span className="text-[10px] text-zinc-500 font-sans">tokens</span></div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_input_cost')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_input_cost')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.label_input_cost')}</div>
+                                        <div className="text-xs font-mono text-emerald-400 font-semibold">${Number(model.input_cost_per_m ?? 0).toFixed(2)}</div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip content={i18n.t('model_manager.row.tooltip_output_cost')} position="top" class_name="w-full">
+                                    <div className="space-y-1 cursor-help">
+                                        <div title={i18n.t('model_manager.row.tooltip_output_cost')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.label_output_cost')}</div>
+                                        <div className="text-xs font-mono text-emerald-400 font-semibold">${Number(model.output_cost_per_m ?? 0).toFixed(2)}</div>
+                                    </div>
+                                </Tooltip>
                             </div>
                         </div>
                     </td>
@@ -262,6 +349,5 @@ export function Model_Row({
         </>
     );
 }
-
 
 // Metadata: [Model_Row]

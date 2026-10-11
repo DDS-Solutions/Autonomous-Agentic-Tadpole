@@ -48,36 +48,66 @@ use std::net::SocketAddr;
 ///
 /// Falls back to "unknown" if no IP can be resolved.
 pub fn extract_client_ip(req: &Request<Body>) -> String {
+    let direct_ip = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|addr| {
+            let ip = addr.0.ip();
+            match ip {
+                std::net::IpAddr::V6(v6) => {
+                    if let Some(v4) = v6.to_ipv4_mapped() {
+                        std::net::IpAddr::V4(v4)
+                    } else {
+                        std::net::IpAddr::V6(v6)
+                    }
+                }
+                v4 => v4,
+            }
+        });
+
     let trust_proxy = std::env::var("TRUST_PROXY_HEADERS")
         .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
         .unwrap_or(false);
 
     if trust_proxy {
-        // 1. Check Cloudflare specific header
-        if let Some(ip) = req
-            .headers()
-            .get("cf-connecting-ip")
-            .and_then(|v| v.to_str().ok())
-        {
-            return ip.trim().to_string();
-        }
+        // Only inspect proxy headers if direct socket connection is from a recognized proxy or local/private network
+        let is_trusted_peer = direct_ip.as_ref().map(|ip| match ip {
+            std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+            std::net::IpAddr::V6(v6) => v6.is_loopback() || ((v6.segments()[0] & 0xfe00) == 0xfc00),
+        }).unwrap_or(true);
 
-        // 2. Check X-Forwarded-For (Standard Proxy)
-        if let Some(forwarded) = req
-            .headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-        {
-            if let Some(ip) = forwarded.split(',').next() {
-                return ip.trim().to_string();
+        if is_trusted_peer {
+            // 1. Check Cloudflare specific header
+            if let Some(ip) = req
+                .headers()
+                .get("cf-connecting-ip")
+                .and_then(|v| v.to_str().ok())
+            {
+                let trimmed = ip.trim();
+                if trimmed.parse::<std::net::IpAddr>().is_ok() {
+                    return trimmed.to_string();
+                }
+            }
+
+            // 2. Check X-Forwarded-For (Standard Proxy)
+            if let Some(forwarded) = req
+                .headers()
+                .get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+            {
+                for part in forwarded.split(',') {
+                    let trimmed = part.trim();
+                    if trimmed.parse::<std::net::IpAddr>().is_ok() {
+                        return trimmed.to_string();
+                    }
+                }
             }
         }
     }
 
     // 3. Socket-level connection info (unspoofable direct source IP)
-    req.extensions()
-        .get::<axum::extract::ConnectInfo<SocketAddr>>()
-        .map(|addr| addr.0.ip().to_string())
+    direct_ip
+        .map(|ip| ip.to_string())
         .unwrap_or_else(|| "unknown".to_string())
 }
 

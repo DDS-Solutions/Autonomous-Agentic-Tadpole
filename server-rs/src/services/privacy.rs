@@ -23,9 +23,8 @@ use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
 
-pub async fn check_canaries_and_report(
+pub async fn probe_canaries(
     client: &reqwest::Client,
-    app_state: &AppState,
     canaries: &[&str],
 ) -> bool {
     let mut breach = false;
@@ -61,14 +60,27 @@ pub async fn check_canaries_and_report(
         }
     }
 
+    breach
+}
+
+pub fn emit_breach_event(app_state: &AppState) {
+    tracing::warn!("🚨 [PrivacyGuard] BREACH: External network reachable while Privacy Mode is ON!");
+    app_state.emit_event(json!({
+        "type": "engine:privacy_breach",
+        "severity": "CRITICAL",
+        "message": "Shield Compromised: External internet access detected during Air-Gap mode.",
+        "timestamp": Utc::now().to_rfc3339()
+    }));
+}
+
+pub async fn check_canaries_and_report(
+    client: &reqwest::Client,
+    app_state: &AppState,
+    canaries: &[&str],
+) -> bool {
+    let breach = probe_canaries(client, canaries).await;
     if breach {
-        tracing::warn!("🚨 [PrivacyGuard] BREACH: External network reachable while Privacy Mode is ON!");
-        app_state.emit_event(json!({
-            "type": "engine:privacy_breach",
-            "severity": "CRITICAL",
-            "message": "Shield Compromised: External internet access detected during Air-Gap mode.",
-            "timestamp": Utc::now().to_rfc3339()
-        }));
+        emit_breach_event(app_state);
     } else {
         tracing::debug!("[PrivacyGuard] Air-Gap verified.");
     }
@@ -91,6 +103,7 @@ pub async fn start_privacy_guard(app_state: Arc<AppState>) {
         }
     };
 
+    let mut last_breach_reported = false;
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
@@ -99,14 +112,33 @@ pub async fn start_privacy_guard(app_state: Arc<AppState>) {
             .privacy_mode
             .load(std::sync::atomic::Ordering::Relaxed);
         if privacy_mode {
-            // Attempt to reach known external endpoints (Canaries)
-            // If ANY are reachable, it's a breach. We use multiple to avoid false negatives.
-            let canaries = [
-                "https://www.google.com",
-                "https://1.1.1.1",
-                "https://8.8.8.8",
-            ];
-            check_canaries_and_report(&client, &app_state, &canaries).await;
+            let active_probe = std::env::var("AIRGAP_CANARY_PROBING")
+                .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+                .unwrap_or(false);
+            if active_probe {
+                // Attempt to reach known external endpoints (Canaries)
+                // If ANY are reachable, it's a breach. We use multiple to avoid false negatives.
+                let canaries = [
+                    "https://www.google.com",
+                    "https://1.1.1.1",
+                    "https://8.8.8.8",
+                ];
+                let is_breached = probe_canaries(&client, &canaries).await;
+                if is_breached {
+                    if !last_breach_reported {
+                        emit_breach_event(&app_state);
+                        last_breach_reported = true;
+                    }
+                } else {
+                    if last_breach_reported {
+                        tracing::info!("🛡️ [PrivacyGuard] Air-Gap re-established.");
+                    }
+                    last_breach_reported = false;
+                    tracing::debug!("[PrivacyGuard] Air-Gap verified.");
+                }
+            }
+        } else {
+            last_breach_reported = false;
         }
     }
 }

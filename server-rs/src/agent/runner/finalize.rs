@@ -69,7 +69,9 @@ impl AgentRunner {
             let turn_cost = usage
                 .as_ref()
                 .map(|u| {
-                    crate::agent::rates::calculate_cost(
+                    crate::agent::rates::calculate_cost_with_custom_rates(
+                        ctx.model_config.input_cost_per_m,
+                        ctx.model_config.output_cost_per_m,
                         &ctx.model_config.model_id,
                         u.input_tokens,
                         u.output_tokens,
@@ -172,7 +174,9 @@ impl AgentRunner {
         let turn_cost = usage
             .as_ref()
             .map(|u| {
-                crate::agent::rates::calculate_cost(
+                crate::agent::rates::calculate_cost_with_custom_rates(
+                    ctx.model_config.input_cost_per_m,
+                    ctx.model_config.output_cost_per_m,
                     &ctx.model_config.model_id,
                     u.input_tokens,
                     u.output_tokens,
@@ -328,7 +332,9 @@ impl AgentRunner {
 
             // Record final cost if usage was provided
             if let Some(u) = usage {
-                let turn_cost = crate::agent::rates::calculate_cost(
+                let turn_cost = crate::agent::rates::calculate_cost_with_custom_rates(
+                    ctx.model_config.input_cost_per_m,
+                    ctx.model_config.output_cost_per_m,
                     &ctx.model_config.model_id,
                     u.input_tokens,
                     u.output_tokens,

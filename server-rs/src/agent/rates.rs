@@ -109,6 +109,42 @@ pub static MODEL_RATES: Lazy<HashMap<&'static str, ModelRate>> = Lazy::new(|| {
     m
 });
 
+/// Calculates the cost in USD for a given token usage and model,
+/// honoring custom per-million token rates when configured.
+pub fn calculate_cost_with_custom_rates(
+    custom_input_cost_per_m: Option<f64>,
+    custom_output_cost_per_m: Option<f64>,
+    model_id: &str,
+    input_tokens: u32,
+    output_tokens: u32,
+) -> f64 {
+    let lower = model_id.to_ascii_lowercase();
+    if lower.starts_with("ollama")
+        || lower.starts_with("local/")
+        || lower.starts_with("mock")
+        || lower == "null"
+    {
+        return 0.0;
+    }
+
+    if custom_input_cost_per_m.is_some() || custom_output_cost_per_m.is_some() {
+        let in_cost_per_m = custom_input_cost_per_m.unwrap_or(0.0);
+        let out_cost_per_m = custom_output_cost_per_m.unwrap_or(0.0);
+        let input_cost = (input_tokens as f64 / 1_000_000.0) * in_cost_per_m;
+        let output_cost = (output_tokens as f64 / 1_000_000.0) * out_cost_per_m;
+        tracing::debug!(
+            "💰 [rates] Calculated custom cost for {}: in=${:.6} out=${:.6} (total=${:.6})",
+            model_id,
+            input_cost,
+            output_cost,
+            input_cost + output_cost
+        );
+        return input_cost + output_cost;
+    }
+
+    calculate_cost(model_id, input_tokens, output_tokens)
+}
+
 /// Calculates the cost in USD for a given token usage and model.
 ///
 /// # Parameters
@@ -120,6 +156,15 @@ pub static MODEL_RATES: Lazy<HashMap<&'static str, ModelRate>> = Lazy::new(|| {
 /// The calculated USD cost as an `f64`. If the model is not in the registry,
 /// a standard fallback rate is applied.
 pub fn calculate_cost(model_id: &str, input_tokens: u32, output_tokens: u32) -> f64 {
+    let lower = model_id.to_ascii_lowercase();
+    if lower.starts_with("ollama")
+        || lower.starts_with("local/")
+        || lower.starts_with("mock")
+        || lower == "null"
+    {
+        return 0.0;
+    }
+
     let rate = MODEL_RATES.get(model_id).unwrap_or(&ModelRate {
         input_cost_per_1k: 0.002, // Default fallback
         output_cost_per_1k: 0.006,
@@ -155,10 +200,43 @@ mod tests {
         // output: 10 * 0.0003 = 0.003
         assert!((cost - 0.00375).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_calculate_cost_ollama() {
+        let cost = calculate_cost("ollama/llama3:8b", 5000, 5000);
+        assert_eq!(cost, 0.0);
+        let cost_local = calculate_cost("local/qwen2.5", 5000, 5000);
+        assert_eq!(cost_local, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_cost_with_custom_rates() {
+        // $2.50 per 1M input, $10.00 per 1M output
+        // 500,000 input tokens = 0.5 * 2.50 = 1.25
+        // 200,000 output tokens = 0.2 * 10.00 = 2.00
+        // total = 3.25
+        let cost = calculate_cost_with_custom_rates(
+            Some(2.5),
+            Some(10.0),
+            "custom-finetune",
+            500_000,
+            200_000,
+        );
+        assert!((cost - 3.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_calculate_cost_with_custom_rates_local_zero() {
+        let cost = calculate_cost_with_custom_rates(
+            Some(5.0),
+            Some(15.0),
+            "ollama/llama3:70b",
+            1_000_000,
+            1_000_000,
+        );
+        assert_eq!(cost, 0.0);
+    }
 }
 
-
-
-
-
 // Metadata: [rates]
+

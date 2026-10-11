@@ -29,6 +29,18 @@ fn sanitize_id(id: &str) -> String {
     id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect()
 }
 
+fn block_filename(mission_id: &str, block_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let clean_mission = sanitize_id(mission_id);
+    let clean_block = sanitize_id(block_id);
+    let mut hasher = Sha256::new();
+    hasher.update(mission_id.as_bytes());
+    hasher.update(b":");
+    hasher.update(block_id.as_bytes());
+    let hash = hex::encode(hasher.finalize());
+    format!("{}_{}_{}.mpk", clean_mission, clean_block, &hash[..12])
+}
+
 /// Manages high-speed SSD persistence for agent context tiers.
 pub struct SSDManager {
     base_path: PathBuf,
@@ -58,7 +70,7 @@ impl SSDManager {
             tokio::fs::create_dir_all(&agent_dir).await.ok();
         }
 
-        let file_path = agent_dir.join(format!("{}_{}.mpk", sanitize_id(&block.mission_id), sanitize_id(&block.id)));
+        let file_path = agent_dir.join(block_filename(&block.mission_id, &block.id));
         
         // Use MessagePack for high-performance binary serialization (Low I/O overhead)
         let bytes = rmp_serde::to_vec(block)
@@ -74,7 +86,7 @@ impl SSDManager {
     pub async fn load_block(&self, agent_id: &str, mission_id: &str, block_id: &str) -> Result<ContextBlock, AppError> {
         let file_path = self.base_path
             .join(sanitize_id(agent_id))
-            .join(format!("{}_{}.mpk", sanitize_id(mission_id), sanitize_id(block_id)));
+            .join(block_filename(mission_id, block_id));
 
         if !file_path.exists() {
             return Err(AppError::NotFound(format!("SSCP Block {} not found on SSD", block_id)));

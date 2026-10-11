@@ -21,7 +21,7 @@
 use axum::{
     body::Body,
     http::{header::AUTHORIZATION, Request, StatusCode},
-    routing::{get, put},
+    routing::get,
     Router,
 };
 use serde_json::json;
@@ -31,7 +31,7 @@ use tower::ServiceExt;
 
 use crate::{
     agent::types::{EngineAgent, TokenUsage},
-    routes::agent::{create_agent, get_agents, update_agent},
+    routes::agent::{create_agent, get_agent, get_agents, update_agent},
     state::AppState,
 };
 
@@ -45,7 +45,7 @@ async fn test_app() -> (Router, Arc<AppState>) {
     // Auth bypass isn't strictly needed if we just pass the right token
     let app = Router::new()
         .route("/v1/agents", get(get_agents).post(create_agent))
-        .route("/v1/agents/{id}", put(update_agent))
+        .route("/v1/agents/{id}", get(get_agent).put(update_agent))
         // we apply the auth middleware manually here like main.rs
         .route_layer(axum::middleware::from_fn_with_state(
             app_state.clone(),

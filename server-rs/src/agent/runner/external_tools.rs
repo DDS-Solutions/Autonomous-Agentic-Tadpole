@@ -120,19 +120,53 @@ impl AgentRunner {
             let host_str = parsed_url.host_str().unwrap_or("");
             let host_lower = host_str.to_ascii_lowercase();
 
-            // 🛡️ [SSRF Defense] Block cloud metadata and dangerous internal addresses
+            // 🛡️ [SSRF Defense] Block cloud metadata, local, and unspecified addresses
             if host_lower == "169.254.169.254"
                 || host_lower.starts_with("169.254.")
                 || host_lower == "metadata.google.internal"
                 || host_lower == "instance-data"
                 || host_lower == "0.0.0.0"
+                || host_lower == "localhost"
             {
                 let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to cloud metadata or unspecified addresses is prohibited\n</untrusted_web_content>", safe_url));
+                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to local, private, or metadata addresses is prohibited\n</untrusted_web_content>", safe_url));
             }
 
-            // Strict local check: must be EXACT local host, NOT a subdomain like localhost.attacker.com
-            let is_strict_local = host_lower == "127.0.0.1" || host_lower == "localhost" || host_lower == "::1";
+            fn is_prohibited_ip(ip: std::net::IpAddr) -> bool {
+                match ip {
+                    std::net::IpAddr::V4(ipv4) => {
+                        ipv4.is_loopback()
+                            || ipv4.is_private()
+                            || ipv4.is_link_local()
+                            || ipv4.is_unspecified()
+                            || ipv4.is_broadcast()
+                            || (ipv4.octets()[0] == 100 && (ipv4.octets()[1] & 0xC0) == 64)
+                    }
+                    std::net::IpAddr::V6(ipv6) => {
+                        ipv6.is_loopback()
+                            || ipv6.is_unspecified()
+                            || ((ipv6.segments()[0] & 0xfe00) == 0xfc00)
+                            || ((ipv6.segments()[0] & 0xffc0) == 0xfe80)
+                            || match ipv6.to_ipv4_mapped() {
+                                Some(v4) => is_prohibited_ip(std::net::IpAddr::V4(v4)),
+                                None => false,
+                            }
+                    }
+                }
+            }
+
+            let port = parsed_url.port_or_known_default().unwrap_or(80);
+            if let Ok(ip) = host_str.parse::<std::net::IpAddr>() {
+                if is_prohibited_ip(ip) {
+                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to private or local network IP addresses is prohibited\n</untrusted_web_content>", safe_url));
+                }
+            } else if let Ok(mut addrs) = tokio::net::lookup_host(format!("{}:{}", host_str, port)).await {
+                if addrs.any(|addr| is_prohibited_ip(addr.ip())) {
+                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
+                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Host resolves to private or local network IP addresses\n</untrusted_web_content>", safe_url));
+                }
+            }
 
             // Dedicated client with no automatic redirect following to prevent SSRF redirect bounces
             let client = reqwest::Client::builder()
@@ -141,13 +175,7 @@ impl AgentRunner {
                 .build()
                 .unwrap_or_else(|_| (*self.state.resources.http_client).clone());
 
-            let mut request = client.get(url);
-            if is_strict_local {
-                request = request.header(
-                    reqwest::header::AUTHORIZATION,
-                    format!("Bearer {}", self.state.security.deploy_token),
-                );
-            }
+            let request = client.get(url);
 
             match request.send().await {
                 Ok(mut r) => {

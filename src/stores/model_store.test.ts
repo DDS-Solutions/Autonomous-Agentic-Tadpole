@@ -85,6 +85,28 @@ describe('use_model_store', () => {
             expect(state.models[0].modality).toBe('vision');
         });
 
+        it('edits a model with custom context window and pricing', async () => {
+            const store = use_model_store.getState();
+            await store.edit_model('m1', 'gpt-4o', 'openai', 'llm', {
+                context_window: 256000,
+                input_cost_per_m: 2.5,
+                output_cost_per_m: 10.0,
+            });
+
+            const state = use_model_store.getState();
+            expect(state.models[0].context_window).toBe(256000);
+            expect(state.models[0].input_cost_per_m).toBe(2.5);
+            expect(state.models[0].output_cost_per_m).toBe(10.0);
+            expect(tadpole_os_service.update_model).toHaveBeenCalledWith(
+                'm1',
+                expect.objectContaining({
+                    context_window: 256000,
+                    input_cost_per_m: 2.5,
+                    output_cost_per_m: 10.0,
+                })
+            );
+        });
+
         it('logs error on edit_model sync failure', async () => {
             vi.mocked(tadpole_os_service.update_model).mockRejectedValue(new Error('Update failed'));
             

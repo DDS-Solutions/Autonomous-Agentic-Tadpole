@@ -293,7 +293,13 @@ impl AgentRunner {
                             .map_err(|e| (e, usage.clone()))?;
 
                             let anneal_cost = anneal_usage.as_ref().map(|u| {
-                                crate::agent::rates::calculate_cost(&ctx.model_config.model_id, u.input_tokens, u.output_tokens)
+                                crate::agent::rates::calculate_cost_with_custom_rates(
+                                    ctx.model_config.input_cost_per_m,
+                                    ctx.model_config.output_cost_per_m,
+                                    &ctx.model_config.model_id,
+                                    u.input_tokens,
+                                    u.output_tokens,
+                                )
                             }).unwrap_or(0.0);
                             running_cost += anneal_cost;
 
@@ -305,7 +311,13 @@ impl AgentRunner {
                     }
                 };
                 let step_cost = turn_usage.as_ref().map(|u| {
-                    crate::agent::rates::calculate_cost(&ctx.model_config.model_id, u.input_tokens, u.output_tokens)
+                    crate::agent::rates::calculate_cost_with_custom_rates(
+                        ctx.model_config.input_cost_per_m,
+                        ctx.model_config.output_cost_per_m,
+                        &ctx.model_config.model_id,
+                        u.input_tokens,
+                        u.output_tokens,
+                    )
                 }).unwrap_or(0.0);
                 running_cost += step_cost;
                 self.accumulate_usage(&mut usage, turn_usage);
@@ -476,7 +488,9 @@ impl AgentRunner {
                                     lu.output_tokens as u64,
                                     lu.total_tokens as u64,
                                 );
-                                let tool_cost = crate::agent::rates::calculate_cost(
+                                let tool_cost = crate::agent::rates::calculate_cost_with_custom_rates(
+                                    ctx.model_config.input_cost_per_m,
+                                    ctx.model_config.output_cost_per_m,
                                     &ctx.model_config.model_id,
                                     lu.input_tokens,
                                     lu.output_tokens,

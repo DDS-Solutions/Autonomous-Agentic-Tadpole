@@ -184,6 +184,21 @@ pub async fn get_agents(
     )))
 }
 
+/// @docs API_REFERENCE:GetAgent
+pub async fn get_agent(
+    State(state): State<Arc<AppState>>,
+    Path(agent_id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    let agent = state
+        .registry
+        .agents
+        .get(&agent_id)
+        .map(|entry| AgentResponse::from(entry.value()))
+        .ok_or_else(|| AppError::NotFound(format!("Agent '{}' not found", agent_id)))?;
+
+    Ok(Json(agent))
+}
+
 pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload: TaskPayload) {
     // Proactive Abort-on-New Policy: Terminate any existing task for this agent
     if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {

@@ -109,8 +109,16 @@ pub async fn trigger_deploy(
     // --- Path Resolution & Context Switching ---
     // If the server is started from the 'server-rs' directory, the scripts are in the root (..).
     // We must execute the command in the root so 'npm run build' inside the script works.
-    let mut cmd = tokio::process::Command::new("powershell.exe");
-    cmd.args(["-ExecutionPolicy", "Bypass", "-File", script_file]);
+    let mut cmd = if cfg!(windows) {
+        let mut c = tokio::process::Command::new("powershell.exe");
+        c.args(["-ExecutionPolicy", "Bypass", "-File", script_file]);
+        c
+    } else {
+        let mut c = tokio::process::Command::new("sh");
+        c.arg(script_file);
+        c
+    };
+    cmd.kill_on_drop(true);
 
     if !std::path::Path::new(script_file).exists() {
         if std::path::Path::new("..").join(script_file).exists() {
@@ -129,8 +137,8 @@ pub async fn trigger_deploy(
         }
     }
 
-    // --- Async Process Execution with 300s timeout ---
-    let result = tokio::time::timeout(std::time::Duration::from_secs(300), cmd.output()).await;
+    // --- Async Process Execution bounded within Tower TimeoutLayer (120s envelope) ---
+    let result = tokio::time::timeout(std::time::Duration::from_secs(110), cmd.output()).await;
 
     match result {
         Ok(Ok(output)) => {
@@ -227,6 +235,7 @@ pub async fn trigger_pre_pr(
 
     let mut cmd = tokio::process::Command::new("python");
     cmd.arg("execution/pre_pr.py");
+    cmd.kill_on_drop(true);
 
     if !std::path::Path::new("execution/pre_pr.py").exists() {
         if std::path::Path::new("../execution/pre_pr.py").exists() {
@@ -244,10 +253,10 @@ pub async fn trigger_pre_pr(
         }
     }
 
-    let result = cmd.output().await;
+    let result = tokio::time::timeout(std::time::Duration::from_secs(110), cmd.output()).await;
 
     match result {
-        Ok(output) => {
+        Ok(Ok(output)) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -273,7 +282,7 @@ pub async fn trigger_pre_pr(
                 ))
             }
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::error!("❌ Failed to spawn Pre-PR process: {}", e);
             Ok((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -281,6 +290,17 @@ pub async fn trigger_pre_pr(
                     status: "error".to_string(),
                     output: None,
                     error: Some(e.to_string()),
+                }),
+            ))
+        }
+        Err(_) => {
+            tracing::error!("❌ Pre-PR process timed out after 110s");
+            Ok((
+                StatusCode::GATEWAY_TIMEOUT,
+                Json(DeployResponse {
+                    status: "error".to_string(),
+                    output: None,
+                    error: Some("Pre-PR process timed out after 110s".to_string()),
                 }),
             ))
         }
