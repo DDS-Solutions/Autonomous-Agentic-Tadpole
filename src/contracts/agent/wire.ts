@@ -26,6 +26,12 @@ export interface ModelConfigDto {
     rpd?: number;
     tpm?: number;
     tpd?: number;
+    context_window?: number;
+    input_cost_per_m?: number;
+    output_cost_per_m?: number;
+    contextWindow?: number;
+    inputCostPerM?: number;
+    outputCostPerM?: number;
     skills?: string[];
     workflows?: string[];
     mcpTools?: string[];

@@ -29,7 +29,7 @@ fn sanitize_id(id: &str) -> String {
     id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect()
 }
 
-fn block_filename(mission_id: &str, block_id: &str) -> String {
+pub fn block_filename(mission_id: &str, block_id: &str) -> String {
     use sha2::{Digest, Sha256};
     let clean_mission = sanitize_id(mission_id);
     let clean_block = sanitize_id(block_id);

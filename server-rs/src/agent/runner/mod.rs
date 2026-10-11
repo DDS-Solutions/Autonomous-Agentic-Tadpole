@@ -164,6 +164,9 @@ impl RunContext {
             tpm: self.model_config.tpm,
             rpd: self.model_config.rpd,
             tpd: self.model_config.tpd,
+            context_window: self.model_config.context_window,
+            input_cost_per_m: self.model_config.input_cost_per_m,
+            output_cost_per_m: self.model_config.output_cost_per_m,
             swarm_depth: Some(self.depth + 1),
             swarm_lineage: Some({
                 let mut l = self.lineage.clone();

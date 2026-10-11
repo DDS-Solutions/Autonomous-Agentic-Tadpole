@@ -1042,6 +1042,12 @@ pub struct TaskPayload {
     pub rpd: Option<u32>,
     pub tpd: Option<u32>,
     pub budget_usd: Option<f64>,
+    #[serde(default, alias = "context_window", alias = "contextWindow")]
+    pub context_window: Option<u32>,
+    #[serde(default, alias = "input_cost_per_m", alias = "inputCostPerM")]
+    pub input_cost_per_m: Option<f64>,
+    #[serde(default, alias = "output_cost_per_m", alias = "outputCostPerM")]
+    pub output_cost_per_m: Option<f64>,
     pub swarm_depth: Option<u32>,
     pub swarm_lineage: Option<Vec<String>>,
     pub external_id: Option<String>,

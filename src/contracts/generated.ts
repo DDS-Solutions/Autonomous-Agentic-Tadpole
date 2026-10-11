@@ -24,7 +24,7 @@ export type AgentCapabilities = { skills: string[]; workflows: string[]; mcpTool
 
 export type AgentState = { activeMission: JsonValue | null; currentTask: string | null; workingMemory: JsonValue; currentReasoningTurn: number }
 
-export type ModelConfig = { modelId?: string; provider?: ModelProvider; systemPrompt?: string | null; baseUrl?: string | null; temperature?: number | null; maxTokens?: number | null; topP?: number | null; externalId?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcpTools?: string[] | null; steeringVectors?: string[] | null; reasoningDepth?: number | null; actThreshold?: number | null; maxTurns?: number | null; connectorConfigs?: ConnectorConfig[] | null; extraParameters?: Partial<{ [key in string]: JsonValue }> | null }
+export type ModelConfig = { modelId?: string; provider?: ModelProvider; systemPrompt?: string | null; baseUrl?: string | null; temperature?: number | null; maxTokens?: number | null; topP?: number | null; externalId?: string | null; rpm?: number | null; rpd?: number | null; tpm?: number | null; tpd?: number | null; skills?: string[] | null; workflows?: string[] | null; mcpTools?: string[] | null; steeringVectors?: string[] | null; reasoningDepth?: number | null; actThreshold?: number | null; maxTurns?: number | null; connectorConfigs?: ConnectorConfig[] | null; extraParameters?: Partial<{ [key in string]: JsonValue }> | null; contextWindow?: number | null; inputCostPerM?: number | null; outputCostPerM?: number | null }
 
 export type ConnectorConfig = { type: string; uri: string }
 

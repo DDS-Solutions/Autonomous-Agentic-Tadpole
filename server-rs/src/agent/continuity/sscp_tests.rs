@@ -18,7 +18,7 @@ Core system module providing specialized functionality for the agent swarm.
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use crate::agent::continuity::{SSDManager, ContextBlock, ContextArbiter, partition_context};
+    use crate::agent::continuity::{SSDManager, ContextBlock, ContextArbiter, partition_context, block_filename};
 
     const CACHE_ROOT: &str = r"G:\Tadpole_Intelligence_Cache";
 
@@ -51,7 +51,7 @@ mod tests {
 
         ssd.flush_block(&block).await.expect("flush_block should succeed");
 
-        let expected_path = root.join("agent-42").join("mission-alpha_block-0.mpk");
+        let expected_path = root.join("agent-42").join(block_filename("mission-alpha", "block-0"));
         assert!(expected_path.exists(), "MessagePack file must exist at {:?}", expected_path);
         println!("✅ File on disk: {} ({} bytes)", expected_path.display(), std::fs::metadata(&expected_path).unwrap().len());
 
@@ -359,7 +359,7 @@ mod tests {
 
         for block in &blocks {
             ssd.flush_block(block).await.unwrap();
-            let path = root.join("agent-e2e").join(format!("mission-final_{}.mpk", block.id));
+            let path = root.join("agent-e2e").join(block_filename("mission-final", &block.id));
             println!("  📄 {} ({} bytes)", path.display(), std::fs::metadata(&path).unwrap().len());
         }
 

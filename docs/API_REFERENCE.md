@@ -45,6 +45,7 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 | `POST` | `/v1/agents` | `routes::agent::create_agent` | Protected |
 | `GET` | `/v1/agents/graph` | `routes::agent::get_swarm_graph_handler` | Protected |
 | `DELETE` | `/v1/agents/{id}` | `routes::agent::delete_agent` | Protected |
+| `GET` | `/v1/agents/{id}` | `routes::agent::get_agent` | Protected |
 | `PUT` | `/v1/agents/{id}` | `routes::agent::update_agent` | Protected |
 | `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet` | Protected |
 | `PUT` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::update_context_packet` | Protected |

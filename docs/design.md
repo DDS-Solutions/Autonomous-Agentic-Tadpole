@@ -126,6 +126,14 @@ Tadpole OS supports multi-window "popped out" views. These windows (e.g., `Detac
 ### 3. Neural Pulse Effect
 Interactive elements should utilize a subtle glow animation (`neural-pulse`) to indicate activity. This is the visual heartbeat of the OS.
 
+### 4. Model Inventory: Rate Limits & Pricing Card
+The Model Management interface surfaces quota and expenditure boundaries through high-density telemetry cards:
+- **Context Window (`context_window`)**: Context length capacity rendered in JetBrains Mono (`text-xs font-mono text-zinc-300`) with uppercase sublabel `CTXT` (`text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]`). Number inputs step by 1,024/4,096 tokens with non-negative bounds.
+- **Token Input Cost (`input_cost_per_m`)**: USD expenditure per 1M prompt/input tokens formatted as `$X.XX/1M`, sublabel `IN / 1M` with emerald focus rings and high-precision float inputs (`step="0.01"`).
+- **Token Output Cost (`output_cost_per_m`)**: USD expenditure per 1M completion/output tokens formatted as `$X.XX/1M`, sublabel `OUT / 1M` with emerald focus rings and high-precision float inputs (`step="0.01"`).
+- **Interactive Tooltip Standard**: All rate limit and pricing fields require high-contrast floating `Tooltip` components (`position="top"`, glassmorphic zinc styling `bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-xl`) and dual-bound `title` + `aria-label` tags for screen-reader and keyboard accessibility.
+- **Micro-Animations & Color Accents**: Rate cards utilize `color-mix(in srgb, var(--zinc-900) 80%, transparent)` backgrounds, subtle `hover:border-zinc-700` transitions, and emerald highlight states when customized values diverge from provider defaults.
+
 ## Do's and Don'ts
 - **Do:** Use `color-mix` for sophisticated transparency.
 - **Do:** Maintain high contrast for all telemetry data.

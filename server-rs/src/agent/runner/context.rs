@@ -302,6 +302,16 @@ impl AgentRunner {
             config.model_id = "gemma4:e4b".to_string();
         }
 
+        if let Some(cw) = payload.context_window {
+            config.context_window = Some(cw);
+        }
+        if let Some(ic) = payload.input_cost_per_m {
+            config.input_cost_per_m = Some(ic);
+        }
+        if let Some(oc) = payload.output_cost_per_m {
+            config.output_cost_per_m = Some(oc);
+        }
+
         if let Some(entry) = self.state.registry.models.get(&config.model_id) {
             if config.context_window.is_none() {
                 config.context_window = entry.context_window;

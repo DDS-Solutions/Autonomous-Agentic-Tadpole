@@ -236,6 +236,19 @@ $$RRF\_Score(d) = \sum_{e \in \{\text{Vector}, \text{BM25}, \text{Graph}\}} \fra
 
 Exposed via `GET /v1/memory/search/hybrid` for unified multi-engine retrieval with deduplication and intersection boosting.
 
+## Model Registry, Context Windows & Pricing Governance
 
+Tadpole OS integrates complete end-to-end telemetry and governance for model context sizing and token cost calculation:
+
+- **Model Registry Architecture (`server-rs/src/routes/model_manager.rs`, `server-rs/src/agent/types.rs`, `src/stores/model_store.ts`)**:
+  - `ModelEntry` and `ModelConfig` declare `context_window` (u32/number), `input_cost_per_m` (f64/number), and `output_cost_per_m` (f64/number) alongside rate bounds (`rpm`, `tpm`, `rpd`, `tpd`).
+  - Strict serialization parity bridge ensures seamless interoperability across TypeScript frontend and Rust backend via Serde aliases (`context_window` / `contextWindow`, `input_cost_per_m` / `inputCostPerM`, `output_cost_per_m` / `outputCostPerM`).
+- **End-to-End Task Payload Wiring**:
+  - Both domain contracts (`Task_Payload` in `src/contracts/agent/domain.ts`) and Rust engine types (`TaskPayload` in `server-rs/src/agent/types.rs`) support contextual overrides.
+  - The agent execution pipeline merges payload limits into active runner `ModelConfig` via `merge_payload_overrides` and automatically propagates limits down swarm hierarchies via `derive_subtask_payload`.
+- **Dynamic Cost Calculation (`server-rs/src/agent/rates.rs`)**:
+  - Custom rates override default tier assumptions through `calculate_cost_with_custom_rates(input_tokens, output_tokens, custom_in_m, custom_out_m)`.
+  - The runtime tracks real-time expenditure in reasoning loops (`server-rs/src/agent/runner/intelligence.rs`) and records cumulative cost into the A2A ledger upon mission finalization (`server-rs/src/agent/runner/finalize.rs`).
 
 [//]: # (Metadata: [ARCHITECTURE])
+

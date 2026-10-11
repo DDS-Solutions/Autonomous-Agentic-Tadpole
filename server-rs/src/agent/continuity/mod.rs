@@ -28,7 +28,7 @@ mod sscp_tests;
 #[cfg(test)]
 mod sscp_smoke;
 
-pub use ssd::{SSDManager, ContextBlock};
+pub use ssd::{SSDManager, ContextBlock, block_filename};
 pub use arbiter::ContextArbiter;
 
 use tiktoken_rs::cl100k_base;

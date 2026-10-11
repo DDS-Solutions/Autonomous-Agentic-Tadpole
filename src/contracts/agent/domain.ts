@@ -128,6 +128,9 @@ export interface Task_Payload {
     tpm?: number;
     rpd?: number;
     tpd?: number;
+    context_window?: number;
+    input_cost_per_m?: number;
+    output_cost_per_m?: number;
     budget_usd?: number;
     external_id?: string;
     safe_mode?: boolean;

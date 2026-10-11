@@ -512,4 +512,24 @@ The engine exposes health and runtime metrics endpoints:
 - `GET /metrics`:
   - Returns Prometheus-compatible operational counters, histogram timings, and resource statistics.
 
+## Model Inventory Quota & Expenditure Operations
+
+The Model Manager provides comprehensive rate limiting and fiscal controls for all connected AI backends:
+
+- **Configuring Context Windows**:
+  - In the Model Manager inventory dashboard (`/models`) or via the Add Node modal, operators configure the active `context_window` capacity (e.g. 128,000 for Gemma/Llama, 1,000,000 for Gemini/Claude).
+  - The runtime engine utilizes this context boundary to govern token budget allocation in the Adaptive Context Slicer and prevent context overflow panics.
+- **Configuring Token Pricing Rates**:
+  - Operators specify custom token rates per model:
+    - **Token Input (`input_cost_per_m`)**: USD rate per million prompt/input tokens.
+    - **Token Output (`output_cost_per_m`)**: USD rate per million completion/output tokens.
+  - Setting both to `0.00` correctly accounts for free local models (Ollama/Local nodes).
+  - Custom rates override default engine lookup tables, allowing exact tracking against custom negotiated provider contracts.
+- **Live Rate Limit Enforcement**:
+  - The engine enforces two tiers of quota limits alongside cost calculation:
+    - **Per-Minute Limits**: Requests per minute (`RPM`) and tokens per minute (`TPM`).
+    - **Daily Quotas**: Requests per day (`RPD`) and tokens per day (`TPD`).
+  - Interactive tooltips across the UI display quota formulas and explanations for operator clarity.
+
 [//]: # (Metadata: [OPERATIONS_MANUAL])
+
