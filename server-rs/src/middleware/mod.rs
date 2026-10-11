@@ -70,11 +70,20 @@ pub fn extract_client_ip(req: &Request<Body>) -> String {
         .unwrap_or(false);
 
     if trust_proxy {
-        // Only inspect proxy headers if direct socket connection is from a recognized proxy or local/private network
-        let is_trusted_peer = direct_ip.as_ref().map(|ip| match ip {
-            std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
-            std::net::IpAddr::V6(v6) => v6.is_loopback() || ((v6.segments()[0] & 0xfe00) == 0xfc00),
-        }).unwrap_or(true);
+        // Only inspect proxy headers if direct socket connection is from loopback or explicitly configured TRUSTED_PROXIES
+        let is_trusted_peer = direct_ip.as_ref().map(|ip| {
+            if ip.is_loopback() {
+                return true;
+            }
+            if let Ok(trusted_list) = std::env::var("TRUSTED_PROXIES") {
+                let ip_str = ip.to_string();
+                return trusted_list
+                    .split(',')
+                    .map(|s| s.trim())
+                    .any(|trusted| trusted == ip_str);
+            }
+            false
+        }).unwrap_or(cfg!(test));
 
         if is_trusted_peer {
             // 1. Check Cloudflare specific header

@@ -319,6 +319,21 @@ pub async fn update_model(
         entry.capabilities = CapabilityMatrix::infer_capabilities(&id);
     }
 
+    // Safeguard: Normalize 0.0 custom pricing on cloud models to None
+    // so catalog pricing is preserved and paid models are never inadvertently zeroed out.
+    let is_local_provider = entry.provider_id.eq_ignore_ascii_case("ollama")
+        || entry.provider_id.eq_ignore_ascii_case("local")
+        || id.to_ascii_lowercase().starts_with("ollama")
+        || id.to_ascii_lowercase().starts_with("local/");
+    if !is_local_provider {
+        if entry.input_cost_per_m == Some(0.0) {
+            entry.input_cost_per_m = None;
+        }
+        if entry.output_cost_per_m == Some(0.0) {
+            entry.output_cost_per_m = None;
+        }
+    }
+
     tracing::info!(
         "🔄 [infra-trace] Model updated: id={}, context_window={:?}, input_cost_per_m={:?}, output_cost_per_m={:?}",
         id, entry.context_window, entry.input_cost_per_m, entry.output_cost_per_m

@@ -82,6 +82,9 @@ impl AgentRunner {
             // [Health Monitoring] Reset failure count on success
             agent.health.failure_count = 0;
             
+            // Capture active task id for task-level token reconciliation
+            let current_task_id = agent.state.current_task.clone();
+
             // ### 🔗 Swarm Connectivity: Cleanup
             // Clear the active mission link so the agent returns to an idle state in the visualizer.
             agent.state.active_mission = None;
@@ -96,6 +99,26 @@ impl AgentRunner {
             tokio::spawn(async move {
                 let _ = budget_guard.record_usage(&agent_id, turn_cost).await;
             });
+
+            // Reconcile task telemetry in agent_tasks
+            if let (Some(task_id), Some(ref u)) = (current_task_id, usage.as_ref()) {
+                let in_toks = u.input_tokens as i64;
+                let out_toks = u.output_tokens as i64;
+                let prov = ctx.model_config.provider.to_string();
+                let pool_task = self.state.resources.pool.clone();
+                tokio::spawn(async move {
+                    let _ = sqlx::query(
+                        "UPDATE agent_tasks SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?, cost_usd = cost_usd + ?, provider_id = COALESCE(provider_id, ?) WHERE id = ?"
+                    )
+                    .bind(in_toks)
+                    .bind(out_toks)
+                    .bind(turn_cost)
+                    .bind(&prov)
+                    .bind(&task_id)
+                    .execute(&pool_task)
+                    .await;
+                });
+            }
 
             // Sync to persistence
             let pool = self.state.resources.pool.clone();

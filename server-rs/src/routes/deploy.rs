@@ -100,41 +100,86 @@ pub async fn trigger_deploy(
         }
     };
 
+    let (script_name, is_powershell) = if cfg!(windows) {
+        (format!("deploy-bunker-{}.ps1", target), true)
+    } else {
+        // On Linux / Unix, prefer .sh script, but support .ps1 via pwsh if installed
+        let sh_name = format!("deploy-bunker-{}.sh", target);
+        let sh_exists = std::path::Path::new(&sh_name).exists()
+            || std::path::Path::new("..").join(&sh_name).exists()
+            || std::path::Path::new("scripts").join(&sh_name).exists()
+            || std::path::Path::new("..").join("scripts").join(&sh_name).exists();
+        if sh_exists {
+            (sh_name, false)
+        } else {
+            (format!("deploy-bunker-{}.ps1", target), true)
+        }
+    };
+
     tracing::info!(
         "🚀 Authenticated deploy triggered for Bunker {} ({})...",
         target,
-        script_file
+        script_name
     );
 
     // --- Path Resolution & Context Switching ---
-    // If the server is started from the 'server-rs' directory, the scripts are in the root (..).
-    // We must execute the command in the root so 'npm run build' inside the script works.
-    let mut cmd = if cfg!(windows) {
-        let mut c = tokio::process::Command::new("powershell.exe");
-        c.args(["-ExecutionPolicy", "Bypass", "-File", script_file]);
-        c
+    let mut project_root_dir = None;
+    let resolved_script_path = if std::path::Path::new(&script_name).exists() {
+        script_name.clone()
+    } else if std::path::Path::new("..").join(&script_name).exists() {
+        project_root_dir = Some("..");
+        script_name.clone()
+    } else if std::path::Path::new("scripts").join(&script_name).exists() {
+        format!("scripts/{}", script_name)
+    } else if std::path::Path::new("..").join("scripts").join(&script_name).exists() {
+        project_root_dir = Some("..");
+        format!("scripts/{}", script_name)
+    } else {
+        tracing::error!("❌ Deployment script not found in . or ..: {}", script_name);
+        return Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(DeployResponse {
+                status: "error".to_string(),
+                output: None,
+                error: Some(format!("Deployment script not found: {}", script_name)),
+            }),
+        ));
+    };
+
+    let mut cmd = if is_powershell {
+        if cfg!(windows) {
+            let mut c = tokio::process::Command::new("powershell.exe");
+            c.args(["-ExecutionPolicy", "Bypass", "-File", &resolved_script_path]);
+            c
+        } else {
+            // Linux PowerShell: require pwsh
+            if which::which("pwsh").is_err() {
+                return Ok((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(DeployResponse {
+                        status: "error".to_string(),
+                        output: None,
+                        error: Some(format!(
+                            "PowerShell script '{}' requires 'pwsh' on Linux, which is not installed. Deploy via shell script (.sh) instead.",
+                            script_name
+                        )),
+                    }),
+                ));
+            }
+            let mut c = tokio::process::Command::new("pwsh");
+            c.args(["-File", &resolved_script_path]);
+            c
+        }
     } else {
         let mut c = tokio::process::Command::new("sh");
-        c.arg(script_file);
+        c.arg(&resolved_script_path);
         c
     };
     cmd.kill_on_drop(true);
 
-    if !std::path::Path::new(script_file).exists() {
-        if std::path::Path::new("..").join(script_file).exists() {
-            tracing::info!("📂 Script not found in CWD. Switching to project root (..) for deployment execution.");
-            cmd.current_dir("..");
-        } else {
-            tracing::error!("❌ Deployment script not found in . or ..: {}", script_file);
-            return Ok((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(DeployResponse {
-                    status: "error".to_string(),
-                    output: None,
-                    error: Some(format!("Deployment script not found: {}", script_file)),
-                }),
-            ));
-        }
+    if let Some(dir) = project_root_dir {
+        tracing::info!("📂 Script found in root/subpath. Switching to project root ({}) for deployment execution.", dir);
+        cmd.current_dir(dir);
     }
 
     // --- Async Process Execution bounded within Tower TimeoutLayer (120s envelope) ---

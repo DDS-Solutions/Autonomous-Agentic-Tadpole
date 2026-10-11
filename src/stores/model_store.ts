@@ -115,8 +115,8 @@ export const use_model_store = create<Model_State>()(
                     rpd: limits?.rpd ?? 1000,
                     tpd: limits?.tpd ?? 10000000,
                     context_window: limits?.context_window ?? 128000,
-                    input_cost_per_m: limits?.input_cost_per_m ?? 0,
-                    output_cost_per_m: limits?.output_cost_per_m ?? 0
+                    input_cost_per_m: (limits?.input_cost_per_m !== undefined && limits.input_cost_per_m > 0) ? limits.input_cost_per_m : undefined,
+                    output_cost_per_m: (limits?.output_cost_per_m !== undefined && limits.output_cost_per_m > 0) ? limits.output_cost_per_m : undefined
                 };
 
                 set(state => ({
@@ -135,7 +135,32 @@ export const use_model_store = create<Model_State>()(
 
             edit_model: async (id, name, provider, modality, limits) => {
                 set(state => ({
-                    models: (state.models || []).map(m => m.id === id ? { ...m, name, provider, modality, ...limits } : m)
+                    models: (state.models || []).map(m => {
+                        if (m.id !== id) return m;
+                        const updated: Model_Entry = { ...m, name, provider, modality };
+                        if (limits) {
+                            if (limits.rpm !== undefined) updated.rpm = limits.rpm;
+                            if (limits.tpm !== undefined) updated.tpm = limits.tpm;
+                            if (limits.rpd !== undefined) updated.rpd = limits.rpd;
+                            if (limits.tpd !== undefined) updated.tpd = limits.tpd;
+                            if (limits.context_window !== undefined) updated.context_window = limits.context_window;
+                            if (limits.input_cost_per_m !== undefined) {
+                                if (limits.input_cost_per_m > 0) {
+                                    updated.input_cost_per_m = limits.input_cost_per_m;
+                                } else {
+                                    delete updated.input_cost_per_m;
+                                }
+                            }
+                            if (limits.output_cost_per_m !== undefined) {
+                                if (limits.output_cost_per_m > 0) {
+                                    updated.output_cost_per_m = limits.output_cost_per_m;
+                                } else {
+                                    delete updated.output_cost_per_m;
+                                }
+                            }
+                        }
+                        return updated;
+                    })
                 }));
 
                 try {

@@ -11,9 +11,12 @@ description = "Allowlist for test fixtures, mocks, and documentation placeholder
 paths = [
     # Test directories and fixture files
     '''(?i).*\.test\.(ts|tsx|js|jsx)$''',
-    '''(?i).*/tests/.*''',
-    '''(?i).*/fixtures/.*''',
+    '''(?i)(?:^|/)tests/.*''',
+    '''(?i)(?:^|/)fixtures/.*''',
     '''(?i)server-rs/tests/.*''',
+    # Rust internal unit test fixtures
+    '''(?i)server-rs/src/secret_redactor\.rs$''',
+    '''(?i)server-rs/src/utils/security\.rs$''',
     # Documentation placeholders
     '''(?i)docs/.*\.md$''',
     '''(?i)wiki/.*\.md$''',

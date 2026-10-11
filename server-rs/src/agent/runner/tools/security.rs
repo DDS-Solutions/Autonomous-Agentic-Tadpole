@@ -36,15 +36,15 @@ impl SecurityManager for DefaultSecurityManager {
         // 1. [CBS] Skill-Based Security Allowlist
         if let Some(agent) = runner.state.registry.agents.get(&ctx.agent_id) {
             let allowed_skills = &agent.value().capabilities.skills;
-            let is_builtin = super::registry::BUILTIN_TOOLS.contains(&fc.name.as_str()) || super::registry::BUILTIN_TOOLS.contains(&normalized_name.as_str());
             let is_orchestrator = ctx.agent_id == crate::agent::constants::AGENT_CEO || ctx.agent_id == crate::agent::constants::AGENT_COO;
+            let is_safe = is_safe_skill(&fc.name, &normalized_name, runner);
 
             let is_allowed = allowed_skills.is_empty() 
                 || allowed_skills.contains(&fc.name) 
                 || allowed_skills.contains(&normalized_name)
                 || allowed_skills.iter().any(|s| s == "all" || s == "execution" || s == "*");
 
-            if !is_orchestrator && !is_builtin && !is_allowed {
+            if !is_orchestrator && !is_safe && !is_allowed {
                 tracing::warn!("🛡️ [CBS] Agent {} attempted unauthorized skill: {} (normalized: {})", ctx.agent_id, fc.name, normalized_name);
                 runner.broadcast_sys(
                     &format!("🛡️ CBS: {} attempted unauthorized skill: {}", ctx.name, fc.name),

@@ -197,6 +197,7 @@ pub async fn execute_sandboxed(
         }
         cmd.env("TADPOLE_SKILL_ARGS", args_json);
         cmd.current_dir(workspace_root);
+        cmd.kill_on_drop(true);
 
         let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
             .map_err(|_| AppError::InfrastructureError {

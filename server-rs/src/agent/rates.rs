@@ -127,9 +127,16 @@ pub fn calculate_cost_with_custom_rates(
         return 0.0;
     }
 
-    if custom_input_cost_per_m.is_some() || custom_output_cost_per_m.is_some() {
-        let in_cost_per_m = custom_input_cost_per_m.unwrap_or(0.0);
-        let out_cost_per_m = custom_output_cost_per_m.unwrap_or(0.0);
+    let has_custom = match (custom_input_cost_per_m, custom_output_cost_per_m) {
+        (Some(i), Some(o)) if i > 0.0 || o > 0.0 => true,
+        (Some(i), None) if i > 0.0 => true,
+        (None, Some(o)) if o > 0.0 => true,
+        _ => false,
+    };
+
+    if has_custom {
+        let in_cost_per_m = custom_input_cost_per_m.unwrap_or(0.0).max(0.0);
+        let out_cost_per_m = custom_output_cost_per_m.unwrap_or(0.0).max(0.0);
         let input_cost = (input_tokens as f64 / 1_000_000.0) * in_cost_per_m;
         let output_cost = (output_tokens as f64 / 1_000_000.0) * out_cost_per_m;
         tracing::debug!(

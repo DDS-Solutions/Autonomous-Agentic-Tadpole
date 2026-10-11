@@ -1,0 +1,39 @@
+# deploy-bunker-1.ps1
+# Build and deploy script for Bunker 1 that archives the active binary as a rollback point.
+
+$BackupDir = "deploy_backups"
+$EngineBinary = "server-rs/target/release/server-rs.exe"
+
+if (-not (Test-Path $BackupDir)) {
+    New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
+}
+
+# 1. Read version
+if (-not (Test-Path "version.json")) {
+    @{ version = "1.1.58" } | ConvertTo-Json | Set-Content "version.json"
+}
+$Version = (Get-Content version.json | ConvertFrom-Json).version
+
+# 2. Archive active binary if exists
+if (Test-Path $EngineBinary) {
+    $ArchiveBinary = "$BackupDir/server-rs_$Version.exe"
+    Write-Host "📦 Archiving current binary version $Version to $ArchiveBinary"
+    Copy-Item $EngineBinary $ArchiveBinary -Force
+}
+
+# 3. Build new version
+Write-Host "🏗️ Compiling engine for Bunker 1..."
+if (Test-Path "server-rs") {
+    Push-Location server-rs
+    cargo build --release
+    Pop-Location
+} else {
+    cargo build --release
+}
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "❌ Build failed. Deployment aborted."
+    exit $LASTEXITCODE
+}
+
+Write-Host "✅ Deployment to Bunker 1 successful. New binary compiled."

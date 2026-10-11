@@ -48,8 +48,8 @@ export function Model_Row({
             rpd: model.rpd || 1000,
             tpd: model.tpd || 10000000,
             context_window: model.context_window ?? model.capabilities?.context_window ?? 128000,
-            input_cost_per_m: model.input_cost_per_m ?? 0,
-            output_cost_per_m: model.output_cost_per_m ?? 0
+            input_cost_per_m: model.input_cost_per_m,
+            output_cost_per_m: model.output_cost_per_m
         }
     });
     const [show_limits, set_show_limits] = useState(false);
@@ -72,8 +72,8 @@ export function Model_Row({
                     rpd: model.rpd || 1000,
                     tpd: model.tpd || 10000000,
                     context_window: model.context_window ?? model.capabilities?.context_window ?? 128000,
-                    input_cost_per_m: model.input_cost_per_m ?? 0,
-                    output_cost_per_m: model.output_cost_per_m ?? 0
+                    input_cost_per_m: model.input_cost_per_m,
+                    output_cost_per_m: model.output_cost_per_m
                 }
             });
         }
@@ -131,7 +131,20 @@ export function Model_Row({
                             <button
                                 onClick={() => {
                                     const final_modality = (edit_state.is_custom_modality ? edit_state.custom_modality : edit_state.modality) as Model_Entry['modality'];
-                                    on_save(edit_state.name, edit_state.provider, final_modality, edit_state.limits);
+                                    const cleaned_limits: Record<string, number> = {
+                                        rpm: edit_state.limits.rpm,
+                                        tpm: edit_state.limits.tpm,
+                                        rpd: edit_state.limits.rpd,
+                                        tpd: edit_state.limits.tpd,
+                                        context_window: edit_state.limits.context_window,
+                                    };
+                                    if (edit_state.limits.input_cost_per_m !== undefined && edit_state.limits.input_cost_per_m > 0) {
+                                        cleaned_limits.input_cost_per_m = edit_state.limits.input_cost_per_m;
+                                    }
+                                    if (edit_state.limits.output_cost_per_m !== undefined && edit_state.limits.output_cost_per_m > 0) {
+                                        cleaned_limits.output_cost_per_m = edit_state.limits.output_cost_per_m;
+                                    }
+                                    on_save(edit_state.name, edit_state.provider, final_modality, cleaned_limits);
                                 }}
                                 aria-label={i18n.t('provider.forge_item.tooltip_save')}
                                 className="p-1.5 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-all"
@@ -216,9 +229,13 @@ export function Model_Row({
                                             type="number"
                                             min="0"
                                             step="any"
+                                            placeholder={i18n.t('model_manager.row.default_cost') || "Standard"}
                                             className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-green-500/50"
-                                            value={edit_state.limits.input_cost_per_m}
-                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, input_cost_per_m: parseFloat(e.target.value) || 0 } })}
+                                            value={edit_state.limits.input_cost_per_m ?? ''}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                                                set_edit_state({ ...edit_state, limits: { ...edit_state.limits, input_cost_per_m: val } });
+                                            }}
                                         />
                                     </div>
                                 </Tooltip>
@@ -229,9 +246,13 @@ export function Model_Row({
                                             type="number"
                                             min="0"
                                             step="any"
+                                            placeholder={i18n.t('model_manager.row.default_cost') || "Standard"}
                                             className="w-full bg-[color:var(--color-background)] border border-[color:var(--color-border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-green-500/50"
-                                            value={edit_state.limits.output_cost_per_m}
-                                            onChange={e => set_edit_state({ ...edit_state, limits: { ...edit_state.limits, output_cost_per_m: parseFloat(e.target.value) || 0 } })}
+                                            value={edit_state.limits.output_cost_per_m ?? ''}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                                                set_edit_state({ ...edit_state, limits: { ...edit_state.limits, output_cost_per_m: val } });
+                                            }}
                                         />
                                     </div>
                                 </Tooltip>
@@ -332,13 +353,13 @@ export function Model_Row({
                                 <Tooltip content={i18n.t('model_manager.row.tooltip_input_cost')} position="top" class_name="w-full">
                                     <div className="space-y-1 cursor-help">
                                         <div title={i18n.t('model_manager.row.tooltip_input_cost')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.label_input_cost')}</div>
-                                        <div className="text-xs font-mono text-emerald-400 font-semibold">${Number(model.input_cost_per_m ?? 0).toFixed(2)}</div>
+                                        <div className="text-xs font-mono text-emerald-400 font-semibold">{model.input_cost_per_m !== undefined ? `$${Number(model.input_cost_per_m).toFixed(2)}` : (i18n.t('model_manager.row.default_cost') || 'Standard')}</div>
                                     </div>
                                 </Tooltip>
                                 <Tooltip content={i18n.t('model_manager.row.tooltip_output_cost')} position="top" class_name="w-full">
                                     <div className="space-y-1 cursor-help">
                                         <div title={i18n.t('model_manager.row.tooltip_output_cost')} className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{i18n.t('model_manager.row.label_output_cost')}</div>
-                                        <div className="text-xs font-mono text-emerald-400 font-semibold">${Number(model.output_cost_per_m ?? 0).toFixed(2)}</div>
+                                        <div className="text-xs font-mono text-emerald-400 font-semibold">{model.output_cost_per_m !== undefined ? `$${Number(model.output_cost_per_m).toFixed(2)}` : (i18n.t('model_manager.row.default_cost') || 'Standard')}</div>
                                     </div>
                                 </Tooltip>
                             </div>

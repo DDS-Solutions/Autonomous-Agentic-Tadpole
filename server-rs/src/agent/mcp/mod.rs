@@ -42,6 +42,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
+pub const MAX_MCP_REPLY_BYTES: usize = 2 * 1024 * 1024;
 /// Operational statistics for a specific tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct McpToolStats {
@@ -369,9 +370,16 @@ impl McpHost {
         self.update_stats(clean_name, result.is_ok(), latency);
         self.emit_pulse(clean_name, result.is_ok(), latency);
 
-        // SEC-04: Total secret redaction at the boundary across all result variants and error payloads
+        // SEC-04: Enforce maximum payload cap (2MB) and secret redaction at the boundary
         match result {
-            Ok(McpResult::Raw(ref raw)) => Ok(McpResult::Raw(self.redactor.scrub(raw))),
+            Ok(McpResult::Raw(ref raw)) => {
+                let bounded_raw = if raw.len() > MAX_MCP_REPLY_BYTES {
+                    format!("{}\n\n[TRUNCATED: Tool response exceeded 2MB limit]", &raw[..MAX_MCP_REPLY_BYTES])
+                } else {
+                    raw.clone()
+                };
+                Ok(McpResult::Raw(self.redactor.scrub(&bounded_raw)))
+            }
             Ok(McpResult::SystemDelegate(k, mut v)) => {
                 self.scrub_json_value(&mut v);
                 Ok(McpResult::SystemDelegate(k, v))
@@ -520,14 +528,27 @@ impl McpHost {
                     let mut output = String::new();
                     for item in content {
                         if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                            output.push_str(text);
+                            if output.len() + text.len() > MAX_MCP_REPLY_BYTES {
+                                let remaining = MAX_MCP_REPLY_BYTES.saturating_sub(output.len());
+                                output.push_str(&text[..remaining.min(text.len())]);
+                                output.push_str("\n\n[TRUNCATED: MCP response exceeded 2MB limit]");
+                                break;
+                            } else {
+                                output.push_str(text);
+                            }
                         }
                     }
                     return Ok(McpResult::Raw(output));
                 }
 
-                return Ok(McpResult::Raw(serde_json::to_string_pretty(&result)
-                    .map_err(|e| AppError::InternalServerError(e.to_string()))?));
+                let serialized = serde_json::to_string_pretty(&result)
+                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                let output = if serialized.len() > MAX_MCP_REPLY_BYTES {
+                    format!("{}\n\n[TRUNCATED: MCP response exceeded 2MB limit]", &serialized[..MAX_MCP_REPLY_BYTES])
+                } else {
+                    serialized
+                };
+                return Ok(McpResult::Raw(output));
             }
         }
 
@@ -625,8 +646,13 @@ impl McpHost {
         )
         .await?;
 
-        // SEC-04: Proactively scrub stdout
-        let scrubbed_stdout = self.redactor.scrub(&raw_output);
+        // SEC-04: Cap response payload and proactively scrub stdout
+        let bounded_output = if raw_output.len() > MAX_MCP_REPLY_BYTES {
+            format!("{}\n\n[TRUNCATED: Skill reply exceeded 2MB limit]", &raw_output[..MAX_MCP_REPLY_BYTES])
+        } else {
+            raw_output
+        };
+        let scrubbed_stdout = self.redactor.scrub(&bounded_output);
         Ok(scrubbed_stdout)
     }
 }

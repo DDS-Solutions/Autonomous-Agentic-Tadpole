@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tracing::{debug, info};
 use crate::error::AppError;
@@ -129,7 +129,10 @@ impl McpClient {
 
         let response: JsonRpcResponse = loop {
             let mut response_line = String::new();
-            let bytes_read = tokio::time::timeout(timeout_duration, self.stdout.read_line(&mut response_line))
+            let bytes_read = tokio::time::timeout(
+                timeout_duration,
+                (&mut self.stdout).take(10 * 1024 * 1024 + 1).read_line(&mut response_line),
+            )
                 .await
                 .map_err(|_| AppError::InfrastructureError {
                     provider_id: "mcp_client".to_string(),

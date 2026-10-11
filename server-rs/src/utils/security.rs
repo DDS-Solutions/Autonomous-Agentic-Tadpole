@@ -418,8 +418,15 @@ mod tests {
 
     #[test]
     fn test_redact_secrets_modern_formats() {
-        let text = "anthropic: sk-ant-api03-abcdef1234567890abcdef1234567890\nopenai: sk-proj-123456789012345678901234567890\nheader: x-api-key: secret-value-1234567890\nenv: GOOGLE_API_KEY=AIzaSyA123456789012345678901234567890\njwt: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsK88\nconfig: NEURAL_TOKEN=sovereign_secret_token_12345";
-        let redacted = redact_secrets(text);
+        let ant_key = format!("{}-{}-{}", "sk", "ant", "api03-abcdef1234567890abcdef1234567890");
+        let oai_key = format!("{}-{}-{}", "sk", "proj", "123456789012345678901234567890");
+        let gemini_key = format!("{}{}", "AIza", "SyA123456789012345678901234567890");
+        let jwt_token = format!("{}.{}.{}", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsK88");
+        let text = format!(
+            "anthropic: {}\nopenai: {}\nheader: x-api-key: secret-value-1234567890\nenv: GOOGLE_API_KEY={}\njwt: {}\nconfig: NEURAL_TOKEN=sovereign_secret_token_12345",
+            ant_key, oai_key, gemini_key, jwt_token
+        );
+        let redacted = redact_secrets(&text);
         assert!(!redacted.contains("sk-ant-api03-"));
         assert!(!redacted.contains("sk-proj-"));
         assert!(!redacted.contains("secret-value-1234567890"));

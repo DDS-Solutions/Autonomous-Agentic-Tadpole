@@ -47,8 +47,8 @@ export function useModelManager() {
         rpd: 1000,
         tpd: 10000000,
         context_window: 128000,
-        input_cost_per_m: 0,
-        output_cost_per_m: 0,
+        input_cost_per_m: undefined as number | undefined,
+        output_cost_per_m: undefined as number | undefined,
         is_custom_modality: false,
         custom_modality: ''
     });
@@ -108,15 +108,19 @@ export function useModelManager() {
         const final_modality = node_form.is_custom_modality ? node_form.custom_modality : node_form.modality;
         
         // Final numeric validation before store dispatch
-        const limits = {
+        const limits: Record<string, number> = {
             rpm: Math.max(0, node_form.rpm),
             tpm: Math.max(0, node_form.tpm),
             rpd: Math.max(0, node_form.rpd),
             tpd: Math.max(0, node_form.tpd),
             context_window: Math.max(0, node_form.context_window ?? 128000),
-            input_cost_per_m: Math.max(0, node_form.input_cost_per_m ?? 0),
-            output_cost_per_m: Math.max(0, node_form.output_cost_per_m ?? 0)
         };
+        if (node_form.input_cost_per_m !== undefined && node_form.input_cost_per_m > 0) {
+            limits.input_cost_per_m = node_form.input_cost_per_m;
+        }
+        if (node_form.output_cost_per_m !== undefined && node_form.output_cost_per_m > 0) {
+            limits.output_cost_per_m = node_form.output_cost_per_m;
+        }
 
         add_model(node_form.name, node_form.provider, final_modality as Model_Entry['modality'], limits);
         set_node_form({ 
@@ -129,8 +133,8 @@ export function useModelManager() {
             rpd: 1000, 
             tpd: 10000000,
             context_window: 128000,
-            input_cost_per_m: 0,
-            output_cost_per_m: 0,
+            input_cost_per_m: undefined,
+            output_cost_per_m: undefined,
             is_custom_modality: false,
             custom_modality: ''
         });

@@ -850,7 +850,7 @@ pub async fn get_token_burn(
 ) -> Result<impl IntoResponse, AppError> {
     use sqlx::Row;
 
-    // 1. Query overall consumption sums
+    // 1. Query overall consumption sums from agent_tasks
     let totals_row = sqlx::query(
         "SELECT 
             COALESCE(SUM(tokens_in), 0) as total_tokens_in,
@@ -862,9 +862,32 @@ pub async fn get_token_burn(
     .await
     .map_err(AppError::Sqlx)?;
 
-    let total_tokens_in: i64 = totals_row.get("total_tokens_in");
-    let total_tokens_out: i64 = totals_row.get("total_tokens_out");
-    let total_cost_usd: f64 = totals_row.get("total_cost_usd");
+    let mut total_tokens_in: i64 = totals_row.get("total_tokens_in");
+    let mut total_tokens_out: i64 = totals_row.get("total_tokens_out");
+    let mut total_cost_usd: f64 = totals_row.get("total_cost_usd");
+
+    // Also query direct consumption sums from agents table to ensure reconciliation with active agent records
+    let agent_totals_row = sqlx::query(
+        "SELECT 
+            COALESCE(SUM(input_tokens), 0) as total_tokens_in,
+            COALESCE(SUM(output_tokens), 0) as total_tokens_out,
+            COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
+         FROM agents"
+    )
+    .fetch_one(&state.resources.pool)
+    .await
+    .map_err(AppError::Sqlx)?;
+
+    let ag_tokens_in: i64 = agent_totals_row.get("total_tokens_in");
+    let ag_tokens_out: i64 = agent_totals_row.get("total_tokens_out");
+    let ag_cost_usd: f64 = agent_totals_row.get("total_cost_usd");
+
+    // If agent_tasks has no token consumption recorded, fall back to agents table telemetry
+    if total_tokens_in == 0 && total_tokens_out == 0 {
+        total_tokens_in = ag_tokens_in;
+        total_tokens_out = ag_tokens_out;
+        total_cost_usd = ag_cost_usd;
+    }
 
     // Update Prometheus gauges
     crate::telemetry::OVERSIGHT_TOKENS_IN.set(total_tokens_in as f64);
@@ -885,7 +908,7 @@ pub async fn get_token_burn(
     .await
     .map_err(AppError::Sqlx)?;
 
-    let providers = provider_rows.into_iter().map(|row| {
+    let mut providers: Vec<ProviderTokenBurn> = provider_rows.into_iter().map(|row| {
         ProviderTokenBurn {
             provider_id: row.get("provider_id"),
             tokens_in: row.get("tokens_in"),
@@ -894,17 +917,53 @@ pub async fn get_token_burn(
         }
     }).collect();
 
-    // 3. Query agent breakdown (joining with agents table for the name)
+    // Fall back to agents table if agent_tasks had no provider tokens recorded
+    if providers.is_empty() || (total_tokens_in > 0 && providers.iter().all(|p| p.tokens_in == 0 && p.tokens_out == 0)) {
+        let agent_prov_rows = sqlx::query(
+            "SELECT 
+                COALESCE(provider, 'unknown') as provider_id,
+                COALESCE(SUM(input_tokens), 0) as tokens_in,
+                COALESCE(SUM(output_tokens), 0) as tokens_out,
+                COALESCE(SUM(cost_usd), 0.0) as cost_usd
+             FROM agents
+             WHERE input_tokens > 0 OR output_tokens > 0 OR cost_usd > 0.0
+             GROUP BY provider"
+        )
+        .fetch_all(&state.resources.pool)
+        .await
+        .map_err(AppError::Sqlx)?;
+
+        if !agent_prov_rows.is_empty() {
+            providers = agent_prov_rows.into_iter().map(|row| {
+                ProviderTokenBurn {
+                    provider_id: row.get("provider_id"),
+                    tokens_in: row.get("tokens_in"),
+                    tokens_out: row.get("tokens_out"),
+                    cost_usd: row.get("cost_usd"),
+                }
+            }).collect();
+        }
+    }
+
+    // 3. Query agent breakdown (reconciling agent_tasks with agents table)
     let agent_rows = sqlx::query(
         "SELECT 
-            t.agent_id,
-            COALESCE(a.name, 'Unknown Agent') as agent_name,
-            COALESCE(SUM(t.tokens_in), 0) as tokens_in,
-            COALESCE(SUM(t.tokens_out), 0) as tokens_out,
-            COALESCE(SUM(t.cost_usd), 0.0) as cost_usd
-         FROM agent_tasks t
-         LEFT JOIN agents a ON t.agent_id = a.id
-         GROUP BY t.agent_id, a.name"
+            a.id as agent_id,
+            a.name as agent_name,
+            MAX(COALESCE(task_totals.tokens_in, 0), COALESCE(a.input_tokens, 0)) as tokens_in,
+            MAX(COALESCE(task_totals.tokens_out, 0), COALESCE(a.output_tokens, 0)) as tokens_out,
+            MAX(COALESCE(task_totals.cost_usd, 0.0), COALESCE(a.cost_usd, 0.0)) as cost_usd
+         FROM agents a
+         LEFT JOIN (
+             SELECT 
+                 agent_id,
+                 SUM(tokens_in) as tokens_in,
+                 SUM(tokens_out) as tokens_out,
+                 SUM(cost_usd) as cost_usd
+             FROM agent_tasks
+             GROUP BY agent_id
+         ) task_totals ON a.id = task_totals.agent_id
+         WHERE COALESCE(a.input_tokens, 0) > 0 OR COALESCE(a.output_tokens, 0) > 0 OR COALESCE(a.cost_usd, 0.0) > 0.0 OR COALESCE(task_totals.tokens_in, 0) > 0"
     )
     .fetch_all(&state.resources.pool)
     .await

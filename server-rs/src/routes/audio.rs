@@ -254,7 +254,7 @@ pub async fn transcribe_audio(
 
     // Initialize Groq Provider
     let (api_key, model_id) = if let Some(groq_provider) = state.registry.providers.get("groq") {
-        let key = groq_provider
+        let groq_api_token = groq_provider
             .api_key
             .clone()
             .or_else(|| std::env::var("GROQ_API_KEY").ok())
@@ -265,11 +265,12 @@ pub async fn transcribe_audio(
             .clone()
             .unwrap_or_else(|| "whisper-large-v3".to_string());
 
-        (key, model)
+        (groq_api_token, model)
     } else {
-        let key = std::env::var("GROQ_API_KEY")
+        let groq_api_token = std::env::var("GROQ_API_KEY")
             .map_err(|_| AppError::InternalServerError("Missing GROQ_API_KEY".to_string()))?;
-        (key, "whisper-large-v3".to_string())
+        let default_audio_model = "whisper-large-v3".to_string();
+        (groq_api_token, default_audio_model)
     };
 
     let config = crate::agent::types::ModelConfig {

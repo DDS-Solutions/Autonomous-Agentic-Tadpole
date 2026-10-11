@@ -415,7 +415,10 @@ mod tests {
         });
 
         // Wait for cascade and restart
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        let start = std::time::Instant::now();
+        while (count_a.load(Ordering::SeqCst) < 2 || count_b.load(Ordering::SeqCst) < 2) && start.elapsed() < Duration::from_secs(3) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
         // Both child A and child B should have been restarted due to OneForAll
         assert!(count_a.load(Ordering::SeqCst) >= 2, "Child A should have restarted");
@@ -482,7 +485,18 @@ mod tests {
         });
 
         // Wait for restarts to exhaust
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        let start = std::time::Instant::now();
+        while execution_count.load(Ordering::SeqCst) < 3 && start.elapsed() < Duration::from_secs(3) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let start_dead = std::time::Instant::now();
+        while start_dead.elapsed() < Duration::from_millis(300) {
+            let metrics = supervisor.handle().get_metrics();
+            if !metrics.is_empty() && !metrics[0].is_alive {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
         let total_executions = execution_count.load(Ordering::SeqCst);
         // Initial spawn (1) + max_restarts (2) = 3 total executions

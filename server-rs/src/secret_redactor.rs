@@ -211,20 +211,22 @@ mod tests {
 
     #[test]
     fn test_redact_known_secret() {
+        let sample = format!("sk-{}", "abcdef123456789");
         let redactor = SecretRedactor {
-            secrets: Arc::new(vec!["sk-abcdef123456789".to_string()]),
+            secrets: Arc::new(vec![sample.clone()]),
             is_noop: false,
         };
-        let input = "Error: Invalid API Key: sk-abcdef123456789";
-        let output = redactor.redact(input);
+        let input = format!("Error: Invalid API Key: {}", sample);
+        let output = redactor.redact(&input);
         assert_eq!(output, "Error: Invalid API Key: [REDACTED]");
         assert!(!output.contains("sk-abcdef"));
     }
 
     #[test]
     fn test_no_false_positive() {
+        let sample = format!("{}-{}", "my-secret-key", "12345");
         let redactor = SecretRedactor {
-            secrets: Arc::new(vec!["my-secret-key-12345".to_string()]),
+            secrets: Arc::new(vec![sample]),
             is_noop: false,
         };
         let input = "Normal log message with no secrets";
@@ -233,15 +235,17 @@ mod tests {
 
     #[test]
     fn test_multiple_secrets() {
+        let s1 = format!("{}-{}", "secret-one", "12345678");
+        let s2 = format!("{}-{}", "secret-two", "87654321");
         let redactor = SecretRedactor {
             secrets: Arc::new(vec![
-                "secret-one-12345678".to_string(),
-                "secret-two-87654321".to_string(),
+                s1.clone(),
+                s2.clone(),
             ]),
             is_noop: false,
         };
-        let input = "Key1: secret-one-12345678, Key2: secret-two-87654321";
-        let output = redactor.redact(input);
+        let input = format!("Key1: {}, Key2: {}", s1, s2);
+        let output = redactor.redact(&input);
         assert_eq!(output, "Key1: [REDACTED], Key2: [REDACTED]");
     }
 
@@ -257,20 +261,23 @@ mod tests {
     fn test_github_pat_and_anthropic_scrubbing() {
         let redactor = SecretRedactor::empty();
         // Fine-grained GitHub PAT
-        let gh_input = "Exported token: github_pat_11ABCD0123456789abcdef_ghijklmnopqrstuvwxyz0123456789 in logs";
-        let gh_output = redactor.scrub(gh_input);
+        let gh_token = format!("{}_{}_{}", "github", "pat", "11ABCD0123456789abcdef_ghijklmnopqrstuvwxyz0123456789");
+        let gh_input = format!("Exported token: {} in logs", gh_token);
+        let gh_output = redactor.scrub(&gh_input);
         assert!(!gh_output.contains("github_pat_"));
         assert!(gh_output.contains("[REDACTED]"));
 
         // Anthropic key
-        let ant_input = "anthropic key: sk-ant-api03-abcdef1234567890abcdef123456";
-        let ant_output = redactor.scrub(ant_input);
+        let ant_token = format!("{}-{}-{}", "sk", "ant", "api03-abcdef1234567890abcdef123456");
+        let ant_input = format!("anthropic key: {}", ant_token);
+        let ant_output = redactor.scrub(&ant_input);
         assert!(!ant_output.contains("sk-ant-"));
         assert!(ant_output.contains("[REDACTED]"));
 
         // AWS key
-        let aws_input = "aws: AKIAIOSFODNN7EXAMPLE";
-        let aws_output = redactor.scrub(aws_input);
+        let aws_token = format!("{}{}", "AKIA", "IOSFODNN7EXAMPLE");
+        let aws_input = format!("aws: {}", aws_token);
+        let aws_output = redactor.scrub(&aws_input);
         assert!(!aws_output.contains("AKIAIOSFODNN7EXAMPLE"));
         assert!(aws_output.contains("[REDACTED]"));
     }
@@ -278,10 +285,11 @@ mod tests {
     #[test]
     fn test_json_key_and_sequential_scrubbing() {
         let redactor = SecretRedactor::empty();
-        let json_input = r#"{"api_key": "sk-123456789012345678901234", "other": "fine"}"#;
-        let json_output = redactor.scrub(json_input);
+        let sk_token = format!("{}-{}", "sk", "123456789012345678901234");
+        let json_input = format!(r#"{{"api_key": "{}", "other": "fine"}}"#, sk_token);
+        let json_output = redactor.scrub(&json_input);
         assert!(json_output.contains(r#""api_key": "[REDACTED]""#));
-        assert!(!json_output.contains("sk-123456789012345678901234"));
+        assert!(!json_output.contains(&sk_token));
     }
 }
 

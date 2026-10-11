@@ -74,7 +74,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install runtime dependencies only (including python-is-python3 alias)
+# Install runtime dependencies (including python, nodejs/npm for npx, and docker CLI)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
@@ -84,9 +84,12 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     python-is-python3 \
+    nodejs \
+    npm \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir skillspector==0.1.3
+RUN python3 -m pip install --break-system-packages --no-cache-dir skillspector==0.1.3 mcp
 
 # Copy binary from builder
 COPY --from=builder /tmp/target/release/server-rs /app/server-rs-bin

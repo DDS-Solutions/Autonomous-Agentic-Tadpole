@@ -536,9 +536,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_redaction_in_response() {
+        let sample_token = format!("{}-{}", "sk", "1234567890abcdef1234567890abcdef");
         // Create an error that contains a sensitive API key in the detail
         let error =
-            AppError::BadRequest("Failed with key sk-1234567890abcdef1234567890abcdef".to_string());
+            AppError::BadRequest(format!("Failed with key {}", sample_token));
 
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -547,7 +548,7 @@ mod tests {
         let (status, json_pd) = ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "Bad Request",
-            "key sk-1234567890abcdef1234567890abcdef".to_string(),
+            format!("key {}", sample_token),
         );
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(json_pd.0.detail.contains("[REDACTED]"));

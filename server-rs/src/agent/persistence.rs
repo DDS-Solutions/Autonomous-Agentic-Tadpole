@@ -396,6 +396,30 @@ where
     }
 }
 
+fn is_safe_builtin_skill(skill_id: &str) -> bool {
+    matches!(
+        skill_id,
+        "read_file"
+            | "read_codebase_file"
+            | "list_files"
+            | "list_dir"
+            | "grep_search"
+            | "get_current_time"
+            | "calculate"
+            | "share_finding"
+            | "update_working_memory"
+            | "get_file_contents"
+            | "get_project_status"
+            | "get_agent_metrics"
+            | "get_current_mission_status"
+            | "search_global_vault"
+            | "list_skill_metadata"
+            | "search_mission_knowledge"
+            | "list_file_symbols"
+            | "get_symbol_body"
+    )
+}
+
 async fn auto_subscribe_agent_skills(
     conn: &mut sqlx::SqliteConnection,
     agent: &EngineAgent,
@@ -415,9 +439,12 @@ async fn auto_subscribe_agent_skills(
             hasher.update(skill_id.as_bytes());
         }
         let scope_hash = hex::encode(hasher.finalize());
-        let status = if is_builtin { "approved" } else { "pending" };
-        let notes = if is_builtin {
-            "Baseline system capability auto-approved"
+        let is_safe = is_safe_builtin_skill(skill_id);
+        let status = if is_safe { "approved" } else { "pending" };
+        let notes = if is_safe {
+            "Baseline safe system capability auto-approved"
+        } else if is_builtin {
+            "Built-in mutating/external capability awaiting operator approval"
         } else {
             "Awaiting operator approval"
         };

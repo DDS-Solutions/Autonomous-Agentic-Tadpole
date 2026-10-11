@@ -505,6 +505,16 @@ impl Validatable for ModelEntry {
         if self.provider_id.trim().is_empty() {
             return Err("Model must be assigned to a Provider ID".to_string());
         }
+        if let Some(cost) = self.input_cost_per_m {
+            if cost < 0.0 || cost.is_nan() {
+                return Err("input_cost_per_m cannot be negative or NaN".to_string());
+            }
+        }
+        if let Some(cost) = self.output_cost_per_m {
+            if cost < 0.0 || cost.is_nan() {
+                return Err("output_cost_per_m cannot be negative or NaN".to_string());
+            }
+        }
         Ok(())
     }
 }
