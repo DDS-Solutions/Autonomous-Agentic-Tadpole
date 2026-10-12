@@ -35,7 +35,7 @@ use std::sync::Arc;
 #[tracing::instrument(skip(state), name = "governance::kill_swarm")]
 pub async fn kill_agents(
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, crate::error::AppError> {
     let mut halted = 0usize;
 
     for mut entry in state.registry.agents.iter_mut() {
@@ -95,7 +95,7 @@ pub async fn kill_agents(
     };
 
     // Persist mutated agent states to SQLite to guarantee persistence across engine restarts
-    state.save_agents().await;
+    state.save_agents().await?;
 
     tracing::warn!(
         "🛑 [Kill Switch] Halted {} agents, aborted {} runners, failed {} active tasks, cleared {} pending oversight entries.",
@@ -113,7 +113,7 @@ pub async fn kill_agents(
         "cleared_oversight": pending_ids.len()
     }));
 
-    (
+    Ok((
         StatusCode::OK,
         Json(serde_json::json!({
             "status": "ok",
@@ -122,7 +122,7 @@ pub async fn kill_agents(
             "failed_tasks": tasks_aborted,
             "cleared_oversight": pending_ids.len()
         })),
-    )
+    ))
 }
 
 /// POST /engine/shutdown — Graceful server shutdown.

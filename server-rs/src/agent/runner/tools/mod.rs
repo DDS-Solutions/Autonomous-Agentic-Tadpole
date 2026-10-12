@@ -578,32 +578,19 @@ impl AgentRunner {
             .cloned()
             .unwrap_or(serde_json::json!({}));
 
-        if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-            let agent = entry.value_mut();
-
-            // Deep recursive JSON merge to preserve nested properties
-            recursive_merge_json(&mut agent.state.working_memory, &new_memory);
-
-            let agent_data = agent.clone();
-            drop(entry); // Release DashMap lock
-
-            // Sync to DB
-            let new_ver = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data)
-                .await?;
-            if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-                entry.version = new_ver;
-            }
-
-            self.state.emit_event(serde_json::json!({
-                "type": "agent:update",
-                "data": agent_data
-            }));
-
-            *output_text = "(WORKING MEMORY UPDATED SUCCESSFULLY)".to_string();
-        } else {
-            *output_text =
-                "(ERROR: Agent not found in registry during working memory update)".to_string();
+        let _lifecycle = self.state.registry.lock_agent(&ctx.agent_id).await;
+        let mut agent = self.state.registry.agents.get(&ctx.agent_id)
+            .ok_or_else(|| AppError::NotFound("Agent was deleted".to_string()))?.clone();
+        if agent.state.active_mission.as_ref().and_then(|mission| mission.get("id"))
+            .and_then(|id| id.as_str()) != Some(ctx.mission_id.as_str()) {
+            return Err(AppError::Conflict("Working-memory update belongs to a superseded mission".to_string()));
         }
+        // Deep merge remains Rust/serde JSON logic; publish only after the write succeeds.
+        recursive_merge_json(&mut agent.state.working_memory, &new_memory);
+        agent.version = crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent).await?;
+        self.state.registry.agents.insert(ctx.agent_id.clone(), agent.clone());
+        self.state.emit_event(serde_json::json!({"type": "agent:update", "data": agent}));
+        *output_text = "(WORKING MEMORY UPDATED SUCCESSFULLY)".to_string();
 
         Ok(())
     }
@@ -850,10 +837,13 @@ mod tests {
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
+        agent.state.active_mission = Some(serde_json::json!({"id": ctx.mission_id}));
         state.registry.agents.insert(ctx.agent_id.clone(), agent);
         
         // Ensure agent exists in DB for persistence call
-        crate::agent::persistence::save_agent_db(&state.resources.pool, &state.registry.agents.get(&ctx.agent_id).unwrap()).await.unwrap();
+        let mut persisted = state.registry.agents.get(&ctx.agent_id).unwrap().clone();
+        persisted.version = crate::agent::persistence::create_agent_db(&state.resources.pool, &persisted).await.unwrap();
+        state.registry.agents.insert(ctx.agent_id.clone(), persisted);
 
         let fc = ToolCall {
             name: "update_working_memory".to_string(),

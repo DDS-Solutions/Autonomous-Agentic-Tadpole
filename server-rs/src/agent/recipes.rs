@@ -103,13 +103,23 @@ async fn ingest_recipe(path: PathBuf, state: Arc<AppState>) -> Result<(), AppErr
             ..Default::default()
         };
 
-        // UPSERT into database
-        if let Err(e) = crate::agent::persistence::save_agent_db(&state.resources.pool, &agent).await {
-            error!("🚨 [Recipes] Failed to persist agent '{}': {}", agent.identity.id, e);
+        let agent_id = agent.identity.id.clone();
+        let _lifecycle = state.registry.lock_agent(&agent_id).await;
+        // Recipes update configuration, preserving live mission/economics state.
+        let mut updated = if let Some(existing) = state.registry.agents.get(&agent.identity.id) {
+            let mut updated = existing.clone();
+            updated.identity = agent.identity;
+            updated.models = agent.models;
+            updated.capabilities = agent.capabilities;
+            updated
+        } else { agent };
+        updated.version = if state.registry.agents.contains_key(&updated.identity.id) {
+            crate::agent::persistence::save_agent_db(&state.resources.pool, &updated).await?
         } else {
-            // Update in-memory registry
-            state.registry.agents.insert(agent.identity.id.clone(), agent);
-        }
+            crate::agent::persistence::create_agent_db(&state.resources.pool, &updated).await?
+        };
+        state.registry.agents.insert(updated.identity.id.clone(), updated);
+
     }
 
     Ok(())

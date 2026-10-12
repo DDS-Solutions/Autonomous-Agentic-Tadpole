@@ -138,7 +138,13 @@ impl SymbolExtractor {
             (call_expression
               function: [
                 (identifier) @ref
+                (scoped_identifier name: (identifier) @ref)
                 (field_expression field: (field_identifier) @ref)
+                (generic_function function: [
+                  (identifier) @ref
+                  (scoped_identifier name: (identifier) @ref)
+                  (field_expression field: (field_identifier) @ref)
+                ])
               ]
             )
             (type_identifier) @ref
@@ -281,6 +287,40 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn finding_regression_rust_references_include_qualified_and_generic_calls() {
+        let mut extractor = SymbolExtractor::new();
+        let content = r#"
+            struct Worker;
+            impl Worker {
+                fn associated() {}
+                fn method<T>(&self, _value: T) {}
+            }
+            fn plain() {}
+            mod domain {
+                pub fn save() {}
+                pub fn convert<T>(value: T) -> T { value }
+            }
+            fn caller(worker: &Worker, value: u32) {
+                let _label = "🦀 crate::domain::false_call()";
+                // crate::domain::comment_call();
+                plain();
+                crate::domain::save();
+                Worker::associated();
+                crate::domain::convert::<u32>(value);
+                worker.method::<u32>(value);
+            }
+        "#;
+        let references = extractor.extract_references(Path::new("lib.rs"), content);
+        for name in ["plain", "save", "associated", "convert", "method"] {
+            let matches: Vec<_> = references.iter().filter(|reference| reference.name == name).collect();
+            assert_eq!(matches.len(), 1, "callee {name} must be indexed once");
+            let range = &matches[0].range;
+            assert_eq!(&content[range.start_byte..range.end_byte], name);
+        }
+        assert!(!references.iter().any(|reference| matches!(reference.name.as_str(), "false_call" | "comment_call")));
+    }
 
     #[test]
     fn test_extract_rust_symbols() {

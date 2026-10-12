@@ -20,6 +20,8 @@ The Rust engine binds to `127.0.0.1:8000` by default and nests application route
 
 ## Authentication
 
+The current shared bearer credential is an operator capability. Middleware records successful verification in a typed request extension consumed by task dispatch. `x-tadpole-role`, `user_id`, and `auto_resume` do not establish identity or role. `auto_resume` controls the authenticated operator's suspension preference. Separately authenticated tenant roles are outside the current authentication model.
+
 Public routes:
 
 - `GET /health`
@@ -38,6 +40,8 @@ Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 ```
 
 ## Agents
+
+Successful agent deletion commits dependent database cleanup before removing the live agent, aborting its runner, and clearing its retained mission receipts. A rejected deletion preserves the live identity and runner. Cancellation and preemption of a retained agent preserve acknowledged provider usage under the server-created mission/run identity; caller-supplied identity properties do not replace that ownership.
 
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |

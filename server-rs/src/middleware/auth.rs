@@ -28,6 +28,11 @@ use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
+/// A server-verified operator credential. Client headers and body fields cannot
+/// create this request extension; only successful token validation installs it.
+#[derive(Clone, Copy, Debug)]
+pub struct AuthenticatedOperator;
+
 /// Constant-time string comparison to prevent timing-based side-channel attacks.
 ///
 /// ### 🔒 Security: Constant-Time Comparison (AUTH-01)
@@ -73,7 +78,7 @@ pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str>
 /// 2. `Sec-WebSocket-Protocol: bearer.<token>` header (browser WebSocket upgrades)
 pub async fn validate_token(
     State(state): State<Arc<AppState>>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
@@ -102,6 +107,7 @@ pub async fn validate_token(
         if let Some(token_name) = match_token(token, &state) {
             tracing::debug!("🔑 [Auth] Authorized request using {}", token_name);
             crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
+            req.extensions_mut().insert(AuthenticatedOperator);
             return Ok(next.run(req).await);
         } else {
             tracing::warn!("🚫 Invalid token provided");
@@ -134,6 +140,7 @@ pub async fn validate_token(
                 if let Some(token_name) = match_token(token, &state) {
                     tracing::info!("🔑 [Auth] Authorized WebSocket request using {}", token_name);
                     crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
+                    req.extensions_mut().insert(AuthenticatedOperator);
                     return Ok(next.run(req).await);
                 }
             }
@@ -169,7 +176,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    async fn dummy_handler() -> StatusCode {
+    async fn dummy_handler(axum::Extension(_operator): axum::Extension<AuthenticatedOperator>) -> StatusCode {
         StatusCode::OK
     }
 
@@ -253,6 +260,7 @@ mod tests {
 
         let req = Request::builder()
             .uri("/")
+            .header("x-tadpole-role", "admin")
             .body(Body::empty())
             .unwrap();
 

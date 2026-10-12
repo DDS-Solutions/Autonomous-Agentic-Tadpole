@@ -68,6 +68,78 @@ mod tests {
         assert!(json["links"].is_array());
     }
 
+    #[tokio::test]
+    async fn test_initial_graph_failure_stays_failed_and_rebuild_recovers() {
+        let mut app_state = AppState::new_minimal_mock().await;
+        let resources = Arc::get_mut(&mut app_state.resources).unwrap();
+        resources.base_dir = resources.base_dir.join("missing-workspace");
+        let state = Arc::new(app_state);
+        for _ in 0..2 {
+            assert!(state.resources.get_symbol_graph().await.is_err());
+            assert!(matches!(state.resources.get_initialization_snapshot().get("SymbolGraph"), Some(crate::types::SubsystemStatus::Failed(_))));
+        }
+
+        let service = crate::intelligence::service::IntelligenceService::new(state.clone());
+        assert!(service.list_graph(None, None).await.is_err());
+        assert!(service.get_impacted_tests("*", "fixture.rs").await.is_err());
+        std::fs::create_dir_all(&state.resources.base_dir).unwrap();
+        let result = service.rebuild_graph(false).await.unwrap();
+        assert_eq!(result.status, "success");
+        assert!(matches!(state.resources.get_initialization_snapshot().get("SymbolGraph"), Some(crate::types::SubsystemStatus::Ready)));
+        assert!(service.list_graph(None, None).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cancelled_rebuild_retains_gate_until_worker_finishes() {
+        let (_, state) = setup_test_app().await;
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let init_state = state.clone();
+        let initializer = tokio::spawn(async move {
+            init_state.resources.symbol_graph.get_or_init(|| async {
+                let _ = started_tx.send(());
+                let _ = release_rx.await;
+                Arc::new(arc_swap::ArcSwap::new(Arc::new(
+                    crate::intelligence::graph::CodeSymbolGraph::new(init_state.resources.base_dir.clone()),
+                )))
+            }).await;
+        });
+        started_rx.await.unwrap();
+        let request_state = state.clone();
+        let request = tokio::spawn(async move {
+            crate::intelligence::service::IntelligenceService::new(request_state).rebuild_graph(true).await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while !state.resources.is_rebuilding_symbol_graph.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+        request.abort();
+        let _ = request.await;
+        assert!(state.resources.is_rebuilding_symbol_graph.load(std::sync::atomic::Ordering::SeqCst));
+        let service = crate::intelligence::service::IntelligenceService::new(state.clone());
+        assert!(matches!(service.rebuild_graph(true).await, Err(crate::error::AppError::Conflict(_))));
+        release_tx.send(()).unwrap();
+        initializer.await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while state.resources.is_rebuilding_symbol_graph.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_rebuild_counts_files_rather_than_symbols() {
+        let (_, state) = setup_test_app().await;
+        std::fs::write(state.resources.base_dir.join("fixture.rs"), "fn first() {}\nfn second() {}\n").unwrap();
+        let service = crate::intelligence::service::IntelligenceService::new(state.clone());
+        let result = service.rebuild_graph(true).await.unwrap();
+        let summary = result.summary.unwrap();
+        assert_eq!(summary.file_count, 1);
+        assert_eq!(summary.node_count, 2);
+        assert_eq!(result.status, "success");
+    }
+
     // 2. Happy Path: Authorized dry-run graph rebuild
     #[tokio::test]
     async fn test_rebuild_code_graph_dry_run_authorized() {
@@ -103,6 +175,44 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn partial_impacted_tests_return_explicit_error() {
+        let (_, state) = setup_test_app().await;
+        let mut graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let root = graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "root".into(), path: "chain.rs".into(), ..Default::default()
+        });
+        graph.index.insert(crate::intelligence::graph::key::index_key("chain.rs", "root"), root);
+        let mut target = root;
+        for index in 0..60 {
+            let caller = graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+                name: format!("caller_{index}"), path: "chain.rs".into(), ..Default::default()
+            });
+            graph.graph.add_edge(caller, target, crate::intelligence::graph::SymbolEdge { kind: "call".into() });
+            target = caller;
+        }
+        let swap = Arc::new(arc_swap::ArcSwap::new(Arc::new(graph)));
+        assert!(state.resources.symbol_graph.set(swap).is_ok());
+        let result = crate::intelligence::service::IntelligenceService::new(state).get_impacted_tests("root", "chain.rs").await;
+        assert!(matches!(result, Err(crate::error::AppError::DomainError { code, .. }) if code == "BR_TRUNCATED"));
+    }
+
+    #[tokio::test]
+    async fn live_http_rebuild_reports_sync_failure_and_releases_gate() {
+        let (app, state) = setup_test_app().await;
+        // A file where a database directory belongs forces a deterministic local sync failure.
+        std::fs::write(state.resources.base_dir.join(".code-review-graph"), "blocked directory").unwrap();
+        let request = Request::builder().method("POST").uri("/v1/intelligence/graph/rebuild")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN)).body(Body::empty()).unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["status"], "warning");
+        assert!(!state.resources.is_rebuilding_symbol_graph.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(state.resources.get_symbol_graph().await.is_ok());
     }
 
     // 4. Failure Path: Reject missing required query parameters on blast radius

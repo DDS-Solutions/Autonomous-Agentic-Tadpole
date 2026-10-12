@@ -61,8 +61,17 @@ def check_c2_cascade_ordering(persistence_code: str) -> list[str]:
 def check_c3_retry_occ_clobber(persistence_code: str) -> list[str]:
     errors = []
     # Ensure no retry loop catches Conflict and overwrites version to force Last-Write-Wins
-    if re.search(r"AppError::Conflict.*?version\s*=\s*.*?\+.*?retry", persistence_code, re.DOTALL | re.IGNORECASE):
-        errors.append("[C3-FAIL] Detected retry loop converting OCC conflict into untracked Last-Write-Wins.")
+    # Restrict the pattern to one function. Combining unrelated functions or
+    # tests can turn a conflict assertion plus a later version assertion into
+    # a fictitious retry loop. Function endings use the declaration's indent.
+    functions = re.finditer(
+        r"^(?P<indent>[ \t]*)(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+[^\{]*\{(?P<body>.*?)^(?P=indent)\}",
+        persistence_code, re.MULTILINE | re.DOTALL,
+    )
+    for function in functions:
+        if re.search(r"AppError::Conflict.*?version\s*=\s*.*?\+.*?retry", function.group("body"), re.DOTALL | re.IGNORECASE):
+            errors.append("[C3-FAIL] Detected retry loop converting OCC conflict into untracked Last-Write-Wins.")
+            break
     return errors
 
 def check_c4_spawn_handle_race(agent_routes_code: str) -> list[str]:
@@ -76,6 +85,11 @@ def check_c4_spawn_handle_race(agent_routes_code: str) -> list[str]:
 
     body = match.group("body")
     # Flag if spawn occurs before insert without any sync barrier or pre-registration
+    if "spawn_agent_execution(" in body:
+        delegated = re.search(r"pub\(crate\) fn spawn_agent_execution.*?\{(?P<body>.*?)\n\}", agent_routes_code, re.DOTALL)
+        if not delegated:
+            return ["[C4-UNVERIFIED] runner tracking implementation could not be located"]
+        body = delegated.group("body")
     if "tokio::spawn" in body and "state.comms.active_runners.insert(" in body:
         spawn_idx = body.find("let join_handle = tokio::spawn")
         insert_idx = body.find("state.comms.active_runners.insert")
@@ -135,6 +149,10 @@ def main():
 
     if persistence_rs.exists():
         code = persistence_rs.read_text(encoding="utf-8")
+        # Include focused implementation modules after persistence decomposition.
+        # C3 still scopes each match to its own function body.
+        for module in sorted(persistence_rs.with_suffix("").glob("*.rs")):
+            code += "\n" + module.read_text(encoding="utf-8")
         all_errors.extend(check_c1_version_clobber(code))
         all_errors.extend(check_c2_cascade_ordering(code))
         all_errors.extend(check_c3_retry_occ_clobber(code))

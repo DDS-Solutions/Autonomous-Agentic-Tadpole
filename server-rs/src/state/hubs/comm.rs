@@ -25,11 +25,13 @@ use tokio::sync::{broadcast, oneshot};
 pub struct RunnerHandle {
     pub abort_handle: tokio::task::AbortHandle,
     pub task_id: tokio::task::Id,
+    /// Server-created scheduled-run identity; never taken from request body claims.
+    pub job_run_id: Option<String>,
 }
 
 impl RunnerHandle {
     pub fn new(abort_handle: tokio::task::AbortHandle, task_id: tokio::task::Id) -> Self {
-        Self { abort_handle, task_id }
+        Self { abort_handle, task_id, job_run_id: None }
     }
 
     pub fn abort(&self) {
@@ -55,6 +57,8 @@ pub struct CommunicationHub {
     pub oversight_resolvers: DashMap<String, oneshot::Sender<bool>>,
     /// Active AbortHandles and TaskIds for running agents, allowing for definitive task cancellation and safe eviction.
     pub active_runners: DashMap<String, RunnerHandle>,
+    /// Retains received usage and owning run identity through cancellation/storage failures.
+    pub mission_contexts: DashMap<String, crate::agent::runner::RunContext>,
     /// Monotonic sequence counter for outbound engine events.
     pub event_sequence: std::sync::atomic::AtomicU64,
 }

@@ -30,21 +30,13 @@ impl AgentRunner {
     /// to business processes while reducing token overhead for SME workloads.
     pub(crate) async fn run_deterministic_workflow(
         &self,
-        agent_id: &str,
+        ctx: &super::RunContext,
         payload: TaskPayload,
         workflow: &mut crate::agent::workflows::WorkflowExecutionState,
+        usage: &mut Option<crate::agent::types::TokenUsage>,
     ) -> Result<String, AppError> {
         let mut final_out = String::new();
         let mut total_usage = crate::agent::types::TokenUsage::default();
-
-        // 1. Resolve basic context (RAG/Paths)
-        let mission_id = payload
-            .cluster_id
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
-        let ctx = self
-            .prepare_run_context(agent_id, &payload, &mission_id, 0, &[])
-            .await?;
 
         self.broadcast_agent(
             &ctx,
@@ -119,13 +111,20 @@ impl AgentRunner {
                     ));
 
                     if let Some(u) = out.usage {
-                        total_usage.input_tokens += u.input_tokens;
-                        total_usage.output_tokens += u.output_tokens;
+                        total_usage.input_tokens = total_usage.input_tokens.saturating_add(u.input_tokens);
+                        total_usage.output_tokens = total_usage.output_tokens.saturating_add(u.output_tokens);
+                        total_usage.total_tokens = total_usage.total_tokens.saturating_add(u.total_tokens);
+                        *usage = Some(total_usage.clone());
                     }
                     workflow.advance();
                 }
-                Err((e, usage)) => {
-                    let _ = self.fail_mission(&ctx, &e, &usage).await;
+                Err((e, turn_usage)) => {
+                    if let Some(u) = turn_usage {
+                        total_usage.input_tokens = total_usage.input_tokens.saturating_add(u.input_tokens);
+                        total_usage.output_tokens = total_usage.output_tokens.saturating_add(u.output_tokens);
+                        total_usage.total_tokens = total_usage.total_tokens.saturating_add(u.total_tokens);
+                    }
+                    *usage = Some(total_usage);
                     return Err(e);
                 }
             }

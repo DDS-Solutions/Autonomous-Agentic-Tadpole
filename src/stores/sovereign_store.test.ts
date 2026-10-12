@@ -28,6 +28,54 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { use_sovereign_store } from './sovereign_store';
+import { sovereign_api_service } from '../services/sovereign_api_service';
+import { use_notification_store } from './notification_store';
+
+describe('finding regressions: session history state', () => {
+    beforeEach(() => {
+        use_sovereign_store.setState({ messages: [], message_index_by_id: {}, active_node_id: 'old-leaf' });
+        use_notification_store.getState().clear_all();
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('replaces the index with history and ignores late updates for old message IDs', async () => {
+        const store = use_sovereign_store.getState();
+        store.add_message({ id: 'old-message', sender_id: '1', sender_name: 'Agent', text: 'old', scope: 'agent' });
+        vi.spyOn(sovereign_api_service, 'history').mockResolvedValue([
+            { id: 'history-message', role: 'assistant', content: 'history', created_at: '2026-10-11T12:00:00Z', mission_id: 'mission' },
+        ]);
+        await store.fetch_session_history('mission', 'leaf');
+        expect(use_sovereign_store.getState().message_index_by_id).toEqual({ 'history-message': 0 });
+        store.update_message('old-message', { text: 'late old update' });
+        expect(store.get_message_by_id('old-message')).toBeUndefined();
+        expect(store.get_message_by_id('history-message')?.text).toBe('history');
+        expect(store.append_message_part('old-message', { type: 'text', content: 'late part' })).toBe(false);
+        store.add_message({ id: 'history-message', sender_id: '1', sender_name: 'Agent', text: 'duplicate', scope: 'agent' });
+        expect(use_sovereign_store.getState().messages).toHaveLength(1);
+    });
+
+    it('keeps current history and selection on failure and notifies the user', async () => {
+        const store = use_sovereign_store.getState();
+        store.add_message({ id: 'old-message', sender_id: '1', sender_name: 'Agent', text: 'old', scope: 'agent' });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(sovereign_api_service, 'history').mockRejectedValue(new Error('Unauthorized'));
+        await expect(store.fetch_session_history('mission', 'leaf')).rejects.toThrow('Unauthorized');
+        expect(store.get_message_by_id('old-message')?.text).toBe('old');
+        expect(use_sovereign_store.getState().active_node_id).toBe('old-leaf');
+        expect(use_notification_store.getState().notifications).toEqual(expect.arrayContaining([
+            expect.objectContaining({ severity: 'error', message: 'Unauthorized' }),
+        ]));
+    });
+
+    it('updates messages and selection together after a successful revert and history refresh', async () => {
+        vi.spyOn(sovereign_api_service, 'revert').mockResolvedValue(undefined);
+        vi.spyOn(sovereign_api_service, 'history').mockResolvedValue([]);
+        await use_sovereign_store.getState().revert_to_node('mission', 'new-leaf');
+        expect(sovereign_api_service.revert).toHaveBeenCalledWith('mission', 'new-leaf');
+        expect(use_sovereign_store.getState().active_node_id).toBe('new-leaf');
+        expect(use_sovereign_store.getState().message_index_by_id).toEqual({});
+    });
+});
 
 describe('use_sovereign_store', () => {
     beforeEach(() => {

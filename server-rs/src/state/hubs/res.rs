@@ -160,33 +160,41 @@ impl ResourceHub {
     }
 
     /// Lazily initializes and returns the symbol-level knowledge graph.
-    pub async fn get_symbol_graph(&self) -> Arc<arc_swap::ArcSwap<CodeSymbolGraph>> {
-        let is_uninitialized = self.symbol_graph.get().is_none();
-        if is_uninitialized {
-            self.set_subsystem_status("SymbolGraph", SubsystemStatus::Warming(0.0));
-        }
+    pub async fn get_symbol_graph(&self) -> Result<Arc<arc_swap::ArcSwap<CodeSymbolGraph>>, crate::error::AppError> {
         let salt = self.obfuscation_salt.clone();
         let base_dir = self.base_dir.clone();
         let graph = self
             .symbol_graph
             .get_or_init(|| async {
+                self.set_subsystem_status("SymbolGraph", SubsystemStatus::Warming(0.0));
                 let mut g = CodeSymbolGraph::new(base_dir);
-                let built_g = tokio::task::spawn_blocking(move || {
-                    let _ = g.build(&salt);
-                    g
+                let result = tokio::task::spawn_blocking(move || {
+                    let result = g.build(&salt);
+                    (g, result)
                 })
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!("🚨 [Graph] Failed to build graph in blocking task: {:?}", e);
-                    CodeSymbolGraph::new(self.base_dir.clone())
-                });
+                .await;
+                let (built_g, status) = match result {
+                    Ok((g, Ok(true))) => (g, SubsystemStatus::Ready),
+                    Ok((g, Ok(false))) => (g, SubsystemStatus::Failed("Graph build exceeded its resource bounds".to_string())),
+                    Ok((g, Err(e))) => {
+                        tracing::error!("[res] Symbol graph initialization failed: {}", e);
+                        (g, SubsystemStatus::Failed(e.to_string()))
+                    }
+                    Err(e) => {
+                        tracing::error!("[res] Symbol graph initialization task failed: {}", e);
+                        (CodeSymbolGraph::new(self.base_dir.clone()), SubsystemStatus::Failed(e.to_string()))
+                    }
+                };
+                self.set_subsystem_status("SymbolGraph", status);
                 Arc::new(arc_swap::ArcSwap::new(Arc::new(built_g)))
             })
             .await;
-        if is_uninitialized {
-            self.set_subsystem_status("SymbolGraph", SubsystemStatus::Ready);
+        if let Some(status) = self.initialization_registry.get("SymbolGraph") {
+            if let SubsystemStatus::Failed(message) = status.value() {
+                return Err(crate::error::AppError::InternalServerError(format!("Symbol graph is unavailable: {message}")));
+            }
         }
-        graph.clone()
+        Ok(graph.clone())
     }
 
     /// Lazily initializes and returns the cached tiktoken BPE core.

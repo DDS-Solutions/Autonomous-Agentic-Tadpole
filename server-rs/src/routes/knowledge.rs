@@ -102,8 +102,8 @@ pub async fn list_knowledge(
     Query(params): Query<ListKnowledgeParams>,
 ) -> Result<Json<Vec<crate::agent::knowledge_store::KnowledgeEntry>>, AppError> {
     let ks = state.resources.get_knowledge_store().await?;
-    let limit = params.limit.unwrap_or(50).min(200);
-    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(50).clamp(0, 200);
+    let offset = params.offset.unwrap_or(0).max(0);
     let entries = ks
         .list(
             params.topic.as_deref(),
@@ -168,7 +168,7 @@ pub async fn get_knowledge_peers(
     Query(params): Query<ListKnowledgeParams>,
 ) -> Result<Json<Vec<crate::agent::knowledge_store::KnowledgeEntry>>, AppError> {
     let ks = state.resources.get_knowledge_store().await?;
-    let limit = params.limit.unwrap_or(5) as usize;
+    let limit = params.limit.unwrap_or(5).clamp(0, 200) as usize;
     let peers = ks
         .get_peers(&id, limit, state.resources.http_client.as_ref().clone())
         .await?;
@@ -217,5 +217,27 @@ pub async fn synthesize_knowledge(
 
 
 
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn list_and_peers_bound_signed_client_values() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        for index in 0..205 {
+            sqlx::query("INSERT INTO knowledge_store_meta (id, text, content_hash) VALUES (?, 'fixture', ?)")
+                .bind(format!("entry-{index}")).bind(format!("hash-{index}")).execute(&state.resources.pool).await.unwrap();
+        }
+        for (limit, expected) in [(i64::MIN, 0), (-1, 0), (0, 0), (1, 1), (i64::MAX, 200)] {
+            let params = ListKnowledgeParams { topic: None, cluster_id: None, concept_type: None, limit: Some(limit), offset: Some(-1) };
+            let Json(entries) = list_knowledge(State(state.clone()), Query(params)).await.unwrap();
+            assert_eq!(entries.len(), expected);
+        }
+        let params = ListKnowledgeParams { topic: None, cluster_id: None, concept_type: None, limit: Some(-1), offset: None };
+        let Json(peers) = get_knowledge_peers(State(state), Path("entry-0".to_string()), Query(params)).await.unwrap();
+        assert!(peers.is_empty());
+    }
+}
 
 // Metadata: [knowledge]

@@ -595,9 +595,16 @@ mod tests {
         assert!(!err_bad.is_retryable());
 
         // Reqwest test: Connection error (retryable)
-        let client = reqwest::Client::new();
+        let refused_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let refused_address = refused_listener.local_addr().unwrap();
+        drop(refused_listener);
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .user_agent("TadpoleOS/1.1.58")
+            .timeout(std::time::Duration::from_secs(3))
+            .build().unwrap();
         let err_conn = client
-            .get("http://this-domain-does-not-exist.invalid")
+            .get(format!("http://{refused_address}"))
             .send()
             .await
             .unwrap_err();
@@ -631,7 +638,6 @@ mod tests {
             }
         });
 
-        let client = reqwest::Client::new();
         let response_err = client
             .get(format!("http://127.0.0.1:{}", port))
             .send()

@@ -17,6 +17,14 @@ This manual reflects the current runtime behavior in `server-rs/src`, `src`, and
 
 ## Local Startup
 
+The engine starts the system actor supervisor automatically. `ENABLE_EVENT_AUTOMATION=true` enables configured event-triggered continuity jobs; `ENABLE_COGNITIVE_MEMORY=true` enables provider-backed memory consolidation and can incur inference charges. Both flags default to false. Consolidation intervals have a 10-second minimum, thresholds range from 2 to 100 entries, and a batch reads at most 100 entries. These workers stop during engine shutdown. A memory save fails explicitly if its actor is unavailable; it never acknowledges discarded data.
+
+Agent persistence conflicts require reloading the current state and reviewing the intended change. The engine does not advance an in-memory version after a failed batch or silently retry a stale full object. Ledger-linked agents cannot be deleted. Scheduled executions register their runner handles before starting, so gateway pause, reset, and delete can cancel them.
+
+Cancelled missions retain acknowledged provider usage, including partial turns and completed workflow steps. Temporary terminal-write failures leave mission ownership and its receipt available for recovery; the stale reaper preserves live tasks and retries stopped ones. A per-agent recovery error is logged without stopping recovery of the remaining candidates; the sweep then returns the first error. Initialization, terminal persistence, and stale recovery finish their commit/publication operations independently of caller cancellation. Receipts and pending quota charges are in memory, so abrupt process termination still needs separate durability validation.
+
+Event automation admits at most 16 concurrent job executors. Slow jobs no longer block every later trigger; the current event's remaining mappings wait for a slot. The broadcast queue can still lose events during sustained overload, with lag reported in logs. Stopping the monitor lets already admitted executors finish their run-record cleanup.
+
 Required setup:
 
 1. Install Node dependencies with `npm install`.

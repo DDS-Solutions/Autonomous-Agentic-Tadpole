@@ -31,6 +31,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { sovereign_api_service } from '../services/sovereign_api_service';
+import { use_notification_store } from './notification_store';
 
 export interface SessionLeaf {
     id: string;
@@ -40,6 +42,14 @@ export interface SessionLeaf {
 }
 
 const TELEMETRY_SOURCE = '[SovereignStore]';
+
+function report_session_error(error: unknown): void {
+    use_notification_store.getState().add_notification({
+        severity: 'error', title: 'Session history',
+        message: error instanceof Error ? error.message : 'The session request failed.',
+        persistent: false,
+    });
+}
 
 export type Sovereign_Scope = 'agent' | 'cluster' | 'swarm';
 
@@ -243,61 +253,47 @@ export const use_sovereign_store = create<Sovereign_State>()(
 
             fetch_session_history: async (mission_id, leaf_id) => {
                 try {
-                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/nodes/${leaf_id}/history`, {
-                        headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
-                        }
+                    const history = await sovereign_api_service.history(mission_id, leaf_id);
+                    const history_messages: Chat_Message[] = history.map((n) => ({
+                        id: n.id,
+                        sender_id: n.role === 'user' ? '0' : '1',
+                        sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
+                        text: n.content,
+                        timestamp: n.created_at || new Date().toISOString(),
+                        scope: 'agent',
+                        target_node: n.mission_id
+                    }));
+                    set({
+                        messages: history_messages,
+                        message_index_by_id: Object.fromEntries(history_messages.map((message, index) => [message.id, index])),
+                        active_node_id: leaf_id
                     });
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        const history_messages = data.history.map((n: Record<string, unknown>) => ({
-                            id: n.id,
-                            sender_id: n.role === 'user' ? '0' : '1',
-                            sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
-                            text: n.content,
-                            timestamp: (n.created_at as string) || new Date().toISOString(),
-                            scope: 'agent',
-                            target_node: n.mission_id
-                        }));
-                        set({ messages: history_messages, active_node_id: leaf_id });
-                    }
                 } catch (err) {
                     console.error(`${TELEMETRY_SOURCE} Failed to fetch multiversal history:`, err);
+                    report_session_error(err);
+                    throw err;
                 }
             },
 
             fetch_mission_leaves: async (mission_id) => {
                 try {
-                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/leaves`, {
-                        headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
-                        }
-                    });
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        set({ session_leaves: data.leaves });
-                    }
+                    set({ session_leaves: await sovereign_api_service.leaves(mission_id) });
                 } catch (err) {
                     console.error(`${TELEMETRY_SOURCE} Failed to fetch mission leaves:`, err);
+                    report_session_error(err);
+                    throw err;
                 }
             },
 
             revert_to_node: async (mission_id, node_id) => {
                 try {
-                    const response = await fetch(`/v1/sovereign/missions/${mission_id}/nodes/${node_id}/revert`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('NEURAL_TOKEN')}`
-                        }
-                    });
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        set({ active_node_id: node_id });
-                        // Refresh history for the new tip
-                        await get().fetch_session_history(mission_id, node_id);
-                    }
+                    await sovereign_api_service.revert(mission_id, node_id);
+                    // Publish node selection and messages together after loading.
+                    await get().fetch_session_history(mission_id, node_id);
                 } catch (err) {
                     console.error(`${TELEMETRY_SOURCE} Time Travel failure:`, err);
+                    report_session_error(err);
+                    throw err;
                 }
             },
 

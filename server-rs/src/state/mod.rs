@@ -106,6 +106,7 @@ impl AppState {
             oversight_queue: DashMap::new(),
             oversight_resolvers: DashMap::new(),
             active_runners: DashMap::new(),
+            mission_contexts: DashMap::new(),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -130,6 +131,7 @@ impl AppState {
         let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::noop());
 
         let registry = Arc::new(RegistryHub {
+            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
             agents: DashMap::new(),
             providers: DashMap::new(),
             provider_health: DashMap::new(),
@@ -246,6 +248,7 @@ impl AppState {
             oversight_queue: DashMap::new(),
             oversight_resolvers: DashMap::new(),
             active_runners: DashMap::new(),
+            mission_contexts: DashMap::new(),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -270,6 +273,7 @@ impl AppState {
         let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::noop());
 
         let registry = Arc::new(RegistryHub {
+            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
             agents: DashMap::new(),
             providers: DashMap::new(),
             provider_health: DashMap::new(),
@@ -552,6 +556,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             oversight_queue: DashMap::new(),
             oversight_resolvers: DashMap::new(),
             active_runners: DashMap::new(),
+            mission_contexts: DashMap::new(),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -640,6 +645,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         let tool_registry = Arc::new(dispatcher.registry);
 
         let registry = Arc::new(RegistryHub {
+            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
             agents: agents.clone(),
             providers,
             provider_health: DashMap::new(),
@@ -815,15 +821,9 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 resp: tx,
             };
 
-            if let Err(e) = actors.memory.send(msg).await {
-                tracing::error!("🚨 [Kernel] Failed to dispatch memory save: {:?}", e);
-                return Err(AppError::InternalServerError("Memory dispatcher failure".to_string()));
-            }
-
-            rx.await.map_err(|_| AppError::InternalServerError("Memory save timed out".to_string()))?
+            crate::system::actors::dispatch(&actors.memory, msg, rx).await
         } else {
-            tracing::warn!("⚠️ [Kernel] MemoryActor not initialized. Memory save discarded.");
-            Ok(())
+            Err(AppError::InternalServerError("MemoryActor not initialized; memory was not saved".to_string()))
         }
     }
 
@@ -843,12 +843,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 resp: tx,
             };
 
-            if let Err(e) = actors.memory.send(msg).await {
-                tracing::error!("🚨 [Kernel] Failed to dispatch memory query: {:?}", e);
-                return Err(AppError::InternalServerError("Memory dispatcher failure".to_string()));
-            }
-
-            rx.await.map_err(|_| AppError::InternalServerError("Memory query timed out".to_string()))?
+            crate::system::actors::dispatch(&actors.memory, msg, rx).await
         } else {
             Err(AppError::InternalServerError("MemoryActor not initialized".to_string()))
         }
@@ -991,93 +986,29 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
 
     /// Persists all current agent states to the database in a single transaction.
     /// Batched to avoid N individual round-trips (was the #1 shutdown bottleneck).
-    pub async fn save_agents(&self) {
-        let agents_vec: Vec<EngineAgent> = self
-            .registry
-            .agents
-            .iter()
-            .map(|kv| kv.value().clone())
-            .collect();
-
-        // Batch all saves into a single transaction (1 fsync vs N fsyncs)
-        match self.resources.pool.begin().await {
-            Ok(mut tx) => {
-                for agent in &agents_vec {
-                    match crate::agent::persistence::save_agent_db_in_tx(&mut tx, agent).await {
-                        Ok(new_ver) => {
-                            if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
-                                entry.version = new_ver;
-                            }
-                        }
-                        Err(crate::error::AppError::Conflict(_)) => {
-                            // Reconcile OCC version drift: fetch true DB version so memory recovers
-                            if let Ok(db_ver) = sqlx::query_scalar::<_, i64>("SELECT version FROM agents WHERE id = ?")
-                                .bind(&agent.identity.id)
-                                .fetch_one(&mut *tx)
-                                .await
-                            {
-                                if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
-                                    entry.version = db_ver as u32;
-                                    tracing::warn!(
-                                        agent_id = %agent.identity.id,
-                                        stale_ver = agent.version,
-                                        reconciled_ver = db_ver,
-                                        "⚠️ [State] Reconciled OCC version drift for agent from DB"
-                                    );
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                agent_id = %agent.identity.id,
-                                error = %err,
-                                "❌ [State] Failed to persist agent during batched save_agents"
-                            );
-                        }
-                    }
-                }
-                if let Err(err) = tx.commit().await {
-                    tracing::error!(
-                        error = %err,
-                        "❌ [State] Failed to commit agent batch transaction"
-                    );
-                }
-            }
-            Err(err) => {
-                tracing::error!(
-                    error = %err,
-                    "❌ [State] Failed to begin agent batch transaction — falling back to individual saves"
-                );
-                // Fallback: individual saves (degraded but functional)
-                for agent in &agents_vec {
-                    match crate::agent::persistence::save_agent_db(&self.resources.pool, agent).await {
-                        Ok(new_ver) => {
-                            if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
-                                entry.version = new_ver;
-                            }
-                        }
-                        Err(crate::error::AppError::Conflict(_)) => {
-                            if let Ok(db_ver) = sqlx::query_scalar::<_, i64>("SELECT version FROM agents WHERE id = ?")
-                                .bind(&agent.identity.id)
-                                .fetch_one(&self.resources.pool)
-                                .await
-                            {
-                                if let Some(mut entry) = self.registry.agents.get_mut(&agent.identity.id) {
-                                    entry.version = db_ver as u32;
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                agent_id = %agent.identity.id,
-                                error = %err,
-                                "❌ [State] Failed to persist agent during fallback save_agents"
-                            );
-                        }
-                    }
+    pub async fn save_agents(&self) -> Result<(), crate::error::AppError> {
+        // Acquire stripes in a consistent order before taking snapshots. No network
+        // work runs under these guards; a failed batch publishes no versions.
+        let mut guards = Vec::with_capacity(self.registry.lifecycle_locks.len());
+        for lock in &self.registry.lifecycle_locks {
+            guards.push(lock.lock().await);
+        }
+        let agents: Vec<EngineAgent> = self.registry.agents.iter()
+            .map(|entry| entry.value().clone()).collect();
+        let mut tx = self.resources.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut versions = Vec::with_capacity(agents.len());
+        for agent in &agents {
+            versions.push(crate::agent::persistence::save_agent_db_in_tx(&mut tx, agent).await?);
+        }
+        tx.commit().await?;
+        for (agent, version) in agents.iter().zip(versions) {
+            if let Some(mut current) = self.registry.agents.get_mut(&agent.identity.id) {
+                if current.version == agent.version {
+                    current.version = version;
                 }
             }
         }
+        Ok(())
     }
 
     /// Persists all provider configurations to disk.
@@ -1118,7 +1049,9 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         );
 
         // 1. Persist Registries
-        self.save_agents().await;
+        if let Err(error) = self.save_agents().await {
+            tracing::error!(%error, "[State] Agent flush failed; stale versions were not advanced");
+        }
         self.save_providers().await;
         self.save_models().await;
 
@@ -1286,6 +1219,7 @@ impl Default for AppState {
             oversight_queue: DashMap::new(),
             oversight_resolvers: DashMap::new(),
             active_runners: DashMap::new(),
+            mission_contexts: DashMap::new(),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -1308,6 +1242,7 @@ impl Default for AppState {
         ));
 
         let registry = Arc::new(RegistryHub {
+            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
             agents: DashMap::new(),
             providers: DashMap::new(),
             provider_health: DashMap::new(),

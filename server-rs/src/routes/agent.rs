@@ -115,42 +115,7 @@ impl From<&EngineAgent> for AgentResponse {
     }
 }
 
-/// Centralized persistence and broadcast helper for agent updates.
-/// Enforces transactional integrity: DB persistence must succeed before in-memory state is committed.
-async fn update_and_persist_agent<F>(
-    state: &Arc<AppState>,
-    agent_id: &str,
-    f: F,
-) -> Result<EngineAgent, AppError> 
-where
-    F: FnOnce(&mut EngineAgent),
-{
-    let mut updated = state
-        .registry
-        .agents
-        .get(agent_id)
-        .ok_or_else(|| AppError::NotFound(format!("Agent '{}' not found", agent_id)))?
-        .clone();
-
-    f(&mut updated);
-
-    // Sync to DB first before committing to memory
-    let new_ver = crate::agent::persistence::save_agent_db(&state.resources.pool, &updated)
-        .await?;
-    updated.version = new_ver;
-
-    // Commit only after durable persistence succeeds
-    state.registry.agents.insert(agent_id.to_string(), updated.clone());
-
-    // Broadcast update with guaranteed up-to-date version
-    state.emit_event(serde_json::json!({
-        "type": "agent:update",
-        "agent_id": agent_id,
-        "data": updated.clone()
-    }));
-
-    Ok(updated)
-}
+pub(crate) use crate::agent::persistence::update_and_persist_agent;
 
 /// GET /v1/agents
 ///
@@ -199,7 +164,16 @@ pub async fn get_agent(
     Ok(Json(agent))
 }
 
-pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload: TaskPayload) {
+pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload: TaskPayload) -> tokio::task::JoinHandle<Result<String, AppError>> {
+    let runner = AgentRunner::new(state.clone());
+    let run_id = agent_id.clone();
+    spawn_agent_execution(state, agent_id, async move { runner.run(run_id, payload).await })
+}
+
+/// Caller holds the agent lifecycle lock until this tracking handle is registered.
+pub(crate) fn spawn_agent_execution<F>(state: Arc<AppState>, agent_id: String, execution: F) -> tokio::task::JoinHandle<Result<String, AppError>>
+where F: std::future::Future<Output = Result<String, AppError>> + Send + 'static {
+
     // Proactive Abort-on-New Policy: Terminate any existing task for this agent
     if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
         tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
@@ -220,17 +194,37 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
         // Guarantee parent thread inserts RunnerHandle before subtask can evict it
         let _ = started_rx.await;
         let my_id = tokio::task::try_id();
-        let runner = AgentRunner::new(state_clone.clone());
-        if let Err(e) = runner.run(agent_id_for_spawn.clone(), payload).await {
+        let mut result = execution.await;
+        // Workflow execution may complete without running this owning agent's mission loop.
+        if result.is_ok() {
+            let _lifecycle = state_clone.registry.lock_agent(&agent_id_for_spawn).await;
+            let owns_runner = state_clone.comms.active_runners.get(&agent_id_for_spawn)
+                .is_some_and(|handle| Some(handle.task_id) == my_id);
+            let needs_release = state_clone.registry.agents.get(&agent_id_for_spawn)
+                .is_some_and(|agent| agent.state.active_mission.is_none() && agent.health.status == "busy");
+            if owns_runner && needs_release {
+                if let Err(error) = update_and_persist_agent(&state_clone, &agent_id_for_spawn, |agent| {
+                    agent.health.status = "idle".to_string();
+                }).await { result = Err(error); }
+            }
+        }
+        if let Err(ref e) = result {
             tracing::error!("❌ [Runner] Agent {} failed: {}", agent_id_for_spawn, e);
             
-            // H4: Reset agent status on failure so it does not stay trapped in busy/working
-            let _ = sqlx::query("UPDATE agents SET status = 'idle' WHERE id = ?")
-                .bind(&agent_id_for_spawn)
-                .execute(&state_clone.resources.pool)
-                .await;
-            if let Some(mut agent) = state_clone.registry.agents.get_mut(&agent_id_for_spawn) {
-                agent.health.status = "idle".to_string();
+            let _lifecycle = state_clone.registry.lock_agent(&agent_id_for_spawn).await;
+            // An old runner must not reset a replacement runner or a deleted identity.
+            if state_clone.comms.active_runners.get(&agent_id_for_spawn)
+                .is_some_and(|handle| Some(handle.task_id) == my_id) {
+                if let Err(error) = update_and_persist_agent(&state_clone, &agent_id_for_spawn, |agent| {
+                    // Retain mission ownership if terminal persistence failed;
+                    // owned cleanup or stale recovery must finalize it first.
+                    if agent.state.active_mission.is_none() {
+                        if agent.health.status != "suspended" { agent.health.status = "idle".to_string(); }
+                        agent.state.current_task = None;
+                    }
+                }).await {
+                    tracing::error!(%error, "[Runner] Failure recovery was not persisted");
+                }
             }
 
             // Async Failure Feedback with structured RFC 9457 support
@@ -255,6 +249,7 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
                 handle.task_id == current_id
             });
         }
+        result
     });
 
     state.comms.active_runners.insert(
@@ -262,6 +257,7 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
         crate::state::hubs::comm::RunnerHandle::new(join_handle.abort_handle(), join_handle.id()),
     );
     let _ = started_tx.send(());
+    join_handle
 }
 
 /// POST /v1/agents/:id/tasks
@@ -281,9 +277,12 @@ pub(crate) fn spawn_agent_runner(state: Arc<AppState>, agent_id: String, payload
 pub async fn send_task(
     Path(agent_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    axum::Extension(_operator): axum::Extension<crate::middleware::auth::AuthenticatedOperator>,
     headers: axum::http::HeaderMap,
     Json(mut payload): Json<TaskPayload>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&agent_id).await;
+
     // Authoritative edge header takes precedence over body
     if let Some(tp) = headers.get("traceparent").and_then(|v| v.to_str().ok()) {
         payload.traceparent = Some(tp.to_string());
@@ -293,22 +292,14 @@ pub async fn send_task(
     match state.registry.agents.get(&agent_id) {
         None => return Err(AppError::NotFound(format!("Agent '{}' not found", agent_id))),
         Some(agent) if agent.health.status == "suspended" => {
-            let role_header = headers.get("x-tadpole-role").and_then(|v| v.to_str().ok());
-            let is_operator_role = role_header == Some("overlord") || role_header == Some("admin");
-
-            // 🛡️ [C5 Defense]: Trust Boundary Invariant
-            // Unauthenticated callers cannot touch suspended agents under any circumstances.
-            if !is_operator_role {
-                return Err(AppError::BadRequest(format!("Agent '{}' is currently suspended.", agent_id)));
-            }
-
-            // Authenticated operator directive
+            // The typed extension is supplied by token validation. auto_resume
+            // is an operator preference, never proof of identity or role.
             if payload.auto_resume.unwrap_or(true) {
                 drop(agent);
                 tracing::info!("🔋 [AgentDispatch] Suspended agent {} auto-resumed by operator directive", agent_id);
-                let _ = update_and_persist_agent(&state, &agent_id, |a| {
+                update_and_persist_agent(&state, &agent_id, |a| {
                     a.health.status = "idle".to_string();
-                }).await;
+                }).await?;
             } else {
                 return Err(AppError::BadRequest(format!("Agent '{}' is currently suspended.", agent_id)));
             }
@@ -316,9 +307,9 @@ pub async fn send_task(
         Some(agent) if agent.health.status == "offline" => {
             drop(agent);
             tracing::info!("🔋 [AgentDispatch] Agent {} auto-awakened from offline state", agent_id);
-            let _ = update_and_persist_agent(&state, &agent_id, |a| {
+            update_and_persist_agent(&state, &agent_id, |a| {
                 a.health.status = "idle".to_string();
-            }).await;
+            }).await?;
         },
         Some(_) => {} // All systems go
     }
@@ -327,18 +318,13 @@ pub async fn send_task(
     let mut claimed = crate::agent::persistence::claim_agent(&state.resources.pool, &agent_id).await?;
     if !claimed {
         // Proactive Abort-on-New Policy: terminate any running task, reset status, and re-claim
-        if let Some((_, old_handle)) = state.comms.active_runners.remove(&agent_id) {
-            tracing::info!("🔄 [Gateway] Aborting existing task for agent {} to prioritize new request.", agent_id);
-            old_handle.abort();
-            state.emit_event(serde_json::json!({
-                "type": "agent:task_preempted",
-                "agent_id": agent_id.clone(),
-                "reason": "preempted_by_new_task"
-            }));
-            let _ = sqlx::query("UPDATE agents SET status = 'idle' WHERE id = ?")
-                .bind(&agent_id)
-                .execute(&state.resources.pool)
-                .await;
+        if state.comms.active_runners.contains_key(&agent_id) {
+            // Save the terminal transition before canceling the old execution.
+            update_and_persist_agent(&state, &agent_id, |agent| {
+                agent.health.status = "idle".to_string();
+                agent.state.active_mission = None;
+                agent.state.current_task = None;
+            }).await?;
             claimed = crate::agent::persistence::claim_agent(&state.resources.pool, &agent_id).await?;
         } else {
             // Cold/Orphaned Recovery Fallback: if no active runner exists in memory
@@ -350,9 +336,9 @@ pub async fn send_task(
             .bind(&agent_id)
             .bind(stale_threshold)
             .execute(&state.resources.pool)
-            .await;
-            if let Ok(res) = auto_reap {
-                if res.rows_affected() > 0 {
+            .await?;
+            {
+                if auto_reap.rows_affected() > 0 {
                     tracing::info!("🔄 [Gateway] Auto-cleared stale orphaned agent lock for {} prior to dispatch.", agent_id);
                     claimed = crate::agent::persistence::claim_agent(&state.resources.pool, &agent_id).await?;
                 }
@@ -397,24 +383,12 @@ pub async fn create_agent(
         return Err(AppError::BadRequest("Agent ID cannot be empty.".to_string()));
     }
 
+
+    let _lifecycle = state.registry.lock_agent(&agent_id_owned).await;
     // 🛡️ [M17: Collision Guard] Reject duplicate agent ID registrations in registry
     if state.registry.agents.contains_key(&agent_id_owned) {
         return Err(AppError::Conflict(format!(
             "Agent with ID '{}' already exists in the swarm registry.",
-            agent_id_owned
-        )));
-    }
-
-    // 🛡️ Check persistent store to prevent resurrecting/overwriting existing DB record
-    let db_exists: bool = sqlx::query_scalar::<sqlx::Sqlite, i64>("SELECT COUNT(*) FROM agents WHERE id = ?")
-        .bind(&agent_id_owned)
-        .fetch_one(&state.resources.pool)
-        .await
-        .map(|c| c > 0)
-        .unwrap_or(false);
-    if db_exists {
-        return Err(AppError::Conflict(format!(
-            "Agent with ID '{}' already exists in the database.",
             agent_id_owned
         )));
     }
@@ -427,24 +401,16 @@ pub async fn create_agent(
     new_agent.health.status = "idle".to_string();
     new_agent.health.heartbeat_at = None;
     new_agent.state.current_task = None;
+    new_agent.state.active_mission = None;
+    new_agent.economics.tokens_used = 0;
+    new_agent.economics.token_usage = Default::default();
     new_agent.version = 1;
 
-    let new_ver = crate::agent::persistence::save_agent_db(&state.resources.pool, &new_agent)
+    let new_ver = crate::agent::persistence::create_agent_db(&state.resources.pool, &new_agent)
         .await?;
     new_agent.version = new_ver;
 
-    // 🛡️ Atomic insertion check to prevent TOCTOU race (H5: rollback DB on collision)
-    if let Some(prev) = state.registry.agents.insert(agent_id_owned.clone(), new_agent.clone()) {
-        state.registry.agents.insert(agent_id_owned.clone(), prev);
-        let _ = sqlx::query("DELETE FROM agents WHERE id = ?")
-            .bind(&agent_id_owned)
-            .execute(&state.resources.pool)
-            .await;
-        return Err(AppError::Conflict(format!(
-            "Concurrent registration conflict for agent '{}'",
-            agent_id_owned
-        )));
-    }
+    state.registry.agents.insert(agent_id_owned.clone(), new_agent.clone());
 
     let agent_path = format!("/v1/agents/{}", agent_id_owned);
     state.emit_event(serde_json::json!({
@@ -476,6 +442,8 @@ pub async fn update_agent(
     State(state): State<Arc<AppState>>,
     Json(update): Json<crate::agent::types::AgentConfigUpdate>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&agent_id).await;
+
     update_and_persist_agent(&state, &agent_id, |agent| {
         update.apply_to(agent);
     }).await?;
@@ -490,6 +458,8 @@ pub async fn pause_agent(
     Path(agent_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&agent_id).await;
+
     update_and_persist_agent(&state, &agent_id, |agent| {
         agent.pause();
     }).await?;
@@ -510,6 +480,8 @@ pub async fn resume_agent(
     Path(agent_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&agent_id).await;
+
     update_and_persist_agent(&state, &agent_id, |agent| {
         agent.resume();
     }).await?;
@@ -528,6 +500,8 @@ pub async fn reset_agent(
     Path(agent_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&agent_id).await;
+
     update_and_persist_agent(&state, &agent_id, |agent| {
         agent.reset();
     }).await?;
@@ -553,6 +527,8 @@ pub async fn sync_mission(
     State(state): State<Arc<AppState>>,
     Json(mission): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, AppError> {
+    let _lifecycle = state.registry.lock_agent(&id).await;
+
     update_and_persist_agent(&state, &id, |agent| {
         agent.set_mission(mission);
     }).await?;
@@ -625,7 +601,10 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
                             ..Default::default()
                         };
 
-                        spawn_agent_runner(state.clone(), agent_id.clone(), payload);
+                        let _lifecycle = state.registry.lock_agent(&agent_id).await;
+                        if state.registry.agents.contains_key(&agent_id) && !state.comms.active_runners.contains_key(&agent_id) {
+                            spawn_agent_runner(state.clone(), agent_id.clone(), payload);
+                        }
                     } else {
                         // Reset to idle since task is ephemeral progress status or empty.
                         reset_agent_to_idle(&state, &agent.identity.id).await;
@@ -640,6 +619,7 @@ pub async fn recover_active_agents(state: Arc<AppState>) {
 
 /// Helper to reset an agent to idle and persist the updated state.
 async fn reset_agent_to_idle(state: &Arc<AppState>, aid: &str) {
+    let _lifecycle = state.registry.lock_agent(aid).await;
     let mut clone = state.registry.agents.get(aid).map(|e| e.value().clone());
 
     if let Some(ref mut a) = clone {
@@ -667,17 +647,20 @@ pub async fn delete_agent(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 0. Proactively abort any active runner task for the deleted agent
+    let _lifecycle = state.registry.lock_agent(&id).await;
+
+    // Commit deletion before changing live state. A rejected delete must leave
+    // the agent and its runner intact (for example, when ledger history exists).
+    crate::agent::persistence::delete_agent_cascade(&state.resources.pool, &id).await?;
+
     if let Some((_, abort_handle)) = state.comms.active_runners.remove(&id) {
         tracing::info!("🛑 [Gateway] Aborting active runner for deleted agent: {}", id);
         abort_handle.abort();
     }
 
-    // 1. Remove from SQLite (cascading deletes)
-    crate::agent::persistence::delete_agent_cascade(&state.resources.pool, &id).await?;
-
-    // 2. Remove from the in-memory registry
+    // Remove from the in-memory registry after durable deletion succeeds.
     state.registry.agents.remove(&id);
+    state.comms.mission_contexts.retain(|_, ctx| ctx.agent_id != id);
 
     Ok((
         StatusCode::OK,
@@ -692,6 +675,106 @@ pub async fn delete_agent(
 mod tests {
     use super::*;
     use crate::agent::types::{EngineAgent, TaskPayload};
+
+    #[tokio::test]
+    async fn stale_saves_cannot_recreate_deleted_agents_or_overwrite_duplicates() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let mut agent = EngineAgent::default();
+        agent.identity.id = "late-save".to_string();
+        agent.version = crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await.unwrap();
+        assert!(matches!(crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await, Err(AppError::Conflict(_))));
+        state.registry.agents.insert(agent.identity.id.clone(), agent.clone());
+        delete_agent(State(state.clone()), Path(agent.identity.id.clone())).await.unwrap();
+        assert!(matches!(crate::agent::persistence::save_agent_db(&state.resources.pool, &agent).await, Err(AppError::Conflict(_))));
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = ?")
+            .bind(&agent.identity.id).fetch_one(&state.resources.pool).await.unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn batch_conflict_rolls_back_and_never_adopts_a_newer_version() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        for id in ["batch-a", "batch-b"] {
+            let mut agent = EngineAgent::default();
+            agent.identity.id = id.to_string();
+            agent.version = crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await.unwrap();
+            state.registry.agents.insert(id.to_string(), agent);
+        }
+        sqlx::query("UPDATE agents SET name = 'durable-newer-name', version = version + 1 WHERE id = 'batch-b'")
+            .execute(&state.resources.pool).await.unwrap();
+        for _ in 0..2 {
+            assert!(matches!(state.save_agents().await, Err(AppError::Conflict(_))));
+            for id in ["batch-a", "batch-b"] { assert_eq!(state.registry.agents.get(id).unwrap().version, 1); }
+        }
+        let row: (String, i64) = sqlx::query_as("SELECT name, version FROM agents WHERE id = 'batch-b'")
+            .fetch_one(&state.resources.pool).await.unwrap();
+        assert_eq!(row, ("durable-newer-name".to_string(), 2));
+        let version: i64 = sqlx::query_scalar("SELECT version FROM agents WHERE id = 'batch-a'")
+            .fetch_one(&state.resources.pool).await.unwrap();
+        assert_eq!(version, 1);
+    }
+
+    #[tokio::test]
+    async fn concurrent_creation_has_exactly_one_winner() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let mut attempts = tokio::task::JoinSet::new();
+        for _ in 0..32 {
+            let state = state.clone();
+            attempts.spawn(async move {
+                let mut agent = EngineAgent::default();
+                agent.identity.id = "contended-id".to_string();
+                create_agent(State(state), Json(agent)).await.map(|_| ())
+            });
+        }
+        let mut successes = 0;
+        while let Some(result) = attempts.join_next().await {
+            match result.unwrap() { Ok(()) => successes += 1, Err(AppError::Conflict(_)) => {}, Err(error) => panic!("{error}") }
+        }
+        assert_eq!(successes, 1);
+        assert!(state.registry.agents.contains_key("contended-id"));
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agents WHERE id = 'contended-id'")
+            .fetch_one(&state.resources.pool).await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn immediate_execution_cleans_registered_handle() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let lock = state.registry.lock_agent("instant").await;
+        let execution = spawn_agent_execution(state.clone(), "instant".to_string(), async { Ok("done".to_string()) });
+        drop(lock);
+        assert_eq!(execution.await.unwrap().unwrap(), "done");
+        assert!(!state.comms.active_runners.contains_key("instant"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_conflict_preserves_runner_and_success_aborts_it() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        for id in ["delete-runner", "ledger-peer"] {
+            let mut agent = EngineAgent::default();
+            agent.identity.id = id.to_string();
+            agent.version = crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await.unwrap();
+            state.registry.agents.insert(id.to_string(), agent);
+        }
+        sqlx::query("INSERT INTO a2a_ledger (tx_id, debit_agent_id, credit_agent_id, amount_micros, lock_id) VALUES ('delete-tx', 'delete-runner', 'ledger-peer', 1, 'delete-lock')")
+            .execute(&state.resources.pool).await.unwrap();
+        let runner = tokio::spawn(std::future::pending::<()>());
+        state.comms.active_runners.insert(
+            "delete-runner".to_string(),
+            crate::state::hubs::comm::RunnerHandle::new(runner.abort_handle(), runner.id()),
+        );
+
+        let result = delete_agent(State(state.clone()), Path("delete-runner".to_string())).await;
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+        assert!(state.registry.agents.contains_key("delete-runner"));
+        assert!(state.comms.active_runners.contains_key("delete-runner"));
+        assert!(!runner.is_finished());
+
+        sqlx::query("DELETE FROM a2a_ledger WHERE tx_id = 'delete-tx'").execute(&state.resources.pool).await.unwrap();
+        assert!(delete_agent(State(state.clone()), Path("delete-runner".to_string())).await.is_ok());
+        assert!(!state.registry.agents.contains_key("delete-runner"));
+        assert!(!state.comms.active_runners.contains_key("delete-runner"));
+        assert!(runner.await.unwrap_err().is_cancelled());
+    }
 
     #[test]
     fn test_agent_response_suspended_is_not_healthy() {

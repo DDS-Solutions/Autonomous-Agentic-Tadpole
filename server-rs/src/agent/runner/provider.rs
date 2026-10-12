@@ -99,9 +99,9 @@ impl AgentRunner {
     ) {
         if let Some(loc) = local {
             if let Some(tot) = total {
-                tot.input_tokens += loc.input_tokens;
-                tot.output_tokens += loc.output_tokens;
-                tot.total_tokens += loc.total_tokens;
+                tot.input_tokens = tot.input_tokens.saturating_add(loc.input_tokens);
+                tot.output_tokens = tot.output_tokens.saturating_add(loc.output_tokens);
+                tot.total_tokens = tot.total_tokens.saturating_add(loc.total_tokens);
             } else {
                 *total = Some(loc);
             }
@@ -482,6 +482,9 @@ impl AgentRunner {
 
         match result {
             Ok((text, tool_calls, usage)) => {
+                // Preserve each acknowledged response before the next await,
+                // including partial turns, workflows, synthesis and failover.
+                ctx.accounting.record(&usage);
                 // Success: Reset failures and restore Green status
                 self.state.registry.provider_failures.remove(&provider_id);
                 self.state.registry.provider_health.insert(provider_id, ProviderStatus::Green);

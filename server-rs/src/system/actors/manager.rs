@@ -13,8 +13,6 @@
 //! ### Actor Manager (Lifecycle Orchestrator)
 //! Responsible for spawning system actors and initializing their 
 //! communication channels.
-// Scaffolded actor manager: will be wired into the kernel in a subsequent phase.
-#![allow(dead_code)]
 
 use crate::state::AppState;
 use crate::system::actors::{ActorRegistry, SystemMessage};
@@ -103,6 +101,7 @@ pub async fn spawn_system_actors(app_state: &Arc<AppState>) -> ActorRegistry {
     }
 
     ActorRegistry {
+        supervisor: supervisor.handle(),
         audit: audit_tx,
         memory: memory_tx,
         security: security_tx,

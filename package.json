@@ -32,7 +32,7 @@
     "test": "vitest run",
     "test:invariants": "vitest run tests/invariants/",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "test:py": "python -m unittest discover -s tests/unit",
     "test:rust": "cargo test --manifest-path server-rs/Cargo.toml",
     "test:wasm": "cargo test --manifest-path wasm-codec/Cargo.toml && cargo test --manifest-path crates/wasm-codec/Cargo.toml",
@@ -121,6 +121,9 @@
     "vite": "$vite",
     "vite-plugin-pwa": {
       "vite": "$vite"
+    },
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "^7.1.6"
     },
     "serialize-javascript": "^7.0.4",
     "esbuild": "^0.25.0",

@@ -57,119 +57,7 @@ impl AgentRunner {
             crate::utils::security::redact_secrets(output_text)
         );
 
-        // Update global agent state
-        if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-            let agent = entry.value_mut();
-            if let Some(ref u) = usage {
-                agent.economics.token_usage = u.clone(); // Use the cumulative turn usage
-                agent.economics.tokens_used += u.total_tokens;
-            }
-
-            // Re-calculate turn cost from final cumulative usage
-            let turn_cost = usage
-                .as_ref()
-                .map(|u| {
-                    crate::agent::rates::calculate_cost_with_custom_rates(
-                        ctx.model_config.input_cost_per_m,
-                        ctx.model_config.output_cost_per_m,
-                        &ctx.model_config.model_id,
-                        u.input_tokens,
-                        u.output_tokens,
-                    )
-                })
-                .unwrap_or(0.0);
-            agent.economics.cost_usd += turn_cost;
-            // [Health Monitoring] Reset failure count on success
-            agent.health.failure_count = 0;
-            
-            // Capture active task id for task-level token reconciliation
-            let current_task_id = agent.state.current_task.clone();
-
-            // ### 🔗 Swarm Connectivity: Cleanup
-            // Clear the active mission link so the agent returns to an idle state in the visualizer.
-            agent.state.active_mission = None;
-            agent.state.current_task = None;
-            if agent.health.status != "suspended" {
-                agent.health.status = "idle".to_string();
-            }
-
-            // Record to persistent budget guard
-            let budget_guard = self.state.security.budget_guard.clone();
-            let agent_id = ctx.agent_id.clone();
-            tokio::spawn(async move {
-                let _ = budget_guard.record_usage(&agent_id, turn_cost).await;
-            });
-
-            // Reconcile task telemetry in agent_tasks
-            if let (Some(task_id), Some(ref u)) = (current_task_id, usage.as_ref()) {
-                let in_toks = u.input_tokens as i64;
-                let out_toks = u.output_tokens as i64;
-                let prov = ctx.model_config.provider.to_string();
-                let pool_task = self.state.resources.pool.clone();
-                tokio::spawn(async move {
-                    let _ = sqlx::query(
-                        "UPDATE agent_tasks SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?, cost_usd = cost_usd + ?, provider_id = COALESCE(provider_id, ?) WHERE id = ?"
-                    )
-                    .bind(in_toks)
-                    .bind(out_toks)
-                    .bind(turn_cost)
-                    .bind(&prov)
-                    .bind(&task_id)
-                    .execute(&pool_task)
-                    .await;
-                });
-            }
-
-            // Sync to persistence
-            let pool = self.state.resources.pool.clone();
-            let agent_clone = agent.clone();
-            let agent_id_for_persist = ctx.agent_id.clone();
-            let registry_ref = self.state.clone();
-            tokio::spawn(async move {
-                match crate::agent::persistence::save_agent_db(&pool, &agent_clone).await {
-                    Ok(new_ver) => {
-                        if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
-                            entry.version = new_ver;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("⚠️ [Finalize] OCC conflict for agent {} on full save: {}. Applying atomic delta update.", agent_id_for_persist, e);
-                        // In case of OCC conflict, apply an atomic terminal update rather than clobbering concurrent mutations
-                        let update_res = sqlx::query(
-                            "UPDATE agents SET 
-                                status = ?, 
-                                current_task = NULL, 
-                                active_mission = NULL,
-                                cost_usd = cost_usd + ?, 
-                                version = version + 1 
-                             WHERE id = ? RETURNING version"
-                        )
-                        .bind(&agent_clone.health.status)
-                        .bind(turn_cost)
-                        .bind(&agent_id_for_persist)
-                        .fetch_optional(&pool)
-                        .await;
-
-                        if let Ok(Some(row)) = update_res {
-                            use sqlx::Row;
-                            let new_ver: i64 = row.get(0);
-                            if let Some(mut entry) = registry_ref.registry.agents.get_mut(&agent_id_for_persist) {
-                                entry.version = new_ver as u32;
-                                entry.health.status = agent_clone.health.status.clone();
-                                entry.state.current_task = None;
-                                entry.state.active_mission = None;
-                            }
-                        }
-                    }
-                }
-            });
-
-            self.state.emit_event(serde_json::json!({
-                "type": "agent:update",
-                "agent_id": ctx.agent_id,
-                "data": *agent
-            }));
-        }
+        self.persist_terminal_state(ctx, usage, false, output_text).await?;
 
         // Delivery formatting
         let mut final_delivery = output_text.trim().to_string();
@@ -191,24 +79,7 @@ impl AgentRunner {
         }
 
         self.broadcast_agent_message(&ctx.agent_id, &ctx.mission_id, &final_delivery);
-        self.update_status(&ctx.agent_id, &ctx.mission_id, "idle", None);
 
-        // 💾 PERSISTENCE & MEMORY
-        let turn_cost = usage
-            .as_ref()
-            .map(|u| {
-                crate::agent::rates::calculate_cost_with_custom_rates(
-                    ctx.model_config.input_cost_per_m,
-                    ctx.model_config.output_cost_per_m,
-                    &ctx.model_config.model_id,
-                    u.input_tokens,
-                    u.output_tokens,
-                )
-            })
-            .unwrap_or(0.0);
-
-        self.finalize_mission_persistence(ctx, output_text, turn_cost)
-            .await?;
         #[cfg(feature = "vector-memory")]
         self.archive_lance_db_memory(ctx, output_text);
 
@@ -218,35 +89,6 @@ impl AgentRunner {
         }
 
         Ok(final_delivery)
-    }
-
-    /// Finalizes mission state and logs the steps to SQLite.
-    async fn finalize_mission_persistence(
-        &self,
-        ctx: &RunContext,
-        output_text: &str,
-        cumulative_cost: f64,
-    ) -> Result<(), AppError> {
-
-        crate::agent::mission::update_mission(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            crate::agent::types::MissionStatus::Completed,
-            cumulative_cost,
-        )
-        .await?;
-
-        crate::agent::mission::log_step(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            &ctx.agent_id,
-            "Agent",
-            output_text,
-            "success",
-            None,
-        )
-        .await?;
-        Ok(())
     }
 
     /// Saves the final output to the agent's permanent institutional knowledge in LanceDB.
@@ -320,79 +162,7 @@ impl AgentRunner {
             &format!("❌ Error: {}", safe_error),
         );
 
-        if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-            let agent = entry.value_mut();
-            agent.health.failure_count += 1;
-            agent.health.last_failure_at = Some(chrono::Utc::now());
-
-            // ### 🔗 Swarm Connectivity: Cleanup
-            // Clear the active mission link so the agent returns to an idle state in the visualizer.
-            agent.state.active_mission = None;
-            agent.state.current_task = None;
-            if agent.health.status != "suspended" {
-                agent.health.status = "idle".to_string();
-            }
-
-            let agent_data = agent.clone();
-            drop(entry); // Release DashMap lock before async calls
-
-            // Sync to DB
-            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
-                Ok(new_ver) => {
-                    if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-                        entry.version = new_ver;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("❌ [Finalize] Failed to persist failed agent {} to DB: {}", ctx.agent_id, e);
-                }
-            }
-
-            self.state.emit_event(serde_json::json!({
-                "type": "agent:update",
-                "data": agent_data
-            }));
-
-            // Record final cost if usage was provided
-            if let Some(u) = usage {
-                let turn_cost = crate::agent::rates::calculate_cost_with_custom_rates(
-                    ctx.model_config.input_cost_per_m,
-                    ctx.model_config.output_cost_per_m,
-                    &ctx.model_config.model_id,
-                    u.input_tokens,
-                    u.output_tokens,
-                );
-                let budget_guard = self.state.security.budget_guard.clone();
-                let agent_id = ctx.agent_id.clone();
-                tokio::spawn(async move {
-                    let _ = budget_guard.record_usage(&agent_id, turn_cost).await;
-                });
-            }
-        }
-
-        // 🕵️ UNIFIED STATUS SYNC
-        // We use update_status AFTER the registry block to ensure the lock is released
-        // and telemetry is broadcast correctly for the "Idle" state.
-        self.update_status(&ctx.agent_id, &ctx.mission_id, "idle", None);
-
-        crate::agent::mission::update_mission(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            crate::agent::types::MissionStatus::Failed,
-            0.0,
-        )
-        .await?;
-
-        crate::agent::mission::log_step(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            &ctx.agent_id,
-            "System",
-            &format!("❌ Error: {}", safe_error),
-            "error",
-            None,
-        )
-        .await?;
+        self.persist_terminal_state(ctx, usage, true, &format!("Error: {}", safe_error)).await?;
 
         Ok(())
     }
@@ -408,56 +178,7 @@ impl AgentRunner {
             ctx.agent_id
         );
 
-        // Update global agent state
-        if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-            let agent = entry.value_mut();
-            agent.state.active_mission = None;
-            if agent.health.status != "suspended" {
-                agent.health.status = "idle".to_string();
-            }
-
-            let agent_data = agent.clone();
-            drop(entry);
-
-            // Sync to DB
-            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_data).await {
-                Ok(new_ver) => {
-                    if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
-                        entry.version = new_ver;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("❌ [Finalize] Failed to persist aborted agent {} to DB: {}", ctx.agent_id, e);
-                }
-            }
-
-            self.state.emit_event(serde_json::json!({
-                "type": "agent:update",
-                "agent_id": ctx.agent_id,
-                "data": agent_data
-            }));
-        }
-
-        self.update_status(&ctx.agent_id, &ctx.mission_id, "idle", None);
-
-        crate::agent::mission::update_mission(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            crate::agent::types::MissionStatus::Failed, // Using Failed as 'Aborted' placeholder for now
-            0.0,
-        )
-        .await?;
-
-        crate::agent::mission::log_step(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-            &ctx.agent_id,
-            "System",
-            "🛑 Mission aborted by kernel/user.",
-            "warning",
-            None,
-        )
-        .await?;
+        self.persist_terminal_state(ctx, &ctx.accounting.usage(), true, "Mission aborted by kernel/user").await?;
 
         Ok(())
     }
@@ -508,7 +229,8 @@ mod tests {
         state.registry.agents.insert(ctx.agent_id.clone(), agent.clone());
 
         // Sync agent to DB first so create_mission doesn't fail
-        crate::agent::persistence::save_agent_db(&state.resources.pool, &agent).await.unwrap();
+        agent.version = crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await.unwrap();
+        state.registry.agents.insert(ctx.agent_id.clone(), agent.clone());
 
         // Create a mock mission in the DB to satisfy persistence calls
         let mission = crate::agent::mission::create_mission(
@@ -518,6 +240,7 @@ mod tests {
             1.0
         ).await.unwrap();
         ctx.mission_id = mission.id;
+        state.registry.agents.get_mut(&ctx.agent_id).unwrap().state.active_mission = Some(serde_json::json!({"id": ctx.mission_id}));
 
         let usage = Some(TokenUsage {
             input_tokens: 100,

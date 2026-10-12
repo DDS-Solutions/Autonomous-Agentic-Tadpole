@@ -13,7 +13,6 @@ Advanced vulnerability and secret scanning engine enforcing OWASP Top 10 securit
 import sys
 import os
 import re
-import io
 import json
 import logging
 import argparse
@@ -22,10 +21,9 @@ from typing import Dict, List, Any, Optional
 
 # Ensure stdout/stderr handle UTF-8 on Windows
 if sys.platform == "win32":
-    if hasattr(sys.stdout, "buffer"):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    if hasattr(sys.stderr, "buffer"):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding='utf-8', errors='replace')
 
 # Initialize sovereign logger
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -121,8 +119,11 @@ def run_security_scan(root_path: str, scan_type: str = "all", scan_env: bool = F
     """Execute complete sovereign security scan across target path."""
     logger.info(f"🛡️ [security_scan] Running Sovereign Security Scan for: {root_path}")
     
-    root = Path(root_path).resolve()
+    root = Path(root_path).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("Scan path must be a directory")
     findings: List[Dict[str, Any]] = []
+    read_errors: List[str] = []
     scanned_count = 0
     
     self_path = Path(__file__).resolve()
@@ -158,6 +159,7 @@ def run_security_scan(root_path: str, scan_type: str = "all", scan_env: bool = F
                 content = p.read_text(encoding='utf-8', errors='ignore')
             except Exception as e:
                 logger.warning(f"⚠️ [security_scan] Unable to read {p}: {e}")
+                read_errors.append(str(p))
                 continue
                 
             # Respect explicit file-level suppression
@@ -237,7 +239,7 @@ def run_security_scan(root_path: str, scan_type: str = "all", scan_env: bool = F
     high_count = sum(1 for f in findings if f["severity"] == "high")
     medium_count = sum(1 for f in findings if f["severity"] == "medium")
     
-    status = "PASS" if (critical_count == 0 and high_count == 0) else "FAIL"
+    status = "FAIL" if critical_count or high_count else "UNVERIFIED" if read_errors else "PASS"
     
     return {
         "status": status,
@@ -246,7 +248,8 @@ def run_security_scan(root_path: str, scan_type: str = "all", scan_env: bool = F
         "critical": critical_count,
         "high": high_count,
         "medium": medium_count,
-        "findings": findings
+        "findings": findings,
+        "read_errors": read_errors
     }
 
 def main():
@@ -281,10 +284,12 @@ def main():
                 print(f"  [{item['severity'].upper()}] {item['file']}:{item['line']} - {item['type']} ({item['snippet']})")
             if len(result['findings']) > 20:
                 print(f"  ... and {len(result['findings']) - 20} more findings.")
+        elif result['read_errors']:
+            print(f"Unverified: {len(result['read_errors'])} source file(s) could not be read.")
         else:
             print("✅ No critical security vulnerabilities or credential leaks detected.")
 
-    sys.exit(0 if result["status"] == "PASS" else 1)
+    sys.exit({"PASS": 0, "FAIL": 1, "UNVERIFIED": 2}[result["status"]])
 
 if __name__ == "__main__":
     main()

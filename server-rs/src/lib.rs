@@ -34,6 +34,8 @@ pub mod system;
 pub mod telemetry;
 pub mod types;
 pub mod utils;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use state::AppState;
 

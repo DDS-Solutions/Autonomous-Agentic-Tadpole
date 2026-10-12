@@ -82,7 +82,7 @@ impl CodeSymbolGraph {
         max_nodes: Option<usize>,
     ) -> (Vec<SymbolNode>, bool) {
         let real_path = self.resolve_path(path);
-        let limit = max_nodes.unwrap_or(500).clamp(1, 5_000);
+        let limit = max_nodes.unwrap_or(500).clamp(1, crate::intelligence::graph::constants::MAX_NODES);
         let mut affected = Vec::new();
         let mut truncated = false;
 
@@ -117,34 +117,32 @@ impl CodeSymbolGraph {
 
             for &start_idx in &start_indices {
                 if visited.insert(start_idx) {
-                    affected_indices.push(start_idx);
-                    queue.push_back((start_idx, 0));
                     if affected_indices.len() >= limit {
                         truncated = true;
                         break;
                     }
+                    affected_indices.push(start_idx);
+                    queue.push_back((start_idx, 0));
                 }
             }
 
-            while let Some((current_idx, depth)) = queue.pop_front() {
-                if affected_indices.len() >= limit {
-                    truncated = true;
-                    break;
-                }
-                if depth >= 50 {
-                    continue; // Shield against malicious/adversarial large depth chains
-                }
+            'traverse: while let Some((current_idx, depth)) = queue.pop_front() {
                 for edge in self
                     .graph
                     .edges_directed(current_idx, petgraph::Direction::Incoming)
                 {
                     let neighbor_idx = edge.source();
-                    if visited.insert(neighbor_idx) {
-                        affected_indices.push(neighbor_idx);
+                    if !visited.contains(&neighbor_idx) {
+                        if depth >= 50 {
+                            truncated = true;
+                            continue;
+                        }
                         if affected_indices.len() >= limit {
                             truncated = true;
-                            break;
+                            break 'traverse;
                         }
+                        visited.insert(neighbor_idx);
+                        affected_indices.push(neighbor_idx);
                         queue.push_back((neighbor_idx, depth + 1));
                     }
                 }
@@ -165,8 +163,8 @@ impl CodeSymbolGraph {
     ///
     /// Prioritizes the target symbol first, then walks backward through incoming
     /// edges (callers) via BFS until the budget is exhausted or depth 50 is reached.
-    /// The target node's signature is truncated (with `"..."` suffix) if it alone
-    /// exceeds the budget, preserving room for top callers where possible.
+    /// Counts metadata and the truncation suffix as well as the signature. A
+    /// budget too small for the target's metadata returns an empty result.
     pub fn resolve_context(
         &self,
         symbol_name: &str,
@@ -178,45 +176,62 @@ impl CodeSymbolGraph {
         let key = index_key(&real_path, symbol_name);
         let mut results = Vec::new();
         let mut accumulated_tokens = 0;
+        let count_tokens = |text: &str| -> usize {
+            bpe.map(|tokenizer| tokenizer.encode_with_special_tokens(text).len())
+                .unwrap_or_else(|| text.len().div_ceil(4))
+        };
+        let metadata_tokens = |node: &SymbolNode| -> usize {
+            count_tokens(&node.name)
+                + count_tokens(&self.resolve_path(&node.path))
+                + count_tokens(&node.kind)
+        };
 
         if let Some(&start_idx) = self.index.get(&key) {
             let start_node = match self.graph.node_weight(start_idx) {
                 Some(n) => n,
                 None => return results,
             };
-            let start_tokens = start_node.tokens;
-
+            let overhead = metadata_tokens(start_node);
+            if overhead > budget {
+                return results;
+            }
             let mut start_clone = start_node.clone();
-
-            let effective_start_tokens = if start_tokens > budget {
-                // Truncate signature to fit budget using BPE tokenizer if available
+            let signature_budget = budget - overhead;
+            if count_tokens(&start_clone.signature) > signature_budget {
+                let suffix = if count_tokens("...") <= signature_budget { "..." } else { "" };
+                let content_budget = signature_budget.saturating_sub(count_tokens(suffix));
                 if let Some(tokenizer) = bpe {
                     let tokens = tokenizer.encode_with_special_tokens(&start_clone.signature);
-                    let target_budget = budget.saturating_sub(5).max(1);
-                    if tokens.len() > target_budget {
-                        if let Ok(truncated_text) = tokenizer.decode(&tokens[..target_budget]) {
-                            start_clone.signature = format!("{}...", truncated_text);
-                            start_clone.tokens = target_budget;
+                    let mut end = content_budget.min(tokens.len());
+                    // A token boundary can split a UTF-8 code point; back up until valid.
+                    loop {
+                        if let Ok(text) = tokenizer.decode(&tokens[..end]) {
+                            start_clone.signature = text;
+                            break;
                         }
+                        if end == 0 {
+                            start_clone.signature.clear();
+                            break;
+                        }
+                        end -= 1;
                     }
                 } else {
-                    let target_budget = budget.saturating_sub(5).max(1);
-                    let budget_chars = target_budget * 4;
-                    if start_clone.signature.len() > budget_chars {
-                        // SEC: Safe truncation at char boundary to prevent panics on multi-byte UTF-8
-                        let safe_bound = start_clone.signature.floor_char_boundary(budget_chars);
-                        start_clone.signature =
-                            format!("{}...", &start_clone.signature[..safe_bound]);
-                        start_clone.tokens = target_budget;
+                    let byte_budget = signature_budget.saturating_mul(4).saturating_sub(suffix.len());
+                    let end = start_clone.signature.floor_char_boundary(byte_budget.min(start_clone.signature.len()));
+                    start_clone.signature.truncate(end);
+                }
+                // Retokenize the combined text: merging a suffix can change BPE boundaries.
+                while count_tokens(&format!("{}{suffix}", start_clone.signature)) > signature_budget {
+                    if start_clone.signature.pop().is_none() {
+                        break;
                     }
                 }
-                start_clone.tokens.min(budget)
-            } else {
-                start_tokens
-            };
+                start_clone.signature.push_str(suffix);
+            }
+            start_clone.tokens = overhead + count_tokens(&start_clone.signature);
+            accumulated_tokens += start_clone.tokens;
 
             results.push(start_clone);
-            accumulated_tokens += effective_start_tokens;
 
             // BFS for callers (if remaining budget allows)
             if accumulated_tokens < budget {
@@ -229,7 +244,6 @@ impl CodeSymbolGraph {
                     if depth >= 50 {
                         continue;
                     }
-                    let mut budget_exceeded = false;
                     for edge in self
                         .graph
                         .edges_directed(current_idx, petgraph::Direction::Incoming)
@@ -240,20 +254,16 @@ impl CodeSymbolGraph {
                                 Some(n) => n,
                                 None => continue,
                             };
-                            let node_tokens = node.tokens;
+                            let node_tokens = metadata_tokens(node) + count_tokens(&node.signature);
 
-                            if accumulated_tokens + node_tokens <= budget {
-                                results.push(node.clone());
+                            if node_tokens <= budget.saturating_sub(accumulated_tokens) {
+                                let mut node = node.clone();
+                                node.tokens = node_tokens;
+                                results.push(node);
                                 accumulated_tokens += node_tokens;
                                 queue.push_back((neighbor_idx, depth + 1));
-                            } else {
-                                budget_exceeded = true;
-                                break;
                             }
                         }
-                    }
-                    if budget_exceeded {
-                        break;
                     }
                 }
             }

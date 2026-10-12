@@ -17,6 +17,10 @@ Tadpole OS is a local-first, zero-trust sovereign agent operations platform with
 
 ## High-Level Runtime
 
+Agent lifecycle transitions use 64 bounded async lock stripes across gateway, scheduled execution, recruitment, and terminal persistence. Acquire lifecycle locks before SQLite transactions; inference runs outside those locks. Creation uses an explicit insert path and updates require an existing row with the expected version. Batch saves publish versions after commit and preserve conflicts for the caller. Mission termination atomically commits agent state, mission status/log, and task usage in `server-rs/src/agent/runner/terminal.rs`, checks the active mission identity, and rejects stale or duplicate completion.
+
+The engine initializes supervised audit, memory, security, and skill actors during startup and stops their supervisor during shutdown. Memory saves persist text in SQLite in either feature build; queries return bounded literal text matches and identify `sqlite-text` as their backend. Vector indexing supplements that durable text. Event automation and provider-backed cognitive consolidation have explicit startup flags, disabled by default. Event listeners continue after broadcast lag and track at most 16 concurrent job executors, retaining the current event's remaining mappings until slots become available. Already admitted executors finish cleanup if the monitor stops; saturation can still drop broadcast events. Consolidation bounds source batches, releases registry references before inference, meters reported usage, and compares source records transactionally before replacing them.
+
 ```mermaid
 flowchart TD
   UI["React Dashboard (src/)"] --> Router["Axum Router (/v1)"]
@@ -174,6 +178,13 @@ The Browser Sentinel operates as a client-side, zero-cloud sentry for real-time 
 - Providers and models are persisted during graceful shutdown.
 - Agent records are loaded from SQLite and saved through batched database writes.
 - Audio cache defaults to `data/audio_cache.db`.
+- Mission creation, activation, and versioned agent assignment commit in one transaction; registry publication follows commit. The runner establishes mission cleanup ownership before context preparation and keeps that ownership if terminal persistence fails.
+- Read-before-write agent/initialization transactions use `BEGIN IMMEDIATE` to avoid SQLite upgrade deadlocks while retaining strict expected-version checks. Agent snapshots release DashMap shard locks before database awaits.
+- Initialization and terminal persistence own their commit/publication boundaries across caller cancellation. Server-owned mission receipts retain acknowledged provider usage and scheduled-run identity through partial turns, workflows, preemption, and temporary cleanup-write failure. Replacement initialization settles the stopped mission before assigning the next one. Receipts are removed after terminal commit or committed agent deletion; receipts and pending quota buffers remain volatile across process termination.
+- Agent persistence separates provider/model catalog storage and lifecycle recovery into sibling modules. The shared agent update helper lives in the persistence layer; quota settlement lives in `server-rs/src/security/metering/settlement.rs`.
+- Quota settlement retains pending agent and mission charges until their shared transaction commits. An owned settlement task survives cancellation of its caller, preserves concurrent additions, and excludes admission reads during commit and buffer settlement. Pending buffers remain volatile across process termination.
+- Stale recovery holds the agent lifecycle lock, preserves live tracked executions, and uses the same versioned terminal persistence as the runner. Scheduler and orchestrator recovery share this policy.
+- Stale recovery owns commit/publication through caller cancellation and isolates per-agent write failures. Other candidates still recover; the sweep returns its first error after processing them.
 
 ## Feature Gates
 
@@ -189,6 +200,7 @@ Default Cargo features are empty.
 Tadpole OS integrates a high-fidelity **Code Intelligence & Blast Radius Engine** (`server-rs/src/intelligence/`):
 
 - **In-Memory Dependency Graph**: Builds a directed symbol graph of all functions, structs, classes, and interfaces across the Rust and TypeScript codebase.
+- Rust call references include module-qualified, associated, and generic function/method calls, with byte-accurate source spans. Static name resolution remains heuristic and does not prove dynamic dispatch or alias resolution.
 - **Visual Force-Directed Layout**: The frontend renders this dependency graph dynamically under the **Neural Map** page using `react-force-graph-2d` for interactive exploration.
 - **Blast Radius Analysis**: Traces incoming edges to calculate the downstream impact of editing any specific code symbol, returning all files and functions that depend on it.
 - **Selective Test Targeting**: Exposes `GET /v1/intelligence/impacted-tests` and agent tool `get_impacted_tests` to determine which test suites are impacted by code changes, accelerating agent verification loops.
@@ -207,6 +219,8 @@ The engine implements several strategies to ensure resilience and zero-panic ope
 - **Panic Remediation**: Critical paths in the bridge, parser, and security modules use safe error propagation (via `Result` and `AppError`) rather than non-recoverable panics.
 - **Non-Blocking Orchestration**: All filesystem I/O in the MCP execution and Memory Palace rehydration modules is migrated to `tokio::fs` to prevent event-loop stalling.
 - **Lock-free Read Queries**: Read-based code graph queries execute concurrently while workspace scans compile on background blocking threads, preventing request timeouts.
+- **Memory Sweep Isolation**: Per-agent consolidation errors are logged and retained as a sweep error after other agents are processed; denial, empty provider output, and persistence conflicts preserve source memories.
+- **Frontend History Integrity**: History, branch discovery, reversion, and promotion use the shared HTTP service with the configured in-memory credential and backend URL. History replacement publishes messages and their ID index together.
 
 ## Swarm Orchestration Engine
 

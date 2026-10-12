@@ -60,9 +60,16 @@ export const SovereignChat: React.FC<SovereignChatProps> = ({ isDetachedView }) 
     const active_node_id = use_sovereign_store(s => s.active_node_id);
     const active_mission_id = use_sovereign_store(s => s.active_mission_id);
     const session_leaves = use_sovereign_store(s => s.session_leaves);
-    const fetch_session_history = use_sovereign_store(s => s.fetch_session_history);
-    const fetch_mission_leaves = use_sovereign_store(s => s.fetch_mission_leaves);
-    const revert_to_node = use_sovereign_store(s => s.revert_to_node);
+    const fetch_session_history_action = use_sovereign_store(s => s.fetch_session_history);
+    const fetch_mission_leaves_action = use_sovereign_store(s => s.fetch_mission_leaves);
+    const revert_to_node_action = use_sovereign_store(s => s.revert_to_node);
+    // Store actions report failures through the existing notification system.
+    const fetch_session_history = useCallback((mission: string, leaf: string) =>
+        fetch_session_history_action(mission, leaf).catch(() => { /* notification already shown */ }), [fetch_session_history_action]);
+    const fetch_mission_leaves = useCallback((mission: string) =>
+        fetch_mission_leaves_action(mission).catch(() => { /* notification already shown */ }), [fetch_mission_leaves_action]);
+    const revert_to_node = useCallback((mission: string, node: string) =>
+        revert_to_node_action(mission, node).catch(() => { /* notification already shown */ }), [revert_to_node_action]);
 
     const target_node = active_scope === 'cluster' ? target_cluster : target_agent;
 

@@ -170,7 +170,12 @@ impl AgentRunner {
         status: &str,
         task: Option<&str>,
     ) {
+        let Ok(_lifecycle) = self.state.registry.try_lock_agent(agent_id) else { return; };
         if let Some(mut agent) = self.state.registry.agents.get_mut(agent_id) {
+            if agent.health.status == "suspended" || agent.state.active_mission.as_ref()
+                .and_then(|mission| mission.get("id")).and_then(|id| id.as_str()) != Some(mission_id) {
+                return;
+            }
             agent.health.status = status.to_string();
             agent.state.current_task = task.map(|t| t.to_string());
         }
@@ -207,6 +212,7 @@ mod tests {
         
         let mut agent = EngineAgent::default();
         agent.identity.id = agent_id.to_string();
+        agent.state.active_mission = Some(serde_json::json!({"id": "mission-1"}));
         state.registry.agents.insert(agent_id.to_string(), agent);
 
         runner.update_status(agent_id, "mission-1", "busy", Some("Thinking..."));

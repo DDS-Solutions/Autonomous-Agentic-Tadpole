@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { intelligence_api_service } from '../../services/intelligence_api_service';
 import { system_api_service } from '../../services/system_api_service';
@@ -19,10 +19,10 @@ import { system_api_service } from '../../services/system_api_service';
 // Mock react-force-graph-2d
 vi.mock('react-force-graph-2d', () => {
     return {
-        default: vi.fn(({ graphData }: any) => (
+        default: vi.fn(({ graphData, onNodeClick }: any) => (
             <div data-testid="force-graph-2d" data-node-count={graphData?.nodes?.length || 0}>
                 {graphData?.nodes?.map((node: any) => (
-                    <div key={node.id} data-testid={`node-${node.id}`}>{node.name}</div>
+                    <div key={node.id} data-testid={`node-${node.id}`} data-affected={node.is_affected} onClick={() => onNodeClick(node)}>{node.name}</div>
                 ))}
             </div>
         )),
@@ -105,6 +105,7 @@ describe('KnowledgeGraph Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(intelligence_api_service.get_graph).mockResolvedValue(mockCodeGraph);
+        vi.mocked(intelligence_api_service.get_blast_radius).mockResolvedValue([]);
         vi.mocked(intelligence_api_service.get_knowledge).mockResolvedValue(mockOkfEntries as any);
         vi.mocked(intelligence_api_service.get_knowledge_edges).mockResolvedValue([
             { source_id: 'okf-concept-001', target_id: 'okf-concept-002' } as any,
@@ -120,6 +121,35 @@ describe('KnowledgeGraph Component', () => {
             }
             return 'Debugging instructions and protocols.';
         });
+    });
+
+    it('keeps the active mode when an earlier graph request finishes late', async () => {
+        let finishGraph!: (value: typeof mockCodeGraph) => void;
+        vi.mocked(intelligence_api_service.get_graph).mockReturnValue(new Promise(resolve => { finishGraph = resolve; }));
+        render(<KnowledgeGraph />);
+        fireEvent.click(screen.getByRole('button', { name: /Knowledge Mode/i }));
+        await waitFor(() => expect(screen.getByTestId('node-okf-concept-001')).toBeInTheDocument());
+        await act(async () => { finishGraph(mockCodeGraph); });
+        expect(screen.getByTestId('node-okf-concept-001')).toBeInTheDocument();
+        expect(screen.queryByTestId('node-server-rs/src/main.rs:main')).not.toBeInTheDocument();
+        expect(vi.mocked(intelligence_api_service.get_graph).mock.calls[0][1]?.aborted).toBe(true);
+    });
+
+    it('keeps highlights from the latest selection when requests finish out of order', async () => {
+        let finishFirst!: (value: any) => void;
+        let finishSecond!: (value: any) => void;
+        vi.mocked(intelligence_api_service.get_blast_radius)
+            .mockReturnValueOnce(new Promise(resolve => { finishFirst = resolve; }))
+            .mockReturnValueOnce(new Promise(resolve => { finishSecond = resolve; }));
+        render(<KnowledgeGraph />);
+        const first = await screen.findByTestId('node-server-rs/src/main.rs:main');
+        fireEvent.click(first);
+        fireEvent.click(screen.getByTestId('node-server-rs/src/agent.rs:Agent'));
+        await act(async () => { finishSecond([mockCodeGraph.nodes[1]]); });
+        await act(async () => { finishFirst([mockCodeGraph.nodes[0]]); });
+        expect(screen.getByTestId('node-server-rs/src/main.rs:main')).toHaveAttribute('data-affected', 'false');
+        expect(screen.getByTestId('node-server-rs/src/agent.rs:Agent')).toHaveAttribute('data-affected', 'true');
+        expect(vi.mocked(intelligence_api_service.get_blast_radius).mock.calls[0][3]?.aborted).toBe(true);
     });
 
     it('renders symbols mode by default and loads graph data', async () => {
@@ -152,7 +182,7 @@ describe('KnowledgeGraph Component', () => {
             expect(screen.getByText(/1 Edges|2 Edges/i)).toBeInTheDocument();
         });
 
-        expect(intelligence_api_service.get_knowledge).toHaveBeenCalledWith({ limit: 200 });
+        expect(intelligence_api_service.get_knowledge).toHaveBeenCalledWith({ limit: 200 }, expect.any(AbortSignal));
     });
 
     it('falls back to curated system knowledge docs when IKS returns empty', async () => {

@@ -27,10 +27,12 @@ use std::sync::Arc;
 //  SUBMODULES
 // ─────────────────────────────────────────────────────────
 mod analysis;
+pub mod accounting;
 mod context;
 mod evolution_tools;
 mod external_tools;
 mod finalize;
+mod terminal;
 mod fs_tools;
 mod intelligence;
 mod lifecycle;
@@ -59,6 +61,8 @@ mod workflow;
 /// Context bag for data resolved during the setup phase of a run.
 #[derive(Clone)]
 pub struct RunContext {
+    /// Server-owned receipt; never deserialized from a task request.
+    pub accounting: Arc<accounting::MissionAccounting>,
     pub agent_id: String,
     pub name: String,
     pub role: String,
@@ -102,6 +106,7 @@ pub struct RunContext {
 impl Default for RunContext {
     fn default() -> Self {
         Self {
+            accounting: Arc::new(accounting::MissionAccounting::default()),
             agent_id: "default-agent".to_string(),
             name: "Default".to_string(),
             role: "Specialist".to_string(),
@@ -286,18 +291,26 @@ impl Drop for ActiveAgentGuard<'_> {
 struct MissionCleanupGuard {
     runner: AgentRunner,
     ctx: Option<RunContext>,
+    usage: Option<crate::agent::types::TokenUsage>,
     completed: bool,
 }
 
 impl Drop for MissionCleanupGuard {
     fn drop(&mut self) {
+        if let Some(ctx) = &self.ctx { ctx.accounting.finish(); }
         if !self.completed {
             if let Some(ref ctx) = self.ctx {
                 let runner = self.runner.clone();
-                let ctx = ctx.clone();
+                let ctx = runner.state.comms.mission_contexts.get(&ctx.mission_id)
+                    .map(|entry| entry.clone()).unwrap_or_else(|| ctx.clone());
+                let usage = ctx.accounting.usage().or_else(|| self.usage.clone());
                 if let Ok(handle) = tokio::runtime::Handle::try_current() {
                     handle.spawn(async move {
-                        let _ = runner.fail_mission_aborted(&ctx).await;
+                        if let Err(error) = runner.persist_terminal_state(&ctx, &usage, true, "Mission aborted by kernel/user").await {
+                            if !matches!(error, AppError::Conflict(_) | AppError::NotFound(_)) {
+                                tracing::error!(%error, mission_id = %ctx.mission_id, "[Runner] Cancellation recovery failed");
+                            }
+                        }
                     });
                 } else {
                     tracing::warn!(
@@ -366,8 +379,7 @@ impl AgentRunner {
         };
 
         if let Some(actors) = self.state.actors.get() {
-            let _ = actors.memory.send(msg).await;
-            resp_rx.await.map_err(|e| AppError::InternalServerError(format!("MemoryActor channel closed: {}", e)))?
+            crate::system::actors::dispatch(&actors.memory, msg, resp_rx).await
         } else {
             Err(AppError::InternalServerError("MemoryActor not initialized".to_string()))
         }
@@ -417,12 +429,6 @@ impl AgentRunner {
             payload.primary_goal = Some(payload.message.clone());
         }
 
-        let mut cleanup_guard = MissionCleanupGuard {
-            runner: self.clone(),
-            ctx: None,
-            completed: false,
-        };
-
         let _mission_id = payload
             .cluster_id
             .clone()
@@ -434,8 +440,49 @@ impl AgentRunner {
             .yield_phase_transition(&agent_id, "Initialization")
             .await;
         let _active_agent_guard = ActiveAgentGuard::acquire(&self.state.governance.active_agents);
-        let mission = self.initialize_mission_state(&agent_id, &payload).await?;
+        // Initialization owns its commit/publication boundary. If this caller
+        // stops, the unclaimed result drops its mission guard and recovers it.
+        let initializer = self.clone();
+        let initializing_agent = agent_id.clone();
+        let initializing_payload = payload.clone();
+        let execution_id = tokio::task::try_id();
+        let (mission, mut cleanup_guard) = tokio::spawn(async move {
+            let mission = initializer.initialize_mission_state(
+                &initializing_agent, &initializing_payload, execution_id,
+            ).await?;
+            let ctx = initializer.state.comms.mission_contexts.get(&mission.id)
+                .map(|ctx| ctx.clone()).ok_or_else(|| AppError::Conflict("Initialized mission was removed before ownership transfer".to_string()))?;
+            let guard = MissionCleanupGuard { runner: initializer, ctx: Some(ctx), usage: None, completed: false };
+            Ok::<_, AppError>((mission, guard))
+        }).await.map_err(|error| AppError::InternalServerError(format!("Mission initialization task failed: {error}")))??;
         let mission_id = mission.id.clone();
+
+        let result = self.run_initialized_mission(&agent_id, payload, &mission_id, &mut cleanup_guard).await;
+        if let Err(error) = &result {
+            let ctx = cleanup_guard.ctx.as_ref().expect("Initialized mission owns a cleanup context");
+            let usage = ctx.accounting.usage().or_else(|| cleanup_guard.usage.clone());
+            match self.fail_mission(ctx, error, &usage).await {
+                Ok(()) | Err(AppError::Conflict(_)) | Err(AppError::NotFound(_)) => cleanup_guard.completed = true,
+                Err(persistence_error) => {
+                    tracing::error!(%persistence_error, mission_id = %mission_id, "[Runner] Mission failure could not be persisted");
+                    return Err(persistence_error);
+                }
+            }
+        } else {
+            cleanup_guard.completed = true;
+        }
+        result
+    }
+
+    async fn run_initialized_mission(
+        &self, agent_id: &str, mut payload: TaskPayload, mission_id: &str,
+        cleanup_guard: &mut MissionCleanupGuard,
+    ) -> Result<String, AppError> {
+        // Every fallible step below is covered by the initialized mission guard.
+        if self.state.actors.get().is_some() {
+            let ctx = cleanup_guard.ctx.as_ref().expect("Initialized cleanup context");
+            self.append_to_journal(ctx, "user", &payload.message, None, None).await?;
+        }
 
         self.state
             .yield_phase_transition(&agent_id, "ContextResolution")
@@ -444,7 +491,7 @@ impl AgentRunner {
             .state
             .registry
             .agents
-            .get(&agent_id)
+            .get(agent_id)
             .map(|a| a.value().clone())
             .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?;
 
@@ -470,36 +517,12 @@ impl AgentRunner {
             }
         }
 
-        if let Some(workflow_name) = agent_data.capabilities.workflows.first() {
-            let msg_lower = payload.message.to_lowercase();
-            let workflow_requested = msg_lower
-                .contains(&workflow_name.to_lowercase().replace("_", " "))
-                || msg_lower.starts_with("/workflow")
-                || msg_lower.starts_with("/sop");
-
-            let should_run_workflow = workflow_requested || agent_data.runner_policy.sme_auto_workflow;
-
-            if should_run_workflow {
-                if let Ok(mut state) = crate::agent::workflows::load_workflow(
-                    self.state.base_dir.as_path(),
-                    workflow_name,
-                )
-                .await
-                {
-                    cleanup_guard.completed = true;
-                    return self
-                        .run_deterministic_workflow(&agent_id, payload, &mut state)
-                        .await;
-                }
-            }
-        }
-
         let depth = payload.swarm_depth.unwrap_or(0);
         let lineage = payload.swarm_lineage.clone().unwrap_or_default();
 
         // ♻️ [SSCP] Rehydrate BEFORE context preparation to ensure prompt has state
         if let Some(restored) = self.state.resources.continuity_arbiter.rehydrate(&agent_id).await {
-            if let Some(mut agent) = self.state.registry.agents.get_mut(&agent_id) {
+            if let Some(mut agent) = self.state.registry.agents.get_mut(agent_id) {
                 agent.state.working_memory = restored;
                 tracing::info!("♻️ [SSCP] Rehydrated working memory for agent {} before context resolution", agent_id);
             }
@@ -511,10 +534,17 @@ impl AgentRunner {
         cleanup_guard.ctx = Some(ctx.clone());
 
         // Phase 2: Preflight Checks validation
-        if let Err(preflight_err) = self.execute_preflight_checks(&agent_id, &agent_data).await {
-            cleanup_guard.completed = true;
-            let _ = self.fail_mission(&ctx, &preflight_err, &None).await;
-            return Err(preflight_err);
+        self.execute_preflight_checks(agent_id, &agent_data).await?;
+
+        if let Some(workflow_name) = agent_data.capabilities.workflows.first() {
+            let msg_lower = payload.message.to_lowercase();
+            let requested = msg_lower.contains(&workflow_name.to_lowercase().replace('_', " "))
+                || msg_lower.starts_with("/workflow") || msg_lower.starts_with("/sop");
+            if requested || agent_data.runner_policy.sme_auto_workflow {
+                if let Ok(mut workflow) = crate::agent::workflows::load_workflow(self.state.base_dir.as_path(), workflow_name).await {
+                    return self.run_deterministic_workflow(&ctx, payload, &mut workflow, &mut cleanup_guard.usage).await;
+                }
+            }
         }
 
         self.state
@@ -529,12 +559,11 @@ impl AgentRunner {
                     .yield_phase_transition(&agent_id, "Finalization")
                     .await;
                 self.record_heartbeat(&ctx.agent_id).await;
-                cleanup_guard.completed = true;
+                cleanup_guard.usage = output.usage.clone();
                 self.finalize_run(&ctx, &output.text, &output.usage).await
             }
             Err((e, usage)) => {
-                cleanup_guard.completed = true;
-                let _ = self.fail_mission(&ctx, &e, &usage).await;
+                cleanup_guard.usage = usage;
                 Err(e)
             }
         }
@@ -740,6 +769,139 @@ mod tests {
         // 👋 is 4 bytes. Truncating at 2 should back off to 0.
         let truncated = runner.safe_truncate(emoji, 2);
         assert!(truncated.contains("... [TRUNCATED]"));
+    }
+
+    #[tokio::test]
+    async fn finding_regression_context_failure_finalizes_initialized_mission_before_returning() {
+        let state = crate::test_support::state_with_agent("context-owner", "http://127.0.0.1:9/v1").await;
+        let runner = AgentRunner::new(state.clone());
+        let error = runner.run("context-owner".to_string(), TaskPayload {
+            message: "Validate context".to_string(), cluster_id: Some("...".to_string()), ..Default::default()
+        }).await.unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(message) if message.contains("workspace ID")));
+        assert_eq!(sqlx::query_scalar::<_, String>("SELECT status FROM mission_history WHERE agent_id = 'context-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap(), "failed");
+        let agent = state.registry.agents.get("context-owner").unwrap().clone();
+        assert_eq!(agent.health.status, "idle");
+        assert!(agent.state.active_mission.is_none());
+        assert_eq!(agent.health.failure_count, 1);
+        assert_eq!(state.governance.active_agents.load(Ordering::SeqCst), 0);
+        assert_eq!(sqlx::query_scalar::<_, String>("SELECT status FROM agents WHERE id = 'context-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap(), "idle");
+    }
+
+    #[tokio::test]
+    async fn finding_regression_workflow_uses_initialized_mission_and_aggregates_all_steps() {
+        let provider = crate::test_support::ProviderStub::start(axum::http::StatusCode::OK, "step completed", false).await;
+        let state = crate::test_support::state_with_agent("workflow-owner", &provider.base_url).await;
+        let directory = state.base_dir.join("data/workflows");
+        tokio::fs::create_dir_all(&directory).await.unwrap();
+        tokio::fs::write(directory.join("regression.md"), "## First step\nComplete the first step.\n## Second step\nComplete the second step.\n").await.unwrap();
+        state.registry.agents.get_mut("workflow-owner").unwrap().capabilities.workflows = vec!["regression".to_string()];
+        let runner = AgentRunner::new(state.clone());
+        let output = runner.run("workflow-owner".to_string(), TaskPayload {
+            message: "/workflow regression".to_string(), cluster_id: Some("workspace-scope".to_string()), ..Default::default()
+        }).await.unwrap();
+        assert!(output.contains("First step") && output.contains("Second step"));
+        // Each specialist step makes its initial call and a Sentinel re-prompt.
+        assert_eq!(provider.calls.load(Ordering::SeqCst), 4);
+        let (mission_id, status, cost): (String, String, f64) = sqlx::query_as("SELECT id, status, cost_usd FROM mission_history WHERE agent_id = 'workflow-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap();
+        assert_ne!(mission_id, "workspace-scope");
+        assert_eq!(status, "completed");
+        assert!((cost - 0.00008).abs() < 1e-12);
+        let agent = state.registry.agents.get("workflow-owner").unwrap();
+        assert_eq!(agent.economics.tokens_used, 60);
+        assert!(agent.state.active_mission.is_none());
+        assert!((state.security.budget_guard.get_global_stats().1 - cost).abs() < 1e-12);
+    }
+
+    #[tokio::test]
+    async fn finding_regression_initialization_write_failure_leaves_no_ghost_mission() {
+        let state = crate::test_support::state_with_agent("initialization-owner", "http://127.0.0.1:9/v1").await;
+        sqlx::query("CREATE TRIGGER reject_initialization BEFORE UPDATE ON agents BEGIN SELECT RAISE(ABORT, 'injected initialization failure'); END")
+            .execute(&state.resources.pool).await.unwrap();
+        let runner = AgentRunner::new(state.clone());
+        assert!(runner.run("initialization-owner".to_string(), TaskPayload {
+            message: "Validate initialization".to_string(), ..Default::default()
+        }).await.is_err());
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM mission_history WHERE agent_id = 'initialization-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap(), 0);
+        let agent = state.registry.agents.get("initialization-owner").unwrap();
+        assert_eq!(agent.health.status, "idle");
+        assert_eq!(agent.version, 1);
+        assert!(agent.state.active_mission.is_none());
+    }
+
+    #[tokio::test]
+    async fn finding_regression_terminal_write_failure_preserves_owned_mission_for_recovery() {
+        let state = crate::test_support::state_with_agent("terminal-owner", "http://127.0.0.1:9/v1").await;
+        sqlx::query("CREATE TRIGGER reject_terminal_status BEFORE UPDATE ON mission_history WHEN NEW.status = 'failed' BEGIN SELECT RAISE(ABORT, 'injected terminal failure'); END")
+            .execute(&state.resources.pool).await.unwrap();
+        let _lifecycle = state.registry.lock_agent("terminal-owner").await;
+        let task = crate::routes::agent::spawn_agent_runner(state.clone(), "terminal-owner".to_string(), TaskPayload {
+            message: "Validate terminal recovery".to_string(), cluster_id: Some("...".to_string()), ..Default::default()
+        });
+        drop(_lifecycle);
+        assert!(matches!(task.await.unwrap(), Err(AppError::Sqlx(_))));
+        let lifecycle = state.registry.lock_agent("terminal-owner").await;
+        assert_eq!(sqlx::query_scalar::<_, String>("SELECT status FROM mission_history WHERE agent_id = 'terminal-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap(), "active");
+        let mut agent = state.registry.agents.get("terminal-owner").unwrap().clone();
+        assert_eq!(agent.health.status, "busy");
+        assert!(agent.state.active_mission.is_some());
+        assert!(!state.comms.active_runners.contains_key("terminal-owner"));
+        // A permanent storage failure must remain visible and retain ownership.
+        // Once storage recovers, the reaper uses the ordinary terminal transaction.
+        sqlx::query("DROP TRIGGER reject_terminal_status").execute(&state.resources.pool).await.unwrap();
+        agent.health.heartbeat_at = Some(chrono::Utc::now() - chrono::Duration::seconds(700));
+        agent.version = crate::agent::persistence::save_agent_db(&state.resources.pool, &agent).await.unwrap();
+        state.registry.agents.insert("terminal-owner".to_string(), agent);
+        drop(lifecycle);
+        // Drop cleanup may already have recovered after the rejecting trigger was removed.
+        crate::agent::persistence::reap_stale_agents(&state, 300).await.unwrap();
+        assert_eq!(sqlx::query_scalar::<_, String>("SELECT status FROM mission_history WHERE agent_id = 'terminal-owner'")
+            .fetch_one(&state.resources.pool).await.unwrap(), "failed");
+        assert_eq!(state.registry.agents.get("terminal-owner").unwrap().health.status, "idle");
+    }
+
+    #[tokio::test]
+    async fn finding_regression_cancelled_initialization_recovers_unclaimed_mission() {
+        let state = crate::test_support::state_with_agent("cancel-initialization", "http://127.0.0.1:9/v1").await;
+        let mut connections = Vec::new();
+        for _ in 0..state.resources.pool.options().get_max_connections() {
+            connections.push(state.resources.pool.acquire().await.unwrap());
+        }
+        let mut events = state.comms.event_tx.subscribe();
+        let runner = AgentRunner::new(state.clone());
+        let caller = tokio::spawn(async move {
+            runner.run("cancel-initialization".to_string(), TaskPayload { message: "Initialize".to_string(), ..Default::default() }).await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if event["phase"] == "Initialization" { break; }
+            }
+            // Let initialization own its lifecycle lock and wait for SQL.
+            while state.registry.try_lock_agent("cancel-initialization").is_ok() {
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        drop(connections);
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let statuses: Vec<String> = sqlx::query_scalar("SELECT status FROM mission_history WHERE agent_id = 'cancel-initialization'")
+                    .fetch_all(&state.resources.pool).await.unwrap();
+                if statuses == ["failed"] && state.comms.mission_contexts.is_empty() { break; }
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+        let agent = state.registry.agents.get("cancel-initialization").unwrap().clone();
+        assert_eq!(agent.health.status, "idle");
+        assert!(agent.state.active_mission.is_none());
+        assert_eq!(state.governance.active_agents.load(Ordering::SeqCst), 0);
     }
 }
 

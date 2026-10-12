@@ -995,6 +995,7 @@ impl EngineAgent {
     pub fn resolve_provider_context(&self, base_dir: std::path::PathBuf) -> crate::agent::runner::RunContext {
         let workspace_root = base_dir.join("data/workspaces/default");
         crate::agent::runner::RunContext {
+            accounting: Default::default(),
             agent_id: self.identity.id.clone(),
             name: self.identity.name.clone(),
             role: self.identity.role.clone(),

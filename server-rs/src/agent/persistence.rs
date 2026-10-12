@@ -19,39 +19,19 @@
 
 use crate::agent::types::{
     AgentCapabilities, AgentEconomics, AgentHealth, AgentIdentity, AgentModels, AgentState,
-    EngineAgent, ModelEntry, ProviderConfig, RoleBlueprint, TokenUsage,
+    EngineAgent, RoleBlueprint, TokenUsage,
 };
 use crate::error::AppError;
 
 use sqlx::{Row, SqlitePool};
 
-const PROVIDERS_FILE: &str = "data/infra_providers.json";
-const MODELS_FILE: &str = "data/infra_models.json";
+mod catalog;
+mod recovery;
+pub use catalog::{load_models, load_providers, save_models, save_providers};
+pub use recovery::{claim_agent, reap_stale_agents, update_agent_heartbeat};
 
 const DEFAULT_PROVIDER: &str = "ollama";
 const DEFAULT_CATEGORY: &str = "user";
-
-async fn read_json_file<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
-    let content = tokio::fs::read_to_string(path).await.ok()?;
-    serde_json::from_str(&content).ok()
-}
-
-/// ### 🔒 SEC-02: Credential Polarization Helper
-/// Maps a protocol-specific provider ID to its canonical environment variable.
-/// 
-/// Returns `None` for providers that do not require secret keys or utilize
-/// alternative authentication mechanisms (e.g., local Ollama instance).
-fn provider_env_var(provider_id: &str) -> Option<&'static str> {
-    match provider_id {
-        "google" | "gemini" => Some("GOOGLE_API_KEY"),
-        "groq" => Some("GROQ_API_KEY"),
-        "openai" => Some("OPENAI_API_KEY"),
-        "anthropic" => Some("ANTHROPIC_API_KEY"),
-        "inception" => Some("INCEPTION_API_KEY"),
-        "deepseek" => Some("DEEPSEEK_API_KEY"),
-        _ => None,
-    }
-}
 
 /// Loads agents from the database.
 /// 
@@ -275,7 +255,7 @@ pub async fn load_agents_db(pool: &SqlitePool) -> Result<Vec<EngineAgent>, AppEr
     Ok(agents)
 }
 
-async fn execute_save_agent<'c, E>(executor: E, agent: &EngineAgent) -> Result<u32, AppError>
+async fn execute_save_agent<'c, E>(executor: E, agent: &EngineAgent, create: bool) -> Result<u32, AppError>
 where
     E: sqlx::Executor<'c, Database = sqlx::Sqlite>,
 {
@@ -292,7 +272,8 @@ where
         });
 
     let res = sqlx::query("INSERT INTO agents (id, name, role, department, description, model_id, tokens_used, status, current_task, input_tokens, output_tokens, theme_color, budget_usd, cost_usd, metadata, skills, workflows, mcp_tools, connector_configs, model_2, model_3, model_config2, model_config3, active_model_slot, voice_id, voice_engine, failure_count, last_failure_at, created_at, heartbeat_at, active_mission, provider, api_key, base_url, system_prompt, temperature, category, requires_oversight, working_memory, stt_engine, version, runner_policy)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE ? OR EXISTS (SELECT 1 FROM agents WHERE id = ?)
             ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             role = excluded.role,
@@ -335,7 +316,7 @@ where
             stt_engine = excluded.stt_engine,
             version = agents.version + 1,
             runner_policy = excluded.runner_policy
-            WHERE agents.id = excluded.id AND agents.version = ?
+            WHERE NOT ? AND agents.id = excluded.id AND agents.version = ?
             RETURNING version"
     )
     .bind(&agent.identity.id)
@@ -378,8 +359,11 @@ where
     .bind(agent.requires_oversight)
     .bind(sqlx::types::Json(&agent.state.working_memory))
     .bind(&agent.stt_engine)
-    .bind(agent.version as i64)
+    .bind(if create { 1 } else { agent.version as i64 })
     .bind(sqlx::types::Json(&agent.runner_policy))
+    .bind(create)
+    .bind(&agent.identity.id)
+    .bind(create)
     .bind(agent.version as i64)
     .fetch_optional(executor)
     .await?;
@@ -390,7 +374,7 @@ where
             Ok(ver as u32)
         }
         None => Err(AppError::Conflict(format!(
-            "Optimistic concurrency lock failed for agent '{}' (version mismatch)",
+            "Agent '{}' is missing, already exists, or has a conflicting version",
             agent.identity.id
         ))),
     }
@@ -468,11 +452,46 @@ async fn auto_subscribe_agent_skills(
     Ok(())
 }
 
+/// Persists and publishes an agent update while the caller holds its lifecycle lock.
+/// Publication follows the strict versioned transaction; conflicts propagate.
+pub(crate) async fn update_and_persist_agent<F>(
+    state: &std::sync::Arc<crate::state::AppState>, agent_id: &str, update: F,
+) -> Result<EngineAgent, AppError>
+where F: FnOnce(&mut EngineAgent) {
+    let mut updated = state.registry.agents.get(agent_id)
+        .ok_or_else(|| AppError::NotFound(format!("Agent '{}' not found", agent_id)))?.clone();
+    update(&mut updated);
+    updated.version = save_agent_db(&state.resources.pool, &updated).await?;
+    state.registry.agents.insert(agent_id.to_string(), updated.clone());
+    state.emit_event(serde_json::json!({
+        "type": "agent:update", "agent_id": agent_id, "data": updated.clone()
+    }));
+    Ok(updated)
+}
+
 pub async fn save_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<u32, AppError> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let new_ver = save_agent_db_in_tx(&mut tx, agent).await?;
     tx.commit().await?;
     Ok(new_ver)
+}
+
+/// Explicit creation never overwrites an existing identity. Ordinary saves cannot resurrect deletions.
+pub async fn create_agent_db(pool: &SqlitePool, agent: &EngineAgent) -> Result<u32, AppError> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let version = create_agent_db_in_tx(&mut tx, agent).await?;
+    tx.commit().await?;
+    Ok(version)
+}
+
+pub async fn create_agent_db_in_tx(
+    conn: &mut sqlx::SqliteConnection,
+    agent: &EngineAgent,
+) -> Result<u32, AppError> {
+    let version = execute_save_agent(&mut *conn, agent, true).await?;
+    sync_manifests_for_agent(&mut *conn, agent).await?;
+    auto_subscribe_agent_skills(&mut *conn, agent).await?;
+    Ok(version)
 }
 
 /// Transaction-compatible variant of `save_agent_db`.
@@ -480,7 +499,7 @@ pub async fn save_agent_db_in_tx(
     conn: &mut sqlx::SqliteConnection,
     agent: &EngineAgent,
 ) -> Result<u32, AppError> {
-    let new_ver = execute_save_agent(&mut *conn, agent).await?;
+    let new_ver = execute_save_agent(&mut *conn, agent, false).await?;
 
     sync_manifests_for_agent(&mut *conn, agent).await?;
     auto_subscribe_agent_skills(&mut *conn, agent).await?;
@@ -521,171 +540,6 @@ async fn sync_manifests_for_agent(
             .await?;
     }
 
-    Ok(())
-}
-
-/// Loads provider configurations from disk and overlays security context.
-/// 
-/// ### 🔒 SEC-02: Credential Polarization
-/// API keys are NEVER loaded from the raw JSON file if a corresponding environment 
-/// variable (e.g., `GOOGLE_API_KEY`) is present. Environment variables are treated 
-/// as the Sovereign Root of Truth for credentials.
-pub async fn load_providers(base_dir: &std::path::Path) -> Vec<ProviderConfig> {
-    let providers_file = match crate::utils::security::validate_path(base_dir, PROVIDERS_FILE) {
-        Ok(path) => path,
-        Err(err) => {
-            tracing::error!("⚠️ [Persistence] Security boundary violation validating providers file: {}", err);
-            return crate::agent::registry::get_default_providers();
-        }
-    };
-    let mut providers = if providers_file.exists() {
-        read_json_file::<Vec<ProviderConfig>>(&providers_file).await.unwrap_or_else(|| {
-            tracing::error!(
-                file = ?providers_file,
-                "❌ [Persistence] Provider JSON parse failure — falling back to defaults"
-            );
-            crate::agent::registry::get_default_providers()
-        })
-    } else {
-        // Fallback: Check RESOURCE_ROOT (e.g. bundled data)
-        let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-        let bundled_file = std::path::Path::new(&resource_root).join(PROVIDERS_FILE);
-        read_json_file::<Vec<ProviderConfig>>(&bundled_file).await.unwrap_or_else(crate::agent::registry::get_default_providers)
-    };
-
-    // SEC-02: Override api_key from environment variables.
-    for provider in &mut providers {
-        if let Some(env_var) = provider_env_var(&provider.id) {
-            if let Ok(key) = std::env::var(env_var) {
-                if !key.trim().is_empty() {
-                    provider.api_key = Some(key);
-                }
-            }
-        }
-    }
-
-    providers
-}
-
-/// ### 🔒 SEC-02: Credential Redaction Pass
-/// Persists provider configurations to disk after sanitizing sensitive tokens.
-/// 
-/// ### 🛰️ Security Note: Identity Leakage Prevention
-/// API keys are stripped and replaced with `serde_json::Value::Null` before disk write.
-/// This ensures that repo-wide exports or cloud backups do not accidentally contain
-/// the `NEURAL_TOKEN` or cloud provider secrets.
-pub async fn save_providers(
-    base_dir: &std::path::Path,
-    providers: Vec<ProviderConfig>,
-) -> Result<(), AppError> {
-    let providers_file = crate::utils::security::validate_path(base_dir, PROVIDERS_FILE)?;
-    let sanitized: Vec<serde_json::Value> = providers
-        .iter()
-        .map(|p| {
-            let mut val = serde_json::to_value(p).unwrap_or_default();
-            if let Some(obj) = val.as_object_mut() {
-                obj.insert("api_key".to_string(), serde_json::Value::Null);
-                obj.remove("apiKey");
-            }
-            val
-        })
-        .collect();
-    let content = serde_json::to_string_pretty(&sanitized)?;
-    tokio::fs::write(providers_file, content)
-        .await
-        .map_err(AppError::Io)?;
-    Ok(())
-}
-
-/// Loads the model registry from disk.
-pub async fn load_models(base_dir: &std::path::Path) -> Vec<ModelEntry> {
-    let models_file = match crate::utils::security::validate_path(base_dir, MODELS_FILE) {
-        Ok(path) => path,
-        Err(err) => {
-            tracing::error!("⚠️ [Persistence] Security boundary violation validating models file: {}", err);
-            return crate::agent::registry::get_default_models();
-        }
-    };
-    if models_file.exists() {
-        if let Some(models) = read_json_file::<Vec<ModelEntry>>(&models_file).await {
-            return models;
-        }
-        tracing::error!(file = ?models_file, "❌ [Persistence] Model JSON parse failure — falling back to defaults");
-    } else {
-        // Fallback: Check RESOURCE_ROOT
-        let resource_root = std::env::var("RESOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-        let bundled_file = std::path::Path::new(&resource_root).join(MODELS_FILE);
-        if let Some(models) = read_json_file::<Vec<ModelEntry>>(&bundled_file).await {
-            return models;
-        }
-    }
-    crate::agent::registry::get_default_models()
-}
-
-/// Persists all model entries to disk.
-pub async fn save_models(base_dir: &std::path::Path, models: Vec<ModelEntry>) -> Result<(), AppError> {
-    let models_file = crate::utils::security::validate_path(base_dir, MODELS_FILE)?;
-    let content = serde_json::to_string_pretty(&models)?;
-    tokio::fs::write(models_file, content)
-        .await
-        .map_err(AppError::Io)?;
-    Ok(())
-}
-
-/// ### 🔗 Orchestration: Atomic Resource Claiming
-/// Atomically claims an agent for a mission by setting its status to 'busy'.
-/// Returns `Ok(true)` if the agent was successfully claimed via the atomic locking 
-/// mechanism, or `Ok(false)` if the agent is already engaged in another reasoning turn.
-pub async fn claim_agent(pool: &SqlitePool, agent_id: &str) -> Result<bool, AppError> {
-    let now = chrono::Utc::now();
-    let res = sqlx::query(
-        "UPDATE agents SET status = 'busy', heartbeat_at = ?1 
-         WHERE id = ?2 AND status IN ('idle', 'active')"
-    )
-    .bind(now)
-    .bind(agent_id)
-    .execute(pool)
-    .await?;
-
-    Ok(res.rows_affected() > 0)
-}
-
-/// ### ⚖️ Governance Rationale: The Swarm Reaper
-/// Identifies and harvests agents marked as 'busy' or 'working' that have exceeded their heartbeat threshold.
-/// 
-/// This is the system's "Safety Valve." If an agent process crashes, hangs, or 
-/// context-overflows without completing its mission, this reaper returns 
-/// the agent to the available pool (`idle`) so the swarm can re-negotiate the task. 
-/// 
-/// Prevents permanent "Busy" or "Working" locks in the database (LIF-03) and ensuring 
-/// swarm availability across high-concurrency mission cycles.
-pub async fn reap_stale_agents(pool: &SqlitePool, threshold_secs: i64) -> Result<u64, AppError> {
-    let now = chrono::Utc::now();
-    // Use safe subtraction to determine the high-water mark for zombie processes.
-    let threshold_time = now - chrono::Duration::seconds(threshold_secs);
-
-    let res = sqlx::query("UPDATE agents SET status = 'idle', current_task = NULL, active_mission = NULL WHERE status IN ('busy', 'working', 'thinking') AND ((heartbeat_at IS NOT NULL AND heartbeat_at < ?1) OR (heartbeat_at IS NULL AND (created_at IS NULL OR created_at < ?1)))")
-        .bind(threshold_time)
-        .execute(pool)
-        .await?;
-
-    let reaped = res.rows_affected();
-    if reaped > 0 {
-        tracing::info!("♻️ [Persistence] Reaped {} stale agent runs.", reaped);
-    }
-    Ok(reaped)
-}
-
-/// ### 📡 Telemetry: Heartbeat Propagation
-/// Updates the heartbeat timestamp in the database for the specified agent.
-/// This prevents the `reap_stale_agents` safety valve from prematurely harvesting
-/// an active long-running mission.
-pub async fn update_agent_heartbeat(pool: &SqlitePool, agent_id: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE agents SET heartbeat_at = ? WHERE id = ?")
-        .bind(chrono::Utc::now())
-        .bind(agent_id)
-        .execute(pool)
-        .await?;
     Ok(())
 }
 
@@ -789,7 +643,27 @@ pub async fn complete_sync(
 /// Transactionally deletes an agent and cascades deletions to all associated metadata tables.
 /// Enforces strict child-first ordering to comply with SQLite foreign key constraints.
 pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(), AppError> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+
+    // Financial history must retain both counterparties. Give callers a useful
+    // conflict before touching dependent records rather than a generic FK error.
+    let has_ledger_history = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM a2a_ledger WHERE debit_agent_id = ?1 OR credit_agent_id = ?1)",
+    )
+    .bind(agent_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if has_ledger_history {
+        return Err(AppError::Conflict(
+            "Agent has A2A ledger history and cannot be deleted; suspend the agent instead".to_string(),
+        ));
+    }
+
+    // Preserve oversight evidence while detaching its optional mission FK.
+    sqlx::query("UPDATE oversight_log SET mission_id = NULL WHERE mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
 
     // 1. Delete granular mission execution logs and nodes (depend on mission_history)
     sqlx::query("DELETE FROM mission_logs WHERE agent_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
@@ -829,6 +703,11 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
         .await?;
 
     // 3. Delete metadata, tasks, quotas, and manifests
+    sqlx::query("DELETE FROM agent_economics_meta WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
     sqlx::query("DELETE FROM agent_quotas WHERE entity_id = ?")
         .bind(agent_id)
         .execute(&mut *tx)
@@ -876,455 +755,7 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::SqlitePool;
-
-    #[tokio::test]
-    async fn test_agent_persistence_round_trip() -> Result<(), AppError> {
-        let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-        // 1. Setup Schema (Matching exactly the final state after migrations)
-        sqlx::query(
-            r#"CREATE TABLE agents (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            department TEXT NOT NULL,
-            description TEXT NOT NULL,
-             model_id TEXT,
-             tokens_used INTEGER DEFAULT 0,
-             status TEXT NOT NULL,
-             current_task TEXT,
-             input_tokens INTEGER DEFAULT 0,
-             output_tokens INTEGER DEFAULT 0,
-             theme_color TEXT,
-            budget_usd REAL DEFAULT 0.0,
-            cost_usd REAL DEFAULT 0.0,
-            metadata TEXT NOT NULL,
-            skills TEXT,
-            workflows TEXT,
-            mcp_tools TEXT,
-            connector_configs TEXT,
-            model_2 TEXT,
-            model_3 TEXT,
-            model_config2 TEXT,
-            model_config3 TEXT,
-            active_model_slot INTEGER DEFAULT 1,
-            failure_count INTEGER DEFAULT 0,
-            last_failure_at DATETIME,
-            heartbeat_at DATETIME,
-            active_mission TEXT,
-            provider TEXT,
-            api_key TEXT,
-            base_url TEXT,
-            system_prompt TEXT,
-            temperature REAL,
-            voice_id TEXT,
-            voice_engine TEXT,
-            category TEXT,
-            requires_oversight BOOLEAN DEFAULT 0,
-            working_memory TEXT DEFAULT '{}',
-            stt_engine TEXT,
-            version INTEGER DEFAULT 1,
-            created_at DATETIME,
-            runner_policy TEXT DEFAULT '{"max_concurrent":1,"resume_blocked_first":true,"preflight_checks":["context_version","skill_updates"]}'
-        )"#,
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE sync_manifest (
-                id TEXT PRIMARY KEY,
-                agent_id TEXT NOT NULL,
-                source_type TEXT NOT NULL,
-                source_uri TEXT NOT NULL,
-                status TEXT NOT NULL,
-                last_sync_at DATETIME
-            )",
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE skill_subscriptions (
-                id TEXT PRIMARY KEY NOT NULL,
-                agent_id TEXT NOT NULL,
-                skill_id TEXT NOT NULL,
-                approved_at INTEGER,
-                scope_hash TEXT NOT NULL,
-                subscription_status TEXT NOT NULL DEFAULT 'pending',
-                installed_at INTEGER,
-                last_updated_at INTEGER,
-                notes TEXT,
-                UNIQUE(agent_id, skill_id)
-            )",
-        )
-        .execute(&pool)
-        .await?;
-
-        // 2. Create Agent with full config
-        let mut agent = crate::agent::types::EngineAgent {
-            identity: crate::agent::types::AgentIdentity {
-                id: "test-agent-1".to_string(),
-                name: "Test Agent".to_string(),
-                role: "Tester".to_string(),
-                department: "QA".to_string(),
-                description: "A test agent".to_string(),
-                theme_color: Some("#ff0000".to_string()),
-                ..Default::default()
-            },
-            health: crate::agent::types::AgentHealth {
-                status: "idle".to_string(),
-                ..Default::default()
-            },
-            capabilities: crate::agent::types::AgentCapabilities {
-                skills: vec!["testing".to_string()],
-                ..Default::default()
-            },
-            models: crate::agent::types::AgentModels {
-                model_id: Some("gemini-1.5-pro".to_string()),
-                ..Default::default()
-            },
-            version: 1,
-            ..Default::default()
-        };
-
-        agent.models.model.provider = crate::agent::types::ModelProvider::Anthropic;
-        agent.models.model.model_id = "claude-3-5-sonnet".to_string();
-        agent.models.model.api_key = Some("sk-test-123".to_string());
-        agent.models.model.base_url = Some("https://api.anthropic.com".to_string());
-        agent.models.model.system_prompt = Some("You are a tester.".to_string());
-        agent.models.model.temperature = Some(0.7);
-
-        agent.state.current_task = Some("Validating persistence parity".to_string());
-        agent.economics.token_usage = TokenUsage {
-            input_tokens: 321,
-            output_tokens: 123,
-            total_tokens: 444,
-        };
-        agent.economics.tokens_used = 2222;
-        agent.state.working_memory = serde_json::json!({"milestone": "test-passed"});
-
-        // 3. Save
-        save_agent_db(&pool, &agent).await?;
-
-        // 4. Load
-        let agents = load_agents_db(&pool).await?;
-        let loaded = agents
-            .iter()
-            .find(|a| a.identity.id == "test-agent-1")
-            .expect("Agent not found");
-
-        // 5. Assert Parity
-        assert_eq!(loaded.identity.name, agent.identity.name);
-        assert_eq!(loaded.models.model.provider, agent.models.model.provider);
-        assert_eq!(loaded.models.model.model_id, agent.models.model.model_id);
-        assert_eq!(loaded.models.model.api_key, None); // SEC-02: Plaintext API keys are never persisted
-        assert_eq!(loaded.models.model.base_url, agent.models.model.base_url);
-        assert_eq!(loaded.models.model.system_prompt, agent.models.model.system_prompt);
-        assert_eq!(loaded.models.model.temperature, agent.models.model.temperature);
-        assert_eq!(loaded.identity.theme_color, agent.identity.theme_color);
-        assert_eq!(loaded.capabilities.skills, agent.capabilities.skills);
-        assert_eq!(loaded.requires_oversight, agent.requires_oversight);
-        assert_eq!(loaded.state.current_task, agent.state.current_task);
-        assert_eq!(
-            loaded.economics.token_usage.input_tokens,
-            agent.economics.token_usage.input_tokens
-        );
-        assert_eq!(
-            loaded.economics.token_usage.output_tokens,
-            agent.economics.token_usage.output_tokens
-        );
-        assert_eq!(
-            loaded.economics.token_usage.total_tokens,
-            agent.economics.token_usage.total_tokens
-        );
-        assert_eq!(loaded.economics.tokens_used, agent.economics.tokens_used);
-        assert_eq!(loaded.state.working_memory["milestone"], "test-passed");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_atomic_claiming_and_reaping() -> Result<(), AppError> {
-        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
-
-        let agent = crate::agent::types::EngineAgent {
-            identity: crate::agent::types::AgentIdentity {
-                id: "agent-1".to_string(),
-                name: "Agent 1".to_string(),
-                role: "Worker".to_string(),
-                ..Default::default()
-            },
-            health: crate::agent::types::AgentHealth {
-                status: "idle".to_string(),
-                heartbeat_at: None,
-                ..Default::default()
-            },
-            created_at: Some(chrono::Utc::now() - chrono::Duration::seconds(700)),
-            version: 1,
-            ..Default::default()
-        };
-        save_agent_db(&pool, &agent).await?;
-
-        // 2. Test Claiming
-        let success = claim_agent(&pool, "agent-1").await?;
-        assert!(success, "First claim should succeed");
-
-        let success_retry = claim_agent(&pool, "agent-1").await?;
-        assert!(!success_retry, "Second claim on busy agent should fail");
-
-        // 3. Test Reaping (Set heartbeat to 600s ago)
-        let old_heartbeat = chrono::Utc::now() - chrono::Duration::seconds(600);
-        sqlx::query("UPDATE agents SET heartbeat_at = ? WHERE id = 'agent-1'")
-            .bind(old_heartbeat)
-            .execute(&pool)
-            .await?;
-
-        let reaped = reap_stale_agents(&pool, 300).await?;
-        assert_eq!(reaped, 1, "Should reap 1 stale agent");
-
-        let final_status: String =
-            sqlx::query_scalar("SELECT status FROM agents WHERE id = 'agent-1'")
-                .fetch_one(&pool)
-                .await?;
-        assert_eq!(final_status, "idle", "Reaped agent should be idle");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_delete_agent_cascade_foreign_keys_on() -> Result<(), AppError> {
-        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
-        sqlx::query("PRAGMA foreign_keys = ON;").execute(&pool).await?;
-
-        // 1. Insert an agent
-        let agent = crate::agent::types::EngineAgent {
-            identity: crate::agent::types::AgentIdentity {
-                id: "cascade-agent-1".to_string(),
-                name: "Cascade Agent".to_string(),
-                role: "Tester".to_string(),
-                ..Default::default()
-            },
-            version: 1,
-            ..Default::default()
-        };
-        save_agent_db(&pool, &agent).await?;
-
-        // 2. Insert dependent mission, mission_log, swarm_context, and directives
-        let mid = "test-mission-123";
-        sqlx::query("INSERT INTO mission_history (id, agent_id, title, status, budget_usd, cost_usd) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("Test Mission")
-            .bind("pending")
-            .bind(10.0)
-            .bind(0.0)
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind("log-1")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("test")
-            .bind("sample text")
-            .bind("info")
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO swarm_context (id, mission_id, agent_id, topic, finding) VALUES (?, ?, ?, ?, ?)")
-            .bind("ctx-1")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("testing")
-            .bind("sample finding")
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind("dir-1")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("cascade-agent-1")
-            .bind("self-instruction")
-            .bind("pending")
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO agent_directives (id, mission_id, source_agent_id, target_agent_id, instruction, status) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind("dir-2")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("cascade-agent-1")
-            .bind("self-instruction")
-            .bind("pending")
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO peer_reviews (id, mission_id, requester_id, reviewer_id, content_to_review, status) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind("pr-1")
-            .bind(mid)
-            .bind("cascade-agent-1")
-            .bind("cascade-agent-1")
-            .bind("artifact-data")
-            .bind("requested")
-            .execute(&pool)
-            .await?;
-
-        let now = chrono::Utc::now();
-        sqlx::query("INSERT INTO agent_quotas (id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind("quota-1")
-            .bind("cascade-agent-1")
-            .bind(50.0)
-            .bind(0.0)
-            .bind("daily")
-            .bind(now)
-            .bind(now)
-            .execute(&pool)
-            .await?;
-
-        sqlx::query("INSERT INTO sync_manifest (id, agent_id, source_type, source_uri) VALUES (?, ?, ?, ?)")
-            .bind("sm-1")
-            .bind("cascade-agent-1")
-            .bind("fs")
-            .bind("/data")
-            .execute(&pool)
-            .await?;
-
-        // 3. Delete cascade must succeed child-first without foreign key constraint failure
-        delete_agent_cascade(&pool, "cascade-agent-1").await?;
-
-        // 4. Verify all records across all tables are wiped cleanly
-        let agent_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = 'cascade-agent-1'")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(agent_count, 0);
-
-        let mission_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mission_history WHERE id = ?")
-            .bind(mid)
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(mission_count, 0);
-
-        let log_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mission_logs WHERE mission_id = ?")
-            .bind(mid)
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(log_count, 0);
-
-        let context_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM swarm_context WHERE mission_id = ?")
-            .bind(mid)
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(context_count, 0);
-
-        let directive_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_directives WHERE mission_id = ?")
-            .bind(mid)
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(directive_count, 0);
-
-        let pr_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM peer_reviews WHERE mission_id = ?")
-            .bind(mid)
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(pr_count, 0);
-
-        let quota_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_quotas WHERE entity_id = 'cascade-agent-1'")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(quota_count, 0);
-
-        let manifest_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_manifest WHERE agent_id = 'cascade-agent-1'")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(manifest_count, 0);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_reap_stale_agents_respects_null_heartbeat_grace_period() -> Result<(), AppError> {
-        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
-
-        // 1. Fresh agent created just now, currently working, heartbeat_at IS NULL
-        let fresh_agent = crate::agent::types::EngineAgent {
-            identity: crate::agent::types::AgentIdentity {
-                id: "fresh-agent".to_string(),
-                name: "Fresh Worker".to_string(),
-                role: "Worker".to_string(),
-                ..Default::default()
-            },
-            health: crate::agent::types::AgentHealth {
-                status: "working".to_string(),
-                heartbeat_at: None,
-                ..Default::default()
-            },
-            created_at: Some(chrono::Utc::now()),
-            version: 1,
-            ..Default::default()
-        };
-        save_agent_db(&pool, &fresh_agent).await?;
-
-        // Reaping with 30s threshold must NOT harvest the fresh worker
-        let reaped = reap_stale_agents(&pool, 30).await?;
-        assert_eq!(reaped, 0, "Fresh agent within grace window must not be reaped");
-
-        let status: String = sqlx::query_scalar("SELECT status FROM agents WHERE id = 'fresh-agent'")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(status, "working");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_occ_conflict_detection_prevents_lost_updates() -> Result<(), AppError> {
-        let pool = crate::db::init_db("sqlite::memory:?skip_seed=true").await?;
-
-        let agent = crate::agent::types::EngineAgent {
-            identity: crate::agent::types::AgentIdentity {
-                id: "occ-agent-1".to_string(),
-                name: "OCC Agent".to_string(),
-                role: "Tester".to_string(),
-                ..Default::default()
-            },
-            version: 1,
-            ..Default::default()
-        };
-
-        // Initial save establishes version
-        let v1 = save_agent_db(&pool, &agent).await?;
-        assert_eq!(v1, 1);
-
-        // Branch A updates agent
-        let mut agent_a = agent.clone();
-        agent_a.version = v1;
-        agent_a.identity.name = "Updated by A".to_string();
-        let v2 = save_agent_db(&pool, &agent_a).await?;
-        assert_eq!(v2, 2);
-
-        // Branch B tries to update using stale version 1
-        let mut agent_b = agent.clone();
-        agent_b.version = v1; // Stale!
-        agent_b.identity.name = "Stale Update by B".to_string();
-
-        let conflict_result = save_agent_db(&pool, &agent_b).await;
-        assert!(
-            matches!(conflict_result, Err(AppError::Conflict(_))),
-            "Expected Conflict error on stale OCC version, got: {:?}",
-            conflict_result
-        );
-
-        Ok(())
-    }
-}
-
-
-
-
+#[path = "persistence/tests.rs"]
+mod tests;
 
 // Metadata: [persistence]

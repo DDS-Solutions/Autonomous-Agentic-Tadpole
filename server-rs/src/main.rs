@@ -168,6 +168,16 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
     };
 
     // 5. Launch Background Tasks only after successful socket bind
+    let actors = server_rs::system::actors::manager::spawn_system_actors(&app_state).await;
+    let _ = app_state.actors.set(actors);
+    // Paid consolidation and event-triggered jobs require explicit operator configuration.
+    let mut optional_workers = Vec::new();
+    if std::env::var("ENABLE_COGNITIVE_MEMORY").as_deref() == Ok("true") {
+        optional_workers.push(server_rs::agent::knowledge_store::cognitive_memory::start_cognitive_memory_pipeline(app_state.clone()).await);
+    }
+    if std::env::var("ENABLE_EVENT_AUTOMATION").as_deref() == Ok("true") {
+        optional_workers.push(server_rs::system::event_bus::start_event_bus_monitoring(app_state.clone(), app_state.event_bus.clone()).await);
+    }
     let shutdown_handle = startup::spawn_background_tasks(app_state.clone(), intent, service_config, shutdown_rx.clone()).await;
 
     // Notify that boot sequence is complete so requests can proceed
@@ -183,7 +193,7 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
             tokio::select! {
                 _ = interval.tick() => {
                     sync_state.flush_all().await;
-                    sync_state.save_agents().await;
+
                     sync_state.save_providers().await;
                     sync_state.save_models().await;
                 }
@@ -212,6 +222,11 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
 
     // Signal all background tasks to shut down gracefully
     let _ = shutdown_tx.send(true);
+    for worker in optional_workers {
+        worker.abort();
+        let _ = worker.await;
+    }
+    if let Some(actors) = app_state.actors.get() { actors.supervisor.shutdown(); }
 
     // Await completion of phased shutdown orchestration
     if let Err(e) = shutdown_handle.await {
@@ -225,7 +240,7 @@ async fn async_main(config: Config) -> anyhow::Result<()> {
 
     // 6. Final Persistence: Save all systemic registries and flush buffers unconditionally before exiting.
     app_state.flush_all().await;
-    app_state.save_agents().await;
+
     app_state.save_providers().await;
     app_state.save_models().await;
 

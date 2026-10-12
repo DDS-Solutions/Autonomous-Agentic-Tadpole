@@ -122,11 +122,24 @@ pub enum SystemMessage {
 /// Registry of MPSC senders for system actors.
 #[derive(Clone)]
 pub struct ActorRegistry {
+    pub supervisor: supervisor::SupervisorHandle,
     pub audit: tokio::sync::mpsc::Sender<SystemMessage>,
     pub memory: tokio::sync::mpsc::Sender<SystemMessage>,
     pub security: tokio::sync::mpsc::Sender<SystemMessage>,
     #[allow(dead_code)]
     pub skill: tokio::sync::mpsc::Sender<SystemMessage>,
+}
+
+/// Bounds both queue admission and response time when an actor is restarting or unavailable.
+pub async fn dispatch<T>(
+    sender: &tokio::sync::mpsc::Sender<SystemMessage>,
+    message: SystemMessage,
+    response: tokio::sync::oneshot::Receiver<Result<T, crate::error::AppError>>,
+) -> Result<T, crate::error::AppError> {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        sender.send(message).await.map_err(|_| crate::error::AppError::InternalServerError("Actor channel closed".to_string()))?;
+        response.await.map_err(|_| crate::error::AppError::InternalServerError("Actor response channel closed".to_string()))?
+    }).await.map_err(|_| crate::error::AppError::InternalServerError("Actor request timed out after 30 seconds".to_string()))?
 }
 
 // Metadata: [mod]

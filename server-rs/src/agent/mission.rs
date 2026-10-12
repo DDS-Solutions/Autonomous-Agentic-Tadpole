@@ -34,6 +34,18 @@ pub async fn create_mission(
     title: &str,
     budget_usd: f64,
 ) -> Result<Mission, AppError> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let mission = create_mission_in_tx(&mut tx, agent_id, title, budget_usd).await?;
+    tx.commit().await?;
+    Ok(mission)
+}
+
+pub(crate) async fn create_mission_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    agent_id: &str,
+    title: &str,
+    budget_usd: f64,
+) -> Result<Mission, AppError> {
     if !budget_usd.is_finite() || budget_usd <= 0.0 {
         return Err(AppError::BadRequest(
             "Mission budget must be strictly positive and finite".to_string(),
@@ -64,7 +76,7 @@ pub async fn create_mission(
     let count: i64 =
         sqlx::query_scalar::<sqlx::Sqlite, i64>("SELECT COUNT(*) FROM agents WHERE id = ?")
             .bind(agent_id)
-            .fetch_one(pool)
+            .fetch_one(&mut **tx)
             .await?;
 
     if count == 0 {
@@ -87,7 +99,7 @@ pub async fn create_mission(
     .bind(mission.updated_at)
     .bind(mission.is_degraded)
     .bind(mission.is_pinned)
-    .execute(pool)
+    .execute(&mut **tx)
     .await?;
 
     Ok(mission)

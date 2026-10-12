@@ -34,9 +34,11 @@ impl AgentRunner {
         depth: u32,
         lineage: &[String],
     ) -> Result<RunContext, AppError> {
-        let entry = self.state.registry.agents.get(agent_id)
-            .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?;
-        let a = entry.value();
+        // Never retain a DashMap shard lock across database awaits: another
+        // mission can own a connection while waiting to publish to this shard.
+        let agent = self.state.registry.agents.get(agent_id)
+            .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?.clone();
+        let a = &agent;
 
         // 1. Resolve Target Model ID
         let target_model_id = payload.model_id.as_ref()
@@ -100,6 +102,8 @@ impl AgentRunner {
         };
 
         Ok(RunContext {
+            accounting: self.state.comms.mission_contexts.get(mission_id)
+                .map(|ctx| ctx.accounting.clone()).unwrap_or_default(),
             agent_id: agent_id.to_string(),
             name: a.identity.name.clone(),
             role: a.identity.role.clone(),
@@ -165,6 +169,9 @@ impl AgentRunner {
         lineage: &[String],
     ) -> Result<RunContext, AppError> {
         let mut ctx = self.resolve_agent_context(agent_id, payload, mission_id, depth, lineage).await?;
+        if let Some(mut stored) = self.state.comms.mission_contexts.get_mut(mission_id) {
+            *stored = ctx.clone();
+        }
 
         ctx.structured_output = payload.structured_output.unwrap_or(false);
         ctx.backlog = None; // Reserved for global backlog injection
@@ -499,6 +506,30 @@ mod tests {
         AgentRunner {
             state,
         }
+    }
+
+    #[tokio::test]
+    async fn finding_regression_database_wait_does_not_retain_agent_shard_lock() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1)
+            .connect("sqlite::memory:").await.unwrap();
+        crate::db::migrations::run_migrations(&pool).await.unwrap();
+        let state = Arc::new(AppState::with_pool(pool.clone()).await);
+        let mut agent = EngineAgent::default();
+        agent.identity.id = "context-lock-fixture".to_string();
+        state.registry.agents.insert(agent.identity.id.clone(), agent);
+        // Occupy the only connection so resolution pauses at its first SQL await.
+        let connection = pool.acquire().await.unwrap();
+        let runner = AgentRunner::new(state.clone());
+        let resolution = tokio::spawn(async move {
+            runner.resolve_agent_context("context-lock-fixture", &TaskPayload::default(), "pending-mission", 0, &[]).await
+        });
+        tokio::task::yield_now().await;
+        assert!(!resolution.is_finished(), "fixture must be waiting for SQL");
+        assert!(matches!(state.registry.agents.try_get_mut("context-lock-fixture"), dashmap::try_result::TryResult::Present(_)),
+            "SQL wait retained the agent's registry shard lock");
+        drop(connection);
+        let ctx = tokio::time::timeout(std::time::Duration::from_secs(10), resolution).await.unwrap().unwrap().unwrap();
+        assert_eq!(ctx.agent_id, "context-lock-fixture");
     }
 
     #[tokio::test]

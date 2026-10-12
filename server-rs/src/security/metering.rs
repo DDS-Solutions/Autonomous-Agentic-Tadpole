@@ -27,6 +27,10 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+mod settlement;
 
 /// Defines the resource allocation and consumption limits for an entity (agent or user).
 ///
@@ -65,24 +69,28 @@ pub enum ResetPeriod {
 /// BudgetGuard prevents model extraction attacks or runaway loops by checking
 /// quotas before permitting LLM calls. Actual costs are recorded post-execution
 /// into the SQLite persistence layer to ensure high-fidelity financial governance.
+#[derive(Clone)]
 pub struct BudgetGuard {
     /// Database pool for persistence of usage metrics.
     pool: SqlitePool,
     /// Thread-safe buffer for debounced agent usage updates (entity_id -> accumulated_cost).
-    buffer: DashMap<String, f64>,
+    buffer: Arc<DashMap<String, f64>>,
     /// Thread-safe buffer for reserved in-flight cost allocations (A2E-01 2PC lock).
-    reserved_buffer: DashMap<String, f64>,
+    reserved_buffer: Arc<DashMap<String, f64>>,
     /// Thread-safe buffer for debounced mission usage updates (cluster_id -> accumulated_cost).
-    mission_buffer: DashMap<String, f64>,
+    mission_buffer: Arc<DashMap<String, f64>>,
+    /// Excludes admission while buffered charges move into committed storage.
+    settlement: Arc<RwLock<()>>,
 }
 
 impl BudgetGuard {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
-            buffer: DashMap::new(),
-            reserved_buffer: DashMap::new(),
-            mission_buffer: DashMap::new(),
+            buffer: Arc::new(DashMap::new()),
+            reserved_buffer: Arc::new(DashMap::new()),
+            mission_buffer: Arc::new(DashMap::new()),
+            settlement: Arc::new(RwLock::new(())),
         }
     }
 
@@ -92,6 +100,8 @@ impl BudgetGuard {
     /// before performing the check. Returns `true` if (used + buffered + reserved + estimated) <= budget.
     #[tracing::instrument(skip(self), fields(entity_id = %entity_id, cost = estimated_cost), name = "security::budget_check")]
     pub async fn check_budget(&self, entity_id: &str, estimated_cost: f64) -> Result<bool> {
+        anyhow::ensure!(estimated_cost.is_finite() && estimated_cost >= 0.0, "Estimated cost must be finite and non-negative");
+        let _settlement = self.settlement.read().await;
         let quota = self.get_or_create_quota(entity_id).await?;
         let buffered = self
             .buffer
@@ -117,6 +127,8 @@ impl BudgetGuard {
 
     /// Atomically checks and reserves estimated cost for an in-flight LLM call (A2E-01 2PC Lock).
     pub async fn check_and_reserve_budget(&self, entity_id: &str, estimated_cost: f64) -> Result<bool> {
+        anyhow::ensure!(estimated_cost.is_finite() && estimated_cost >= 0.0, "Estimated cost must be finite and non-negative");
+        let _settlement = self.settlement.write().await;
         let quota = self.get_or_create_quota(entity_id).await?;
         let buffered = self
             .buffer
@@ -145,6 +157,7 @@ impl BudgetGuard {
     /// Records actual cost after an operation completes (Debounced) and releases matching reservation.
     #[tracing::instrument(skip(self), fields(entity_id = %entity_id, cost = cost_usd), name = "security::budget_record")]
     pub async fn record_usage(&self, entity_id: &str, cost_usd: f64) -> Result<()> {
+        anyhow::ensure!(cost_usd.is_finite() && cost_usd >= 0.0, "Usage cost must be finite and non-negative");
         *self.buffer.entry(entity_id.to_string()).or_insert(0.0) += cost_usd;
         if let Some(mut entry) = self.reserved_buffer.get_mut(entity_id) {
             *entry.value_mut() = (*entry.value() - cost_usd).max(0.0);
@@ -159,6 +172,8 @@ impl BudgetGuard {
         cluster_id: &str,
         estimated_cost: f64,
     ) -> Result<bool> {
+        anyhow::ensure!(estimated_cost.is_finite() && estimated_cost >= 0.0, "Estimated cost must be finite and non-negative");
+        let _settlement = self.settlement.read().await;
         let quota = self.get_or_create_mission_quota(cluster_id).await?;
         let buffered = self
             .mission_buffer
@@ -180,68 +195,11 @@ impl BudgetGuard {
     /// Records usage for a specific mission (Debounced).
     #[allow(dead_code)]
     pub async fn record_mission_usage(&self, cluster_id: &str, cost_usd: f64) -> Result<()> {
+        anyhow::ensure!(cost_usd.is_finite() && cost_usd >= 0.0, "Usage cost must be finite and non-negative");
         *self
             .mission_buffer
             .entry(cluster_id.to_string())
             .or_insert(0.0) += cost_usd;
-        Ok(())
-    }
-
-    /// Flushes all buffered usage metrics to the database.
-    ///
-    /// This method should be called by a background loop (e.g., every 5-10 seconds)
-    /// to ensure eventual consistency while minimizing DB write contention.
-    #[tracing::instrument(skip(self), name = "security::budget_flush")]
-    pub async fn flush_to_db(&self) -> Result<()> {
-        // 1. Batch Sync Agent Quotas
-        let mut agent_updates = Vec::new();
-        // Use a loop to drain or reset entries to avoid double-processing
-        for mut entry in self.buffer.iter_mut() {
-            let cost = *entry.value();
-            if cost > 0.0 {
-                agent_updates.push((entry.key().clone(), cost));
-                *entry.value_mut() = 0.0;
-            }
-        }
-
-        if !agent_updates.is_empty() {
-            let mut tx = self.pool.begin().await?;
-            for (entity_id, cost) in agent_updates {
-                sqlx::query(
-                    "UPDATE agent_quotas SET used_usd = used_usd + ?1 WHERE entity_id = ?2",
-                )
-                .bind(cost)
-                .bind(entity_id)
-                .execute(&mut *tx)
-                .await?;
-            }
-            tx.commit().await?;
-        }
-
-        // 2. Batch Sync Mission Quotas
-        let mut mission_updates = Vec::new();
-        for mut entry in self.mission_buffer.iter_mut() {
-            let cost = *entry.value();
-            if cost > 0.0 {
-                mission_updates.push((entry.key().clone(), cost));
-                *entry.value_mut() = 0.0;
-            }
-        }
-
-        if !mission_updates.is_empty() {
-            let mut tx = self.pool.begin().await?;
-            for (cluster_id, cost) in mission_updates {
-                sqlx::query(
-                    "UPDATE mission_quotas SET used_usd = used_usd + ?1 WHERE cluster_id = ?2",
-                )
-                .bind(cost)
-                .bind(cluster_id)
-                .execute(&mut *tx)
-                .await?;
-            }
-            tx.commit().await?;
-        }
-
         Ok(())
     }
 
@@ -349,12 +307,7 @@ impl BudgetGuard {
 
     /// Mock budget guard for tests
     pub fn mock() -> Self {
-        Self {
-            pool: sqlx::SqlitePool::connect_lazy("sqlite::memory:").expect("Tadpole OS Metering: Failed to connect to in-memory database for mock BudgetGuard."),
-            buffer: DashMap::new(),
-            reserved_buffer: DashMap::new(),
-            mission_buffer: DashMap::new(),
-        }
+        Self::new(sqlx::SqlitePool::connect_lazy("sqlite::memory:").expect("Tadpole OS Metering: Failed to connect to in-memory database for mock BudgetGuard."))
     }
 
     async fn get_or_create_quota(&self, entity_id: &str) -> Result<Quota> {
@@ -511,6 +464,99 @@ impl BudgetGuard {
 mod tests {
     use super::*;
     use sqlx::SqlitePool;
+
+    async fn settlement_fixture() -> Result<BudgetGuard> {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await?;
+        for (table, identity) in [("agent_quotas", "entity_id"), ("mission_quotas", "cluster_id")] {
+            sqlx::query(&format!("CREATE TABLE {table} (id TEXT PRIMARY KEY, {identity} TEXT UNIQUE, used_usd REAL, budget_usd REAL, last_reset_at TEXT, next_reset_at TEXT, reset_period TEXT)"))
+                .execute(&pool).await?;
+            sqlx::query(&format!("INSERT INTO {table} VALUES ('quota', 'settlement', 0.0, 0.5, '2024-01-01T00:00:00Z', '2124-01-01T00:00:00Z', 'never')"))
+                .execute(&pool).await?;
+        }
+        Ok(BudgetGuard::new(pool))
+    }
+
+    #[tokio::test]
+    async fn finding_regression_settlement_failure_preserves_agent_and_mission_charges_until_retry() -> Result<()> {
+        for rejected_table in ["agent_quotas", "mission_quotas"] {
+            let guard = settlement_fixture().await?;
+            guard.record_usage("settlement", 0.6).await?;
+            guard.record_mission_usage("settlement", 0.6).await?;
+            sqlx::query(&format!("CREATE TRIGGER reject_settlement BEFORE UPDATE ON {rejected_table} BEGIN SELECT RAISE(ABORT, 'injected settlement failure'); END"))
+                .execute(&guard.pool).await?;
+            assert!(guard.flush_to_db().await.is_err());
+            assert!(!guard.check_budget("settlement", 0.1).await?);
+            assert!(!guard.check_mission_budget("settlement", 0.1).await?);
+            for table in ["agent_quotas", "mission_quotas"] {
+                assert_eq!(sqlx::query_scalar::<_, f64>(&format!("SELECT used_usd FROM {table}"))
+                    .fetch_one(&guard.pool).await?, 0.0);
+            }
+            sqlx::query("DROP TRIGGER reject_settlement").execute(&guard.pool).await?;
+            guard.flush_to_db().await?;
+            guard.flush_to_db().await?;
+            for table in ["agent_quotas", "mission_quotas"] {
+                assert_eq!(sqlx::query_scalar::<_, f64>(&format!("SELECT used_usd FROM {table}"))
+                    .fetch_one(&guard.pool).await?, 0.6);
+            }
+            assert_eq!(guard.get_global_stats().1, 0.0);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn finding_regression_settlement_caller_cancellation_preserves_new_charges_and_excludes_admission() -> Result<()> {
+        let guard = settlement_fixture().await?;
+        guard.record_usage("settlement", 0.6).await?;
+        let connection = guard.pool.acquire().await?;
+        let caller_guard = guard.clone();
+        let caller = tokio::spawn(async move { caller_guard.flush_to_db().await });
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while guard.settlement.try_read().is_ok() { tokio::task::yield_now().await; }
+        }).await?;
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        guard.record_usage("settlement", 0.1).await?;
+        let check_guard = guard.clone();
+        let admission = tokio::spawn(async move { check_guard.check_budget("settlement", 0.1).await });
+        tokio::task::yield_now().await;
+        assert!(!admission.is_finished(), "Admission must wait for durable settlement");
+        drop(connection);
+        assert!(!tokio::time::timeout(std::time::Duration::from_secs(5), admission).await???);
+        guard.flush_to_db().await?;
+        let used: f64 = sqlx::query_scalar("SELECT used_usd FROM agent_quotas").fetch_one(&guard.pool).await?;
+        assert!((used - 0.7).abs() < 1e-12);
+        assert_eq!(guard.get_global_stats().1, 0.0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn finding_regression_settlement_competing_flushes_charge_once_and_create_missing_quota() -> Result<()> {
+        let guard = settlement_fixture().await?;
+        guard.record_usage("new-entity", 0.2).await?;
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let guard = guard.clone();
+            tasks.push(tokio::spawn(async move { guard.flush_to_db().await }));
+        }
+        for task in tasks { task.await??; }
+        let used: f64 = sqlx::query_scalar("SELECT used_usd FROM agent_quotas WHERE entity_id = 'new-entity'").fetch_one(&guard.pool).await?;
+        assert_eq!(used, 0.2);
+        assert_eq!(guard.get_global_stats().1, 0.0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn finding_regression_settlement_rejects_invalid_costs_before_recording_or_admission() {
+        let guard = BudgetGuard::mock();
+        for cost in [f64::NAN, f64::INFINITY, -0.01] {
+            assert!(guard.record_usage("agent", cost).await.is_err());
+            assert!(guard.record_mission_usage("mission", cost).await.is_err());
+            assert!(guard.check_budget("agent", cost).await.is_err());
+            assert!(guard.check_and_reserve_budget("agent", cost).await.is_err());
+            assert!(guard.check_mission_budget("mission", cost).await.is_err());
+        }
+        assert_eq!(guard.get_global_stats().1, 0.0);
+    }
 
     #[tokio::test]
     async fn test_quota_enforcement() -> Result<()> {

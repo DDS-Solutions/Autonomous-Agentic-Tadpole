@@ -71,7 +71,7 @@ impl IntelligenceService {
             }
         }
 
-        let graph_swap = self.state.resources.get_symbol_graph().await;
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
         let limit = max_nodes.unwrap_or(20_000).min(20_000);
 
@@ -171,27 +171,30 @@ impl IntelligenceService {
             return Err(AppError::Conflict("A symbol graph rebuild is already in progress".to_string()));
         }
 
-        struct RebuildGuard<'a>(&'a std::sync::atomic::AtomicBool);
-        impl<'a> Drop for RebuildGuard<'a> {
+        struct RebuildGuard(Arc<crate::state::hubs::res::ResourceHub>);
+        impl Drop for RebuildGuard {
             fn drop(&mut self) {
-                self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+                self.0.is_rebuilding_symbol_graph.store(false, std::sync::atomic::Ordering::SeqCst);
             }
         }
-        let _guard = RebuildGuard(&self.state.resources.is_rebuilding_symbol_graph);
+        let rebuild_guard = RebuildGuard(Arc::clone(&self.state.resources));
 
-        let graph_swap = self.state.resources.get_symbol_graph().await;
-        let salt = self.state.resources.obfuscation_salt.clone();
-        let swap_clone = Arc::clone(&graph_swap);
+        // The worker owns the gate through initialization, build, publication and DB sync.
+        // Dropping an HTTP request detaches the task without allowing a second rebuild.
+        tokio::spawn(async move {
+            let resources = &rebuild_guard.0;
+            // A failed initial snapshot can still seed a repair rebuild.
+            let graph_swap = match resources.symbol_graph.get() {
+                Some(graph) => graph.clone(),
+                None => resources.get_symbol_graph().await?,
+            };
+            let salt = resources.obfuscation_salt.clone();
+            let (root, config, repository) = {
+                let graph = graph_swap.load();
+                (graph.root.clone(), graph.config.clone(), graph.repository.clone())
+            };
 
-        // 1. Copy config, repository, and root inside a brief load
-        let (root, config, repository) = {
-            let guard = swap_clone.load();
-            (guard.root.clone(), guard.config.clone(), guard.repository.clone())
-        };
-
-        if dry_run {
-            // For dry run, we build a temporary graph but do not swap it.
-            let summary = tokio::task::spawn_blocking(move || -> Result<RebuildSummary, AppError> {
+            let (temp_graph, summary, success) = tokio::task::spawn_blocking(move || {
                 let mut temp_graph = CodeSymbolGraph {
                     graph: petgraph::graph::DiGraph::new(),
                     index: std::collections::HashMap::new(),
@@ -200,78 +203,49 @@ impl IntelligenceService {
                     config,
                     root,
                 };
-                let _success = temp_graph.build(&salt)?;
-                
-                Ok(RebuildSummary {
+                let success = temp_graph.build(&salt)?;
+                let summary = RebuildSummary {
                     node_count: temp_graph.graph.node_count(),
                     edge_count: temp_graph.graph.edge_count(),
-                    file_count: temp_graph.index.len(),
-                })
+                    file_count: temp_graph.repository.parse_cache.len(),
+                };
+                Ok::<_, AppError>((temp_graph, summary, success))
             })
             .await
-            .map_err(|e| AppError::InternalServerError(format!("Graph dry-rebuild thread panicked: {}", e)))??;
+            .map_err(|e| AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e)))??;
 
-            return Ok(GraphRebuildResponse {
-                status: "success".to_string(),
-                dry_run: true,
-                summary: Some(summary),
-            });
-        }
-
-        // 2. Perform the CPU-intensive rebuild on a temporary new graph instance
-        let (summary, success) = tokio::task::spawn_blocking(move || -> Result<(RebuildSummary, bool), AppError> {
-            let mut temp_graph = CodeSymbolGraph {
-                graph: petgraph::graph::DiGraph::new(),
-                index: std::collections::HashMap::new(),
-                obfuscated_to_real_path: std::collections::HashMap::new(),
-                repository,
-                config,
-                root,
-            };
-            let success = temp_graph.build(&salt)?;
-
-            let node_count = temp_graph.graph.node_count();
-            let edge_count = temp_graph.graph.edge_count();
-            let file_count = temp_graph.index.len();
-
-            // 3. Swap the built graph into the live lock only if success is true (soft cap constraint)
-            if success {
-                swap_clone.store(Arc::new(temp_graph));
+            let mut status = if success { "success" } else { "warning" };
+            if success && !dry_run {
+                graph_swap.store(Arc::new(temp_graph));
+                resources.set_subsystem_status("SymbolGraph", crate::types::SubsystemStatus::Ready);
+                let db_root = resources.base_dir.clone();
+                let db_path = db_root.join(".code-review-graph").join("graph.db");
+                if let Err(e) = crate::intelligence::graph_store::refresh_code_review_graph_db(
+                    db_root, db_path, resources.obfuscation_salt.clone(), resources.git_path.clone(),
+                ).await {
+                    tracing::warn!("[graph_store] SQLite graph sync failed: {}", e);
+                    status = "warning";
+                }
             }
-            
-            Ok((RebuildSummary {
-                node_count,
-                edge_count,
-                file_count,
-            }, success))
+
+            Ok(GraphRebuildResponse {
+                status: status.to_string(),
+                dry_run,
+                summary: Some(summary),
+            })
         })
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e)))??;
-
-        // P2: Trigger non-blocking SQLite graph sync on successful full rebuild
-        if success {
-            let db_root = self.state.resources.base_dir.clone();
-            let db_path = db_root.join(".code-review-graph").join("graph.db");
-            let bg_salt = self.state.resources.obfuscation_salt.clone();
-            let git_path = self.state.resources.git_path.clone();
-            tokio::spawn(async move {
-                if let Err(e) = crate::intelligence::graph_store::refresh_code_review_graph_db(db_root, db_path, bg_salt, git_path).await {
-                    tracing::warn!("[graph_store] Background SQLite graph sync failed: {}", e);
-                }
-            });
-        }
-
-        Ok(GraphRebuildResponse {
-            status: if success { "success".to_string() } else { "warning".to_string() },
-            dry_run: false,
-            summary: Some(summary),
-        })
+        .map_err(|e| AppError::InternalServerError(format!("Graph rebuild task panicked: {}", e)))?
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn blast_radius(&self, name: &str, path: &str, max_nodes: Option<usize>) -> Result<Vec<SymbolNode>, AppError> {
+        Ok(self.blast_radius_result(name, path, max_nodes).await?.0)
+    }
+
+    async fn blast_radius_result(&self, name: &str, path: &str, max_nodes: Option<usize>) -> Result<(Vec<SymbolNode>, bool), AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
-        let graph_swap = self.state.resources.get_symbol_graph().await;
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
         let query_path = path.replace('\\', "/");
@@ -295,8 +269,7 @@ impl IntelligenceService {
                 return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
             }
 
-            let (affected, _truncated) = guard.calculate_blast_radius_bounded(&query_name, raw_path, max_nodes);
-            Ok::<_, AppError>(affected)
+            Ok::<_, AppError>(guard.calculate_blast_radius_bounded(&query_name, raw_path, max_nodes))
         });
 
         let affected = match timeout(Duration::from_secs(5), task_future).await {
@@ -316,7 +289,7 @@ impl IntelligenceService {
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn resolve_context(&self, name: &str, path: &str, budget: usize) -> Result<ResolveResponse, AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
-        let graph_swap = self.state.resources.get_symbol_graph().await;
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
         let query_path = path.replace('\\', "/");
@@ -373,7 +346,14 @@ impl IntelligenceService {
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn get_impacted_tests(&self, name: &str, path: &str) -> Result<Vec<String>, AppError> {
-        let affected = self.blast_radius(name, path, Some(200)).await?;
+        let (affected, truncated) = self.blast_radius_result(name, path, Some(crate::intelligence::graph::constants::MAX_NODES)).await?;
+        if truncated {
+            return Err(AppError::DomainError {
+                code: "BR_TRUNCATED".to_string(),
+                detail: "Impacted-test analysis exceeded traversal bounds; run the full test suite".to_string(),
+                help_link: None,
+            });
+        }
         let mut tests = std::collections::BTreeSet::new();
 
         for node in affected {

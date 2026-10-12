@@ -20,7 +20,7 @@ Welcome, Sovereign Engineers and AI Agents. This manual defines the operational 
 ## Technical Stack & Architecture
 
 Tadpole OS utilizes a **3-Layer Architecture**:
-1. **Directive Layer (`directives/`)**: Standard Operating Procedures (SOPs) in Markdown (e.g., [LONG_TERM_MEMORY.md](../directives/LONG_TERM_MEMORY.md)).
+1. **Directive Layer (`directives/`)**: Standard Operating Procedures (SOPs) in Markdown (e.g., `directives/LONG_TERM_MEMORY.md`).
 2. **Orchestration Layer (AI Agents / Nexus Engineer)**: Reads directives, triggers execution tools, and coordinates workflows.
 3. **Execution Layer (`execution/`)**: Deterministic Python scripts that interface with external networks, validate codebases, or run security scans.
 
@@ -32,7 +32,7 @@ The core engine is implemented in Rust (`server-rs/`), and the user interface ru
 
 ### 1. Adding a New API Route
 
-API routes are registered within [router.rs](../server-rs/src/router.rs) using the [Axum](https://docs.rs/axum/latest/axum/) framework.
+API routes are registered within `server-rs/src/router.rs` using the [Axum](https://docs.rs/axum/latest/axum/) framework.
 
 **Workflow:**
 1. Create a new handler in `server-rs/src/routes/<module_name>.rs`:
@@ -53,7 +53,7 @@ API routes are registered within [router.rs](../server-rs/src/router.rs) using t
    ```rust
    pub mod custom_module;
    ```
-3. Register the route handler in [router.rs](../server-rs/src/router.rs) under the appropriate route builder function (`build_protected_v1_routes`, `build_engine_public_routes`, etc.):
+3. Register the route handler in `server-rs/src/router.rs` under the appropriate route builder function (`build_protected_v1_routes`, `build_engine_public_routes`, etc.):
    ```rust
    Router::new().route("/custom-path", get(routes::custom_module::handle_custom_route))
    ```
@@ -74,7 +74,7 @@ chmod +x .git/hooks/pre-commit
 
 ### 2. Adding a New SystemService (Background Service)
 
-The startup orchestration uses a phased startup system based on the `SystemService` trait defined in [mod.rs](../server-rs/src/startup/mod.rs).
+The startup orchestration uses a phased startup system based on the `SystemService` trait defined in `server-rs/src/startup/mod.rs`.
 
 **Workflow:**
 1. Define a service struct in a new file under `server-rs/src/startup/services/` (e.g., `server-rs/src/startup/services/custom_service.rs`):
@@ -118,7 +118,7 @@ The startup orchestration uses a phased startup system based on the `SystemServi
    pub mod custom_service;
    pub use custom_service::CustomSystemWorker;
    ```
-3. Register the service in the boot flow inside [mod.rs](../server-rs/src/startup/mod.rs):
+3. Register the service in the boot flow inside `server-rs/src/startup/mod.rs`:
    ```rust
    warmup_tasks.push(Box::new(services::CustomSystemWorker));
    ```

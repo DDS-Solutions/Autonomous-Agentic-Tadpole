@@ -95,29 +95,14 @@ impl AgentRunner {
         let _extra_mcp = fc.args.get("mcp_tools").and_then(|v| v.as_array());
         let role_override = fc.args.get("role").and_then(|v| v.as_str());
 
-        // 🛡️ [Harden Phase 4: Batched Pre-flight]
-        // Pre-flight all sub-agents in a single transaction to prevent recursive DB deadlocks and reduce lock contention.
-        if let Ok(mut tx) = self.state.resources.pool.begin().await {
-            for sub_agent_id in &target_ids {
-                // Skip if lineage blocked (handled below)
-                if ctx.lineage.contains(sub_agent_id) || ctx.agent_id == *sub_agent_id {
-                    continue;
-                }
-                
-                if let Err(e) = self.ensure_sub_agent_exists(
-                    &mut tx,
-                    SubAgentOptions {
-                        agent_id: sub_agent_id,
-                        parent_config: &ctx.model_config,
-                        extra_skills,
-                        extra_workflows,
-                        role_override,
-                    },
-                ).await {
-                    tracing::warn!("⚠️ [Swarm] Failed to ensure sub-agent {} pre-flight: {}", sub_agent_id, e);
-                }
-            }
-            let _ = tx.commit().await;
+        // Each specialist transition commits before registry publication. Keeping an
+        // outer SQL transaction while waiting for lifecycle locks would invert lock order.
+        for sub_agent_id in &mut target_ids {
+            if ctx.lineage.contains(sub_agent_id) || ctx.agent_id == *sub_agent_id { continue; }
+            *sub_agent_id = self.ensure_sub_agent_exists(SubAgentOptions {
+                agent_id: sub_agent_id, parent_config: &ctx.model_config,
+                extra_skills, extra_workflows, role_override,
+            }).await?;
         }
 
         let arbiter = self.state.resources.continuity_arbiter.clone();
@@ -272,7 +257,6 @@ impl AgentRunner {
     ///    atomically created, registered in the registry, and persisted to SQLite.
     pub(crate) async fn ensure_sub_agent_exists(
         &self,
-        conn: &mut sqlx::SqliteConnection,
         opts: SubAgentOptions<'_>,
     ) -> Result<String, ToolExecutionError> {
         // Fast-path: If the agent already exists in the memory registry and no new capabilities are provided, return immediately
@@ -348,23 +332,20 @@ impl AgentRunner {
             );
             matched_agent.health.status = "active".to_string(); // Force active status for UI visibility
 
-            // Sync changes to Registry and DB
-            self.state
-                .registry
-                .agents
-                .insert(target_id.clone(), matched_agent.clone());
-            let _ = crate::agent::persistence::save_agent_db_in_tx(
-                &mut *conn,
-                &matched_agent,
-            )
-            .await
-            .map_err(|e| {
-                tracing::warn!(
-                    "⚠️ [Swarm] Failed to persist recruited agent {} to DB: {}",
-                    target_id,
-                    e
-                )
-            });
+            let _lifecycle = self.state.registry.lock_agent(&target_id).await;
+            // Refresh the candidate under its lock; discovery snapshots are not write authority.
+            matched_agent = self.state.registry.agents.get(&target_id)
+                .ok_or_else(|| AppError::NotFound("Recruited agent was deleted".to_string()))?.clone();
+            matched_agent.metadata.insert("has_participated_in_swarm".to_string(), serde_json::Value::Bool(true));
+            if matched_agent.health.status == "idle" { matched_agent.health.status = "active".to_string(); }
+            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agents WHERE id = ?)")
+                .bind(&target_id).fetch_one(&self.state.resources.pool).await.map_err(AppError::from)?;
+            matched_agent.version = if exists {
+                crate::agent::persistence::save_agent_db(&self.state.resources.pool, &matched_agent).await?
+            } else {
+                crate::agent::persistence::create_agent_db(&self.state.resources.pool, &matched_agent).await?
+            };
+            self.state.registry.agents.insert(target_id.clone(), matched_agent.clone());
 
             // If the matched agent has a specific model config, use it.
             if let Some(mid) = &matched_agent.models.model_id {
@@ -423,7 +404,7 @@ impl AgentRunner {
             (format!("AI-{}", "General Intelligence Node"), "Swarm Core".to_string(), "Autonomous sub-agent spawned for specific task resolution.".to_string())
         };
 
-        let sub_agent = crate::agent::types::EngineAgent {
+        let mut sub_agent = crate::agent::types::EngineAgent {
             identity: crate::agent::types::AgentIdentity {
                 id: target_id.clone(),
                 name: target_id.clone(),
@@ -478,21 +459,11 @@ impl AgentRunner {
             ..Default::default()
         };
 
-        let _ = crate::agent::persistence::save_agent_db_in_tx(&mut *conn, &sub_agent)
-            .await
-            .map_err(|e| {
-                tracing::warn!(
-                    "⚠️ [Swarm] Failed to persist sub-agent {} to DB: {}",
-                    target_id,
-                    e
-                )
-            });
-        self.state
-            .registry
-            .agents
-            .insert(target_id.to_string(), sub_agent);
-
-        Ok("".to_string())
+        let _lifecycle = self.state.registry.lock_agent(&target_id).await;
+        if self.state.registry.agents.contains_key(&target_id) { return Ok(target_id); }
+        sub_agent.version = crate::agent::persistence::create_agent_db(&self.state.resources.pool, &sub_agent).await?;
+        self.state.registry.agents.insert(target_id.clone(), sub_agent);
+        Ok(target_id)
     }
 
     /// Handles `issue_alpha_directive`: delegates to Tadpole Alpha (ID: 2).
@@ -540,20 +511,11 @@ impl AgentRunner {
             crate::agent::constants::AGENT_COO.to_string()
         };
 
-        // Ensure the resolved agent exists in DB before running
-        if let Ok(mut tx) = self.state.resources.pool.begin().await {
-            let _ = self.ensure_sub_agent_exists(
-                &mut tx,
-                SubAgentOptions {
-                    agent_id: &alpha_id,
-                    parent_config: &ctx.model_config,
-                    extra_skills: None,
-                    extra_workflows: None,
-                    role_override: Some("COO (Operations Director)"),
-                },
-            ).await;
-            let _ = tx.commit().await;
-        }
+        self.ensure_sub_agent_exists(SubAgentOptions {
+            agent_id: &alpha_id, parent_config: &ctx.model_config,
+            extra_skills: None, extra_workflows: None,
+            role_override: Some("COO (Operations Director)"),
+        }).await.map_err(|error| AppError::InternalServerError(error.to_string()))?;
 
         // Bounded execution timeout for sub-runner to prevent deadlock/hangs
         let sub_timeout = std::time::Duration::from_secs(240);
@@ -690,10 +652,8 @@ mod tests {
             .insert(tier1_agent.identity.id.clone(), tier1_agent);
 
         let parent_config = ModelConfig::default();
-        let mut tx = state.resources.pool.begin().await.unwrap();
         runner
             .ensure_sub_agent_exists(
-                &mut tx,
                 SubAgentOptions {
                     agent_id: "analyst",
                     parent_config: &parent_config,
@@ -704,7 +664,6 @@ mod tests {
             )
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         let analyst = state.registry.agents.get("specialist_analyst").unwrap();
         assert_eq!(
@@ -735,10 +694,8 @@ mod tests {
             .insert(tier2_agent.identity.id.clone(), tier2_agent);
 
         let parent_config = ModelConfig::default();
-        let mut tx = state.resources.pool.begin().await.unwrap();
         runner
             .ensure_sub_agent_exists(
-                &mut tx,
                 SubAgentOptions {
                     agent_id: "coder",
                     parent_config: &parent_config,
@@ -749,7 +706,6 @@ mod tests {
             )
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         let coder = state.registry.agents.get("previous_brain").unwrap();
         assert_eq!(
@@ -762,10 +718,8 @@ mod tests {
     async fn test_recruitment_tier3_fabrication() {
         let (runner, state) = setup_test_runner().await;
         let parent_config = ModelConfig::default();
-        let mut tx = state.resources.pool.begin().await.unwrap();
         runner
             .ensure_sub_agent_exists(
-                &mut tx,
                 SubAgentOptions {
                     agent_id: "researcher",
                     parent_config: &parent_config,
@@ -776,7 +730,6 @@ mod tests {
             )
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         assert!(state.registry.agents.contains_key("researcher"));
         let researcher = state.registry.agents.get("researcher").unwrap();
@@ -832,10 +785,8 @@ mod tests {
             ..Default::default()
         };
 
-        let mut tx = state.resources.pool.begin().await.unwrap();
         runner
             .ensure_sub_agent_exists(
-                &mut tx,
                 SubAgentOptions {
                     agent_id: "2",
                     parent_config: &parent_config,
@@ -846,7 +797,6 @@ mod tests {
             )
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         let agent = state.registry.agents.get("2").unwrap();
         assert!(

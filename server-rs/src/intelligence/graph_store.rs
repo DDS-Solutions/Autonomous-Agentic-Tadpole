@@ -22,7 +22,7 @@ use walkdir::WalkDir;
 
 mod db;
 
-static PY_FUNC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap());
+static PY_FUNC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap());
 static PY_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap());
 static SQL_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)").unwrap());
 static JS_FUNC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap());
@@ -938,6 +938,24 @@ mod tests {
     use tempfile::tempdir;
 
     #[tokio::test]
+    async fn finding_regression_graph_links_module_qualified_generic_rust_call() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/lib.rs"),
+            "mod persistence;\nfn caller() { crate::persistence::save_agent_db::<u32>(); }\n").unwrap();
+        std::fs::write(dir.path().join("src/persistence.rs"),
+            "pub fn save_agent_db<T>() {}\n").unwrap();
+        let database = dir.path().join(".code-review-graph/graph.db");
+        refresh_code_review_graph_db(dir.path().to_path_buf(), database.clone(), "qualified-call-regression".to_string(), None)
+            .await.unwrap();
+        let pool = db::open_graph_pool(&database).await.unwrap();
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM edges edge JOIN nodes caller ON caller.qualified_name = edge.source_qualified JOIN nodes callee ON callee.qualified_name = edge.target_qualified WHERE edge.kind = 'CALLS' AND caller.name = 'caller' AND callee.name = 'save_agent_db'")
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(count, 1, "cross-module generic call must reach the actual definition");
+    }
+
+    #[tokio::test]
     async fn refresh_creates_idempotent_graph_db() {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
@@ -965,6 +983,14 @@ mod tests {
         .unwrap();
         assert_eq!(first.node_count, second.node_count);
         assert_eq!(first.edge_count, second.edge_count);
+    }
+
+    #[test]
+    fn lightweight_python_extraction_indexes_async_functions() {
+        let (symbols, _, _) = lightweight_extract("py", "async def execute_tool(args):\n    return await worker(args)\n\ndef helper():\n    pass\n");
+        assert_eq!(symbols.iter().map(|symbol| symbol.name.as_str()).collect::<Vec<_>>(), ["execute_tool", "helper"]);
+        assert_eq!(symbols[0].line_start, 1);
+        assert_eq!(symbols[1].line_start, 4);
     }
 
     #[tokio::test]

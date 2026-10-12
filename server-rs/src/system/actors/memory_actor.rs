@@ -15,8 +15,6 @@
 //! Centralizes LanceDB/Arrow operations to prevent lock contention
 //! and ensure consistency across the swarm.
 
-// Scaffolded actor: will be wired into the kernel in a subsequent phase.
-#![allow(dead_code)]
 
 use crate::system::actors::SystemMessage;
 use crate::agent::memory::VectorMemory;
@@ -66,8 +64,8 @@ impl MemoryActor {
             };
             let Some(msg) = msg else { break; };
             match msg {
-                SystemMessage::MemoryQuery { query: _, limit: _, resp } => {
-                    let _ = resp.send(Err(AppError::InternalServerError("MemoryQuery via Actor not yet fully implemented".to_string())));
+                SystemMessage::MemoryQuery { query, limit, resp } => {
+                    let _ = resp.send(self.handle_query(&query, limit).await);
                 }
                 SystemMessage::MemorySave { content, resp } => {
                     let result = self.handle_save(content).await;
@@ -99,17 +97,36 @@ impl MemoryActor {
     async fn handle_save(&self, content: serde_json::Value) -> Result<(), AppError> {
         let text = content.get("text").and_then(|v| v.as_str()).unwrap_or_default();
         let mission_id = content.get("mission_id").and_then(|v| v.as_str()).unwrap_or("global");
-        let vector = content.get("vector")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|n| n.as_f64().map(|f| f as f32)).collect::<Vec<f32>>())
-            .unwrap_or_default();
+        let vector: Vec<f32> = content.get("vector").map(|value| serde_json::from_value(value.clone()))
+            .transpose().map_err(|_| AppError::BadRequest("Memory vector must contain numbers".to_string()))?.unwrap_or_default();
 
-        if text.is_empty() || vector.is_empty() {
-            return Err(AppError::BadRequest("MemorySave requires 'text' and 'vector'".to_string()));
+        if text.trim().is_empty() || text.len() > 1_048_576 || vector.iter().any(|n| !n.is_finite()) {
+            return Err(AppError::BadRequest("MemorySave requires bounded text and finite vector values".to_string()));
         }
 
         let id = uuid::Uuid::new_v4().to_string();
-        self.vector_memory.add_memory(&id, text, mission_id, vector).await
+        // SQLite is the durable text source in both builds; disabled vector support
+        // must not turn a successful save into discarded data.
+        let agent_id = content.get("agent_id").and_then(|v| v.as_str()).unwrap_or("global");
+        sqlx::query("INSERT INTO fallback_memories (id, agent_id, text, mission_id) VALUES (?, ?, ?, ?)")
+            .bind(&id).bind(agent_id).bind(text).bind(mission_id).execute(&self.pool).await?;
+        if !vector.is_empty() {
+            if let Err(error) = self.vector_memory.add_memory(&id, text, mission_id, vector).await {
+                tracing::warn!(%error, "[memory_actor] Vector indexing failed; durable text remains available");
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_query(&self, query: &str, limit: usize) -> Result<serde_json::Value, AppError> {
+        if query.len() > 8192 {
+            return Err(AppError::BadRequest("Memory query exceeds 8192 bytes".to_string()));
+        }
+        let rows = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT id, text, mission_id FROM fallback_memories WHERE instr(lower(text), lower(?)) > 0 ORDER BY created_at DESC, id LIMIT ?"
+        ).bind(query).bind(limit.min(200) as i64).fetch_all(&self.pool).await?;
+        Ok(serde_json::json!({"backend": "sqlite-text", "memories": rows.into_iter().map(|(id, text, mission_id)|
+            serde_json::json!({"id": id, "text": text, "mission_id": mission_id})).collect::<Vec<_>>()}))
     }
 
     async fn handle_append(
@@ -185,6 +202,7 @@ impl MemoryActor {
                 SELECT n.id, n.mission_id, n.parent_id, n.role, n.content, n.metadata, n.created_at, h.depth + 1
                 FROM mission_nodes n
                 JOIN history h ON n.id = h.parent_id
+                WHERE h.depth < 1024 AND n.mission_id = h.mission_id
             )
             SELECT id, mission_id, parent_id, role, content, metadata 
             FROM history 
@@ -196,6 +214,9 @@ impl MemoryActor {
         .await
         .map_err(|e| AppError::InternalServerError(format!("History traversal failed: {}", e)))?;
 
+        if nodes.first().is_some_and(|node| node.2.is_some()) {
+            return Err(AppError::Conflict("Session ancestry is incomplete, cyclic, or exceeds 1024 levels".to_string()));
+        }
         let result = nodes.into_iter().map(|(id, mission_id, parent_id, role, content, metadata)| {
             serde_json::json!({
                 "id": id,
@@ -214,6 +235,21 @@ impl MemoryActor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn durable_text_query_covers_save_bounds_and_validation() {
+        let state = crate::state::AppState::new_minimal_mock().await;
+        let (_tx, rx) = mpsc::channel(10);
+        let actor = MemoryActor::new(Arc::new(tokio::sync::Mutex::new(rx)), &state.base_dir, state.resources.pool.clone()).await.unwrap();
+        actor.handle_save(serde_json::json!({"text": "Rust ownership fixture", "vector": []})).await.unwrap();
+        let result = actor.handle_query("ownership", usize::MAX).await.unwrap();
+        assert_eq!(result["memories"].as_array().unwrap().len(), 1);
+        assert_eq!(result["backend"], "sqlite-text");
+        assert!(actor.handle_query("ownership", 0).await.unwrap()["memories"].as_array().unwrap().is_empty());
+        assert!(actor.handle_save(serde_json::json!({"text": "", "vector": []})).await.is_err());
+        assert!(actor.handle_save(serde_json::json!({"text": "valid", "vector": ["bad"]})).await.is_err());
+        assert!(actor.handle_query(&"x".repeat(8193), 1).await.is_err());
+    }
 
     #[tokio::test]
     async fn test_multiversal_traversal() {

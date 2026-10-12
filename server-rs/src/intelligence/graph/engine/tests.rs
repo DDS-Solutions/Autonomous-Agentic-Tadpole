@@ -329,9 +329,40 @@ fn test_token_budgeted_context_resolution() {
     let resolved_large = graph.resolve_context("helper", "main.rs", 1000, None);
     assert_eq!(resolved_large.len(), 2);
 
-    // Tiny budget — only target should be returned and its signature truncated
+    // A budget below the metadata cost cannot represent even the target.
     let resolved_small = graph.resolve_context("helper", "main.rs", 2, None);
-    assert!(resolved_small[0].signature.ends_with("..."));
+    assert!(resolved_small.is_empty());
+}
+
+#[test]
+fn test_context_budget_accounts_for_metadata_and_unicode() {
+    let mut graph = CodeSymbolGraph::new(std::path::PathBuf::from("/workspace"));
+    let node = SymbolNode {
+        name: "target".into(),
+        path: "src/context.rs".into(),
+        kind: "function".into(),
+        signature: "fn target() { /* 🦀 中文 café */ }".repeat(5),
+        tokens: 200,
+        ..Default::default()
+    };
+    let idx = graph.graph.add_node(node);
+    graph.index.insert(index_key("src/context.rs", "target"), idx);
+    let bpe = tiktoken_rs::cl100k_base().unwrap();
+    for tokenizer in [None, Some(&bpe)] {
+        let count = |text: &str| tokenizer.map_or_else(
+            || text.len().div_ceil(4),
+            |bpe| bpe.encode_with_special_tokens(text).len(),
+        );
+        for budget in 0..=220 {
+            let resolved = graph.resolve_context("target", "src/context.rs", budget, tokenizer);
+            let total: usize = resolved.iter().map(|node| node.tokens).sum();
+            assert!(total <= budget, "reported {total} tokens for budget {budget}");
+            for node in resolved {
+                let actual = count(&node.name) + count("src/context.rs") + count(&node.kind) + count(&node.signature);
+                assert_eq!(node.tokens, actual, "metadata and truncation suffix must be counted");
+            }
+        }
+    }
 }
 
 #[test]
@@ -366,6 +397,25 @@ fn test_blast_radius_bounded_limits_and_truncation_flag() {
     let (all_affected, not_truncated) = graph.calculate_blast_radius_bounded("CoreHub", "src/core.rs", Some(20));
     assert_eq!(all_affected.len(), 11, "Must return all 11 nodes");
     assert!(!not_truncated, "Truncation flag must be false when limit is not exceeded");
+    let (exact, truncated) = graph.calculate_blast_radius_bounded("CoreHub", "src/core.rs", Some(11));
+    assert_eq!(exact.len(), 11);
+    assert!(!truncated, "An exactly full but complete result is not truncated");
+}
+
+#[test]
+fn test_blast_radius_reports_depth_truncation() {
+    let mut graph = CodeSymbolGraph::new(std::path::PathBuf::from("/workspace"));
+    let root = graph.graph.add_node(SymbolNode { name: "root".into(), path: "chain.rs".into(), ..Default::default() });
+    graph.index.insert(index_key("chain.rs", "root"), root);
+    let mut target = root;
+    for i in 0..60 {
+        let caller = graph.graph.add_node(SymbolNode { name: format!("caller_{i}"), path: "chain.rs".into(), ..Default::default() });
+        graph.graph.add_edge(caller, target, SymbolEdge { kind: "call".into() });
+        target = caller;
+    }
+    let (affected, truncated) = graph.calculate_blast_radius_bounded("root", "chain.rs", Some(100));
+    assert_eq!(affected.len(), 51);
+    assert!(truncated, "A depth-limited result must not claim completeness");
 }
 
 // =========================================================================
@@ -465,9 +515,10 @@ fn test_three_path_edge_case_cycles_depth_and_unicode() {
     assert_eq!(affected.len(), 2, "Cycle must terminate and discover both nodes without looping");
 
     // Test budget smaller than start node token count + safe Unicode character boundary slicing
-    let ctx = graph.resolve_context("fn_alpha", "src/cycle.rs", 2, None);
+    let ctx = graph.resolve_context("fn_alpha", "src/cycle.rs", 12, None);
     assert_eq!(ctx.len(), 1, "Should only contain target node");
     assert!(ctx[0].signature.ends_with("..."), "Signature must be safely truncated");
+    assert!(ctx[0].tokens <= 12);
 
     // Test max node truncation clamp
     let (clamped, was_truncated) = graph.calculate_blast_radius_bounded("fn_alpha", "src/cycle.rs", Some(1));

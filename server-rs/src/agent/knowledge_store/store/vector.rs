@@ -31,6 +31,10 @@ pub async fn get_peers(
     limit: usize,
     http_client: reqwest::Client,
 ) -> Result<Vec<KnowledgeEntry>, AppError> {
+    let limit = limit.min(200);
+    if limit == 0 {
+        return Ok(Vec::new());
+    }
     let entry = metadata::get_by_id(pool, id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("[IKS] Entry {} not found", id)))?;

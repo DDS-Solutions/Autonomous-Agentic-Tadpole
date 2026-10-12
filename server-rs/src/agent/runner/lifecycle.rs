@@ -174,24 +174,39 @@ impl AgentRunner {
     ///    swarm recruitment.
     /// 4. **Mission Creation**: Generates the high-fidelity `Mission` record 
     ///    with an automated summary title derived from the payload message.
-    pub(crate) async fn initialize_mission_state(
-        &self,
-        agent_id: &str,
-        payload: &TaskPayload,
+    pub(super) async fn initialize_mission_state(
+        &self, agent_id: &str, payload: &TaskPayload, execution_id: Option<tokio::task::Id>,
     ) -> Result<crate::agent::types::Mission, AppError> {
-        // 🛡️ [Resilience] Ensure agent exists in database (auto-sync if only in registry)
-        let agent_to_sync = self.state.registry.agents.get(agent_id).map(|a| a.value().clone());
-        if let Some(agent) = agent_to_sync {
-            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent).await {
-                Ok(new_ver) => {
-                    if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
-                        entry.version = new_ver;
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("⚠️ [Lifecycle] Pre-flight sync of agent {} to DB failed: {}", agent_id, e);
-                }
+        let _lifecycle = self.state.registry.lock_agent(agent_id).await;
+        let mut agent = self.state.registry.agents.get(agent_id)
+            .ok_or_else(|| AppError::NotFound(format!("Agent '{}' not found", agent_id)))?.clone();
+        if agent.health.status == "suspended" {
+            return Err(AppError::Forbidden("Agent is suspended".to_string()));
+        }
+        if self.state.comms.active_runners.get(agent_id)
+            .is_some_and(|handle| Some(handle.task_id) != execution_id) {
+            return Err(AppError::Conflict("Agent already has a tracked runner".to_string()));
+        }
+        if let Some(mission_id) = agent.state.active_mission.as_ref()
+            .and_then(|mission| mission.get("id")).and_then(|id| id.as_str()) {
+            let previous = self.state.comms.mission_contexts.get(mission_id).map(|ctx| ctx.clone())
+                .ok_or_else(|| AppError::Conflict("Agent already has an active mission".to_string()))?;
+            if previous.accounting.task_id == execution_id {
+                return Err(AppError::Conflict("Execution already owns an initialized mission".to_string()));
             }
+            // Drop marks the old execution stopped without taking this lock.
+            // Settle its received usage before assigning a replacement mission.
+            previous.accounting.wait_finished().await?;
+            self.persist_terminal_state_locked(&previous, &previous.accounting.usage(), true, "Mission preempted by incoming dispatch").await?;
+            agent = self.state.registry.agents.get(agent_id)
+                .ok_or_else(|| AppError::NotFound(format!("Agent '{}' was deleted", agent_id)))?.clone();
+        }
+        // Support registry-only startup seeds explicitly, never via an update upsert.
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agents WHERE id = ?)")
+            .bind(agent_id).fetch_one(&self.state.resources.pool).await?;
+        if !exists {
+            agent.version = crate::agent::persistence::create_agent_db(&self.state.resources.pool, &agent).await?;
+            self.state.registry.agents.insert(agent_id.to_string(), agent.clone());
         }
 
         let depth = std::cmp::max(
@@ -289,73 +304,40 @@ impl AgentRunner {
             }
         });
 
-        let mission = crate::agent::mission::create_mission(
-            &self.state.resources.pool,
+        // Acquire write ownership before identity/version reads; deferred
+        // read-to-write upgrades can deadlock simultaneous initializations.
+        let mut tx = self.state.resources.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut mission = crate::agent::mission::create_mission_in_tx(
+            &mut tx,
             agent_id,
             &mission_title,
             mission_budget,
         )
         .await?;
 
-        if let Err(e) = crate::agent::mission::update_mission(
-            &self.state.resources.pool,
-            &mission.id,
-            crate::agent::types::MissionStatus::Active,
-            0.0,
-        )
-        .await {
-            tracing::error!("❌ [Lifecycle] Failed to set mission {} to Active: {}", mission.id, e);
-        }
+        sqlx::query("UPDATE mission_history SET status = 'active' WHERE id = ?")
+            .bind(&mission.id).execute(&mut *tx).await?;
+        mission.status = crate::agent::types::MissionStatus::Active;
 
-        // --- 📔 Journaling: Record initial User node ---
-        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
-        let msg = crate::system::actors::SystemMessage::MemoryAppend {
-            mission_id: mission.id.clone(),
-            parent_id: None, // Root node
-            role: "user".to_string(),
-            content: payload.message.clone(),
-            metadata: None,
-            resp: resp_tx,
-        };
-        if let Some(actors) = self.state.actors.get() {
-            let _ = actors.memory.send(msg).await;
-            let _ = resp_rx.await; // Wait for initial node to be recorded
-        }
-
-        // We update the in-memory registry so the high-speed PulseCollector 
-        // (telemetry loop) can detect the active mission link.
-        if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
-            let agent = entry.value_mut();
-            agent.state.active_mission = Some(serde_json::json!({
-                "id": mission.id,
-                "title": mission.title
-            }));
-            agent.health.status = "busy".to_string();
-            let agent_clone = agent.clone();
-            drop(entry); // Release DashMap lock before async database I/O
-
-            // ### 🗄️ Persistence: Database Sync
-            // We MUST save to the database immediately so the Orchestrator
-            // (Safety Valve) can see that this agent is engaged and doesn't
-            // mark the mission as a "ghost".
-            match crate::agent::persistence::save_agent_db(&self.state.resources.pool, &agent_clone).await {
-                Ok(new_ver) => {
-                    if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
-                        entry.version = new_ver;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("❌ [Lifecycle] Failed to persist engaged agent {} to DB: {}", agent_id, e);
-                }
-            }
-
-            // Broadcast the agent update so other UI components (like the sidebar) sync
-            self.state.emit_event(serde_json::json!({
-                "type": "agent:update",
-                "agent_id": agent_id,
-                "data": agent_clone
-            }));
-        }
+        agent.state.active_mission = Some(serde_json::json!({
+            "id": mission.id, "title": mission.title
+        }));
+        agent.health.status = "busy".to_string();
+        agent.health.heartbeat_at = Some(chrono::Utc::now());
+        agent.version = crate::agent::persistence::save_agent_db_in_tx(&mut tx, &agent).await?;
+        tx.commit().await?;
+        self.state.registry.agents.insert(agent_id.to_string(), agent.clone());
+        let mut recovery_ctx = agent.resolve_provider_context(self.state.base_dir.clone());
+        recovery_ctx.mission_id = mission.id.clone();
+        let task_id = execution_id;
+        let job_run_id = self.state.comms.active_runners.get(agent_id)
+            .filter(|handle| Some(handle.task_id) == task_id)
+            .and_then(|handle| handle.job_run_id.clone());
+        recovery_ctx.accounting = std::sync::Arc::new(super::accounting::MissionAccounting::for_execution(task_id, job_run_id));
+        self.state.comms.mission_contexts.insert(mission.id.clone(), recovery_ctx);
+        self.state.emit_event(serde_json::json!({
+            "type": "agent:update", "agent_id": agent_id, "data": agent
+        }));
 
         Ok(mission)
     }

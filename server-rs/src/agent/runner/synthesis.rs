@@ -1137,6 +1137,7 @@ mod tests {
                 oversight_queue: dashmap::DashMap::new(),
                 oversight_resolvers: dashmap::DashMap::new(),
                 active_runners: dashmap::DashMap::new(),
+                mission_contexts: dashmap::DashMap::new(),
                 event_sequence: std::sync::atomic::AtomicU64::new(0),
             }),
             governance: Arc::new(crate::state::hubs::gov::GovernanceHub {
@@ -1153,6 +1154,7 @@ mod tests {
                 observed_max_depth: std::sync::atomic::AtomicU32::new(0),
             }),
             registry: Arc::new(crate::state::hubs::reg::RegistryHub {
+            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
                 agents: dashmap::DashMap::new(),
                 providers: dashmap::DashMap::new(),
                 provider_health: DashMap::new(),

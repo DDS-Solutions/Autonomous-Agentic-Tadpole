@@ -22,8 +22,16 @@ use crate::agent::types::{EngineAgent, ModelEntry, ProviderConfig, SwarmNode};
 use dashmap::DashMap;
 use std::sync::Arc;
 
+/// Fixed stripes bound synchronization memory even for arbitrary client IDs.
+pub const AGENT_LIFECYCLE_STRIPES: usize = 64;
+
+pub fn lifecycle_locks() -> [tokio::sync::Mutex<()>; AGENT_LIFECYCLE_STRIPES] {
+    std::array::from_fn(|_| tokio::sync::Mutex::new(()))
+}
+
 /// Hub for agent identities, provider configs, and skill discovery.
 pub struct RegistryHub {
+    pub lifecycle_locks: [tokio::sync::Mutex<()>; AGENT_LIFECYCLE_STRIPES],
     /// The live agent registry, synced with persistence.
     pub agents: DashMap<String, EngineAgent>,
     /// Configured LLM providers (e.g., OpenAI, Ollama).
@@ -54,6 +62,19 @@ pub struct RegistryHub {
 }
 
 impl RegistryHub {
+    fn lifecycle_lock(&self, id: &str) -> &tokio::sync::Mutex<()> {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        id.hash(&mut hasher);
+        &self.lifecycle_locks[hasher.finish() as usize % AGENT_LIFECYCLE_STRIPES]
+    }
+    pub fn try_lock_agent(&self, id: &str) -> Result<tokio::sync::MutexGuard<'_, ()>, tokio::sync::TryLockError> {
+        self.lifecycle_lock(id).try_lock()
+    }
+    /// Hold across a durable transition and its registry publication, never inference.
+    pub async fn lock_agent(&self, id: &str) -> tokio::sync::MutexGuard<'_, ()> {
+        self.lifecycle_lock(id).lock().await
+    }
     /// Returns a summarized list of specialized agents available in the cluster.
     /// Filters out generic or internal nodes to provide a clean recruitment directory.
     pub fn list_active_specialists(&self) -> Vec<String> {

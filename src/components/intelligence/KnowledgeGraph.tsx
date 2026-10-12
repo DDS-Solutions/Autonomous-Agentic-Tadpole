@@ -53,6 +53,8 @@ const extractLinks = (text: string, nodeIds: Set<string>): string[] => {
 
 export const KnowledgeGraph: React.FC = () => {
     const fg_ref = useRef<ForceGraphMethods<ExtendedGraphNode, ForceGraphLink> | undefined>(undefined);
+    const graph_request = useRef<AbortController | null>(null);
+    const selection_request = useRef<AbortController | null>(null);
     const [data, set_data] = useState<CodeGraphData | null>(null);
     const [loading, set_loading] = useState(true);
     const [selected_node, set_selected_node] = useState<ExtendedGraphNode | null>(null);
@@ -71,10 +73,16 @@ export const KnowledgeGraph: React.FC = () => {
     }, [selected_node]);
 
     const fetch_graph = useCallback(async () => {
+        graph_request.current?.abort();
+        const controller = new AbortController();
+        graph_request.current = controller;
+        const signal = controller.signal;
         set_loading(true);
+        set_data(null);
         try {
             if (view_mode === 'symbols') {
-                const graph = await intelligence_api_service.get_graph();
+                const graph = await intelligence_api_service.get_graph(undefined, signal);
+                if (signal.aborted) return;
                 set_data(graph);
             } else {
                 type UnifiedKnowledgeItem = {
@@ -94,9 +102,10 @@ export const KnowledgeGraph: React.FC = () => {
 
                 // Fetch OKF knowledge entries & explicit edges from IKS (OKF v0.3)
                 const [rawEntries, explicitEdges] = await Promise.all([
-                    intelligence_api_service.get_knowledge({ limit: 200 }).catch(() => []),
-                    intelligence_api_service.get_knowledge_edges().catch(() => []),
+                    intelligence_api_service.get_knowledge({ limit: 200 }, signal).catch(() => []),
+                    intelligence_api_service.get_knowledge_edges(undefined, signal).catch(() => []),
                 ]);
+                if (signal.aborted) return;
                 let entries: UnifiedKnowledgeItem[] = rawEntries;
 
                 // Fallback to Curated System Knowledge Documents if IKS is empty
@@ -184,15 +193,16 @@ export const KnowledgeGraph: React.FC = () => {
                     }
                 }
 
+                if (signal.aborted) return;
                 set_data({
                     nodes: nodes as ExtendedGraphNode[],
                     links,
                 });
             }
         } catch (err) {
-            console.error(`[KnowledgeGraph] Failed to fetch graph (${view_mode}):`, err);
+            if (!signal.aborted) console.error(`[KnowledgeGraph] Failed to fetch graph (${view_mode}):`, err);
         } finally {
-            set_loading(false);
+            if (!signal.aborted) set_loading(false);
         }
     }, [view_mode]);
 
@@ -201,6 +211,10 @@ export const KnowledgeGraph: React.FC = () => {
         fetch_graph();
         set_selected_node(null);
         set_affected_nodes(new Set());
+        return () => {
+            graph_request.current?.abort();
+            selection_request.current?.abort();
+        };
     }, [fetch_graph]);
 
     // Transform data for force-graph
@@ -233,14 +247,21 @@ export const KnowledgeGraph: React.FC = () => {
     }, [data, affected_nodes, view_mode]);
 
     const handle_node_click = async (node: ExtendedGraphNode) => {
+        selection_request.current?.abort();
+        const controller = new AbortController();
+        selection_request.current = controller;
+        const signal = controller.signal;
         set_selected_node(node);
+        set_affected_nodes(new Set());
         try {
             if (view_mode === 'okf') {
-                const peers = await intelligence_api_service.get_knowledge_peers(node.id, 5);
+                const peers = await intelligence_api_service.get_knowledge_peers(node.id, 5, signal);
+                if (signal.aborted) return;
                 const peer_ids = new Set(peers.map(p => p.id));
                 set_affected_nodes(peer_ids);
             } else {
-                const affected = await intelligence_api_service.get_blast_radius(node.name, node.path);
+                const affected = await intelligence_api_service.get_blast_radius(node.name, node.path, undefined, signal);
+                if (signal.aborted) return;
                 const affected_ids = new Set(affected.map(n => `${n.path}:${n.name}`));
                 set_affected_nodes(affected_ids);
             }
@@ -251,11 +272,12 @@ export const KnowledgeGraph: React.FC = () => {
                 fg_ref.current.zoom(2.5, 1000);
             }
         } catch (err) {
-            console.error('[KnowledgeGraph] Blast radius failed:', err);
+            if (!signal.aborted) console.error('[KnowledgeGraph] Blast radius failed:', err);
         }
     };
 
     const handle_close_sidebar = () => {
+        selection_request.current?.abort();
         set_selected_node(null);
         set_affected_nodes(new Set());
     };

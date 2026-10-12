@@ -10,20 +10,17 @@ Core system module providing specialized functionality for the agent swarm.
 - **Telemetry Link**: Search `[sscp_tests]` in tracing logs.
 */
 
-//! SSCP Phase 1, 2 & 3 Verification Tests — Drive G
-//! 
-//! All tests write to G:\Tadpole_Intelligence_Cache to validate
-//! real SSD integration. Each test uses a unique subdirectory.
+//! SSCP Phase 1, 2 & 3 verification with isolated temporary disk storage.
+//! Each invocation uses a unique directory so parallel runs cannot delete
+//! another run's cache or touch an operator's persistent intelligence cache.
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
     use crate::agent::continuity::{SSDManager, ContextBlock, ContextArbiter, partition_context, block_filename};
 
-    const CACHE_ROOT: &str = r"G:\Tadpole_Intelligence_Cache";
-
     fn test_ssd(name: &str) -> (SSDManager, std::path::PathBuf) {
-        let base_dir = std::env::temp_dir().join("tadpole-sscp-cache");
+        let base_dir = std::env::temp_dir().join(format!("tadpole-sscp-cache-{}", uuid::Uuid::new_v4()));
         let path = base_dir.join(format!("test-{}", name));
         (SSDManager::new(&path), path)
     }
@@ -379,8 +376,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_swarm_flood_on_drive_g() {
-        let path = std::path::PathBuf::from(CACHE_ROOT).join("test-flood");
-        let ssd = Arc::new(SSDManager::new(&path));
+        let (ssd, path) = test_ssd("flood");
+        let ssd = Arc::new(ssd);
         let arbiter = Arc::new(ContextArbiter::new(ssd.clone()));
 
         let mut handles = Vec::new();

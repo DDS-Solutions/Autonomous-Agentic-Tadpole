@@ -388,22 +388,18 @@ pub async fn install_template(
     let mut agents_installed = 0;
     if !validated_agents.is_empty() {
         let _ = tokio::fs::create_dir_all(&agents_dest).await;
-        for (filename, src_path, agent) in validated_agents {
+        for (filename, src_path, mut agent) in validated_agents {
+            let _lifecycle = state.registry.lock_agent(&agent.identity.id).await;
             let dest_file = agents_dest.join(&filename);
             let _ = tokio::fs::copy(&src_path, &dest_file).await;
 
             // Persist to database and active registry
-            if let Err(e) =
-                crate::agent::persistence::save_agent_db(&state.resources.pool, &agent).await
-            {
-                tracing::warn!(
-                    "Failed to persist agent '{}' to database: {e}",
-                    agent.identity.id
-                );
-                errors.push(format!(
-                    "DB write warning for agent '{}': {e}",
-                    agent.identity.id
-                ));
+            match crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await {
+                Ok(version) => agent.version = version,
+                Err(error) => {
+                    errors.push(format!("Agent '{}' was not installed: {}", agent.identity.id, error));
+                    continue;
+                }
             }
 
             state
@@ -746,11 +742,13 @@ pub async fn uninstall_template(
                     }
                 }
                 for agent_id in &receipt.agent_ids {
-                    let _ = crate::agent::persistence::delete_agent_cascade(
+                    let _lifecycle = state.registry.lock_agent(agent_id).await;
+                    crate::agent::persistence::delete_agent_cascade(
                         &state.resources.pool,
                         agent_id,
                     )
-                    .await;
+                    .await?;
+                    if let Some((_, runner)) = state.comms.active_runners.remove(agent_id) { runner.abort(); }
                     state.registry.agents.remove(agent_id);
                 }
 

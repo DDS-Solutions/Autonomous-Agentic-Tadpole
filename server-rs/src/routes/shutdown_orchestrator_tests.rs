@@ -31,6 +31,7 @@ mod tests {
         test_agent.health.status = "busy".to_string();
         test_agent.state.active_mission = Some(serde_json::json!("mission-123"));
         
+        test_agent.version = crate::agent::persistence::create_agent_db(&app_state.resources.pool, &test_agent).await.unwrap();
         app_state.registry.agents.insert("agent-9".to_string(), test_agent);
 
         // Inject authorization token
