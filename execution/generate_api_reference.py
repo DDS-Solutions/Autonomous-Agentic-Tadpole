@@ -410,6 +410,11 @@ def write_openapi(routes: list[Route]) -> None:
                 ]
                 if path == "/v1/intelligence/resolve":
                     intel_params.append(("budget", "query", False, "integer", "Token budget constraint"))
+            elif path == "/v1/intelligence/impacted-tests":
+                intel_params = [
+                    ("path", "query", True, "string", "File path"),
+                    ("name", "query", False, "string", "Symbol name")
+                ]
 
             if params or intel_params:
                 lines.append("      parameters:")
@@ -483,17 +488,32 @@ def write_openapi(routes: list[Route]) -> None:
 
             # Responses
             success_schema = SUCCESS_RESPONSE_MAP.get((route.method, path), "GenericResponse")
-            lines.extend(
-                [
-                    "      responses:",
-                    '        "200":',
-                    "          description: Success",
-                    "          content:",
-                    "            application/json:",
-                    "              schema:",
-                    f"                $ref: '#/components/schemas/{success_schema}'",
-                ]
-            )
+            if (route.method, path) == ("GET", "/v1/intelligence/impacted-tests"):
+                lines.extend(
+                    [
+                        "      responses:",
+                        '        "200":',
+                        "          description: Success",
+                        "          content:",
+                        "            application/json:",
+                        "              schema:",
+                        "                type: array",
+                        "                items:",
+                        "                  type: string",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        "      responses:",
+                        '        "200":',
+                        "          description: Success",
+                        "          content:",
+                        "            application/json:",
+                        "              schema:",
+                        f"                $ref: '#/components/schemas/{success_schema}'",
+                    ]
+                )
 
             # 400 Bad Request for POST/PUT
             if route.method in ("POST", "PUT"):
@@ -962,13 +982,14 @@ SymbolNodeList:
   items: { $ref: '#/components/schemas/SymbolNode' }
 ResolveResponse:
   type: object
-  required: [symbols, budget, accumulated_tokens]
+  required: [symbols, budget, accumulated_tokens, truncation_estimate]
   properties:
     symbols:
       type: array
       items: { $ref: '#/components/schemas/SymbolNode' }
     budget: { type: integer }
-    accumulated_tokens: { type: integer }"""
+    accumulated_tokens: { type: integer }
+    truncation_estimate: { type: boolean }"""
     # Parse the multiline string and split by lines, prefixing each line with two spaces (since we are outputting under schemas)
     for schema_line in schemas_raw.strip().split("\n"):
         lines.append("    " + schema_line)
@@ -1001,6 +1022,8 @@ def write_api_reference(routes: list[Route]) -> None:
         "",
         "## Authentication",
         "",
+        "The current shared bearer credential is an operator capability. Middleware records successful verification in a typed request extension consumed by task dispatch. `x-tadpole-role`, `user_id`, and `auto_resume` do not establish identity or role. `auto_resume` controls the authenticated operator's suspension preference. Separately authenticated tenant roles are outside the current authentication model.",
+        "",
         "Public routes:",
         "",
     ]
@@ -1031,7 +1054,15 @@ def write_api_reference(routes: list[Route]) -> None:
 
     for tag in sorted(grouped):
         title = tag.replace("-", " ").title()
-        lines.extend([f"## {title}", "", "| Method | Path | Handler | Notes |", "| --- | --- | --- | --- |"])
+        lines.extend([f"## {title}", ""])
+        if tag == "agents":
+            lines.extend(
+                [
+                    "Successful agent deletion commits dependent database cleanup before removing the live agent, aborting its runner, and clearing its retained mission receipts. A rejected deletion preserves the live identity and runner. Cancellation and preemption of a retained agent preserve acknowledged provider usage under the server-created mission/run identity; caller-supplied identity properties do not replace that ownership.",
+                    "",
+                ]
+            )
+        lines.extend(["| Method | Path | Handler | Notes |", "| --- | --- | --- | --- |"])
         for route in grouped[tag]:
             if route.path in ("/v1/engine/ws", "/v1/engine/live-voice"):
                 note = "Protected (WS Subprotocol)"
