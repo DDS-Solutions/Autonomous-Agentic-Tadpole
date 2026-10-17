@@ -212,7 +212,7 @@ impl SymbolExtractor {
             let mut kind = String::new();
             let mut full_node = None;
 
-            for capture in m.captures {
+            for capture in m.captures() {
                 let capture_name = query.capture_names()[capture.index as usize];
                 if capture_name == "name" {
                     name = capture
@@ -261,7 +261,7 @@ impl SymbolExtractor {
         let mut refs = Vec::new();
 
         while let Some(m) = matches.next() {
-            for capture in m.captures {
+            for capture in m.captures() {
                 let name = capture
                     .node
                     .utf8_text(content.as_bytes())

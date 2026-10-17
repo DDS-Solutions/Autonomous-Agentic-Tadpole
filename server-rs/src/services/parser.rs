@@ -117,13 +117,13 @@ impl SymbolParser {
             let mut kind = "unknown".to_string();
             
             // We expect at least one capture (the item itself)
-            if m.captures.is_empty() {
+            if m.captures().is_empty() {
                 continue;
             }
             
-            let mut node = m.captures[0].node;
+            let mut node = m.captures()[0].node;
 
-            for capture in m.captures {
+            for capture in m.captures() {
                 let capture_name = query.capture_names()[capture.index as usize];
                 if capture_name == "name" {
                     if let Some(s) = content.get(capture.node.byte_range()) {
