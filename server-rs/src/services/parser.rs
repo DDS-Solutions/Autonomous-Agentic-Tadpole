@@ -93,12 +93,9 @@ impl SymbolParser {
             return Vec::new();
         }
 
-        let tree = match parser.parse(content, None) {
-            Some(t) => t,
-            None => {
-                tracing::error!("❌ [Parser] Failed to parse content for {}", path);
-                return Vec::new();
-            }
+        let Some(tree) = parser.parse(content, None) else {
+            tracing::error!("❌ [Parser] Failed to parse content for {}", path);
+            return Vec::new();
         };
 
         let query = match Query::new(&language, query_str) {
