@@ -57,6 +57,7 @@ pkg/
 **/pkg/
 audit_full_report.*
 audit_production_report.md
+codebase-trace-audit-plan.md
 test_permissions.txt
 server-rs/src/scratch_*.rs
 sidecar_panic.log

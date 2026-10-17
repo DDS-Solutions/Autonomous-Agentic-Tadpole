@@ -501,15 +501,50 @@ impl AgentRunner {
         let shell = if cfg!(windows) { "powershell" } else { "sh" };
         let flag = if cfg!(windows) { "-Command" } else { "-c" };
 
-        let child = tokio::process::Command::new(shell)
+        let mut cmd = tokio::process::Command::new(shell);
+        cmd.kill_on_drop(true)
             .arg(flag)
-            .arg(script)
-            .env("SKILL_NAME", skill_name)
+            .arg(script);
+
+        // Enforce strict environment isolation: do not leak parent API keys or secrets
+        cmd.env_clear();
+        cmd.env("SKILL_NAME", skill_name)
             .env("SKILL_PARAMS", params.to_string())
-            .env("SKILL_OUTPUT", output)
-            .current_dir(cwd)
+            .env("SKILL_OUTPUT", output);
+
+        #[cfg(windows)]
+        {
+            if let Ok(val) = std::env::var("SystemRoot") {
+                cmd.env("SystemRoot", val);
+            }
+            if let Ok(val) = std::env::var("COMSPEC") {
+                cmd.env("COMSPEC", val);
+            }
+            if let Ok(val) = std::env::var("PATHEXT") {
+                cmd.env("PATHEXT", val);
+            }
+            if let Ok(val) = std::env::var("PATH") {
+                cmd.env("PATH", val);
+            }
+            if let Ok(val) = std::env::var("TEMP") {
+                cmd.env("TEMP", val);
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            if let Ok(val) = std::env::var("PATH") {
+                cmd.env("PATH", val);
+            }
+            if let Ok(val) = std::env::var("HOME") {
+                cmd.env("HOME", val);
+            }
+        }
+
+        cmd.current_dir(cwd)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        let child = cmd
             .spawn()
             .map_err(|e| AppError::InternalServerError(format!("Failed to spawn verification script: {}", e)))?;
 

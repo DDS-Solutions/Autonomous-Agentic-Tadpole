@@ -30,6 +30,9 @@
 
                 ⚠️ ***Warning: With great power comes great responsibility. SANDBOX USE ONLY*** ⚠️
 
+> [!CAUTION]
+> **Host Execution Notice**: Autonomous Agentic Tadpole is designed for local developer workstations and isolated bunker lab environments. While WebAssembly skill isolation and Docker container options exist, local Python skills and verification scripts execute within host process boundaries under path-containment controls. Do not execute untrusted agent workflows without dedicated machine or container isolation.
+
 Most agent frameworks stop at prompt orchestration. Autonomous Agentic Tadpole goes further: it combines a Rust control plane, a production-grade React operations console, SQLite-backed persistence, governance gates, skill execution, MCP tooling, model-provider management, and live telemetry into one local-first system.
 
 The result is a desktop-ready agent operations platform that can run missions, manage agent state, inspect model providers, schedule continuity jobs, surface security posture, and keep a durable audit trail without depending on a hosted control plane.

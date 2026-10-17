@@ -165,6 +165,24 @@ impl BudgetGuard {
         Ok(())
     }
 
+    /// Atomically reserves budget and returns an RAII guard that automatically releases
+    /// the reservation if dropped before being committed.
+    pub async fn reserve_scoped(
+        &self,
+        entity_id: &str,
+        estimated_cost: f64,
+    ) -> Result<Option<BudgetReservationGuard>> {
+        if self.check_and_reserve_budget(entity_id, estimated_cost).await? {
+            Ok(Some(BudgetReservationGuard::new(
+                self.clone(),
+                entity_id,
+                estimated_cost,
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Checks if a mission (cluster) has sufficient remaining budget.
     #[allow(dead_code)]
     pub async fn check_mission_budget(
@@ -457,6 +475,49 @@ impl BudgetGuard {
         .await?;
 
         Ok(())
+    }
+}
+
+/// RAII Guard that holds an in-flight 2PC budget reservation.
+/// If dropped before being explicitly committed, it automatically releases the reservation.
+pub struct BudgetReservationGuard {
+    guard: BudgetGuard,
+    entity_id: String,
+    reserved_cost: f64,
+    committed: bool,
+}
+
+impl BudgetReservationGuard {
+    pub fn new(guard: BudgetGuard, entity_id: impl Into<String>, reserved_cost: f64) -> Self {
+        Self {
+            guard,
+            entity_id: entity_id.into(),
+            reserved_cost,
+            committed: false,
+        }
+    }
+
+    /// Marks the reservation as committed (e.g., when usage is recorded), preventing rollback on drop.
+    pub fn commit(mut self) {
+        self.committed = true;
+    }
+
+    /// Returns the reserved dollar amount.
+    pub fn reserved_cost(&self) -> f64 {
+        self.reserved_cost
+    }
+}
+
+impl Drop for BudgetReservationGuard {
+    fn drop(&mut self) {
+        if !self.committed && self.reserved_cost > 0.0 {
+            self.guard.release_reservation(&self.entity_id, self.reserved_cost);
+            tracing::debug!(
+                "🔓 [BudgetGuard] RAII auto-released uncommitted reservation of ${:.6} for entity '{}'",
+                self.reserved_cost,
+                self.entity_id
+            );
+        }
     }
 }
 

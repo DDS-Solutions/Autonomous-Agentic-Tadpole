@@ -217,7 +217,9 @@ pub async fn install_template(
     let _ = tokio::fs::create_dir_all(&temp_dir).await;
 
     // 1. Clone repository using the boot-resolved git command
-    let status = match tokio::process::Command::new(&git_cmd)
+    let mut cmd = tokio::process::Command::new(&git_cmd);
+    cmd.kill_on_drop(true);
+    let status = match cmd
         .arg("clone")
         .arg("--depth")
         .arg("1")

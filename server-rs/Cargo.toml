@@ -65,7 +65,7 @@ base64 = "0.23.1"
 lru = "0.18.0"
 tokio-tungstenite = "0.29.0"
 subtle = "2.6"
-moka = { version = "0.12", features = ["future"] }
+moka = { version = "0.12", features = ["future", "sync"] }
 memmap2 = "0.9"
 
 
@@ -113,24 +113,6 @@ default = []
 vector-memory = ["dep:lancedb", "dep:arrow-schema", "dep:arrow-array"]
 neural-audio = ["dep:ort", "dep:hound", "dep:ndarray", "dep:whisper-rs"]
 
-[profile.release]
-opt-level = 3 # Maximize execution performance
-lto = "fat"    # Full Link Time Optimization for maximum stripping
-codegen-units = 1 # Better optimizations
-panic = 'unwind' # Preserve stack unwinding for telemetry and panic hooks
-strip = true    # Remove all symbols
-
-[profile.bench]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-
 [dev-dependencies]
 tempfile = "3.14"
 criterion = { version = "0.8.2", features = ["async_tokio"] }
-
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 2

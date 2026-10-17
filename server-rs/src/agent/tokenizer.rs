@@ -9,7 +9,7 @@
 //! - **Failure Path**: Tokenizer initialization failure, unknown model fallback.
 //! - **Trace Scope**: `server-rs::agent::tokenizer`
 
-use dashmap::DashMap;
+use moka::sync::Cache;
 use once_cell::sync::Lazy;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -30,8 +30,12 @@ static CL100K_TOKENIZER: Lazy<Option<Arc<CoreBPE>>> = Lazy::new(|| {
     }
 });
 
-/// High-concurrency zero-allocation token count cache (bounded capacity 4,096 entries).
-static TOKEN_COUNT_CACHE: Lazy<DashMap<u64, usize>> = Lazy::new(|| DashMap::with_capacity(4096));
+/// High-concurrency zero-allocation token count cache (bounded capacity 4,096 entries, lock-free LRU/TinyLFU).
+static TOKEN_COUNT_CACHE: Lazy<Cache<u64, usize>> = Lazy::new(|| {
+    Cache::builder()
+        .max_capacity(4096)
+        .build()
+});
 
 /// Zero-allocation fast 64-bit cache key hasher.
 #[inline]
@@ -48,7 +52,7 @@ pub struct TokenizerService;
 
 impl TokenizerService {
     /// Calculates token count for a given text content based on the target model ID.
-    /// Utilizes a high-concurrency DashMap LRU cache for zero-allocation sub-microsecond hits.
+    /// Utilizes a high-concurrency moka LRU cache for zero-allocation sub-microsecond hits.
     pub fn count_tokens(model_id: &str, text: &str) -> usize {
         if text.is_empty() {
             return 0;
@@ -56,7 +60,7 @@ impl TokenizerService {
 
         let cache_key = compute_cache_key(model_id, text);
         if let Some(cached) = TOKEN_COUNT_CACHE.get(&cache_key) {
-            return *cached;
+            return cached;
         }
 
         // Zero-allocation case-insensitive model matching
@@ -86,10 +90,6 @@ impl TokenizerService {
             _ => Self::estimate_tokens_fallback(text),
         };
 
-        // Enforce RAM safety limit (max 4,096 entries)
-        if TOKEN_COUNT_CACHE.len() >= 4096 {
-            TOKEN_COUNT_CACHE.clear();
-        }
         TOKEN_COUNT_CACHE.insert(cache_key, count);
 
         count
@@ -98,7 +98,7 @@ impl TokenizerService {
     /// Clears the token count cache (useful for benchmarks & isolated tests).
     #[allow(dead_code)]
     pub fn clear_cache() {
-        TOKEN_COUNT_CACHE.clear();
+        TOKEN_COUNT_CACHE.invalidate_all();
     }
 
     /// Zero-allocation case-insensitive ASCII substring search helper.

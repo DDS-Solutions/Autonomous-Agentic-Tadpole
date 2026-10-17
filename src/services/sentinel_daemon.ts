@@ -77,8 +77,10 @@ class SentinelDaemon {
                 this.idle_callback_id = window.requestIdleCallback(
                     async (deadline) => {
                         this.idle_callback_id = null;
-                        if (deadline.timeRemaining() > 10 || deadline.didTimeout) {
+                        if (deadline.timeRemaining() > 10) {
                             await this.execute_cycle();
+                        } else if (deadline.didTimeout) {
+                            console.debug('🛡️ [SentinelDaemon] Deferring audit cycle to preserve UI 60fps render frames.');
                         }
                         if (this.is_running) {
                             this.schedule_next();

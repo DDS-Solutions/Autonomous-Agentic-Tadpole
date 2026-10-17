@@ -132,6 +132,7 @@ impl TaskGraph {
     /// A node transitions from `Pending` -> `Ready` if all incoming predecessor nodes are `Completed`.
     pub fn get_ready_nodes(&mut self) -> Vec<TaskNode> {
         let mut ready_indices = Vec::new();
+        let mut skip_indices = Vec::new();
 
         for idx in self.graph.node_indices() {
             let node = &self.graph[idx];
@@ -139,18 +140,35 @@ impl TaskGraph {
                 continue;
             }
 
-            // Check if all parent dependencies are COMPLETED
             let mut all_parents_completed = true;
+            let mut has_failed_or_skipped_parent = false;
+
             for parent_idx in self.graph.neighbors_directed(idx, Direction::Incoming) {
-                if self.graph[parent_idx].status != TaskNodeStatus::Completed {
-                    all_parents_completed = false;
-                    break;
+                match self.graph[parent_idx].status {
+                    TaskNodeStatus::Completed => {}
+                    TaskNodeStatus::Failed | TaskNodeStatus::Skipped => {
+                        has_failed_or_skipped_parent = true;
+                        all_parents_completed = false;
+                        break;
+                    }
+                    _ => {
+                        all_parents_completed = false;
+                    }
                 }
             }
 
-            if all_parents_completed {
+            if has_failed_or_skipped_parent {
+                skip_indices.push(idx);
+            } else if all_parents_completed {
                 ready_indices.push(idx);
             }
+        }
+
+        for idx in skip_indices {
+            self.graph[idx].status = TaskNodeStatus::Skipped;
+            self.graph[idx].error_detail =
+                Some("Skipped because at least one upstream parent failed or was skipped".into());
+            warn!("⏭️ [TaskGraph] Dependent node '{}' skipped due to non-completed predecessor", self.graph[idx].id);
         }
 
         let mut ready_nodes = Vec::new();

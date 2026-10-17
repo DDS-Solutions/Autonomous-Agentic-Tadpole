@@ -170,6 +170,37 @@ impl SharedBlackboard {
     pub fn clear_mission(&self, mission_id: &str) {
         self.missions.remove(mission_id);
     }
+
+    /// Creates an RAII scoped mission handle that cleans up the mission blackboard when dropped.
+    pub fn scoped_mission(self: &Arc<Self>, mission_id: impl Into<String>) -> MissionBlackboardScope {
+        MissionBlackboardScope::new(Arc::clone(self), mission_id)
+    }
+}
+
+/// RAII Drop guard that deterministically frees mission blackboard entries upon scope termination.
+pub struct MissionBlackboardScope {
+    blackboard: Arc<SharedBlackboard>,
+    mission_id: String,
+}
+
+impl MissionBlackboardScope {
+    pub fn new(blackboard: Arc<SharedBlackboard>, mission_id: impl Into<String>) -> Self {
+        Self {
+            blackboard,
+            mission_id: mission_id.into(),
+        }
+    }
+
+    pub fn mission_id(&self) -> &str {
+        &self.mission_id
+    }
+}
+
+impl Drop for MissionBlackboardScope {
+    fn drop(&mut self) {
+        self.blackboard.clear_mission(&self.mission_id);
+        tracing::debug!("🧹 [Blackboard] Deterministically pruned mission blackboard for '{}'", self.mission_id);
+    }
 }
 
 #[cfg(test)]

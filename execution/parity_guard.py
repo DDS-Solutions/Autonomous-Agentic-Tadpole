@@ -123,7 +123,7 @@ def check_env_vars(root):
         print_result("ENV-VAR", False, "No environment variables found in server-rs/src (scanner failure)")
         errors += 1
 
-    SYSTEM_HOST_VARS = {"PATH", "COMSPEC", "PATHEXT", "SystemRoot", "TEMP", "TMP"}
+    SYSTEM_HOST_VARS = {"PATH", "COMSPEC", "PATHEXT", "SystemRoot", "TEMP", "TMP", "HOME"}
     for var in env_vars_in_code:
         if var in SYSTEM_HOST_VARS or var in env_example_vars:
             print_result("ENV-VAR", True, f"{var} documented")
