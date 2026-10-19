@@ -105,6 +105,8 @@ impl AgentRunner {
         let mut running_cost: f64 = ctx.current_cost_usd;
         let tool_repetition_tracker: Arc<parking_lot::Mutex<std::collections::HashMap<(String, String), usize>>> =
             Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new()));
+        let doom_loop_detector: Arc<parking_lot::Mutex<crate::agent::runner::loop_detector::DoomLoopDetector>> =
+            Arc::new(parking_lot::Mutex::new(crate::agent::runner::loop_detector::DoomLoopDetector::new()));
 
         while turn_count < max_turns {
             turn_count += 1;
@@ -519,8 +521,9 @@ impl AgentRunner {
                         let runner = self.clone();
                         let ctx_clone = ctx.clone();
                         let user_msg_clone = payload.message.clone();
-                        let turn_idx = reasoning_turn;
+                        let _turn_idx = reasoning_turn;
                         let tracker = tool_repetition_tracker.clone();
+                        let loop_det = doom_loop_detector.clone();
                         futures.push(async move {
                             ctx_clone.metrics.record_tool_attempt();
                             runner.update_status(&ctx_clone.agent_id, &ctx_clone.mission_id, "working", Some(&format!("Executing tool: {}...", fc.name)));
@@ -528,10 +531,10 @@ impl AgentRunner {
                             let mut local_text = String::new();
                             let mut local_usage = None;
 
-                            // 🔁 [Tool Idempotency] Check persistent tool result cache
+                            let args_str = serde_json::to_string(&fc.args).unwrap_or_else(|_| fc.args.to_string());
                             use std::hash::{Hash, Hasher};
                             let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                            fc.args.to_string().hash(&mut hasher);
+                            args_str.hash(&mut hasher);
                             let args_hash = format!("{:x}", hasher.finish());
 
                             // 🛡️ [Loop Guard] Track consecutive identical tool calls
@@ -572,29 +575,67 @@ impl AgentRunner {
                                 String::new()
                             };
 
-                            let cached = crate::agent::mission::get_tool_result(&runner.state.resources.pool, &ctx_clone.mission_id, &fc.name, &args_hash).await.unwrap_or(None);
-                            let result = if let Some(cached_output) = cached {
-                                tracing::info!("🔁 [Idempotency] Replaying cached tool result for '{}' (hash: {})", fc.name, args_hash);
+                            // 🎯 [SharedToolCache / get_tool_result] Only cache strictly idempotent read-only tools with mtime invalidation
+                            let is_cacheable = crate::agent::runner::tools::cache::SharedToolCache::is_cacheable(&fc.name);
+                            let workspace_root_str = ctx_clone.workspace_root.to_string_lossy().to_string();
+
+                            let cached = if is_cacheable {
+                                runner.state.resources.tool_cache.lock().get(&fc.name, &args_str, &workspace_root_str)
+                            } else {
+                                None
+                            };
+
+                            let result = if let Some((cached_output, cached_usage)) = cached {
+                                tracing::info!("🎯 [SharedToolCache Hit] Bypassing execution for idempotent tool '{}'", fc.name);
                                 local_text = cached_output.clone();
+                                if let Some(u) = cached_usage {
+                                    local_usage = Some(u);
+                                }
                                 Ok(Some(cached_output))
                             } else {
+                                // Path extraction for cache invalidation & leasing
+                                let target_path_opt = fc.args.get("path")
+                                    .or_else(|| fc.args.get("file_path"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|p| {
+                                        let pb = std::path::PathBuf::from(p);
+                                        if pb.is_absolute() { pb } else { ctx_clone.workspace_root.join(pb) }
+                                    });
+
+                                // Invalidate cache on mutations
+                                if matches!(fc.name.as_str(), "write_file" | "write_to_file" | "patch_file" | "replace_file_content" | "edit_file" | "create_file") {
+                                    if let Some(ref path) = target_path_opt {
+                                        runner.state.resources.tool_cache.lock().invalidate_path(path);
+                                    }
+                                } else if fc.name == "run_command" || fc.name == "execute_shell" {
+                                    runner.state.resources.tool_cache.lock().clear();
+                                }
+
                                 let res = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
-                                if res.is_ok() && !local_text.is_empty() {
-                                    let call_id = format!("{}:{}:{}", ctx_clone.mission_id, turn_idx, fc.name);
-                                    let _ = crate::agent::mission::save_tool_result(
-                                        &runner.state.resources.pool,
-                                        &call_id,
-                                        &ctx_clone.mission_id,
-                                        turn_idx as i64,
+                                if is_cacheable && res.is_ok() && !local_text.is_empty() && !local_text.contains("[TOOL_ERROR]") && !local_text.contains("FAILED:") {
+                                    runner.state.resources.tool_cache.lock().insert(
                                         &fc.name,
-                                        &args_hash,
-                                        &local_text,
-                                    ).await;
+                                        &args_str,
+                                        &workspace_root_str,
+                                        local_text.clone(),
+                                        local_usage.clone(),
+                                        target_path_opt,
+                                    );
                                 }
                                 res
                             };
 
-                            if !warning_prefix.is_empty() {
+                            // 🔄 [DoomLoopDetector] Detect periodic tool cycles (periods 1-4)
+                            let is_periodic_loop = loop_det.lock().check(&ctx_clone.agent_id, &fc.name, &args_str, &local_text);
+                            if is_periodic_loop {
+                                tracing::warn!("🔄 [DoomLoopDetector] Periodic tool execution loop detected for agent '{}' on tool '{}'", ctx_clone.agent_id, fc.name);
+                                local_text = format!(
+                                    "[TOOL_WARNING] Periodic cycle detected: you are repeating tool actions across turns without forward progress. Change strategy immediately or ask the user for guidance.\n{}",
+                                    local_text
+                                );
+                            }
+
+                            if !warning_prefix.is_empty() && !is_periodic_loop {
                                 local_text = format!("{}{}", warning_prefix, local_text);
                             }
 
@@ -748,45 +789,7 @@ impl AgentRunner {
         })
     }
 
-    /// Compresses the internal monologue via recursive summarization if it grows too large.
-    async fn compress_monologue(
-        &self,
-        ctx: &RunContext,
-        monologue: &mut Vec<String>,
-    ) -> Result<(), AppError> {
-        let total_chars: usize = monologue.iter().map(|s| s.len()).sum();
-        if total_chars < 8192 {
-            return Ok(());
-        }
 
-        tracing::info!(
-            "✂️ [Mythos] Monologue threshold reached ({} chars) for agent {}. Summarizing...",
-            total_chars, ctx.agent_id
-        );
-
-        let history = monologue.join("\n\n");
-        let prompt = format!(
-            "SUMMARIZE YOUR PREVIOUS REASONING STEPS INTO A SINGLE CONCISE PARAGRAPH. \
-             RETAIN ALL KEY INSIGHTS, VARIABLES, AND HYPOTHESES. \
-             \n\nPREVIOUS REASONING:\n{}",
-            history
-        );
-
-        let (summary_text, _, _) = self
-            .call_provider(
-                ctx,
-                "You are an expert reasoning summarizer. Be technical, dense, and objective.",
-                &prompt,
-                None,
-            )
-            .await?;
-
-        monologue.clear();
-        monologue.push(format!("CONSOLIDATED REASONING: {}", summary_text));
-        ctx.metrics.record_summarization();
-
-        Ok(())
-    }
 
     /// Enforces the Sentinel Gate protocol: Specialist agents are forbidden from text-only turns.
     #[allow(clippy::too_many_arguments)]
@@ -1050,6 +1053,7 @@ mod tests {
             &mut function_calls,
             &mut usage,
             &mut attempts,
+            &[],
         ).await;
 
         assert!(result.is_ok());
@@ -1081,6 +1085,7 @@ mod tests {
             &mut function_calls,
             &mut usage,
             &mut attempts,
+            &[],
         ).await;
         std::env::remove_var("TADPOLE_NULL_PROVIDERS");
 

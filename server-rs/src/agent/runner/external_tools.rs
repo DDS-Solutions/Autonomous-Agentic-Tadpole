@@ -103,75 +103,21 @@ impl AgentRunner {
         } else {
             self.broadcast_agent(ctx, &format!("🌐 Surface: researching {}...", url), "info");
 
-            let parsed_url = match reqwest::Url::parse(url) {
-                Ok(u) => u,
-                Err(e) => {
+            // 🛡️ [SSRF & DNS-Rebinding Defense] Rigorous IP, CGNAT, IPv6, and cloud metadata validation
+            let validated = match crate::security::ssrf_guard::validate_public_http_url(url).await {
+                Ok(v) => v,
+                Err(err) => {
                     let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Invalid URL: {}\n</untrusted_web_content>", safe_url, e));
+                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: {}\n</untrusted_web_content>", safe_url, err));
                 }
             };
 
-            let scheme = parsed_url.scheme();
-            if scheme != "http" && scheme != "https" {
-                let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Only http and https schemes are permitted\n</untrusted_web_content>", safe_url));
-            }
-
-            let host_str = parsed_url.host_str().unwrap_or("");
-            let host_lower = host_str.to_ascii_lowercase();
-
-            // 🛡️ [SSRF Defense] Block cloud metadata, local, and unspecified addresses
-            if host_lower == "169.254.169.254"
-                || host_lower.starts_with("169.254.")
-                || host_lower == "metadata.google.internal"
-                || host_lower == "instance-data"
-                || host_lower == "0.0.0.0"
-                || host_lower == "localhost"
-            {
-                let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to local, private, or metadata addresses is prohibited\n</untrusted_web_content>", safe_url));
-            }
-
-            fn is_prohibited_ip(ip: std::net::IpAddr) -> bool {
-                match ip {
-                    std::net::IpAddr::V4(ipv4) => {
-                        ipv4.is_loopback()
-                            || ipv4.is_private()
-                            || ipv4.is_link_local()
-                            || ipv4.is_unspecified()
-                            || ipv4.is_broadcast()
-                            || (ipv4.octets()[0] == 100 && (ipv4.octets()[1] & 0xC0) == 64)
-                    }
-                    std::net::IpAddr::V6(ipv6) => {
-                        ipv6.is_loopback()
-                            || ipv6.is_unspecified()
-                            || ((ipv6.segments()[0] & 0xfe00) == 0xfc00)
-                            || ((ipv6.segments()[0] & 0xffc0) == 0xfe80)
-                            || match ipv6.to_ipv4_mapped() {
-                                Some(v4) => is_prohibited_ip(std::net::IpAddr::V4(v4)),
-                                None => false,
-                            }
-                    }
-                }
-            }
-
-            let port = parsed_url.port_or_known_default().unwrap_or(80);
-            if let Ok(ip) = host_str.parse::<std::net::IpAddr>() {
-                if is_prohibited_ip(ip) {
-                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Access to private or local network IP addresses is prohibited\n</untrusted_web_content>", safe_url));
-                }
-            } else if let Ok(mut addrs) = tokio::net::lookup_host(format!("{}:{}", host_str, port)).await {
-                if addrs.any(|addr| is_prohibited_ip(addr.ip())) {
-                    let safe_url = url.replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
-                    return Ok(format!("<untrusted_web_content url=\"{}\">\nFETCH FAILED: Host resolves to private or local network IP addresses\n</untrusted_web_content>", safe_url));
-                }
-            }
-
-            // Dedicated client with no automatic redirect following to prevent SSRF redirect bounces
+            // Dedicated client with IP-pinning via .resolve() to eliminate TOCTOU DNS rebinding,
+            // and no automatic redirect following to prevent SSRF redirect bounces.
             let client = reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(std::time::Duration::from_secs(15))
+                .resolve(&validated.host, std::net::SocketAddr::new(validated.ip, validated.port))
                 .build()
                 .unwrap_or_else(|_| (*self.state.resources.http_client).clone());
 

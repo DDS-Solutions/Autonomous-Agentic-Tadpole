@@ -69,6 +69,11 @@ This map reflects the current code layout and should be used as the first orient
 | Multi-Agent Starter Kits | `starter_kits/` | Ready-to-deploy swarms (Customer Success, Explorer Scout, Finance Compliance, Marketing Growth). |
 | Persistence | `server-rs/src/db/{mod,migrations,seed,init,contract_tests}.rs`, `server-rs/migrations/`, `data/` | Modular SQLite initialization, migrations (`20260304000100`–`20260918000100`), contract test coverage, safe fallback memory provisioning, and gated reconciliation (`ALLOW_MIGRATION_RECONCILE=true`). |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
+| Shared Tool Cache & Invalidation | `server-rs/src/agent/runner/tools/cache.rs` | In-memory read-only LRU tool cache with monotonic file mtime/size freshness validation and mutation invalidation. |
+| Cyclic Loop Detection & Monologue Compactor | `server-rs/src/agent/runner/{loop_detector,monologue}.rs` | Period 1-4 cyclical tool loop detection and 2-stage monologue compaction (embedded log trimming + older turn summarization). |
+| SSRF Security Guard | `server-rs/src/security/ssrf_guard.rs` | Public IP and scheme validation, private/local CIDR rejection, and DNS pre-resolution IP pinning for outbound agent tool requests. |
+| Telemetry Span Watchdog | `server-rs/src/telemetry/span_watchdog.rs` | Background watchdog reaping leaked/orphaned telemetry spans with provider-aware TTLs (60s cloud, 300s local Ollama). |
+| Mission Bench Rig | `tests/mission_bench/` | 5-scenario blind-judge benchmark harness (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) asserting system invariants. |
 | Structured Message Pipeline | `server-rs/src/agent/types.rs`, `server-rs/src/agent/runner/provider.rs` | Strongly typed `ChatMessage` protocol with native Anthropic/Gemini ephemeral prompt caching. |
 | Ground Truth Evaluation | `evals/tasks.json`, `evals/run.py` | 20-task ground truth architectural evaluation benchmark suite (`npm run test:evals`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |

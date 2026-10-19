@@ -441,6 +441,7 @@ pub async fn spawn_background_tasks(
         Box::new(services::BudgetFlushService),
         Box::new(services::RecipeIngestionService),
         Box::new(services::SystemHealthMonitorService),
+        Box::new(services::SpanWatchdogService),
     ];
 
     #[cfg(feature = "vector-memory")]

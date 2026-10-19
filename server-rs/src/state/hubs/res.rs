@@ -102,6 +102,8 @@ pub struct ResourceHub {
     pub git_path: Option<std::path::PathBuf>,
     /// Atomic concurrency gate to prevent simultaneous symbol graph rebuilds.
     pub is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool,
+    /// Shared in-memory tool cache with mtime and file size invalidation.
+    pub tool_cache: Arc<parking_lot::Mutex<crate::agent::runner::tools::cache::SharedToolCache>>,
 }
 
 impl ResourceHub {

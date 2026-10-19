@@ -52,6 +52,8 @@ pub mod tools;
 pub mod error;
 pub(crate) mod execution_metrics;
 pub(crate) mod turn_compactor;
+pub(crate) mod loop_detector;
+mod monologue;
 mod workflow;
 
 // ─────────────────────────────────────────────────────────

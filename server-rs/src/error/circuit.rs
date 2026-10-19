@@ -76,7 +76,7 @@ impl CircuitBreaker {
             CircuitState::Closed | CircuitState::HalfOpen => true,
             CircuitState::Open => {
                 tracing::warn!(
-                    "⚡ [CircuitBreaker:{}] Circuit OPEN. Fast-failing request to protect downstream service.",
+                    "⚡ [circuit_breaker] name={} Circuit OPEN. Fast-failing request to protect downstream service.",
                     self.name
                 );
                 false
@@ -89,7 +89,7 @@ impl CircuitBreaker {
         let prev = self.consecutive_failures.swap(0, Ordering::Relaxed);
         if prev >= self.failure_threshold {
             tracing::info!(
-                "🌱 [CircuitBreaker:{}] Probe succeeded. Circuit healed: Open/HalfOpen -> CLOSED.",
+                "🌱 [circuit_breaker] name={} Probe succeeded. Circuit healed: Open/HalfOpen -> CLOSED.",
                 self.name
             );
         }
@@ -103,7 +103,7 @@ impl CircuitBreaker {
 
         if failures >= self.failure_threshold {
             tracing::error!(
-                "🚨 [CircuitBreaker:{}] Tripped to OPEN! Consecutive failures: {} >= threshold {}. Cooldown: {}s",
+                "🚨 [circuit_breaker] name={} Tripped to OPEN! Consecutive failures: {} >= threshold {}. Cooldown: {}s",
                 self.name,
                 failures,
                 self.failure_threshold,

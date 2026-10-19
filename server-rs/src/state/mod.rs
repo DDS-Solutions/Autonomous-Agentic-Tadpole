@@ -202,6 +202,7 @@ impl AppState {
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
+                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -346,6 +347,7 @@ impl AppState {
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
+                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -719,6 +721,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
+                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -1308,6 +1311,7 @@ impl Default for AppState {
             obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             git_path: which::which("git").ok(),
             is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
+            tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

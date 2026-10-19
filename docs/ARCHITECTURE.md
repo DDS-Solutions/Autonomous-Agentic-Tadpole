@@ -298,5 +298,14 @@ The agent execution pipeline in `server-rs/src/agent/runner/` enforces rigorous 
    - Fully automated ground-truth benchmark suite asserting 20 core architectural capabilities (schema validation, loop guards, budget gates, prompt caching, hierarchy intercepts, Merkle continuity, and recovery fallbacks).
    - Executable via `npm run test:evals` or `python evals/run.py`.
 
+7. **Execution Resilience, Shared Tool Cache & Security Watchdogs (`server-rs/src/agent/runner/`)**:
+   - **Shared Tool Cache (`server-rs/src/agent/runner/tools/cache.rs`)**: Replaces indiscriminate SQLite caching with a strict in-memory LRU tool cache. Only read-only tools are cached; cached entries validate monotonic `mtime` and file byte size, and invalidation occurs instantly on mutating tools (`write_file`, `patch_file`, `replace_file_content`, `run_command`).
+   - **Cyclic DoomLoopDetector (`server-rs/src/agent/runner/loop_detector.rs`)**: Evaluates JSON-normalized SHA-256 signatures of tool call invocations and outputs to detect multi-turn cyclic loops (periods 1, 2, 3, and 4), aborting infinite oscillations before consuming mission budget.
+   - **Two-Stage Monologue Compaction (`server-rs/src/agent/runner/monologue.rs`)**: Strips embedded execution logs (>2,000 chars) and dense LLM summarization for turns outside the hot tail (last 4 turns) with deterministic fallback summarization.
+   - **SSRFGuard (`server-rs/src/security/ssrf_guard.rs`)**: Comprehensive outbound HTTP security validating schemes, ports, and IP ranges (rejecting RFC 1918, RFC 5737, loopback, CGNAT, link-local, IPv6 ULA) and directly pinning resolved IPs in `reqwest::ClientBuilder` to defeat DNS rebinding.
+   - **SpanWatchdog (`server-rs/src/telemetry/span_watchdog.rs`)**: Background sweep service enforcing provider-specific TTLs (60s cloud, 300s Ollama) on open telemetry spans, auto-closing orphans with `SPAN_TIMEOUT_REAPED` events.
+   - **Mission Benchmark Harness (`tests/mission_bench/`)**: Standardized 5-scenario benchmark test suite (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) asserting system invariants.
+
 [//]: # (Metadata: [ARCHITECTURE])
+
 

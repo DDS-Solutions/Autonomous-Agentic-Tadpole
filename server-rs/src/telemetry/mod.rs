@@ -25,6 +25,7 @@ pub mod pulse;
 pub mod pulse_types;
 pub mod bridge;
 pub mod sink;
+pub mod span_watchdog;
 
 #[cfg(test)]
 mod pulse_tests;

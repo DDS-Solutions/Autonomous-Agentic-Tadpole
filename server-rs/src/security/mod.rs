@@ -26,6 +26,7 @@ pub mod monitoring;
 pub mod permissions;
 pub mod scanner;
 pub mod sandbox;
+pub mod ssrf_guard;
 
 pub use conflict::ConflictManager;
 

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """
+@docs ARCHITECTURE:Core
+@docs OPERATIONS_MANUAL:Verification
+
+### AI Assist Note
 Tadpole OS Sovereign Swarm - 20-Task Ground Truth Evaluation Harness
 Evaluates system invariants, governance policies, context guards, and reasoning boundaries.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Task invariant mismatch, missing schema properties, or unparseable evaluations.
+- **Telemetry Link**: Search `[evals_run]` in system logs.
 """
 
 import sys
@@ -26,7 +34,7 @@ def run_evals():
     results = []
 
     print(f"\n=======================================================")
-    print(f"[*] Tadpole OS Swarm Evaluation Harness (v{bench['version']})")
+    print(f"[evals_run] Tadpole OS Swarm Evaluation Harness (v{bench['version']})")
     print(f"    Executing {len(tasks)} Ground Truth Architectural Tasks")
     print(f"=======================================================\n")
 

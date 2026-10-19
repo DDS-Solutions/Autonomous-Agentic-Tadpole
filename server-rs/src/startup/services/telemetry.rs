@@ -276,5 +276,29 @@ impl SystemService for RecoverActiveAgentsService {
     }
 }
 
+pub struct SpanWatchdogService;
+
+#[async_trait]
+impl SystemService for SpanWatchdogService {
+    fn name(&self) -> &'static str { "SpanWatchdog" }
+    fn is_critical(&self) -> bool { false }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase2TelemetryMonitoring }
+    async fn start(
+        &self,
+        context: SystemContext,
+    ) -> Result<(), anyhow::Error> {
+        let mut shutdown_rx = context.shutdown_rx.clone();
+        context.app_state.resources.set_subsystem_status("SpanWatchdog", crate::types::SubsystemStatus::Ready);
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    tracing::info!("🛑 [SpanWatchdog] SpanWatchdog service shutting down gracefully.");
+                }
+                _ = crate::telemetry::span_watchdog::SpanWatchdog::start_background_loop() => {}
+            }
+        });
+        Ok(())
+    }
+}
 
 // Metadata: [telemetry]

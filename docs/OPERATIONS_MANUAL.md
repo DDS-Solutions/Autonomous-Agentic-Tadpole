@@ -340,6 +340,12 @@ The endpoint `GET /v1/engine/health` returns detailed JSON telemetry for monitor
     *   `SQLiteLocked`: Database busy/lock wait time exceeds 10s.
 *   **Grafana Dashboard**: Configured in `monitoring/grafana/dashboards/tadpole_dashboard.json` for live status visualization.
 
+### Telemetry Watchdog & Execution Resilience
+*   **SpanWatchdog**: Sweeps active telemetry spans every 10s. Enforces provider-aware TTLs (60s cloud, 300s local Ollama). Automatically closes orphaned spans with synthetic `SPAN_TIMEOUT_REAPED` events to prevent leaked spans from degrading dashboard performance.
+*   **Shared Tool Cache**: High-performance LRU cache for idempotent reads with monotonic `mtime` and byte size validation, invalidated upon mutating disk writes or shell commands.
+*   **SSRF Protection**: Strict host and IP validation for outbound agent web requests, pinning resolved public IPs to eliminate DNS rebinding vectors.
+*   **Mission Benchmark Harness**: Standardized 5-scenario evaluation suite (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) testing tool caching, loop prevention, monologue compression, SSRF protection, and span leak recovery.
+
 Useful log tags in code comments and traces:
 
 - `[Main]`

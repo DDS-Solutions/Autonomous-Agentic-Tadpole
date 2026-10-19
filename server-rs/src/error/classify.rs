@@ -233,3 +233,17 @@ impl Classify for AppError {
         }
     }
 }
+
+impl AppError {
+    /// Logs structured telemetry for classified errors.
+    pub fn log_classified(&self) {
+        tracing::debug!(
+            target: "server-rs::error::classify",
+            "[error_classify] class={:?} scope={:?} error={}",
+            self.error_class(),
+            self.error_scope(),
+            self
+        );
+    }
+}
+

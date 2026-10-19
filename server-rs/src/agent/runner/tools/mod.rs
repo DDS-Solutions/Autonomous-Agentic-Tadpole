@@ -23,6 +23,8 @@ pub mod registry;
 pub mod dispatcher;
 pub mod trait_tool;
 pub mod capability;
+pub mod cache;
+pub use cache::SharedToolCache;
 use crate::error::AppError;
 use security::{SecurityManager, DefaultSecurityManager};
 use tracing::Instrument;
