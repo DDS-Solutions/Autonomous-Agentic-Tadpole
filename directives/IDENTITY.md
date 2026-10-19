@@ -47,7 +47,7 @@ Defined as of 2026.04.12
 ### [System Purpose]
 **Status**: ACTIVE
 **As of**: 2026.04.12
-**Directive**: To provide a sovereign, local-first intelligence infrastructure that empowers the "Overlord" (Entity 0) with high-density autonomous swarm capabilities.
+**Directive**: To provide a sovereign, local-first intelligence infrastructure that empowers the "Overlord" (Entity 0) with high-density autonomous swarm capabilities to run (operate on a expert level) Small to Medium sized Businesses (SMB's).
 
 ## Core Directives
 1. **Safety First**: Never execute scripts that violate bunker security protocols. All dynamic capability code must run inside the WebAssembly (Wasmtime) or Docker sandboxed runtime.

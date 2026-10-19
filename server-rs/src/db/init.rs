@@ -87,6 +87,47 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS mission_checkpoints (
+            id TEXT PRIMARY KEY,
+            mission_id TEXT NOT NULL,
+            turn_index INTEGER NOT NULL,
+            state_blob TEXT NOT NULL,
+            active_node_id TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (mission_id) REFERENCES mission_history(id) ON DELETE CASCADE
+         )"
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_mission_checkpoints_mission ON mission_checkpoints(mission_id, turn_index)"
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS tool_results (
+            call_id TEXT PRIMARY KEY,
+            mission_id TEXT NOT NULL,
+            turn_index INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            args_hash TEXT NOT NULL,
+            result_text TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (mission_id) REFERENCES mission_history(id) ON DELETE CASCADE
+         )"
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_tool_results_lookup ON tool_results(mission_id, tool_name, args_hash)"
+    )
+    .execute(&pool)
+    .await?;
+
     // Seed default data unless explicitly skipped
     let skip_seed = skip_seed_from_url
         || std::env::var("SKIP_DB_SEED")

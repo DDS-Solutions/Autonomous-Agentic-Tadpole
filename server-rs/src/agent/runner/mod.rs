@@ -389,11 +389,18 @@ impl AgentRunner {
     /// Used by the `reap_stale_agents` safety valve to detect hung missions.
     pub(crate) async fn record_heartbeat(&self, agent_id: &str) {
         let now = chrono::Utc::now();
-        if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
+        let should_persist = if let Some(mut entry) = self.state.registry.agents.get_mut(agent_id) {
+            let last = entry.health.heartbeat_at;
             entry.value_mut().health.heartbeat_at = Some(now);
-        }
-        if let Err(e) = crate::agent::persistence::update_agent_heartbeat(&self.state.resources.pool, agent_id).await {
-            tracing::warn!("⚠️ [Runner] Failed to persist heartbeat for agent {}: {}", agent_id, e);
+            last.map(|t| (now - t).num_seconds() >= 10).unwrap_or(true)
+        } else {
+            true
+        };
+
+        if should_persist {
+            if let Err(e) = crate::agent::persistence::update_agent_heartbeat(&self.state.resources.pool, agent_id).await {
+                tracing::warn!("⚠️ [Runner] Failed to persist heartbeat for agent {}: {}", agent_id, e);
+            }
         }
     }
 

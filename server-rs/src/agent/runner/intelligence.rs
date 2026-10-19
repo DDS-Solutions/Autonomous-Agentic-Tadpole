@@ -13,10 +13,10 @@
 //!   during a long chain, or tokenizer failure during prompt assembly.
 //! - **Trace Scope**: `server-rs::agent::runner::intelligence`
 
-use crate::agent::types::TaskPayload;
+use crate::agent::types::{TaskPayload, ToolDefinition};
 use super::{AgentRunner, IntelligenceOutput, RunContext};
 use crate::agent::constants::*;
-use crate::error::AppError;
+use crate::error::{AppError, Classify};
 use std::sync::Arc;
 use tracing::Instrument;
 
@@ -103,6 +103,8 @@ impl AgentRunner {
         let max_turns = ctx.max_turns;
 
         let mut running_cost: f64 = ctx.current_cost_usd;
+        let tool_repetition_tracker: Arc<parking_lot::Mutex<std::collections::HashMap<(String, String), usize>>> =
+            Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new()));
 
         while turn_count < max_turns {
             turn_count += 1;
@@ -115,8 +117,22 @@ impl AgentRunner {
             );
 
             // 🛡️ [Bounded Autonomy] Pre-turn financial gate: halt before LLM call if budget exhausted
-            if ctx.budget_usd > 0.0 && running_cost >= ctx.budget_usd {
-                tracing::warn!("💰 [Intelligence] Budget limit reached before Turn {} for agent {}", turn_count, ctx.agent_id);
+            let effective_budget = if ctx.budget_usd > 0.0 {
+                ctx.budget_usd
+            } else if ctx.budget_limit_usd > 0.0 {
+                ctx.budget_limit_usd
+            } else {
+                crate::agent::constants::DEFAULT_BUDGET_LIMIT_USD
+            };
+
+            if running_cost >= effective_budget {
+                tracing::warn!(
+                    "💰 [Intelligence] Budget limit reached before Turn {} for agent {} (${:.4} >= ${:.4})",
+                    turn_count,
+                    ctx.agent_id,
+                    running_cost,
+                    effective_budget
+                );
                 self.broadcast_agent(ctx, "Budget limit reached. Quiescing mission.", "warn");
                 return Ok(IntelligenceOutput {
                     text: format!("{} (Halting: Mission Budget Cap Exceeded)", scrub_mythos_tags(&output_text)),
@@ -128,8 +144,12 @@ impl AgentRunner {
                 .yield_phase_transition(&ctx.agent_id, &format!("Execution: Turn {}", turn_count))
                 .await;
 
+            // Build tools once per turn (P6 optimization)
+            let tools = vec![self.build_tools(ctx).await];
+
             // --- 🧠 [Mythos] Recurrent Reasoning Loop ---
             let mut reasoning_turn = 0;
+            let mut resource_guard_attempts: u32 = 0;
             let mut reasoning_halted = false;
             let mut internal_monologue = Vec::new();
 
@@ -156,8 +176,6 @@ impl AgentRunner {
                 }
 
                 self.record_heartbeat(&ctx.agent_id).await;
-
-                let tools = vec![self.build_tools(ctx).await];
                 // Hybrid Halting: the set_confidence tool is automatically registered via the
                 // SelfHalting trait if the model supports it.
 
@@ -244,16 +262,68 @@ impl AgentRunner {
                     }
                 }
 
+                // 🪟 [Structured Message Dispatch & Prompt Caching]
+                let mut structured_messages: Vec<crate::agent::types::ChatMessage> = compacted_history
+                    .iter()
+                    .map(|t| crate::agent::types::ChatMessage::from_legacy_turn(t))
+                    .collect();
+
+                if !internal_monologue.is_empty() {
+                    structured_messages.push(crate::agent::types::ChatMessage::assistant(format!(
+                        "INTERNAL MONOLOGUE:\n{}",
+                        internal_monologue.join("\n\n")
+                    )));
+                }
+
+                // 🪟 [Context Window Guard] Token-based window limit check
+                let context_limit = ctx
+                    .model_config
+                    .context_window
+                    .unwrap_or_else(|| {
+                        crate::agent::capability_matrix::CapabilityMatrix::infer_capabilities(&ctx.model_config.model_id)
+                            .context_window
+                            .unwrap_or(128_000)
+                    }) as usize;
+
+                let estimated_tokens = crate::agent::runner::provider::estimate_messages_token_count(
+                    &system_prompt,
+                    &structured_messages,
+                );
+
+                if estimated_tokens > context_limit {
+                    tracing::error!(
+                        "🚨 [Context Overflow] Estimated tokens ({}) exceed context window ({}) for model {}",
+                        estimated_tokens,
+                        context_limit,
+                        ctx.model_config.model_id
+                    );
+                    return Err((
+                        AppError::ContextOverflow(format!(
+                            "Context token count ({} tokens) exceeds context window of {} for model {}",
+                            estimated_tokens, context_limit, ctx.model_config.model_id
+                        )),
+                        usage,
+                    ));
+                }
+
                 let provider_res = self
-                    .call_provider(ctx, &system_prompt, &current_prompt, Some(tools))
+                    .call_provider_messages(ctx, &system_prompt, &structured_messages, Some(tools.clone()))
                     .await;
 
                 let (mut turn_text, mut function_calls, turn_usage) = match provider_res {
-                    Ok(data) => data,
+                    Ok(data) => {
+                        resource_guard_attempts = 0;
+                        data
+                    }
                     Err(e) => {
                         let err_str = e.to_string();
                         if err_str.contains("RESOURCE_GUARD") {
-                            tracing::warn!("🛡️ [Intelligence] Resource Guard active. Pausing intelligence loop for agent {}.", ctx.agent_id);
+                            resource_guard_attempts += 1;
+                            if resource_guard_attempts >= 6 {
+                                tracing::error!("🚨 [Intelligence] Resource Guard timeout: system resources constrained for >60s for agent {}.", ctx.agent_id);
+                                return Err((AppError::InternalServerError("Resource Guard timeout: system memory remained constrained for 60s".to_string()), usage));
+                            }
+                            tracing::warn!("🛡️ [Intelligence] Resource Guard active (attempt {}/6). Pausing intelligence loop for agent {}.", resource_guard_attempts, ctx.agent_id);
                             self.broadcast_sys("🛡️ System Resources Critical: Local inference paused. Waiting for memory stabilization...", "warning", Some(ctx.mission_id.clone()));
                             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                             reasoning_turn = reasoning_turn.saturating_sub(1);
@@ -261,18 +331,12 @@ impl AgentRunner {
                         }
 
                         // ### 🛠️ [Self-Annealing] Catch parsing failures
-                        // These errors (BadRequest from malformed tool JSON, InternalServerError
-                        // from extraction failures) are recoverable via re-prompting.
-                        if matches!(e, AppError::BadRequest(_) | AppError::InternalServerError(_)) {
+                        if e.is_fatal() {
+                            return Err((e, usage));
+                        }
+
+                        if e.is_repairable() && matches!(e, AppError::BadRequest(_) | AppError::InternalServerError(_)) {
                             let detail = e.to_string();
-                            // Provider request errors (e.g. missing model, bad auth, connection) are not recoverable via re-prompting
-                            if detail.contains("model is required")
-                                || detail.contains("invalid_request_error")
-                                || detail.contains("ConnectionRefused")
-                                || detail.contains("dns error")
-                                || matches!(e, AppError::Unauthorized(_) | AppError::Forbidden(_) | AppError::NotFound(_)) {
-                                return Err((e, usage));
-                            }
 
                             let mut anneal_attempts = 0;
                             let mut anneal_text = String::new();
@@ -288,6 +352,7 @@ impl AgentRunner {
                                 &mut anneal_calls,
                                 &mut anneal_usage,
                                 &mut anneal_attempts,
+                                &tools,
                             )
                             .await
                             .map_err(|e| (e, usage.clone()))?;
@@ -358,6 +423,7 @@ impl AgentRunner {
                         &mut function_calls,
                         &mut usage,
                         &mut sentinel_attempts,
+                        &tools,
                     )
                     .await
                     .map_err(|e| (e, usage.clone()))?;
@@ -453,13 +519,85 @@ impl AgentRunner {
                         let runner = self.clone();
                         let ctx_clone = ctx.clone();
                         let user_msg_clone = payload.message.clone();
+                        let turn_idx = reasoning_turn;
+                        let tracker = tool_repetition_tracker.clone();
                         futures.push(async move {
                             ctx_clone.metrics.record_tool_attempt();
                             runner.update_status(&ctx_clone.agent_id, &ctx_clone.mission_id, "working", Some(&format!("Executing tool: {}...", fc.name)));
                             runner.record_heartbeat(&ctx_clone.agent_id).await;
                             let mut local_text = String::new();
                             let mut local_usage = None;
-                            let result = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
+
+                            // 🔁 [Tool Idempotency] Check persistent tool result cache
+                            use std::hash::{Hash, Hasher};
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            fc.args.to_string().hash(&mut hasher);
+                            let args_hash = format!("{:x}", hasher.finish());
+
+                            // 🛡️ [Loop Guard] Track consecutive identical tool calls
+                            let rep_count = {
+                                let mut lock = tracker.lock();
+                                let count = lock.entry((fc.name.clone(), args_hash.clone())).or_insert(0);
+                                *count += 1;
+                                *count
+                            };
+
+                            if rep_count >= 5 {
+                                tracing::error!(
+                                    "🚨 [Loop Guard] Tool loop blocked: '{}' executed {} times with identical parameters for agent {}",
+                                    fc.name,
+                                    rep_count,
+                                    ctx_clone.agent_id
+                                );
+                                let err_msg = format!(
+                                    "Tool loop detected: '{}' executed {} consecutive times with identical parameters",
+                                    fc.name,
+                                    rep_count
+                                );
+                                return (
+                                    fc.name,
+                                    Err(AppError::Runner(crate::agent::runner::error::RunnerError::RecursionBlocked(err_msg.clone()))),
+                                    format!("[TOOL_ERROR] RecursionBlocked: {}", err_msg),
+                                    None,
+                                );
+                            }
+
+                            let warning_prefix = if rep_count >= 3 {
+                                format!(
+                                    "[TOOL_WARNING] You have called '{}' {} times with identical parameters. Ensure forward progress or adjust strategy.\n",
+                                    fc.name,
+                                    rep_count
+                                )
+                            } else {
+                                String::new()
+                            };
+
+                            let cached = crate::agent::mission::get_tool_result(&runner.state.resources.pool, &ctx_clone.mission_id, &fc.name, &args_hash).await.unwrap_or(None);
+                            let result = if let Some(cached_output) = cached {
+                                tracing::info!("🔁 [Idempotency] Replaying cached tool result for '{}' (hash: {})", fc.name, args_hash);
+                                local_text = cached_output.clone();
+                                Ok(Some(cached_output))
+                            } else {
+                                let res = runner.execute_tool(&ctx_clone, &fc, &mut local_text, &mut local_usage, &user_msg_clone).await;
+                                if res.is_ok() && !local_text.is_empty() {
+                                    let call_id = format!("{}:{}:{}", ctx_clone.mission_id, turn_idx, fc.name);
+                                    let _ = crate::agent::mission::save_tool_result(
+                                        &runner.state.resources.pool,
+                                        &call_id,
+                                        &ctx_clone.mission_id,
+                                        turn_idx as i64,
+                                        &fc.name,
+                                        &args_hash,
+                                        &local_text,
+                                    ).await;
+                                }
+                                res
+                            };
+
+                            if !warning_prefix.is_empty() {
+                                local_text = format!("{}{}", warning_prefix, local_text);
+                            }
+
                             runner.record_heartbeat(&ctx_clone.agent_id).await;
 
                             if result.is_err() || local_text.contains("[TOOL_ERROR]") || local_text.contains("FAILED:") {
@@ -476,10 +614,10 @@ impl AgentRunner {
                     let mut observation_buffer = String::new();
                     let mut mission_completed = false;
                     let mut final_report = None;
-                    let mut first_error = None;
+                    let mut first_fatal_error = None;
 
                     let _ = async {
-                        while let Some((name, result, local_text, local_usage)) = futures.next().await {
+                        while let Some((name, result, mut local_text, local_usage)) = futures.next().await {
                             self.record_heartbeat(&ctx.agent_id).await;
                             self.accumulate_usage(&mut usage, local_usage.clone());
                             if let Some(ref lu) = local_usage {
@@ -497,16 +635,26 @@ impl AgentRunner {
                                 );
                                 running_cost += tool_cost;
                             }
-                            observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
 
                             if let Err(e) = result {
-                                if first_error.is_none() {
-                                    first_error = Some(e);
+                                if e.is_fatal() {
+                                    if first_fatal_error.is_none() {
+                                        first_fatal_error = Some(e);
+                                    }
+                                } else {
+                                    tracing::warn!("⚠️ [Intelligence] Tool '{}' encountered non-fatal error: {}. Containing as observation.", name, e);
+                                    if local_text.is_empty() {
+                                        local_text = format!("[TOOL_ERROR] {}", e);
+                                    } else if !local_text.contains("[TOOL_ERROR]") {
+                                        local_text = format!("{}\n[TOOL_ERROR] {}", local_text, e);
+                                    }
                                 }
                             } else if name == "complete_mission" {
                                 mission_completed = true;
-                                final_report = Some(local_text);
+                                final_report = Some(local_text.clone());
                             }
+
+                            observation_buffer.push_str(&format!("\nTool {} Result: {}", name, local_text));
                         }
                     }
                     .instrument(orbit_span)
@@ -528,7 +676,19 @@ impl AgentRunner {
                         }
                     }
 
-                    if let Some(e) = first_error {
+                    // 💾 [Durable Checkpointing] Save delta checkpoint at turn boundary
+                    if let Ok(state_json) = serde_json::to_string(&conversation_history) {
+                        let parent_id_ref = ctx.active_node_id.lock().clone();
+                        let _ = crate::agent::mission::save_mission_checkpoint(
+                            &self.state.resources.pool,
+                            &ctx.mission_id,
+                            reasoning_turn as i64,
+                            &state_json,
+                            parent_id_ref.as_deref(),
+                        ).await;
+                    }
+
+                    if let Some(e) = first_fatal_error {
                         return Err((e, usage));
                     }
 
@@ -639,6 +799,7 @@ impl AgentRunner {
         function_calls: &mut Vec<crate::agent::types::ToolCall>,
         usage: &mut Option<crate::agent::types::TokenUsage>,
         attempt_count: &mut u32,
+        tools: &[ToolDefinition],
     ) -> Result<(), AppError> {
         if *attempt_count >= 2 {
             tracing::error!("🚨 [Sentinel] Patience limit reached for {}. Agent is stuck in narrative mode.", ctx.agent_id);
@@ -667,13 +828,12 @@ impl AgentRunner {
                 user_directive
             );
 
-            let swarm_tool = self.build_tools(ctx).await;
             let sentinel_result = self
                 .call_provider(
                     ctx,
                     system_prompt,
                     &sentinel_directive,
-                    Some(vec![swarm_tool]),
+                    Some(tools.to_vec()),
                 )
                 .await;
 
@@ -709,13 +869,12 @@ impl AgentRunner {
                     user_directive
                 );
 
-                let swarm_tool = self.build_tools(ctx).await;
                 let sentinel_result = self
                     .call_provider(
                         ctx,
                         system_prompt,
                         &sentinel_directive,
-                        Some(vec![swarm_tool]),
+                        Some(tools.to_vec()),
                     )
                     .await;
 
@@ -742,6 +901,7 @@ impl AgentRunner {
         function_calls: &mut Vec<crate::agent::types::ToolCall>,
         usage: &mut Option<crate::agent::types::TokenUsage>,
         attempt_count: &mut u32,
+        tools: &[ToolDefinition],
     ) -> Result<(), AppError> {
         if *attempt_count >= 2 {
             tracing::error!("🚨 [Self-Annealing] Max attempts reached for {}. Giving up on malformed JSON.", ctx.agent_id);
@@ -758,8 +918,7 @@ impl AgentRunner {
             error_detail, user_directive
         );
 
-        let tools = vec![self.build_tools(ctx).await];
-        let result = self.call_provider(ctx, system_prompt, &correction_prompt, Some(tools)).await?;
+        let result = self.call_provider(ctx, system_prompt, &correction_prompt, Some(tools.to_vec())).await?;
         
         *attempt_count += 1;
         let (sent_text, sent_calls, sent_usage) = result;

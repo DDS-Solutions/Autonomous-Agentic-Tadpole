@@ -53,17 +53,27 @@ const Ops_Dashboard = lazy(page_imports['/dashboard'] as () => Promise<{ default
 const Model_Store = lazy(page_imports['/infra/model-store'] as () => Promise<{ default: React.ComponentType<object> }>);
 const Governance_View = lazy(page_imports['/governance'] as () => Promise<{ default: React.ComponentType<object> }>);
 
-/** Pre-fetches all route chunks in the background during idle cycles. */
+/** Pre-fetches high-probability routes in the background during idle cycles. */
 export const preload_all_routes = (): void => {
   if (typeof window === 'undefined') return;
+  const high_probability_routes = ['/dashboard', '/settings', '/missions'];
   const runner = () => {
-    Object.values(page_imports).forEach(imp => { void imp(); });
+    high_probability_routes.forEach(path => {
+      const imp = page_imports[path];
+      if (imp) void imp();
+    });
   };
   if ('requestIdleCallback' in window) {
     window.requestIdleCallback(runner);
   } else {
-    setTimeout(runner, 1000);
+    setTimeout(runner, 1500);
   }
+};
+
+/** Pre-fetches a specific route component on demand (e.g., on nav link hover). */
+export const preload_route = (path: string): void => {
+  const imp = page_imports[path];
+  if (imp) void imp();
 };
 
 export interface Route_Config {

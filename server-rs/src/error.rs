@@ -19,10 +19,18 @@ use axum::Json;
 use serde::Serialize;
 use thiserror::Error;
 
+pub mod classify;
+pub mod circuit;
+pub use classify::{Classify, ErrorClass, ErrorScope};
+pub use circuit::{CircuitBreaker, CircuitState};
+
 /// Helper function to safely truncate a string to a maximum number of bytes
 /// without breaking UTF-8 char boundaries.
 fn safe_truncate_bytes(s: &str, max_bytes: usize) -> String {
     if s.len() > max_bytes {
+        if max_bytes < 3 {
+            return s.chars().take(max_bytes).collect();
+        }
         let mut end = max_bytes - 3;
         while !s.is_char_boundary(end) {
             end -= 1;
@@ -117,11 +125,17 @@ pub enum AppError {
     #[error("Bad Request: {0}")]
     BadRequest(String),
 
+    #[error("Context Window Overflow: {0}")]
+    ContextOverflow(String),
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
     #[error("Forbidden: {0}")]
     Forbidden(String),
+
+    #[error("Intel Boundary Violation: {0}")]
+    IntelBoundaryViolation(String),
 
     #[error("Intel Path Unknown: {0}")]
     IntelPathUnknown(String),
@@ -248,12 +262,22 @@ impl AppError {
                 status_code = StatusCode::BAD_REQUEST;
                 type_slug = "bad-request".to_string();
             }
+            AppError::ContextOverflow(_) => {
+                status_code = StatusCode::PAYLOAD_TOO_LARGE;
+                type_slug = "context-overflow".to_string();
+                severity = "WARNING";
+            }
             AppError::Unauthorized(_) => {
                 status_code = StatusCode::UNAUTHORIZED;
                 type_slug = "unauthorized".to_string();
                 severity = "CRITICAL";
             }
             AppError::Forbidden(_) => {
+                status_code = StatusCode::FORBIDDEN;
+                type_slug = "forbidden".to_string();
+                severity = "CRITICAL";
+            }
+            AppError::IntelBoundaryViolation(_) => {
                 status_code = StatusCode::FORBIDDEN;
                 type_slug = "intel-boundary-violation".to_string();
                 severity = "CRITICAL";
@@ -272,7 +296,7 @@ impl AppError {
                 detail: _,
                 help_link: hl,
             } => {
-                status_code = StatusCode::INTERNAL_SERVER_ERROR;
+                status_code = StatusCode::UNPROCESSABLE_ENTITY;
                 type_slug = format!("domain:{}", code).to_lowercase();
                 help_link = hl.clone();
                 error_code = Some(code.clone());
@@ -382,8 +406,7 @@ impl AppError {
             AppError::RateLimit(_) => true,
             AppError::Reqwest(e) => {
                 // Retry on timeouts, connection failures, or premature closures (common in local LLM bursts)
-                // e.is_request() includes connection resets during payload delivery
-                e.is_timeout() || e.is_connect() || e.is_request() || e.is_body()
+                e.is_timeout() || e.is_connect() || e.is_body()
             }
             _ => false,
         }
@@ -401,7 +424,7 @@ impl IntoResponse for AppError {
         let safe_detail = if status.is_server_error() {
             "An internal server error occurred. Please check system logs.".to_string()
         } else {
-            crate::utils::security::redact_secrets(&detail)
+            sanitize_html(&crate::utils::security::redact_secrets(&detail))
         };
 
         let body = Json(ProblemDetails {

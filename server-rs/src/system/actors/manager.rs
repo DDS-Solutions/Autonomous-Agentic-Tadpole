@@ -67,6 +67,7 @@ pub async fn spawn_system_actors(app_state: &Arc<AppState>) -> ActorRegistry {
                     Ok(actor) => actor.run().await,
                     Err(e) => {
                         error!("🚨 [Kernel] Failed to initialize MemoryActor: {}", e);
+                        panic!("Failed to initialize MemoryActor: {}", e);
                     }
                 }
             }

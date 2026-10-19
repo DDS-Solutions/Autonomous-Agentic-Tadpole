@@ -39,7 +39,7 @@ let memory_session_api_key = '';
 export const get_session_api_key = (): string => memory_session_api_key;
 
 export const set_session_api_key = (value: string): void => {
-    memory_session_api_key = typeof value === 'string' ? value : '';
+    memory_session_api_key = typeof value === 'string' ? value.trim() : '';
 };
 
 export const clear_session_api_key = (): void => {
@@ -207,7 +207,7 @@ export function is_valid_url(url: string): boolean {
 
 export function is_valid_api_key(api_key: string): boolean {
     const sanitized = sanitize_api_key(api_key);
-    return sanitized.length >= 12 && /^[A-Za-z0-9_-]{12,}$/.test(sanitized);
+    return sanitized.length >= 12 && /^[A-Za-z0-9_.\-+/=~]{12,}$/.test(sanitized);
 }
 
 /**

@@ -16,7 +16,7 @@
 //! - **Trace Scope**: `server-rs::agent::openai`
 
 use crate::agent::runner::parser::PolyglotParser;
-use crate::agent::types::{ModelConfig, TokenUsage, ToolCall, ToolDefinition};
+use crate::agent::types::{ChatMessage, ModelConfig, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -125,8 +125,16 @@ impl OpenAIProvider {
         user_message: &str,
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
-        self.generate_internal(system_prompt, user_message, tools, None)
-            .await
+        self.generate_messages(system_prompt, &[ChatMessage::user(user_message)], tools).await
+    }
+
+    pub async fn generate_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.generate_messages_internal(system_prompt, messages, tools, None).await
     }
 
     /// Main generation loop for OpenAI-compatible models.
@@ -135,14 +143,14 @@ impl OpenAIProvider {
     /// 1. **Tool Mapping**: Translating Gemini-style tools to OpenAI's tool-call schema.
     /// 2. **Retry Logic**: Injecting error-correction instructions if previous attempts failed.
     /// 3. **Native vs Bridge**: Detecting if the model supports native tools or needs tag parsing.
-    async fn generate_internal(
+    async fn generate_messages_internal(
         &self,
         system_prompt: &str,
-        user_message: &str,
+        messages: &[ChatMessage],
         tools: Option<Vec<ToolDefinition>>,
         retry_msg: Option<String>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
-        self.generate_with_fallback(system_prompt, user_message, tools, retry_msg, false).await
+        self.generate_with_fallback(system_prompt, messages, tools, retry_msg, false).await
     }
 
     /// ### 📡 Intelligence Orchestration: OpenAI Native/Bridge (generate_with_fallback)
@@ -164,7 +172,7 @@ impl OpenAIProvider {
     async fn generate_with_fallback(
         &self,
         system_prompt: &str,
-        user_message: &str,
+        messages: &[ChatMessage],
         tools: Option<Vec<ToolDefinition>>,
         retry_msg: Option<String>,
         is_fallback: bool,
@@ -210,31 +218,55 @@ impl OpenAIProvider {
                 .collect::<Vec<OpenAITool>>()
         });
 
-        let mut messages = Vec::new();
+        let mut req_messages = Vec::new();
         
         let has_vectors = self.config.steering_vectors.as_ref().is_some_and(|v| !v.is_empty());
         
-        if !has_vectors {
-            messages.push(OpenAIMessage {
+        if !has_vectors && !system_prompt.trim().is_empty() {
+            req_messages.push(OpenAIMessage {
                 role: "system".to_string(),
                 content: Some(system_prompt.to_string()),
             });
-        } else {
+        } else if has_vectors {
             tracing::info!("🧠 [OBLITERATUS] Steering vectors active. Stripping bulky system prompt.");
         }
 
-        messages.push(OpenAIMessage {
-            role: "user".to_string(),
-            content: Some(user_message.to_string()),
-        });
+        for msg in messages {
+            match msg {
+                ChatMessage::System { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "system".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::User { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "user".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::Assistant { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "assistant".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::Tool { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "tool".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+            }
+        }
 
         // If this is a retry, append the failed generation and correction instruction
         if let Some(ref r) = retry_msg {
-            messages.push(OpenAIMessage {
+            req_messages.push(OpenAIMessage {
                 role: "assistant".to_string(),
                 content: Some(r.clone()),
             });
-            messages.push(OpenAIMessage {
+            req_messages.push(OpenAIMessage {
                 role: "user".to_string(),
                 content: Some("CRITICAL ERROR: Your previous tool call was malformed. Please fix the JSON syntax and try again. Ensure all arguments are inside the brackets and there are no stray characters.".to_string()),
             });
@@ -242,7 +274,7 @@ impl OpenAIProvider {
 
         let request_body = OpenAIRequest {
             model: self.config.model_id.clone(),
-            messages,
+            messages: req_messages,
             temperature: self.config.temperature,
             user: self.config.external_id.clone(),
             tools: if openai_tools.as_ref().is_none_or(|t| t.is_empty()) {
@@ -343,7 +375,7 @@ impl OpenAIProvider {
 
                     return Box::pin(fallback_provider.generate_with_fallback(
                         system_prompt,
-                        user_message,
+                        messages,
                         tools,
                         retry_msg,
                         true

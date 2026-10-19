@@ -126,6 +126,7 @@ pub enum MissionStatus {
     Completed,
     Failed,
     Paused,
+    Suspended,
 }
 
 /// ### 📡 Protocol: RoleAuthorityLevel
@@ -1171,8 +1172,110 @@ pub struct MemoryEntryDetailed {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<crate::types::rag_scoring::RagScore>,
 }
+/// ### 📡 Protocol: ChatMessage
+/// Structured, multi-role message for provider message generation.
+/// Decouples conversational turns from flat strings, enabling native
+/// prompt caching (Anthropic/Gemini) and exact role-fidelity.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "role", rename_all = "snake_case")]
+pub enum ChatMessage {
+    System {
+        content: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cache_control: bool,
+    },
+    User {
+        content: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cache_control: bool,
+    },
+    Assistant {
+        content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_calls: Option<Vec<ToolCall>>,
+    },
+    Tool {
+        tool_call_id: String,
+        name: String,
+        content: String,
+    },
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+impl ChatMessage {
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::User {
+            content: content.into(),
+            cache_control: false,
+        }
+    }
+
+    pub fn system(content: impl Into<String>) -> Self {
+        Self::System {
+            content: content.into(),
+            cache_control: false,
+        }
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self::Assistant {
+            content: content.into(),
+            tool_calls: None,
+        }
+    }
+
+    pub fn tool(tool_call_id: impl Into<String>, name: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::Tool {
+            tool_call_id: tool_call_id.into(),
+            name: name.into(),
+            content: content.into(),
+        }
+    }
+
+    pub fn role_str(&self) -> &str {
+        match self {
+            Self::System { .. } => "system",
+            Self::User { .. } => "user",
+            Self::Assistant { .. } => "assistant",
+            Self::Tool { .. } => "tool",
+        }
+    }
+
+    pub fn content_str(&self) -> &str {
+        match self {
+            Self::System { content, .. } => content.as_str(),
+            Self::User { content, .. } => content.as_str(),
+            Self::Assistant { content, .. } => content.as_str(),
+            Self::Tool { content, .. } => content.as_str(),
+        }
+    }
+
+    pub fn to_flattened_string(&self) -> String {
+        match self {
+            Self::System { content, .. } => format!("SYSTEM: {}", content),
+            Self::User { content, .. } => format!("USER: {}", content),
+            Self::Assistant { content, .. } => format!("ASSISTANT: {}", content),
+            Self::Tool { name, content, .. } => format!("OBSERVATION: Tool {} Result: {}", name, content),
+        }
+    }
+
+    /// Converts a legacy flattened conversation history line into a ChatMessage.
+    pub fn from_legacy_turn(turn: &str) -> Self {
+        let trimmed = turn.trim();
+        if let Some(rest) = trimmed.strip_prefix("USER: ") {
+            Self::user(rest)
+        } else if let Some(rest) = trimmed.strip_prefix("ASSISTANT: ") {
+            Self::assistant(rest)
+        } else if let Some(rest) = trimmed.strip_prefix("SYSTEM: ") {
+            Self::system(rest)
+        } else if let Some(rest) = trimmed.strip_prefix("OBSERVATION: ") {
+            Self::tool("legacy", "observation", rest)
+        } else {
+            Self::user(trimmed)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ToolCall {
     pub name: String,
     pub args: serde_json::Value,

@@ -47,7 +47,7 @@ export type McpToolHub = { name: string; description: string; input_schema: Json
  */
 export type McpToolStats = { invocations: number; success_count: number; failure_count: number; avg_latency_ms: number }
 
-export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused"
+export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused" | "suspended"
 
 export type Modality = "llm" | "vision" | "voice" | "audio" | "reasoning"
 

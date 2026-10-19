@@ -25,6 +25,9 @@ pub const AGENT_COO: &str = "2";
 /// The Alpha Agent. Legacy identifier or special core utility agent.
 pub const AGENT_ALPHA: &str = "alpha";
 
+/// Default ceiling budget limit in USD per mission if unconfigured.
+pub const DEFAULT_BUDGET_LIMIT_USD: f64 = 10.0;
+
 
 
 // Metadata: [constants]

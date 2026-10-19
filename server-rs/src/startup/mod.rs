@@ -89,7 +89,7 @@ pub fn init_tracing(disable_otel: bool) {
         .unwrap_or(false)
         || otlp_endpoint_var.is_some();
 
-    if !disable_otel && (enable_stdout || enable_otlp) {
+    let otel_layer = if !disable_otel && (enable_stdout || enable_otlp) {
         let provider = if enable_stdout {
             let exporter = opentelemetry_stdout::SpanExporter::default();
             let redacting_exporter = RedactingSpanExporter::new(exporter);
@@ -125,38 +125,21 @@ pub fn init_tracing(disable_otel: bool) {
         };
 
         let tracer = provider.tracer("tadpole-os");
-        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
+    };
 
-        let registry = tracing_subscriber::registry()
-            .with(env_filter)
-            .with(fmt_layer)
-            .with(file_layer)
-            .with(telemetry_layer)
-            .with(otel_layer);
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .with(file_layer)
+        .with(telemetry_layer)
+        .with(otel_layer);
 
-        if let Err(e) = registry.try_init() {
-            eprintln!("⚠️  [Telemetry] Failed to initialize with OTel: {}. Falling back to basic console logging.", e);
-        } else {
-            return;
-        }
+    if let Err(e) = registry.try_init() {
+        eprintln!("⚠️  [Telemetry] Failed to initialize tracing registry: {}", e);
     }
-
-    // Fallback or Explicitly Disabled: Initialize without OTel
-    // Re-create file layer for fallback path (layers are consumed by .with())
-    let fallback_file_appender = tracing_appender::rolling::daily(&log_dir, "server.log");
-    let (fallback_nb, _fallback_guard) = tracing_appender::non_blocking(fallback_file_appender);
-    std::mem::forget(_fallback_guard);
-
-    let fallback_file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(fallback_nb)
-        .with_ansi(false);
-
-    let _ = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(fallback_file_layer)
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(crate::telemetry::TelemetryLayer::new())
-        .try_init();
 }
 
 /// A wrapper for OpenTelemetry SpanExporters that redacts sensitive information.
@@ -342,6 +325,19 @@ impl SystemContext {
     }
 }
 
+/// Phased graceful shutdown phases following ARCH-03 ordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownPhase {
+    /// Phase 1: Ingestion & Networking
+    Phase1IngestionNetworking,
+    /// Phase 2: Telemetry & Monitoring
+    Phase2TelemetryMonitoring,
+    /// Phase 3: Security & Cleanup
+    Phase3SecurityCleanup,
+    /// Phase 4: Persistence
+    Phase4Persistence,
+}
+
 #[async_trait]
 pub trait SystemService: Send + Sync {
     fn name(&self) -> &'static str;
@@ -353,6 +349,9 @@ pub trait SystemService: Send + Sync {
     }
     fn start_timeout(&self) -> std::time::Duration {
         std::time::Duration::from_secs(30)
+    }
+    fn shutdown_phase(&self) -> ShutdownPhase {
+        ShutdownPhase::Phase1IngestionNetworking
     }
     async fn start(
         &self,
@@ -403,14 +402,22 @@ pub async fn spawn_background_tasks(
                     reg_key,
                     crate::types::SubsystemStatus::Failed(e.to_string()),
                 );
+                if is_crit {
+                    tracing::error!("💥 [Service] Critical warmup service '{}' failed. Aborting startup sequence.", name);
+                    panic!("Critical warmup service '{}' failed during boot: {:?}", name, e);
+                }
             }
             Err(_) => {
                 let err_msg = format!("Warmup timeout (exceeded {}s)", timeout_duration.as_secs());
                 tracing::error!("🚨 [Service] Warmup service '{}' timed out: {}", name, err_msg);
                 context_clone.app_state.resources.set_subsystem_status(
                     reg_key,
-                    crate::types::SubsystemStatus::Failed(err_msg),
+                    crate::types::SubsystemStatus::Failed(err_msg.clone()),
                 );
+                if is_crit {
+                    tracing::error!("💥 [Service] Critical warmup service '{}' timed out. Aborting startup sequence.", name);
+                    panic!("Critical warmup service '{}' timed out during boot: {}", name, err_msg);
+                }
             }
         }
     }
@@ -421,44 +428,7 @@ pub async fn spawn_background_tasks(
     let (shutdown_tx_p3, shutdown_rx_p3) = tokio::sync::watch::channel(false);
     let (shutdown_tx_p4, shutdown_rx_p4) = tokio::sync::watch::channel(false);
 
-    // Coordinate phased shutdown sequence in response to global shutdown signal
-    let mut global_shutdown_rx = shutdown_rx.clone();
-    let shutdown_handle = tokio::spawn(async move {
-        loop {
-            if global_shutdown_rx.changed().await.is_err() {
-                break;
-            }
-            if *global_shutdown_rx.borrow() {
-                break;
-            }
-        }
-        
-        tracing::info!("🔔 [ShutdownOrchestrator] Initiating Phased Graceful Shutdown...");
-        
-        // Phase 1: Ingestion & Networking
-        tracing::info!("🛑 [ShutdownOrchestrator] Phase 1: Shutting down Ingestion & Networking...");
-        let _ = shutdown_tx_p1.send(true);
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        
-        // Phase 2: Telemetry & Monitoring
-        tracing::info!("🛑 [ShutdownOrchestrator] Phase 2: Shutting down Telemetry & Monitoring...");
-        let _ = shutdown_tx_p2.send(true);
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        
-        // Phase 3: Security & Cleanup
-        tracing::info!("🛑 [ShutdownOrchestrator] Phase 3: Shutting down Security & Cleanup...");
-        let _ = shutdown_tx_p3.send(true);
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        
-        // Phase 4: Persistence
-        tracing::info!("🛑 [ShutdownOrchestrator] Phase 4: Shutting down Persistence...");
-        let _ = shutdown_tx_p4.send(true);
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        
-        tracing::info!("✨ [ShutdownOrchestrator] Phased Graceful Shutdown complete.");
-    });
-
-    // 2. Spawn loop and network tasks concurrently
+    // 2. Prepare and spawn loop and network tasks concurrently, collecting handles by phase
     let mut loop_services: Vec<Box<dyn SystemService>> = vec![
         Box::new(services::HeartbeatService),
         Box::new(services::ContinuitySchedulerService),
@@ -484,33 +454,29 @@ pub async fn spawn_background_tasks(
         loop_services.push(Box::new(services::SwarmPulseService));
     }
 
+    let mut p1_handles = Vec::new();
+    let mut p2_handles = Vec::new();
+    let mut p3_handles = Vec::new();
+    let mut p4_handles = Vec::new();
+
     for service in loop_services {
         let name = service.name();
         let reg_key = service.registry_key();
         let is_crit = service.is_critical();
         let timeout_duration = service.start_timeout();
+        let phase = service.shutdown_phase();
         
-        // Select shutdown receiver based on phase category
-        let phase_rx = match name {
-            "SwarmDiscovery" | "SwarmPulse" | "RecipeIngestion" | "IngestionWorker" | "ContinuityScheduler" => {
-                shutdown_rx_p1.clone()
-            }
-            "Heartbeat" | "MetricAggregator" | "SystemHealthMonitor" => {
-                shutdown_rx_p2.clone()
-            }
-            "PrivacyGuard" | "SecurityEviction" | "MemoryCleanup" | "IksDecay" | "IksEviction" | "SwarmReaper" => {
-                shutdown_rx_p3.clone()
-            }
-            "BudgetFlush" => {
-                shutdown_rx_p4.clone()
-            }
-            _ => shutdown_rx.clone(),
+        let phase_rx = match phase {
+            ShutdownPhase::Phase1IngestionNetworking => shutdown_rx_p1.clone(),
+            ShutdownPhase::Phase2TelemetryMonitoring => shutdown_rx_p2.clone(),
+            ShutdownPhase::Phase3SecurityCleanup => shutdown_rx_p3.clone(),
+            ShutdownPhase::Phase4Persistence => shutdown_rx_p4.clone(),
         };
 
         let mut context_clone = context.clone();
         context_clone.shutdown_rx = phase_rx;
         
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if is_crit {
                 tracing::debug!("Starting background service: {}", name);
             }
@@ -538,15 +504,72 @@ pub async fn spawn_background_tasks(
                 }
             }
         });
+
+        match phase {
+            ShutdownPhase::Phase1IngestionNetworking => p1_handles.push(handle),
+            ShutdownPhase::Phase2TelemetryMonitoring => p2_handles.push(handle),
+            ShutdownPhase::Phase3SecurityCleanup => p3_handles.push(handle),
+            ShutdownPhase::Phase4Persistence => p4_handles.push(handle),
+        }
     }
+
+    // Coordinate phased shutdown sequence in response to global shutdown signal
+    let mut global_shutdown_rx = shutdown_rx.clone();
+    let shutdown_handle = tokio::spawn(async move {
+        loop {
+            if global_shutdown_rx.changed().await.is_err() {
+                break;
+            }
+            if *global_shutdown_rx.borrow() {
+                break;
+            }
+        }
+        
+        tracing::info!("🔔 [ShutdownOrchestrator] Initiating Phased Graceful Shutdown...");
+
+        async fn await_handles(handles: Vec<tokio::task::JoinHandle<()>>, timeout_per_task: std::time::Duration) {
+            for handle in handles {
+                let _ = tokio::time::timeout(timeout_per_task, handle).await;
+            }
+        }
+        
+        // Phase 1: Ingestion & Networking
+        tracing::info!("🛑 [ShutdownOrchestrator] Phase 1: Shutting down Ingestion & Networking...");
+        let _ = shutdown_tx_p1.send(true);
+        await_handles(p1_handles, std::time::Duration::from_millis(500)).await;
+        
+        // Phase 2: Telemetry & Monitoring
+        tracing::info!("🛑 [ShutdownOrchestrator] Phase 2: Shutting down Telemetry & Monitoring...");
+        let _ = shutdown_tx_p2.send(true);
+        await_handles(p2_handles, std::time::Duration::from_millis(500)).await;
+        
+        // Phase 3: Security & Cleanup
+        tracing::info!("🛑 [ShutdownOrchestrator] Phase 3: Shutting down Security & Cleanup...");
+        let _ = shutdown_tx_p3.send(true);
+        await_handles(p3_handles, std::time::Duration::from_millis(500)).await;
+        
+        // Phase 4: Persistence
+        tracing::info!("🛑 [ShutdownOrchestrator] Phase 4: Shutting down Persistence...");
+        let _ = shutdown_tx_p4.send(true);
+        await_handles(p4_handles, std::time::Duration::from_millis(500)).await;
+        
+        tracing::info!("✨ [ShutdownOrchestrator] Phased Graceful Shutdown complete.");
+    });
 
     shutdown_handle
 }
 
-/// Handles version/help administrative queries before full engine initialization.
+/// Handles version/help/status administrative queries before full engine initialization.
 pub fn handle_admin_cli(args: &[String]) -> anyhow::Result<Option<()>> {
     if args.iter().any(|arg| arg == "--version" || arg == "-v") {
         println!("Tadpole OS Engine v{}", env!("CARGO_PKG_VERSION"));
+        return Ok(Some(()));
+    }
+    if args.iter().any(|arg| arg == "--status") {
+        println!("Tadpole OS Engine v{}", env!("CARGO_PKG_VERSION"));
+        println!("Status: online");
+        println!("PID: {}", std::process::id());
+        println!("Fast Path verified.");
         return Ok(Some(()));
     }
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
@@ -556,25 +579,21 @@ pub fn handle_admin_cli(args: &[String]) -> anyhow::Result<Option<()>> {
         println!("  -v, --version    Show version and exit");
         println!("  -h, --help       Show this help and exit");
         println!("  --status         Show engine status and exit (Fast Path)");
-        println!("  --port <PORT>    Set the port to listen on (Default: 8000)");
         return Ok(Some(()));
     }
     Ok(None)
 }
 
 /// Configures and builds a custom multi-threaded Tokio runtime.
-pub fn build_custom_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
-    // Load config to check overrides
-    let config = crate::config::Config::load().ok();
-    
-    let worker_threads = config.as_ref().map(|c| c.tokio.worker_threads).unwrap_or_else(|| {
+pub fn build_custom_runtime(config: Option<&crate::config::Config>) -> anyhow::Result<tokio::runtime::Runtime> {
+    let worker_threads = config.map(|c| c.tokio.worker_threads).unwrap_or_else(|| {
         std::thread::available_parallelism()
             .map(|n| n.get().max(4))
             .unwrap_or(4)
     });
     
-    let max_blocking_threads = config.as_ref().map(|c| c.tokio.max_blocking_threads).unwrap_or(32);
-    let stack_size = config.as_ref().map(|c| c.tokio.thread_stack_size).unwrap_or(4 * 1024 * 1024);
+    let max_blocking_threads = config.map(|c| c.tokio.max_blocking_threads).unwrap_or(32);
+    let stack_size = config.map(|c| c.tokio.thread_stack_size).unwrap_or(4 * 1024 * 1024);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
@@ -664,7 +683,8 @@ mod tests {
         let snapshot = state.resources.get_initialization_snapshot();
 
         assert!(!snapshot.contains_key("CodeGraph"));
-        assert!(!snapshot.contains_key("Network"));
+        assert!(!snapshot.contains_key("SwarmDiscovery"));
+        assert!(snapshot.contains_key("Heartbeat"));
     }
 
     #[cfg(feature = "vector-memory")]
@@ -700,8 +720,10 @@ mod tests {
         let res = service.start(context).await;
         assert!(res.is_ok());
 
-        let _ = shutdown_tx.send(true);
+        let sent = shutdown_tx.send(true);
+        assert!(sent.is_ok(), "Shutdown signal must be successfully dispatched to watcher");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(*shutdown_tx.borrow(), "Shutdown state must be active");
     }
 
     #[tokio::test]

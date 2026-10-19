@@ -54,9 +54,9 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet` | Protected |
 | `PUT` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::update_context_packet` | Protected |
 | `GET` | `/v1/agents/{id}/maintenance-report` | `routes::agentic_engine::get_maintenance_report` | Protected |
-| `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
-| `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
-| `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
+| `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Uses LanceDB vector store when feature `vector-memory` is enabled; falls back gracefully to SQLite memories (200 OK). |
+| `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Persists to LanceDB vector store when `vector-memory` is enabled; otherwise stores in SQLite fallback memories (200 OK). |
+| `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Deletes memory entry from active store (LanceDB or SQLite fallback memories). |
 | `POST` | `/v1/agents/{id}/mission` | `routes::agent::sync_mission` | Protected |
 | `POST` | `/v1/agents/{id}/pause` | `routes::agent::pause_agent` | Protected |
 | `POST` | `/v1/agents/{id}/reset` | `routes::agent::reset_agent` | Protected |

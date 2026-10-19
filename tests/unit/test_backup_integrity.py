@@ -23,8 +23,12 @@ sys.path.append(str(Path(__file__).parent.parent.parent / "execution"))
 import backup_sqlite
 import restore_sqlite
 
+from unittest.mock import patch
+
 class TestBackupRestoreIntegrity(unittest.TestCase):
     def setUp(self):
+        self.patcher = patch('restore_sqlite.check_live_engine', return_value=False)
+        self.patcher.start()
         # Create a temp directory for DB testing
         self.test_dir = tempfile.mkdtemp()
         self.db_path = Path(self.test_dir) / "test_tadpole.db"
@@ -40,6 +44,7 @@ class TestBackupRestoreIntegrity(unittest.TestCase):
         self.conn.close()
 
     def tearDown(self):
+        self.patcher.stop()
         # Clean up temp directory
         shutil.rmtree(self.test_dir)
         if "DATABASE_URL" in os.environ:

@@ -20,9 +20,11 @@
 //!   `tracing` logs for request-id tracking and permission denials.
 //! - **Trace Scope**: `server-rs::router`
 
+use crate::error::AppError;
 use crate::state::AppState;
 use crate::{middleware, routes};
 use axum::{
+    response::IntoResponse,
     routing::{get, post, put},
     Router,
 };
@@ -71,7 +73,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .merge(metrics_route)
         .nest("/v1", v1_routes)
         .with_state(app_state.clone())
-        .layer(axum::extract::DefaultBodyLimit::max(16 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(256 * 1024))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             crate::middleware::boot::wait_for_system_ready,
@@ -130,6 +132,17 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
                 .gzip(true)
                 .zstd(true),
         )
+        .layer(tower_http::catch_panic::CatchPanicLayer::custom(|err: Box<dyn std::any::Any + Send + 'static>| {
+            let details = if let Some(s) = err.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = err.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unhandled server panic".to_string()
+            };
+            tracing::error!("💥 [Router:CatchPanic] Unhandled handler panic: {}", details);
+            AppError::InternalServerError(format!("Unhandled server panic: {}", details)).into_response()
+        }))
         .layer(cors);
 
     // Static file serving with proper cache headers

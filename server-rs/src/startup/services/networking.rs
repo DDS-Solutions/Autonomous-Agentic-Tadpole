@@ -8,7 +8,7 @@
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[networking]` in tracing logs.
 
-use crate::startup::{SystemContext, SystemService};
+use crate::startup::{SystemContext, SystemService, ShutdownPhase};
 use async_trait::async_trait;
 
 pub struct SwarmDiscoveryService;
@@ -18,6 +18,7 @@ impl SystemService for SwarmDiscoveryService {
     fn name(&self) -> &'static str { "SwarmDiscovery" }
     fn is_critical(&self) -> bool { true }
     fn registry_key(&self) -> &'static str { "Network" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase1IngestionNetworking }
     fn start_timeout(&self) -> std::time::Duration {
         std::time::Duration::from_secs(10)
     }

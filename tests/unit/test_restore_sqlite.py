@@ -27,8 +27,12 @@ sys.path.insert(0, str(EXEC_DIR))
 import restore_sqlite
 import backup_sqlite
 
+from unittest.mock import patch
+
 class TestRestoreSqliteAdversarial(unittest.TestCase):
     def setUp(self):
+        self.patcher = patch('restore_sqlite.check_live_engine', return_value=False)
+        self.patcher.start()
         self.test_dir = tempfile.mkdtemp()
         self.db_path = Path(self.test_dir) / "active_tadpole.db"
         os.environ["DATABASE_URL"] = f"sqlite:{self.db_path}"
@@ -41,6 +45,7 @@ class TestRestoreSqliteAdversarial(unittest.TestCase):
         conn.close()
 
     def tearDown(self):
+        self.patcher.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
         if "DATABASE_URL" in os.environ:
             del os.environ["DATABASE_URL"]

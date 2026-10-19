@@ -69,6 +69,8 @@ This map reflects the current code layout and should be used as the first orient
 | Multi-Agent Starter Kits | `starter_kits/` | Ready-to-deploy swarms (Customer Success, Explorer Scout, Finance Compliance, Marketing Growth). |
 | Persistence | `server-rs/src/db/{mod,migrations,seed,init,contract_tests}.rs`, `server-rs/migrations/`, `data/` | Modular SQLite initialization, migrations (`20260304000100`–`20260918000100`), contract test coverage, safe fallback memory provisioning, and gated reconciliation (`ALLOW_MIGRATION_RECONCILE=true`). |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
+| Structured Message Pipeline | `server-rs/src/agent/types.rs`, `server-rs/src/agent/runner/provider.rs` | Strongly typed `ChatMessage` protocol with native Anthropic/Gemini ephemeral prompt caching. |
+| Ground Truth Evaluation | `evals/tasks.json`, `evals/run.py` | 20-task ground truth architectural evaluation benchmark suite (`npm run test:evals`). |
 | Documentation | `README.md`, `docs/`, `SYSTEM_MAP.md` | Public orientation, architecture, operations, security, API reference, and OpenAPI. |
 
 ## API Boundary

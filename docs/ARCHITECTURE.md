@@ -95,12 +95,13 @@ The engine starts in `server-rs/src/main.rs`.
 - auth brute-force limiter
 - security headers
 - request ID injection
-- rate-limit headers
+- atomic rate limiting (`parking_lot::Mutex` inside `moka::sync::Cache`) with `Retry-After` and `X-RateLimit-*` headers
 - tracing spans
 - deprecation middleware
-- 120-second timeout
+- 256 KiB request payload size limit (accommodating `MAX_TASK_LENGTH`)
+- 120-second timeout (aligned with client-side 110-second request budgets)
 - compression
-- CORS
+- CORS with 600s preflight caching and exposed diagnostic headers
 
 Public routes:
 
@@ -263,6 +264,39 @@ Tadpole OS integrates complete end-to-end telemetry and governance for model con
 - **Dynamic Cost Calculation (`server-rs/src/agent/rates.rs`)**:
   - Custom rates override default tier assumptions through `calculate_cost_with_custom_rates(input_tokens, output_tokens, custom_in_m, custom_out_m)`.
   - The runtime tracks real-time expenditure in reasoning loops (`server-rs/src/agent/runner/intelligence.rs`) and records cumulative cost into the A2A ledger upon mission finalization (`server-rs/src/agent/runner/finalize.rs`).
+
+## Structured Reasoning, Prompt Caching & Deterministic Verification
+
+The agent execution pipeline in `server-rs/src/agent/runner/` enforces rigorous message structure, context accounting, and output validation:
+
+1. **Native Multi-Role `ChatMessage` Protocol (`server-rs/src/agent/types.rs`)**:
+   - Replaces unstructured string flattening with typed `ChatMessage` variants: `System`, `User`, `Assistant`, and `Tool`.
+   - Tool execution results are returned strictly as `ChatMessage::Tool`, isolating observation outputs from instruction streams and eliminating indirect prompt injection vectors.
+   - Converts legacy turns via `ChatMessage::from_legacy_turn()`.
+
+2. **Native Ephemeral Prompt Caching (`server-rs/src/agent/anthropic.rs`, `server-rs/src/agent/gemini.rs`)**:
+   - Automatically serializes Anthropic system blocks with `cache_control: {"type": "ephemeral"}`.
+   - Provider caches the large, immutable system instructions on edge nodes, cutting per-turn input token costs by up to 90% and reducing latency on multi-turn reasoning loops.
+
+3. **Context Window Token Accounting (`server-rs/src/agent/runner/turn_compactor.rs`, `server-rs/src/agent/runner/provider.rs`)**:
+   - `estimate_messages_token_count` computes model-aware token usage using `TokenizerService` before making network requests.
+   - When cumulative tokens exceed the model's `context_window` capacity (or `CapabilityMatrix::infer_capabilities`), execution halts with `AppError::ContextOverflow`.
+   - Classified as `ErrorClass::Repairable` and `ErrorScope::Turn`, enabling the compaction engine to offload observations to `.tmp/tool_overflow/` and recover without terminating the mission.
+
+4. **Tool Repetition & Recursion Guard (`server-rs/src/agent/runner/intelligence.rs`)**:
+   - A thread-safe tracker monitors consecutive identical `(tool_name, args_hash)` calls.
+   - **At 3 identical calls**: Injects a `[TOOL_WARNING]` advising the agent to change strategy.
+   - **At 5 identical calls**: Aborts execution with `RunnerError::RecursionBlocked`, preventing runaway token expenditure.
+   - Pre-turn budget gate enforces a `$10.00` limit fallback (`DEFAULT_BUDGET_LIMIT_USD`).
+
+5. **Deterministic Artifact Verification (`server-rs/src/agent/runner/mission_tools.rs`)**:
+   - Tool `complete_mission` supports an optional `artifacts` array in its manifest schema.
+   - Verifies that all declared artifact files physically exist on disk within `workspace_root`.
+   - If any declared file is missing, rejects completion with `ToolExecutionError::Validation`, forcing the agent to produce the artifact before closing the mission.
+
+6. **20-Task Ground Truth Evaluation Suite (`evals/tasks.json`, `evals/run.py`)**:
+   - Fully automated ground-truth benchmark suite asserting 20 core architectural capabilities (schema validation, loop guards, budget gates, prompt caching, hierarchy intercepts, Merkle continuity, and recovery fallbacks).
+   - Executable via `npm run test:evals` or `python evals/run.py`.
 
 [//]: # (Metadata: [ARCHITECTURE])
 

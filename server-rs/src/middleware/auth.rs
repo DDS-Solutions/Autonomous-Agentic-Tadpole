@@ -51,7 +51,7 @@ pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str>
     } else if state.security.deploy_token_new.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
         Some("NEURAL_TOKEN_NEW")
     } else if state.security.deploy_token_old.as_ref().map(|t| constant_time_eq(token.as_bytes(), t.as_bytes())).unwrap_or(false) {
-        // Enforce server-authoritative grace window if rotation metadata is present
+        // Enforce server-authoritative grace window. SEC-AUTH-01: Fail closed if rotation metadata is missing.
         if let (Some(rotated_at), Some(grace_secs)) = (state.security.token_rotated_at, state.security.token_grace_secs) {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -65,8 +65,13 @@ pub(crate) fn match_token(token: &str, state: &AppState) -> Option<&'static str>
                 );
                 return None;
             }
+            Some("NEURAL_TOKEN_OLD")
+        } else {
+            tracing::error!(
+                "🚫 [auth] NEURAL_TOKEN_OLD configured but NEURAL_TOKEN_ROTATED_AT or NEURAL_TOKEN_GRACE_SECS is missing. Failing closed to prevent perpetual fallback credentials."
+            );
+            None
         }
-        Some("NEURAL_TOKEN_OLD")
     } else {
         None
     }
@@ -91,15 +96,16 @@ pub async fn validate_token(
     let client_ip = crate::middleware::extract_client_ip(&req);
     let mut token_opt = None;
 
-    // Check for standard Authorization header first
+    // Check for standard Authorization header first (RFC 7235: case-insensitive scheme)
     let auth_header = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|val| val.to_str().ok());
 
     if let Some(auth_str) = auth_header {
-        if let Some(token) = auth_str.strip_prefix("Bearer ") {
-            token_opt = Some(token.to_string());
+        let trimmed = auth_str.trim();
+        if let Some(token) = trimmed.strip_prefix("Bearer ").or_else(|| trimmed.strip_prefix("bearer ")) {
+            token_opt = Some(token.trim().to_string());
         }
     }
 

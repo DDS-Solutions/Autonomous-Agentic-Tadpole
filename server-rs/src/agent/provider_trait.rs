@@ -14,7 +14,7 @@
 //!   call parsing mismatches.
 //! - **Trace Scope**: `server-rs::agent::provider_trait`
 
-use crate::agent::types::{ToolCall, ToolDefinition, TokenUsage};
+use crate::agent::types::{ChatMessage, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use async_trait::async_trait;
 
@@ -38,6 +38,22 @@ pub trait LlmProvider: Send + Sync {
         user_message: &str,
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError>;
+
+    /// Generates a response from the LLM using structured multi-role chat messages.
+    /// Enables prompt caching and preserves assistant/tool role boundaries.
+    async fn generate_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        let flattened = messages
+            .iter()
+            .map(|m| m.to_flattened_string())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        self.generate(system_prompt, &flattened, tools).await
+    }
 
     /// Generates vector embeddings for a given text.
     #[allow(dead_code)]

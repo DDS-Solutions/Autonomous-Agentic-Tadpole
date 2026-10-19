@@ -14,12 +14,17 @@
 //!   400 Bad Request on `input_schema` validation, or tool call duplication.
 //! - **Trace Scope**: `server-rs::agent::anthropic`
 
-use crate::agent::types::{TokenUsage, ToolCall, ToolDefinition, ModelConfig};
+use crate::agent::types::{ChatMessage, ModelConfig, TokenUsage, ToolCall, ToolDefinition};
 use crate::agent::provider_trait::LlmProvider;
 use crate::error::AppError;
 use async_trait::async_trait;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AnthropicCacheControl {
+    r#type: String,
+}
 
 #[derive(Debug, Serialize)]
 struct AnthropicMessage {
@@ -30,12 +35,38 @@ struct AnthropicMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicContentBlock {
-    Text { text: String },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<AnthropicCacheControl>,
+    },
     ToolUse {
         id: String,
         name: String,
         input: serde_json::Value,
     },
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<AnthropicCacheControl>,
+    },
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicSystemBlock {
+    r#type: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<AnthropicCacheControl>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum AnthropicSystemPrompt {
+    Text(String),
+    Structured(Vec<AnthropicSystemBlock>),
 }
 
 #[derive(Debug, Serialize)]
@@ -50,7 +81,7 @@ struct AnthropicRequest {
     model: String,
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<AnthropicSystemPrompt>,
     messages: Vec<AnthropicMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -98,14 +129,11 @@ impl AnthropicProvider {
             api_key,
         }
     }
-}
 
-#[async_trait]
-impl LlmProvider for AnthropicProvider {
-    async fn generate(
+    pub async fn generate_messages(
         &self,
         system_prompt: &str,
-        user_message: &str,
+        messages: &[ChatMessage],
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
         let url = self.config.base_url.as_deref().unwrap_or("https://api.anthropic.com/v1/messages");
@@ -123,18 +151,78 @@ impl LlmProvider for AnthropicProvider {
                 .collect::<Vec<AnthropicTool>>()
         });
 
-        let messages = vec![AnthropicMessage {
-            role: "user".to_string(),
-            content: vec![AnthropicContentBlock::Text {
-                text: user_message.to_string(),
-            }],
-        }];
+        let mut anthropic_messages = Vec::new();
+        for msg in messages {
+            match msg {
+                ChatMessage::System { .. } => {
+                    // System messages are handled in request.system
+                }
+                ChatMessage::User { content, cache_control } => {
+                    anthropic_messages.push(AnthropicMessage {
+                        role: "user".to_string(),
+                        content: vec![AnthropicContentBlock::Text {
+                            text: content.clone(),
+                            cache_control: if *cache_control {
+                                Some(AnthropicCacheControl { r#type: "ephemeral".to_string() })
+                            } else {
+                                None
+                            },
+                        }],
+                    });
+                }
+                ChatMessage::Assistant { content, tool_calls } => {
+                    let mut blocks = Vec::new();
+                    if !content.is_empty() {
+                        blocks.push(AnthropicContentBlock::Text {
+                            text: content.clone(),
+                            cache_control: None,
+                        });
+                    }
+                    if let Some(tcs) = tool_calls {
+                        for (idx, tc) in tcs.iter().enumerate() {
+                            blocks.push(AnthropicContentBlock::ToolUse {
+                                id: format!("call_{}", idx),
+                                name: tc.name.clone(),
+                                input: tc.args.clone(),
+                            });
+                        }
+                    }
+                    anthropic_messages.push(AnthropicMessage {
+                        role: "assistant".to_string(),
+                        content: blocks,
+                    });
+                }
+                ChatMessage::Tool { tool_call_id, content, .. } => {
+                    anthropic_messages.push(AnthropicMessage {
+                        role: "user".to_string(),
+                        content: vec![AnthropicContentBlock::ToolResult {
+                            tool_use_id: tool_call_id.clone(),
+                            content: content.clone(),
+                            cache_control: None,
+                        }],
+                    });
+                }
+            }
+        }
+
+        // Add prompt caching breakpoint on the system prompt for cost and latency optimization
+        let system = if system_prompt.trim().is_empty() {
+            None
+        } else {
+            Some(AnthropicSystemPrompt::Structured(vec![AnthropicSystemBlock {
+                r#type: "text".to_string(),
+                text: system_prompt.to_string(),
+                cache_control: Some(AnthropicCacheControl {
+                    r#type: "ephemeral".to_string(),
+                }),
+            }]))
+        };
 
         let request_body = AnthropicRequest {
             model: self.config.model_id.clone(),
             max_tokens: self.config.max_tokens.unwrap_or(4096),
-            system: Some(system_prompt.to_string()),
-            messages,
+            system,
+            messages: anthropic_messages,
             temperature: self.config.temperature,
             tools: if anthropic_tools.as_ref().is_none_or(|t| t.is_empty()) { None } else { anthropic_tools },
         };
@@ -191,6 +279,27 @@ impl LlmProvider for AnthropicProvider {
         });
 
         Ok((output_text, function_calls, token_usage))
+    }
+}
+
+#[async_trait]
+impl LlmProvider for AnthropicProvider {
+    async fn generate(
+        &self,
+        system_prompt: &str,
+        user_message: &str,
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.generate_messages(system_prompt, &[ChatMessage::user(user_message)], tools).await
+    }
+
+    async fn generate_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.generate_messages(system_prompt, messages, tools).await
     }
 
     async fn embed(&self, _text: &str) -> Result<Vec<f32>, AppError> {

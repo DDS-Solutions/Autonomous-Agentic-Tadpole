@@ -322,7 +322,9 @@ class Tadpole_OS_Socket_Client {
 
                 try {
                     const data = JSON.parse(event.data);
-                    this.handle_socket_message(data);
+                    void this.handle_socket_message(data).catch((err) => {
+                        console.error('[Tadpole_OS] Error processing WebSocket packet:', err);
+                    });
                 } catch (e) {
                     console.debug('[Tadpole_OS] Dropped malformed packet:', e);
                 }
@@ -341,6 +343,33 @@ class Tadpole_OS_Socket_Client {
                         });
                         return;
                     }
+
+                    // On abnormal closure (code 1006), verify if backend rejected auth before scheduling reconnect
+                    if (event?.code === 1006 && typeof fetch !== 'undefined') {
+                        const health_url = `${tadpole_os_url || 'http://localhost:8000'}`.trim().replace(/\/$/, '') + '/v1/engine/health';
+                        fetch(health_url, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        }).then(res => {
+                            if (res.status === 401 || res.status === 403) {
+                                console.warn('[Tadpole_OS] Engine returned 401/403. Halting WebSocket reconnect loop.');
+                                event_bus.emit_log({
+                                    source: 'System',
+                                    text: 'WebSocket authentication failed. Please update NEURAL_TOKEN in Settings.',
+                                    severity: 'error'
+                                });
+                                return;
+                            }
+                            if (!this.is_explicitly_closed) {
+                                this.schedule_reconnect();
+                            }
+                        }).catch(() => {
+                            if (!this.is_explicitly_closed) {
+                                this.schedule_reconnect();
+                            }
+                        });
+                        return;
+                    }
+
                     if (!this.is_explicitly_closed) {
                         this.schedule_reconnect();
                     }

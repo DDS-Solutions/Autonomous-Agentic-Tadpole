@@ -91,7 +91,18 @@ pub async fn compact_and_offload_observation(
     (compacted, Some(target_path))
 }
 
-/// Applies pinned-tail, failure-retention, and role-based visibility filtering to conversation history.
+pub const DEFAULT_OBSERVATION_TOKEN_THRESHOLD: usize = 100;
+
+/// Calculates total token count across conversation turns using model-aware TokenizerService.
+#[allow(dead_code)]
+pub fn calculate_history_tokens(model_id: &str, history: &[String]) -> usize {
+    history
+        .iter()
+        .map(|turn| crate::agent::tokenizer::TokenizerService::count_tokens(model_id, turn))
+        .sum()
+}
+
+/// Applies pinned-tail, failure-retention, and token-based visibility filtering to conversation history.
 pub fn compact_conversation_history(role: &str, raw_history: &[String]) -> Vec<String> {
     tracing::debug!("[compactor] Compacting transcript turns for role={}", role);
     let len = raw_history.len();
@@ -130,15 +141,16 @@ pub fn compact_conversation_history(role: &str, raw_history: &[String]) -> Vec<S
             continue;
         }
 
+        let token_count = crate::agent::tokenizer::TokenizerService::count_tokens("gpt-4o", &clean_msg);
         if (clean_msg.starts_with("OBSERVATION:") || clean_msg.starts_with("TOOL OUTPUT:"))
-            && clean_msg.chars().count() > 300
+            && (token_count > DEFAULT_OBSERVATION_TOKEN_THRESHOLD || clean_msg.chars().count() > 300)
         {
             // If the observation already points to an offloaded file, preserve pointer intact
             if !clean_msg.contains("tool_overflow") && !clean_msg.contains("Full output saved to:") {
                 let truncated = format!(
-                    "{}... [TRUNCATED TOOL OUTPUT: {} chars total]",
+                    "{}... [TRUNCATED TOOL OUTPUT: {} tokens total]",
                     safe_truncate_str(&clean_msg, 300),
-                    clean_msg.len()
+                    token_count
                 );
                 clean.push(truncated);
                 continue;

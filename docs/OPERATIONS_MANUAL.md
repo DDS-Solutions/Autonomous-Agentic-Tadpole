@@ -109,6 +109,7 @@ This will automatically:
 2. Add the new token to `.env` as `NEURAL_TOKEN` and `NEURAL_TOKEN_NEW`.
 3. Set the previous token as `NEURAL_TOKEN_OLD`.
 4. During this rotation grace period, the engine accepts requests with any of these three tokens (using constant-time timing-attack proof comparison).
+5. The grace period is strictly bounded by `NEURAL_TOKEN_ROTATED_AT` and `NEURAL_TOKEN_GRACE_SECS`. If either timestamp or grace seconds configuration is omitted or expired, `NEURAL_TOKEN_OLD` is rejected immediately (fail-closed).
 
 ### Model Slot Routing & Local Privacy Optimizer Runbook
 
@@ -278,7 +279,7 @@ Capabilities include:
 - manage scripts, workflows, and hooks
 - resolve capability proposals
 - **Hybrid RAG Triad**:
-  - **LanceDB Vector RAG** (`server-rs/src/agent/memory.rs`): High-dimensional semantic search.
+  - **LanceDB Vector RAG & SQLite Fallback** (`server-rs/src/agent/memory.rs`, `server-rs/src/routes/memory.rs`): High-dimensional semantic search with graceful SQLite fallback (`fallback_memories`, returning 200 OK) when vector memory is unconfigured or unavailable.
   - **TrustGraph GraphRAG** (`server-rs/src/agent/trustgraph.rs`): Directed entity-relation graph engine with $O(N)$ BFS multi-hop context traversal.
   - **BM25 Lexical Search** (`server-rs/src/services/bm25_memory.rs`): Sub-millisecond exact keyword and symbol search (< 1ms) via `GET /v1/memory/search/bm25`.
 
@@ -538,6 +539,50 @@ The Model Manager provides comprehensive rate limiting and fiscal controls for a
     - **Per-Minute Limits**: Requests per minute (`RPM`) and tokens per minute (`TPM`).
     - **Daily Quotas**: Requests per day (`RPD`) and tokens per day (`TPD`).
   - Interactive tooltips across the UI display quota formulas and explanations for operator clarity.
+
+## Swarm Evaluation Benchmark & Context Overflow Runbook
+
+### Running Ground-Truth Architectural Evaluations
+Operators can execute the ground-truth benchmark suite:
+```bash
+npm run test:evals
+# Or directly via Python:
+python evals/run.py
+```
+This suite verifies 20 architectural invariants with zero network drift:
+1. Tool manifest parameter schemas
+2. Loop guard recursion blocking
+3. Pre-turn financial cap checks
+4. Deterministic artifact existence on mission completion
+5. Context window overflow containment
+6. Ephemeral prompt caching headers
+7. Structured role mapping (`ChatMessage`)
+8. Heartbeat SQLite write throttling
+9. Bulky observation offloading to `.tmp/tool_overflow/`
+10. Sentinel gate narrative leaks
+11. COO hierarchy redirects to Alpha Node
+12. Parallel tool capping ($\le 10$)
+13. Dynamic memory throttling ($\ge 90\%$)
+14. Cached tool replay via parameter hashing
+15. Turn-1 adversarial jailbreak detection
+16. Script-aware non-Latin balance profiling
+17. Provider failover dispatch
+18. Error classification (`AppError::ContextOverflow` as Repairable)
+19. Merkle audit trail non-repudiation
+20. Silent mission completion closure synthesis
+
+### Handling Context Overflow (`AppError::ContextOverflow`)
+When an agent session accumulates tokens exceeding the configured `context_window`:
+- The engine returns `AppError::ContextOverflow` mapped to HTTP 413 Payload Too Large.
+- The error is categorized as `ErrorClass::Repairable` and `ErrorScope::Turn`.
+- The turn compactor prunes earlier observations and stores full outputs in `.tmp/tool_overflow/` with restorable URI pointers.
+- The mission remains active; if the context remains above capacity, operators can adjust the model's `context_window` in `/models` or compact the mission transcript.
+
+### Handling Tool Repetition Alerts (`[TOOL_WARNING]` & `RecursionBlocked`)
+When an agent repeats identical tool calls:
+- At 3 consecutive executions with identical parameter hashes, a `[TOOL_WARNING]` is injected into the observation stream.
+- At 5 repetitions, the mission is halted with `RunnerError::RecursionBlocked`.
+- Operators can review the mission transcript in `/missions`, identify the missing dependency or parameter mismatch, and issue a clarifying directive from the UI.
 
 [//]: # (Metadata: [OPERATIONS_MANUAL])
 

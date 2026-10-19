@@ -21,7 +21,13 @@
     "autonomous-agents-system"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css",
+    "*.scss"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "engine": "node scripts/cargo_runner.cjs run --manifest-path server-rs/Cargo.toml",
@@ -31,6 +37,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:invariants": "vitest run tests/invariants/",
+    "test:evals": "python evals/run.py",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && playwright test",
     "test:py": "python -m unittest discover -s tests/unit",

@@ -8,7 +8,7 @@
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[telemetry]` in tracing logs.
 
-use crate::startup::{SystemContext, SystemService, StateQuery, StateResponse};
+use crate::startup::{SystemContext, SystemService, StateQuery, StateResponse, ShutdownPhase};
 use async_trait::async_trait;
 
 pub struct HeartbeatService;
@@ -17,6 +17,7 @@ pub struct HeartbeatService;
 impl SystemService for HeartbeatService {
     fn name(&self) -> &'static str { "Heartbeat" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase2TelemetryMonitoring }
     async fn start(
         &self,
         context: SystemContext,
@@ -151,6 +152,7 @@ pub struct MetricAggregatorService;
 impl SystemService for MetricAggregatorService {
     fn name(&self) -> &'static str { "MetricAggregator" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase2TelemetryMonitoring }
     async fn start(
         &self,
         context: SystemContext,
@@ -181,6 +183,7 @@ pub struct SystemHealthMonitorService;
 impl SystemService for SystemHealthMonitorService {
     fn name(&self) -> &'static str { "SystemHealthMonitor" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase2TelemetryMonitoring }
     async fn start(
         &self,
         context: SystemContext,

@@ -1,0 +1,148 @@
+{
+  "version": "1.1.58",
+  "total_tasks": 20,
+  "passed": 20,
+  "pass_percentage": 100.0,
+  "results": [
+    {
+      "id": "task_01",
+      "name": "Tool Schema Validation",
+      "category": "Tooling",
+      "status": "PASS",
+      "detail": "Manifest schema verified for read_codebase_file"
+    },
+    {
+      "id": "task_02",
+      "name": "Recursion Loop Guard",
+      "category": "Reliability",
+      "status": "PASS",
+      "detail": "Tool loop guard: warn at 3, abort with RecursionBlocked at 5"
+    },
+    {
+      "id": "task_03",
+      "name": "Pre-turn Budget Gate",
+      "category": "Governance",
+      "status": "PASS",
+      "detail": "Pre-turn financial budget gate quiesces before LLM turn"
+    },
+    {
+      "id": "task_04",
+      "name": "Deterministic Artifact Verification",
+      "category": "Verification",
+      "status": "PASS",
+      "detail": "complete_mission enforces disk presence of all declared artifacts"
+    },
+    {
+      "id": "task_05",
+      "name": "Context Window Guard",
+      "category": "Context",
+      "status": "PASS",
+      "detail": "Context window guard asserts estimated_tokens <= context_limit"
+    },
+    {
+      "id": "task_06",
+      "name": "Prompt Caching Header",
+      "category": "CostOptimization",
+      "status": "PASS",
+      "detail": "Anthropic system prompt structured with ephemeral cache_control"
+    },
+    {
+      "id": "task_07",
+      "name": "Structured Role Fidelity",
+      "category": "Architecture",
+      "status": "PASS",
+      "detail": "ChatMessage enum supports System, User, Assistant, Tool role fidelity"
+    },
+    {
+      "id": "task_08",
+      "name": "Heartbeat SQLite Cooldown",
+      "category": "Performance",
+      "status": "PASS",
+      "detail": "Heartbeat throttled to >= 10s cooldown for SQLite persistence"
+    },
+    {
+      "id": "task_09",
+      "name": "Bulky Observation Offload",
+      "category": "Context",
+      "status": "PASS",
+      "detail": "Bulky tool observations offloaded to .tmp/tool_overflow/ with preview pointer"
+    },
+    {
+      "id": "task_10",
+      "name": "Sentinel Gate Narrative Rejection",
+      "category": "Autonomy",
+      "status": "PASS",
+      "detail": "Sentinel gate detects and rejects narrative leaks for task specialists"
+    },
+    {
+      "id": "task_11",
+      "name": "COO Hierarchy Intercept",
+      "category": "Governance",
+      "status": "PASS",
+      "detail": "COO recruitment requests intercepted and redirected to Alpha Node"
+    },
+    {
+      "id": "task_12",
+      "name": "Concurrent Tool Dispatch Cap",
+      "category": "Reliability",
+      "status": "PASS",
+      "detail": "Parallel tool execution safely capped at 10 to prevent resource exhaustion"
+    },
+    {
+      "id": "task_13",
+      "name": "Memory Pressure Dynamic Throttle",
+      "category": "ResourceManagement",
+      "status": "PASS",
+      "detail": "Dynamic memory throttle active when memory > 90%"
+    },
+    {
+      "id": "task_14",
+      "name": "Tool Execution Idempotency",
+      "category": "Performance",
+      "status": "PASS",
+      "detail": "Persistent tool cache replays deterministic result for matching parameter hash"
+    },
+    {
+      "id": "task_15",
+      "name": "Adversarial Injection Detection",
+      "category": "Security",
+      "status": "PASS",
+      "detail": "Pre-flight security gate detects adversarial jailbreaks on Turn 1"
+    },
+    {
+      "id": "task_16",
+      "name": "Script-Aware Profiling",
+      "category": "Security",
+      "status": "PASS",
+      "detail": "Script profiler calculates Latin vs Non-Latin script balance"
+    },
+    {
+      "id": "task_17",
+      "name": "Provider Failover Dispatch",
+      "category": "Resilience",
+      "status": "PASS",
+      "detail": "Provider dispatch engine implements automatic multi-provider failover"
+    },
+    {
+      "id": "task_18",
+      "name": "Error Scope Classification",
+      "category": "Architecture",
+      "status": "PASS",
+      "detail": "ContextOverflow classified as ErrorClass::Repairable and ErrorScope::Turn"
+    },
+    {
+      "id": "task_19",
+      "name": "Merkle Journal Audit Continuity",
+      "category": "Security",
+      "status": "PASS",
+      "detail": "MerkleAuditTrail verifies cryptographic hash chain integrity and non-repudiation"
+    },
+    {
+      "id": "task_20",
+      "name": "Mission Closure Synthesis Fallback",
+      "category": "Reliability",
+      "status": "PASS",
+      "detail": "Silent completion triggers Mission Closure pulse to synthesize final report"
+    }
+  ]
+}

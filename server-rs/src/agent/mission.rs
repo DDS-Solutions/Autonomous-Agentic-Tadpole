@@ -164,21 +164,40 @@ pub async fn update_mission(
 }
 
 /// Sweeps any abandoned missions that were left in `active` state due to a crash or unexpected shutdown,
-/// reconciling them to `failed` and updating their timestamp.
+/// reconciling missions with checkpoints to `suspended` (for resumption) and checkpointless missions to `failed`.
 pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppError> {
     let now = Utc::now();
-    let result = sqlx::query::<sqlx::Sqlite>(
+
+    // 1. Reconcile active missions with checkpoints to 'suspended' for safe resumption
+    let suspended_res = sqlx::query::<sqlx::Sqlite>(
+        "UPDATE mission_history SET status = 'suspended', updated_at = ?1 
+         WHERE status = 'active' AND id IN (SELECT DISTINCT mission_id FROM mission_checkpoints)",
+    )
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    let suspended_count = suspended_res.rows_affected();
+    if suspended_count > 0 {
+        tracing::info!(
+            "🌱 [Recovery] Safely suspended {} interrupted mission(s) with durable checkpoints for resumption.",
+            suspended_count
+        );
+    }
+
+    // 2. Reconcile remaining checkpointless active missions to 'failed'
+    let failed_res = sqlx::query::<sqlx::Sqlite>(
         "UPDATE mission_history SET status = 'failed', updated_at = ?1 WHERE status = 'active'",
     )
     .bind(now)
     .execute(pool)
     .await?;
 
-    let count = result.rows_affected();
-    if count > 0 {
+    let failed_count = failed_res.rows_affected();
+    if failed_count > 0 {
         tracing::warn!(
-            "🧹 [Recovery] Reconciled {} abandoned/interrupted mission(s) from 'active' to 'failed'.",
-            count
+            "🧹 [Recovery] Reconciled {} uncheckpointed abandoned mission(s) from 'active' to 'failed'.",
+            failed_count
         );
     }
 
@@ -194,7 +213,105 @@ pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppErr
         );
     }
 
-    Ok(count)
+    Ok(suspended_count + failed_count)
+}
+
+/// Persists a durable delta checkpoint at the end of a reasoning turn.
+pub async fn save_mission_checkpoint(
+    pool: &SqlitePool,
+    mission_id: &str,
+    turn_index: i64,
+    state_blob: &str,
+    active_node_id: Option<&str>,
+) -> Result<(), AppError> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query::<sqlx::Sqlite>(
+        "INSERT INTO mission_checkpoints (id, mission_id, turn_index, state_blob, active_node_id)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
+    .bind(id)
+    .bind(mission_id)
+    .bind(turn_index)
+    .bind(state_blob)
+    .bind(active_node_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Loads the latest durable checkpoint for a mission, if one exists.
+pub async fn load_latest_mission_checkpoint(
+    pool: &SqlitePool,
+    mission_id: &str,
+) -> Result<Option<(i64, String, Option<String>)>, AppError> {
+    let row = sqlx::query::<sqlx::Sqlite>(
+        "SELECT turn_index, state_blob, active_node_id FROM mission_checkpoints
+         WHERE mission_id = ?1 ORDER BY turn_index DESC LIMIT 1",
+    )
+    .bind(mission_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(r) = row {
+        let turn_index: i64 = r.try_get("turn_index")?;
+        let state_blob: String = r.try_get("state_blob")?;
+        let active_node_id: Option<String> = r.try_get("active_node_id")?;
+        Ok(Some((turn_index, state_blob, active_node_id)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Saves a tool execution result to the idempotency cache.
+pub async fn save_tool_result(
+    pool: &SqlitePool,
+    call_id: &str,
+    mission_id: &str,
+    turn_index: i64,
+    tool_name: &str,
+    args_hash: &str,
+    result_text: &str,
+) -> Result<(), AppError> {
+    sqlx::query::<sqlx::Sqlite>(
+        "INSERT OR REPLACE INTO tool_results (call_id, mission_id, turn_index, tool_name, args_hash, result_text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+    )
+    .bind(call_id)
+    .bind(mission_id)
+    .bind(turn_index)
+    .bind(tool_name)
+    .bind(args_hash)
+    .bind(result_text)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Looks up a cached tool result for idempotency and replay safety.
+pub async fn get_tool_result(
+    pool: &SqlitePool,
+    mission_id: &str,
+    tool_name: &str,
+    args_hash: &str,
+) -> Result<Option<String>, AppError> {
+    let row = sqlx::query::<sqlx::Sqlite>(
+        "SELECT result_text FROM tool_results
+         WHERE mission_id = ?1 AND tool_name = ?2 AND args_hash = ?3",
+    )
+    .bind(mission_id)
+    .bind(tool_name)
+    .bind(args_hash)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(r) = row {
+        let res: String = r.try_get("result_text")?;
+        Ok(Some(res))
+    } else {
+        Ok(None)
+    }
 }
 
 /// ### 📡 Telemetry: Structural Mission Logging
@@ -439,6 +556,7 @@ fn status_to_str(status: &MissionStatus) -> &'static str {
         MissionStatus::Completed => "completed",
         MissionStatus::Failed => "failed",
         MissionStatus::Paused => "paused",
+        MissionStatus::Suspended => "suspended",
     }
 }
 

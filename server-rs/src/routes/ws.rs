@@ -42,7 +42,22 @@ pub async fn ws_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
-    tracing::debug!("📥 WS Handshake Headers: {:?}", headers);
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let mut scrubbed_headers = headers.clone();
+        if scrubbed_headers.contains_key("sec-websocket-protocol") {
+            scrubbed_headers.insert(
+                "sec-websocket-protocol",
+                axum::http::HeaderValue::from_static("[REDACTED]"),
+            );
+        }
+        if scrubbed_headers.contains_key("authorization") {
+            scrubbed_headers.insert(
+                "authorization",
+                axum::http::HeaderValue::from_static("[REDACTED]"),
+            );
+        }
+        tracing::debug!("📥 WS Handshake Headers: {:?}", scrubbed_headers);
+    }
     // CSRF protection: verify the Origin header for WS upgrades
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         let allowed_env = std::env::var("ALLOWED_ORIGINS").unwrap_or_default();
@@ -69,7 +84,7 @@ pub async fn ws_handler(
         }
     }
 
-    // Extract the subprotocol the client sent (e.g., "bearer.tadpole-dev-token-2026")
+    // Extract the subprotocol the client sent (e.g., "bearer.<token>")
     // SEC-01: Split the comma-separated list and pick the first one (usually the bearer token)
     let protocol = headers
         .get("sec-websocket-protocol")
@@ -85,15 +100,17 @@ pub async fn ws_handler(
         .unwrap_or("");
     let is_pulse_active = full_protocol_header.contains("tadpole-pulse-v1");
 
+    let proto_kind = protocol.split('.').next().unwrap_or("none");
     tracing::info!(
-        "✅ WebSocket handshake authorized via middleware. Selected Protocol: {}",
-        protocol
+        "✅ WebSocket handshake authorized via middleware. Protocol kind: {}",
+        proto_kind
     );
 
-    // Echo ONLY the selected subprotocol back. Without this, the browser closes the WS immediately
-    // because RFC 6455 requires the server to acknowledge *one* requested subprotocol.
-    // The idiomatic Axum way is to use .protocols().
-    let ws = if !protocol.is_empty() {
+    // SEC-WS-02: Echo an offered subprotocol. If pulse protocol is offered, select it
+    // so that bearer token strings are not echoed back in response headers.
+    let ws = if is_pulse_active {
+        ws.protocols(["tadpole-pulse-v1"])
+    } else if !protocol.is_empty() {
         ws.protocols([protocol])
     } else {
         ws

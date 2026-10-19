@@ -58,6 +58,25 @@ impl ProviderVariant {
         }
     }
 
+    pub(crate) async fn generate_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::agent::types::ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        match self {
+            ProviderVariant::Gemini(p) => {
+                p.generate_messages(system_prompt, messages, tools).await
+            }
+            ProviderVariant::Groq(p) => p.generate_messages(system_prompt, messages, tools).await,
+            ProviderVariant::OpenAI(p) => p.generate_messages(system_prompt, messages, tools).await,
+            ProviderVariant::Anthropic(p) => p.generate_messages(system_prompt, messages, tools).await,
+            ProviderVariant::Null(p) => {
+                p.generate_messages(system_prompt, messages, tools).await
+            }
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) async fn embed(&self, text: &str) -> Result<Vec<f32>, AppError> {
         match self {
@@ -82,8 +101,18 @@ fn resolve_api_key(config: &crate::agent::types::ModelConfig, env_var: &str) -> 
 }
 
 /// Token-estimate heuristic based on byte count (~3.5 bytes per token for Latin text).
+#[allow(dead_code)]
 pub(crate) fn estimate_token_count(system_prompt: &str, user_message: &str) -> usize {
     ((system_prompt.len() + user_message.len()) as f64 / 3.5) as usize
+}
+
+/// Token estimation for structured ChatMessages using model-aware TokenizerService.
+pub(crate) fn estimate_messages_token_count(system_prompt: &str, messages: &[crate::agent::types::ChatMessage]) -> usize {
+    let mut total = crate::agent::tokenizer::TokenizerService::count_tokens("gpt-4o", system_prompt);
+    for msg in messages {
+        total += crate::agent::tokenizer::TokenizerService::count_tokens("gpt-4o", msg.content_str());
+    }
+    total.max(1)
 }
 
 impl AgentRunner {
@@ -117,6 +146,18 @@ impl AgentRunner {
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
         self.dispatch_to_provider(ctx, system_prompt, user_message, tools)
+            .await
+    }
+
+    /// Routes the structured generation request with native ChatMessages.
+    pub(crate) async fn call_provider_messages(
+        &self,
+        ctx: &RunContext,
+        system_prompt: &str,
+        messages: &[crate::agent::types::ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.dispatch_to_provider_messages(ctx, system_prompt, messages, tools)
             .await
     }
 
@@ -375,191 +416,209 @@ impl AgentRunner {
         user_message: &'a str,
         tools: Option<Vec<ToolDefinition>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError>> + Send + 'a>> {
+        let msg = vec![crate::agent::types::ChatMessage::user(user_message)];
+        self.dispatch_to_provider_messages_owned(ctx, system_prompt.to_string(), msg, tools)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn dispatch_to_provider_messages<'a>(
+        &'a self,
+        ctx: &'a RunContext,
+        system_prompt: &'a str,
+        messages: &'a [crate::agent::types::ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError>> + Send + 'a>> {
+        self.dispatch_to_provider_messages_owned(ctx, system_prompt.to_string(), messages.to_vec(), tools)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn dispatch_to_provider_messages_owned<'a>(
+        &'a self,
+        ctx: &'a RunContext,
+        system_prompt: String,
+        messages: Vec<crate::agent::types::ChatMessage>,
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError>> + Send + 'a>> {
         Box::pin(async move {
-        use crate::agent::types::ProviderStatus;
-        use std::sync::atomic::Ordering;
+            use crate::agent::types::ProviderStatus;
+            use std::sync::atomic::Ordering;
 
-        let provider_id = ctx.provider_name.clone();
-        let health = self.state.registry.provider_health.get(&provider_id)
-            .map(|h| *h.value())
-            .unwrap_or(ProviderStatus::Green);
+            let provider_id = ctx.provider_name.clone();
+            let health = self.state.registry.provider_health.get(&provider_id)
+                .map(|h| *h.value())
+                .unwrap_or(ProviderStatus::Green);
 
-        // Pre-emptive Failover for RED status
-        if health == ProviderStatus::Red {
-            tracing::warn!("🚨 [Provider] {} is in RED state. Attempting pre-emptive failover...", provider_id);
-            if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {
-                tracing::warn!(
-                    "🔄 [Pre-emptive Failover] {} in RED state for agent {}. Switching to {} ({})",
-                    provider_id, ctx.agent_id, failover_ctx.provider_name, failover_ctx.model_config.model_id
-                );
-                return self.dispatch_to_provider(&failover_ctx, system_prompt, user_message, tools).await;
+            // Pre-emptive Failover for RED status
+            if health == ProviderStatus::Red {
+                tracing::warn!("🚨 [Provider] {} is in RED state. Attempting pre-emptive failover...", provider_id);
+                if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {
+                    tracing::warn!(
+                        "🔄 [Pre-emptive Failover] {} in RED state for agent {}. Switching to {} ({})",
+                        provider_id, ctx.agent_id, failover_ctx.provider_name, failover_ctx.model_config.model_id
+                    );
+                    return self.dispatch_to_provider_messages_owned(&failover_ctx, system_prompt, messages, tools).await;
+                }
             }
-        }
 
-        let client = (*self.state.resources.http_client).clone();
-        let limiter_key = format!("{}:{}", ctx.provider_name, ctx.model_config.model_id);
-        let limiter = self
-            .state
-            .resources
-            .rate_limiters
-            .entry(limiter_key.clone())
-            .or_insert_with(|| {
-                Arc::new(crate::agent::rate_limiter::RateLimiter::new(
-                    ctx.model_config.rpm,
-                    ctx.model_config.tpm,
-                ))
-            })
-            .value()
-            .clone();
+            let client = (*self.state.resources.http_client).clone();
+            let limiter_key = format!("{}:{}", ctx.provider_name, ctx.model_config.model_id);
+            let limiter = self
+                .state
+                .resources
+                .rate_limiters
+                .entry(limiter_key.clone())
+                .or_insert_with(|| {
+                    Arc::new(crate::agent::rate_limiter::RateLimiter::new(
+                        ctx.model_config.rpm,
+                        ctx.model_config.tpm,
+                    ))
+                })
+                .value()
+                .clone();
 
-        let estimated_tokens = estimate_token_count(system_prompt, user_message);
-        if limiter.is_active() {
-            limiter.acquire(estimated_tokens as u32).await;
-        }
+            let estimated_tokens = estimate_messages_token_count(&system_prompt, &messages);
+            if limiter.is_active() {
+                limiter.acquire(estimated_tokens as u32).await;
+            }
 
-        // SSCP: Cloud providers bypass RAM guard intentionally — inference runs remotely.
-        // Only local providers (Ollama/127.0.0.1) can cause host OOM.
-        let is_local = ctx.model_config.provider == ModelProvider::Ollama 
-            || ctx.model_config.base_url.as_ref().is_some_and(|u| u.contains("127.0.0.1") || u.contains("localhost"));
-        
-        if is_local {
-            let arbiter = self.state.resources.continuity_arbiter.clone();
+            // SSCP: Cloud providers bypass RAM guard intentionally — inference runs remotely.
+            // Only local providers (Ollama/127.0.0.1) can cause host OOM.
+            let is_local = ctx.model_config.provider == ModelProvider::Ollama 
+                || ctx.model_config.base_url.as_ref().is_some_and(|u| u.contains("127.0.0.1") || u.contains("localhost"));
             
-            // 1. Update hot registry with current agent's estimated footprint
-            arbiter.update_agent_load(&ctx.agent_id, estimated_tokens);
+            if is_local {
+                let arbiter = self.state.resources.continuity_arbiter.clone();
+                
+                // 1. Update hot registry with current agent's estimated footprint
+                arbiter.update_agent_load(&ctx.agent_id, estimated_tokens);
 
-            // 2. Check for VRAM/RAM pressure
-            if arbiter.check_vram_pressure() {
-                if let Some(target_id) = arbiter.select_eviction_target() {
-                    let is_active = self.state.comms.active_runners.contains_key(&target_id)
-                        || self.state.registry.agents.get(&target_id).map(|a| a.health.status == "busy" || a.health.status == "working").unwrap_or(false);
-                    if target_id != ctx.agent_id && !is_active {
-                        // Retrieve the eviction target's working memory from the registry
-                        let working_memory = self.state.registry.agents.get(&target_id)
-                            .map(|a| a.state.working_memory.clone());
-                        tracing::warn!("❄️ [SSCP] High memory pressure. Evicting agent {} to SSD to prioritize {}", target_id, ctx.agent_id);
-                        let _ = arbiter.evict_to_ssd(&target_id, working_memory.as_ref()).await;
+                // 2. Check for VRAM/RAM pressure
+                if arbiter.check_vram_pressure() {
+                    if let Some(target_id) = arbiter.select_eviction_target() {
+                        let is_active = self.state.comms.active_runners.contains_key(&target_id)
+                            || self.state.registry.agents.get(&target_id).map(|a| a.health.status == "busy" || a.health.status == "working").unwrap_or(false);
+                        if target_id != ctx.agent_id && !is_active {
+                            // Retrieve the eviction target's working memory from the registry
+                            let working_memory = self.state.registry.agents.get(&target_id)
+                                .map(|a| a.state.working_memory.clone());
+                            tracing::warn!("❄️ [SSCP] High memory pressure. Evicting agent {} to SSD to prioritize {}", target_id, ctx.agent_id);
+                            let _ = arbiter.evict_to_ssd(&target_id, working_memory.as_ref()).await;
 
-                        // ✨ CLEAR FROM REGISTRY TO FREE MEMORY ✨
-                        if let Some(mut target_agent) = self.state.registry.agents.get_mut(&target_id) {
-                            target_agent.state.working_memory = serde_json::json!({});
-                            tracing::info!("♻️ [SSCP] Cleared registry memory for evicted agent {}", target_id);
+                            // ✨ CLEAR FROM REGISTRY TO FREE MEMORY ✨
+                            if let Some(mut target_agent) = self.state.registry.agents.get_mut(&target_id) {
+                                target_agent.state.working_memory = serde_json::json!({});
+                                tracing::info!("♻️ [SSCP] Cleared registry memory for evicted agent {}", target_id);
+                            }
                         }
                     }
                 }
+
+                // 3. Early failure for extreme pressure (SSCP Hard Limit)
+                let stats = self.state.security.system_monitor.get_system_defense_stats();
+                if stats.memory_pressure >= 0.80 {
+                    tracing::warn!(
+                        "⚠️ [SSCP] High memory pressure ({:.1}%). Degraded inference mode — eviction prioritized.",
+                        stats.memory_pressure * 100.0
+                    );
+                }
+                if stats.memory_pressure >= 0.98 {
+                    tracing::error!("🚨 [SSCP] CRITICAL memory pressure ({:.1}%). Swarm execution suspended.", stats.memory_pressure * 100.0);
+                    return Err(AppError::InfrastructureError { 
+                        provider_id: "sscp_guard".to_string(), 
+                        detail: "CRITICAL: System memory pressure is too high for safe inference.".to_string(), 
+                        help_link: None 
+                    });
+                }
             }
 
-            // 3. Early failure for extreme pressure (SSCP Hard Limit)
-            // NOTE: Threshold is 90% (not 98%) — at 98% the OS is in OOM territory
-            // and the eviction spawns above may already be failing silently.
-            let stats = self.state.security.system_monitor.get_system_defense_stats();
-            if stats.memory_pressure >= 0.80 {
-                tracing::warn!(
-                    "⚠️ [SSCP] High memory pressure ({:.1}%). Degraded inference mode — eviction prioritized.",
-                    stats.memory_pressure * 100.0
-                );
+            // Unified provider dispatch (local and cloud share the same failure tracking path)
+            let provider = self.resolve_provider(ctx, client);
+            let start = std::time::Instant::now();
+            let result = provider.generate_messages(&system_prompt, &messages, tools.clone()).await;
+            let duration = start.elapsed().as_secs_f32() * 1000.0;
+            
+            // Record latency if successful (we don't record failures to avoid skewing the performance baseline)
+            if result.is_ok() {
+                self.state.resources.hardware_profiler.record_inference_latency(duration);
             }
-            if stats.memory_pressure >= 0.98 {
-                tracing::error!("🚨 [SSCP] CRITICAL memory pressure ({:.1}%). Swarm execution suspended.", stats.memory_pressure * 100.0);
-                return Err(AppError::InfrastructureError { 
-                    provider_id: "sscp_guard".to_string(), 
-                    detail: "CRITICAL: System memory pressure is too high for safe inference.".to_string(), 
-                    help_link: None 
-                });
-            }
-        }
 
-        // Unified provider dispatch (local and cloud share the same failure tracking path)
-        let provider = self.resolve_provider(ctx, client);
-        let start = std::time::Instant::now();
-        let result = provider.generate(system_prompt, user_message, tools.clone()).await;
-        let duration = start.elapsed().as_secs_f32() * 1000.0;
-        
-        // Record latency if successful (we don't record failures to avoid skewing the performance baseline)
-        if result.is_ok() {
-            self.state.resources.hardware_profiler.record_inference_latency(duration);
-        }
+            match result {
+                Ok((text, tool_calls, usage)) => {
+                    // Preserve each acknowledged response before the next await
+                    ctx.accounting.record(&usage);
+                    // Success: Reset failures and restore Green status
+                    self.state.registry.provider_failures.remove(&provider_id);
+                    self.state.registry.provider_health.insert(provider_id, ProviderStatus::Green);
 
-        match result {
-            Ok((text, tool_calls, usage)) => {
-                // Preserve each acknowledged response before the next await,
-                // including partial turns, workflows, synthesis and failover.
-                ctx.accounting.record(&usage);
-                // Success: Reset failures and restore Green status
-                self.state.registry.provider_failures.remove(&provider_id);
-                self.state.registry.provider_health.insert(provider_id, ProviderStatus::Green);
-
-                if limiter.is_active() {
-                    if let Some(ref u) = usage {
-                        limiter.record_usage_reconcile(u.total_tokens, estimated_tokens as u32);
-                        self.state.governance.tpm_accumulator.fetch_add(
-                            u.total_tokens as usize,
-                            Ordering::Relaxed,
-                        );
+                    if limiter.is_active() {
+                        if let Some(ref u) = usage {
+                            limiter.record_usage_reconcile(u.total_tokens, estimated_tokens as u32);
+                            self.state.governance.tpm_accumulator.fetch_add(
+                                u.total_tokens as usize,
+                                Ordering::Relaxed,
+                            );
+                        }
                     }
+                    Ok((text, tool_calls, usage))
                 }
-                Ok((text, tool_calls, usage))
-            }
-            Err(e) => {
-                if limiter.is_active() {
-                    limiter.release_reservation(estimated_tokens as u32);
-                }
-
-                // Failure: Increment count and update status
-                let failures = self.state.registry.provider_failures.entry(provider_id.clone())
-                    .or_insert_with(|| std::sync::atomic::AtomicU32::new(0));
-                let count = failures.fetch_add(1, Ordering::Relaxed) + 1;
-
-                let new_status = if count >= 5 {
-                    ProviderStatus::Red
-                } else if count >= 3 {
-                    ProviderStatus::Amber
-                } else {
-                    ProviderStatus::Green
-                };
-                
-                self.state.registry.provider_health.insert(provider_id.clone(), new_status);
-
-                tracing::warn!(
-                    "⚠️ [Provider] {} failed (count: {}). New status: {:?}",
-                    provider_id, count, new_status
-                );
-
-                // 🔄 Sovereign Failover: Attempt model-slot failover for connection errors
-                let err_str = e.to_string();
-                let is_conn_fail = err_str.contains("error sending request")
-                    || err_str.contains("Connection refused")
-                    || err_str.contains("timed out")
-                    || err_str.contains("connection reset")
-                    || err_str.contains("status: 429")
-                    || err_str.contains("429 Too Many")
-                    || err_str.contains("status: 503");
-
-                if is_conn_fail {
-                    if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {
-                        tracing::warn!(
-                            "🔄 [Sovereign Failover] {} unreachable for agent {}. Failing over to {} ({})",
-                            provider_id, ctx.agent_id, failover_ctx.provider_name, failover_ctx.model_config.model_id
-                        );
-                        self.broadcast_sys(
-                            &format!(
-                                "🔄 Sovereign Failover: {} unreachable. Switching {} to {} ({})...",
-                                provider_id.to_uppercase(), ctx.agent_id, 
-                                failover_ctx.provider_name.to_uppercase(), failover_ctx.model_config.model_id
-                            ),
-                            "warning",
-                            Some(ctx.mission_id.clone()),
-                        );
-                        // Recursive dispatch with the failover context (no infinite loop: 
-                        // try_resolve_failover_context returns None if no more slots are available)
-                        return self.dispatch_to_provider(&failover_ctx, system_prompt, user_message, tools).await;
+                Err(e) => {
+                    if limiter.is_active() {
+                        limiter.release_reservation(estimated_tokens as u32);
                     }
-                }
 
-                Err(e)
+                    // Failure: Increment count and update status
+                    let failures = self.state.registry.provider_failures.entry(provider_id.clone())
+                        .or_insert_with(|| std::sync::atomic::AtomicU32::new(0));
+                    let count = failures.fetch_add(1, Ordering::Relaxed) + 1;
+
+                    let new_status = if count >= 5 {
+                        ProviderStatus::Red
+                    } else if count >= 3 {
+                        ProviderStatus::Amber
+                    } else {
+                        ProviderStatus::Green
+                    };
+                    
+                    self.state.registry.provider_health.insert(provider_id.clone(), new_status);
+
+                    tracing::warn!(
+                        "⚠️ [Provider] {} failed (count: {}). New status: {:?}",
+                        provider_id, count, new_status
+                    );
+
+                    // 🔄 Sovereign Failover: Attempt model-slot failover for connection errors
+                    let err_str = e.to_string();
+                    let is_conn_fail = err_str.contains("error sending request")
+                        || err_str.contains("Connection refused")
+                        || err_str.contains("timed out")
+                        || err_str.contains("connection reset")
+                        || err_str.contains("status: 429")
+                        || err_str.contains("429 Too Many")
+                        || err_str.contains("status: 503");
+
+                    if is_conn_fail {
+                        if let Some(failover_ctx) = self.try_resolve_failover_context(ctx).await {
+                            tracing::warn!(
+                                "🔄 [Sovereign Failover] {} unreachable for agent {}. Failing over to {} ({})",
+                                provider_id, ctx.agent_id, failover_ctx.provider_name, failover_ctx.model_config.model_id
+                            );
+                            self.broadcast_sys(
+                                &format!(
+                                    "🔄 Sovereign Failover: {} unreachable. Switching {} to {} ({})...",
+                                    provider_id.to_uppercase(), ctx.agent_id, 
+                                    failover_ctx.provider_name.to_uppercase(), failover_ctx.model_config.model_id
+                                ),
+                                "warning",
+                                Some(ctx.mission_id.clone()),
+                            );
+                            return self.dispatch_to_provider_messages_owned(&failover_ctx, system_prompt, messages, tools).await;
+                        }
+                    }
+
+                    Err(e)
+                }
             }
-        }
-        }) // close Box::pin(async move { ... })
+        })
     }
 
     /// Attempts to resolve a failover RunContext by stepping to the next available model slot.

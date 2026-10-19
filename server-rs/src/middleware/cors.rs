@@ -110,6 +110,15 @@ pub fn create_cors_layer() -> CorsLayer {
         axum::http::HeaderName::from_static("traceparent"),
         axum::http::HeaderName::from_static("access-control-request-private-network"),
     ])
+    .expose_headers([
+        axum::http::HeaderName::from_static("x-request-id"),
+        axum::http::HeaderName::from_static("traceparent"),
+        axum::http::HeaderName::from_static("x-ratelimit-limit"),
+        axum::http::HeaderName::from_static("x-ratelimit-remaining"),
+        axum::http::HeaderName::from_static("x-ratelimit-reset"),
+        axum::http::HeaderName::from_static("retry-after"),
+    ])
+    .max_age(std::time::Duration::from_secs(600))
     .allow_credentials(allow_credentials)
 }
 

@@ -8,7 +8,7 @@
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[security]` in tracing logs.
 
-use crate::startup::{SystemContext, SystemService};
+use crate::startup::{SystemContext, SystemService, ShutdownPhase};
 use async_trait::async_trait;
 
 pub struct PrivacyGuardService;
@@ -17,6 +17,7 @@ pub struct PrivacyGuardService;
 impl SystemService for PrivacyGuardService {
     fn name(&self) -> &'static str { "PrivacyGuard" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,
@@ -44,6 +45,7 @@ pub struct SecurityEvictionService;
 impl SystemService for SecurityEvictionService {
     fn name(&self) -> &'static str { "SecurityEviction" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,
@@ -87,6 +89,7 @@ pub struct BudgetFlushService;
 impl SystemService for BudgetFlushService {
     fn name(&self) -> &'static str { "BudgetFlush" }
     fn is_critical(&self) -> bool { true }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase4Persistence }
     async fn start(
         &self,
         context: SystemContext,

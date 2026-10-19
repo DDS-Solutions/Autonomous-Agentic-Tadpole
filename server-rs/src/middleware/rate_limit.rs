@@ -22,6 +22,8 @@ use axum::{
     response::Response,
 };
 use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use crate::middleware::extract_client_ip;
 
@@ -30,10 +32,10 @@ static FALLBACK_LIMIT: HeaderValue = HeaderValue::from_static("0");
 
 /// Tracks rate limit buckets by IP.
 /// Key: IP address (as string)
-/// Value: (tokens, last_refill_timestamp)
-/// Utilizing `moka` for high-performance concurrent access and automated eviction.
-static RATE_BUCKETS: Lazy<moka::future::Cache<String, (f64, Instant)>> = Lazy::new(|| {
-    moka::future::Cache::builder()
+/// Value: Arc<Mutex<(tokens, last_refill_timestamp)>>
+/// Utilizing `moka::sync::Cache` with thread-safe Mutex for atomic check-and-consume.
+static RATE_BUCKETS: Lazy<moka::sync::Cache<String, Arc<Mutex<(f64, Instant)>>>> = Lazy::new(|| {
+    moka::sync::Cache::builder()
         .max_capacity(20000)
         .time_to_idle(Duration::from_secs(600)) // 10 minute idle eviction
         .build()
@@ -61,35 +63,61 @@ pub async fn inject_rate_limit_headers(
     }
 
     let now = Instant::now();
-    let (mut tokens, mut last_refill) = RATE_BUCKETS
-        .get(&client_ip)
-        .await
-        .unwrap_or((*MAX_TOKENS, now));
+    let bucket_arc = RATE_BUCKETS.get_with(client_ip.clone(), || {
+        Arc::new(Mutex::new((*MAX_TOKENS, now)))
+    });
 
-    // 1. Refill based on elapsed time (Token Bucket Algorithm)
-    let elapsed = now.duration_since(last_refill).as_secs_f64();
-    tokens = (tokens + elapsed * *REFILL_RATE_PER_SEC).min(*MAX_TOKENS);
-    last_refill = now;
+    let (current_tokens, reset_secs, is_exceeded) = {
+        let mut bucket = bucket_arc.lock();
+        let elapsed = now.duration_since(bucket.1).as_secs_f64();
+        bucket.0 = (bucket.0 + elapsed * *REFILL_RATE_PER_SEC).min(*MAX_TOKENS);
+        bucket.1 = now;
 
-    if tokens < 1.0 {
+        let reset = if bucket.0 < *MAX_TOKENS {
+            ((*MAX_TOKENS - bucket.0) / *REFILL_RATE_PER_SEC).ceil() as u64
+        } else {
+            0
+        };
+
+        if bucket.0 < 1.0 {
+            (bucket.0, reset.max(1), true)
+        } else {
+            bucket.0 -= 1.0;
+            (bucket.0, reset, false)
+        }
+    };
+
+    if is_exceeded {
         tracing::warn!(
             "🚫 [Security] Rate limit exceeded for IP: {}. Blocked.",
             client_ip
         );
-        return Err(StatusCode::TOO_MANY_REQUESTS);
+        let mut res = Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .body(Body::empty())
+            .unwrap();
+        let headers = res.headers_mut();
+        headers.insert(
+            axum::http::header::RETRY_AFTER,
+            HeaderValue::from_str(&reset_secs.to_string())
+                .unwrap_or_else(|_| HeaderValue::from_static("1")),
+        );
+        headers.insert(
+            "X-RateLimit-Limit",
+            HeaderValue::from_str(&(*MAX_TOKENS as u32).to_string())
+                .unwrap_or_else(|_| FALLBACK_LIMIT.clone()),
+        );
+        headers.insert(
+            "X-RateLimit-Remaining",
+            HeaderValue::from_static("0"),
+        );
+        headers.insert(
+            "X-RateLimit-Reset",
+            HeaderValue::from_str(&reset_secs.to_string())
+                .unwrap_or_else(|_| FALLBACK_LIMIT.clone()),
+        );
+        return Ok(res);
     }
-
-    // 2. Consume 1 token and update cache
-    tokens -= 1.0;
-    let current_tokens = tokens;
-    RATE_BUCKETS.insert(client_ip.clone(), (tokens, last_refill)).await;
-
-    // 3. Calculate reset time (seconds until full refill)
-    let reset_secs = if tokens < *MAX_TOKENS {
-        ((*MAX_TOKENS - tokens) / *REFILL_RATE_PER_SEC).ceil() as u64
-    } else {
-        0
-    };
 
     // 4. Proceed with request
     let mut response = next.run(req).await;

@@ -142,7 +142,12 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "final_report": { "type": "string" }
+                    "final_report": { "type": "string", "description": "The final executive summary and technical report" },
+                    "artifacts": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional list of file paths that must exist on disk as mission artifacts before completing"
+                    }
                 },
                 "required": ["final_report"]
             }),

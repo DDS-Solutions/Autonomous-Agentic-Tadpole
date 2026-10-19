@@ -8,7 +8,7 @@
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[jobs]` in tracing logs.
 
-use crate::startup::{SystemContext, SystemService};
+use crate::startup::{SystemContext, SystemService, ShutdownPhase};
 use async_trait::async_trait;
 
 pub struct ContinuitySchedulerService;
@@ -16,6 +16,7 @@ pub struct ContinuitySchedulerService;
 #[async_trait]
 impl SystemService for ContinuitySchedulerService {
     fn name(&self) -> &'static str { "ContinuityScheduler" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase1IngestionNetworking }
     async fn start(
         &self,
         context: SystemContext,
@@ -43,6 +44,7 @@ pub struct SwarmReaperService;
 #[async_trait]
 impl SystemService for SwarmReaperService {
     fn name(&self) -> &'static str { "SwarmReaper" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,
@@ -70,6 +72,7 @@ pub struct MemoryCleanupService;
 #[async_trait]
 impl SystemService for MemoryCleanupService {
     fn name(&self) -> &'static str { "MemoryCleanup" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,
@@ -113,6 +116,7 @@ pub struct IngestionWorkerService;
 #[async_trait]
 impl SystemService for IngestionWorkerService {
     fn name(&self) -> &'static str { "IngestionWorker" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase1IngestionNetworking }
     async fn start(
         &self,
         context: SystemContext,
@@ -139,6 +143,7 @@ pub struct RecipeIngestionService;
 #[async_trait]
 impl SystemService for RecipeIngestionService {
     fn name(&self) -> &'static str { "RecipeIngestion" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase1IngestionNetworking }
     async fn start(
         &self,
         context: SystemContext,
@@ -167,6 +172,7 @@ pub struct IksDecayService;
 #[async_trait]
 impl SystemService for IksDecayService {
     fn name(&self) -> &'static str { "IksDecay" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,
@@ -214,6 +220,7 @@ pub struct IksEvictionService;
 #[async_trait]
 impl SystemService for IksEvictionService {
     fn name(&self) -> &'static str { "IksEviction" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
     async fn start(
         &self,
         context: SystemContext,

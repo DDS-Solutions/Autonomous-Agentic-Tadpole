@@ -15,7 +15,7 @@
 //! - **Trace Scope**: `server-rs::agent::gemini`
 
 use reqwest::Client;
-use crate::agent::types::{ModelConfig, TokenUsage, ToolCall, ToolDefinition};
+use crate::agent::types::{ChatMessage, ModelConfig, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 
@@ -189,6 +189,15 @@ impl GeminiProvider {
         user_message: &str,
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.generate_messages(system_prompt, &[ChatMessage::user(user_message)], tools).await
+    }
+
+    pub async fn generate_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
         let base_url = self
             .config
             .base_url
@@ -210,15 +219,58 @@ impl GeminiProvider {
             }
         }
 
-        let combined_prompt = format!("{}\n\nUSER MESSAGE:\n{}", system_prompt, user_message);
+        let mut contents = Vec::new();
+        for (i, msg) in messages.iter().enumerate() {
+            match msg {
+                ChatMessage::System { content, .. } => {
+                    contents.push(GeminiContent {
+                        role: "user".to_string(),
+                        parts: vec![GeminiPart {
+                            text: format!("SYSTEM DIRECTIVE: {}", content),
+                        }],
+                    });
+                }
+                ChatMessage::User { content, .. } => {
+                    let text = if i == 0 && !system_prompt.trim().is_empty() {
+                        format!("SYSTEM DIRECTIVE:\n{}\n\nUSER:\n{}", system_prompt, content)
+                    } else {
+                        content.clone()
+                    };
+                    contents.push(GeminiContent {
+                        role: "user".to_string(),
+                        parts: vec![GeminiPart { text }],
+                    });
+                }
+                ChatMessage::Assistant { content, .. } => {
+                    contents.push(GeminiContent {
+                        role: "model".to_string(),
+                        parts: vec![GeminiPart {
+                            text: content.clone(),
+                        }],
+                    });
+                }
+                ChatMessage::Tool { name, content, .. } => {
+                    contents.push(GeminiContent {
+                        role: "user".to_string(),
+                        parts: vec![GeminiPart {
+                            text: format!("OBSERVATION: Tool {} Result: {}", name, content),
+                        }],
+                    });
+                }
+            }
+        }
 
-        let mut request_body = GeminiRequest {
-            contents: vec![GeminiContent {
+        if contents.is_empty() {
+            contents.push(GeminiContent {
                 role: "user".to_string(),
                 parts: vec![GeminiPart {
-                    text: combined_prompt.clone(),
+                    text: system_prompt.to_string(),
                 }],
-            }],
+            });
+        }
+
+        let mut request_body = GeminiRequest {
+            contents,
             tools,
             user: self.config.external_id.clone(),
             cached_content: None,
@@ -227,8 +279,8 @@ impl GeminiProvider {
 
         if let Some(sys) = &self.config.system_prompt {
             request_body.cached_content = self.resolve_context_cache(sys).await;
-        } else if combined_prompt.contains("(cache_control: {\"type\": \"ephemeral\"})") {
-            request_body.cached_content = self.resolve_context_cache(&combined_prompt).await;
+        } else if !system_prompt.trim().is_empty() && system_prompt.len() > 1000 {
+            request_body.cached_content = self.resolve_context_cache(system_prompt).await;
         }
 
         let mut attempts = 0;

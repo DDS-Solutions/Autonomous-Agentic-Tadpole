@@ -15,7 +15,7 @@
 //!   multipart boundary errors during Whisper transcription.
 //! - **Trace Scope**: `server-rs::agent::groq`
 
-use crate::agent::types::{ModelConfig, TokenUsage, ToolCall, ToolDefinition};
+use crate::agent::types::{ChatMessage, ModelConfig, TokenUsage, ToolCall, ToolDefinition};
 use crate::error::AppError;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -117,14 +117,22 @@ impl GroqProvider {
         user_message: &str,
         tools: Option<Vec<ToolDefinition>>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
-        self.generate_internal(system_prompt, user_message, tools, None)
-            .await
+        self.generate_messages(system_prompt, &[ChatMessage::user(user_message)], tools).await
     }
 
-    async fn generate_internal(
+    pub async fn generate_messages(
         &self,
         system_prompt: &str,
-        user_message: &str,
+        messages: &[ChatMessage],
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
+        self.generate_messages_internal(system_prompt, messages, tools, None).await
+    }
+
+    async fn generate_messages_internal(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
         tools: Option<Vec<ToolDefinition>>,
         retry_msg: Option<String>,
     ) -> Result<(String, Vec<ToolCall>, Option<TokenUsage>), AppError> {
@@ -157,24 +165,50 @@ impl GroqProvider {
                 .collect::<Vec<GroqTool>>()
         });
 
-        let mut messages = vec![
-            GroqMessage {
+        let mut groq_messages = Vec::new();
+        if !system_prompt.trim().is_empty() {
+            groq_messages.push(GroqMessage {
                 role: "system".to_string(),
                 content: Some(system_prompt.to_string()),
-            },
-            GroqMessage {
-                role: "user".to_string(),
-                content: Some(user_message.to_string()),
-            },
-        ];
+            });
+        }
+
+        for msg in messages {
+            match msg {
+                ChatMessage::System { content, .. } => {
+                    groq_messages.push(GroqMessage {
+                        role: "system".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::User { content, .. } => {
+                    groq_messages.push(GroqMessage {
+                        role: "user".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::Assistant { content, .. } => {
+                    groq_messages.push(GroqMessage {
+                        role: "assistant".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::Tool { content, .. } => {
+                    groq_messages.push(GroqMessage {
+                        role: "tool".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+            }
+        }
 
         // If this is a retry, append the failed generation and correction instruction
         if let Some(ref r) = retry_msg {
-            messages.push(GroqMessage {
+            groq_messages.push(GroqMessage {
                 role: "assistant".to_string(),
                 content: Some(r.clone()),
             });
-            messages.push(GroqMessage {
+            groq_messages.push(GroqMessage {
                 role: "user".to_string(),
                 content: Some("CRITICAL ERROR: Your previous tool call was malformed. Please fix the JSON syntax and try again. Ensure all arguments are inside the brackets and there are no stray characters.".to_string()),
             });
@@ -182,7 +216,7 @@ impl GroqProvider {
 
         let request_body = GroqRequest {
             model: self.config.model_id.clone(),
-            messages,
+            messages: groq_messages,
             temperature: self.config.temperature,
             user: self.config.external_id.clone(),
             tools: if groq_tools.as_ref().is_none_or(|t| t.is_empty()) {
@@ -266,9 +300,9 @@ impl GroqProvider {
                         // 2. If recovery fails, fallback to LLM self-correction
                         if retry_msg.is_none() {
                             tracing::warn!("🛠️ [Groq] Tool call failed natively. Attempting self-correction retry...");
-                            let result = Box::pin(self.generate_internal(
+                            let result = Box::pin(self.generate_messages_internal(
                                 system_prompt,
-                                user_message,
+                                messages,
                                 tools,
                                 Some(failed_gen.to_string()),
                             ))

@@ -88,6 +88,41 @@ impl AgentRunner {
             "🏁 [Mission] Agent {} requesting completion...",
             ctx.agent_id
         );
+
+        // 🛡️ [Phase 3 Verification] Deterministic Artifact Verification
+        // If artifacts are declared in fc.args ("artifacts"), verify they actually exist on disk.
+        if let Some(artifacts_val) = fc.args.get("artifacts") {
+            let artifact_paths: Vec<String> = if let Some(arr) = artifacts_val.as_array() {
+                arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect()
+            } else if let Some(s) = artifacts_val.as_str() {
+                s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
+            } else {
+                Vec::new()
+            };
+
+            for path_str in &artifact_paths {
+                let resolved_path = if std::path::Path::new(path_str).is_absolute() {
+                    std::path::PathBuf::from(path_str)
+                } else {
+                    ctx.workspace_root.join(path_str)
+                };
+
+                if !resolved_path.exists() {
+                    tracing::warn!(
+                        "⚠️ [Artifact Verification] Declared artifact '{}' (resolved: {:?}) does not exist on disk for agent {}",
+                        path_str,
+                        resolved_path,
+                        ctx.agent_id
+                    );
+                    return Err(ToolExecutionError::Validation(format!(
+                        "Artifact verification failed: declared artifact '{}' does not exist on disk at {:?}. You must create the file before completing the mission.",
+                        path_str,
+                        resolved_path
+                    )));
+                }
+            }
+        }
+
         self.broadcast_agent(
             ctx,
             "🏁 Mission work completed. Archiving mission artifacts...",

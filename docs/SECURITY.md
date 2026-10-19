@@ -33,16 +33,21 @@ Authorization: Bearer <token>
 The auth middleware is implemented in `server-rs/src/middleware/auth.rs` and uses constant-time token comparison via the `subtle` crate.
 
 ### Token Rotation Grace Window
-During active token rotation runbooks, the engine supports a dual-token validation window:
-*   `NEURAL_TOKEN_OLD`: Accepts the deprecated token to prevent service disruption of legacy clients.
-*   `NEURAL_TOKEN_NEW`: Accepts the newly rotated token to allow phased rolling upgrades.
+During active token rotation runbooks, the engine supports a phased token validation window:
 *   `NEURAL_TOKEN`: Matches the primary system token.
+*   `NEURAL_TOKEN_NEW`: Accepts the newly rotated token to allow phased rolling upgrades.
+*   `NEURAL_TOKEN_OLD`: Accepts the deprecated token within a strictly bounded window.
+*   `NEURAL_TOKEN_ROTATED_AT`: RFC3339 timestamp marking the exact inception of key rotation.
+*   `NEURAL_TOKEN_GRACE_SECS`: Number of seconds the old token remains acceptable (default: 300).
+*   **Fail-Closed Policy**: If `NEURAL_TOKEN_ROTATED_AT` or `NEURAL_TOKEN_GRACE_SECS` is unset, invalid, or the grace period has elapsed, `NEURAL_TOKEN_OLD` is rejected immediately (fail-closed) to prevent unbounded credential lifespan.
 
 Browser WebSocket upgrades may pass auth through:
 
 ```http
 Sec-WebSocket-Protocol: bearer.<token>
 ```
+
+Sensitive bearer credentials in `Sec-WebSocket-Protocol` headers are systematically redacted from logs, emitting only safe protocol classifications.
 
 Unauthenticated public routes are strictly limited to:
 
@@ -196,5 +201,25 @@ Before deploying beyond local development:
 | Vector memory enabled | memory routes become available | run engine with `--features vector-memory` |
 
 
+
+## Prompt Injection & Autonomous Reasoning Boundaries
+
+The platform enforces zero-trust controls over multi-turn agent reasoning and tool execution:
+
+1. **Native Role Encapsulation (`ChatMessage::Tool`)**:
+   - Tool observations and execution results are dispatched strictly as native `tool` role messages, never concatenated into user or system prompt strings.
+   - This architectural isolation neutralizes indirect prompt injection attacks where retrieved web content or file data attempts to mimic system directives or instructions.
+
+2. **Pre-Flight Adversarial Jailbreak Detection**:
+   - Turn-1 instructions are screened for known jailbreak tokens (`<|im_start|>`, `<|im_end|>`, `"ignore all previous instructions"`, `"you are now dan"`).
+   - Flagged prompts have their snippets redacted via `redact_secrets()` and are immediately quarantined to the human-in-the-loop oversight queue with status `flagged_injection`.
+
+3. **Deterministic Artifact Verification**:
+   - Prevents agent deception and premature task completion by verifying the physical presence of all declared files on disk prior to marking a mission as `Completed`.
+   - Missing artifacts raise `ToolExecutionError::Validation`, blocking transition to terminal success state.
+
+4. **Financial Cap Fallback & Loop Termination**:
+   - Pre-turn budget gate checks expenditure before each LLM invocation, falling back to a hard `$10.00` safety limit (`DEFAULT_BUDGET_LIMIT_USD`).
+   - Tool recursion tracker halts identical consecutive tool executions at 5 attempts via `RunnerError::RecursionBlocked`.
 
 [//]: # (Metadata: [SECURITY])

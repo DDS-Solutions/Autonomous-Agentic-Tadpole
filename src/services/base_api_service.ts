@@ -19,8 +19,8 @@
 import { get_settings } from '../stores/settings_store';
 import { use_trace_store } from '../stores/trace_store';
 
-export const DEFAULT_TIMEOUT = 300000; // 5 minutes default (critical for slow-loading local models)
-export const DEPLOY_TIMEOUT = 7200000; // 2 hours for deployment
+export const DEFAULT_TIMEOUT = 110000; // 110s aligned with server handler envelope
+export const DEPLOY_TIMEOUT = 110000; // 110s server hard cap
 export const MAX_RETRIES = 3;
 export const INITIAL_RETRY_DELAY = 1000;
 
@@ -147,9 +147,14 @@ export async function api_request<T = unknown>(
     const base_url = tadpole_os_url.replace(/\/$/, '');
     const clean_path = path.startsWith('/') ? path : `/${path}`;
     const url = `${base_url}${clean_path}`;
-    const { signal, clear } = with_timeout(options.timeout);
 
-    const { headers: base_headers, context } = get_headers((options.headers as Record<string, string>)?.['X-Request-Id']);
+    const custom_request_id = options.headers
+        ? Object.entries(options.headers as Record<string, string>).find(
+            ([k]) => k.toLowerCase() === 'x-request-id'
+          )?.[1]
+        : undefined;
+
+    const { headers: base_headers, context } = get_headers(custom_request_id);
 
     // Multipart/FormData support: if the body is FormData, we must Let the browser set the Content-Type (with boundary)
     const is_form_data = options.body instanceof FormData;
@@ -172,6 +177,9 @@ export async function api_request<T = unknown>(
 
     try {
         const execute_fetch = async (attempt: number): Promise<Response> => {
+            const per_attempt_timeout = options.signal ? null : with_timeout(options.timeout);
+            const active_signal = options.signal || per_attempt_timeout?.signal;
+
             try {
                 const res = await fetch(url, {
                     ...options,
@@ -179,12 +187,14 @@ export async function api_request<T = unknown>(
                         ...final_headers,
                         ...options.headers
                     },
-                    signal: options.signal || signal
+                    signal: active_signal
                 });
 
+                per_attempt_timeout?.clear();
+
                 // Hardened Retry Logic: Handle 429 and 503 with exponential backoff for safe methods
-                const _is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
-                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES && _is_safe_method) {
+                const is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
+                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES && is_safe_method) {
                     const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
                     console.warn(`[BaseAPI] ${res.status} detected at ${path}. Retrying in ${backoff}ms (Attempt ${attempt + 1})...`);
                     await new Promise(resolve => setTimeout(resolve, backoff));
@@ -193,12 +203,15 @@ export async function api_request<T = unknown>(
 
                 return res;
             } catch (err) {
+                const timed_out = (active_signal?.aborted && active_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT');
+                per_attempt_timeout?.clear();
+
                 // Only retry safe, idempotent methods. POST/PUT/DELETE/PATCH
                 // must NOT be retried to avoid duplicate side effects (unless it's a network failure).
-                const _is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
+                const is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
                 
-                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError') || !_is_safe_method) {
-                    if (err instanceof Error && err.message === 'TIMEOUT') {
+                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError') || !is_safe_method) {
+                    if (timed_out) {
                         throw new Error(`Request timed out after ${options.timeout || DEFAULT_TIMEOUT}ms for: ${url}`, { cause: err });
                     }
                     if (err instanceof TypeError && err.message === 'Failed to fetch') {
@@ -268,7 +281,20 @@ export async function api_request<T = unknown>(
             result = await response.text();
         } else {
             const text = await response.text();
-            result = text ? JSON.parse(text) : null;
+            if (!text) {
+                result = null;
+            } else {
+                try {
+                    result = JSON.parse(text);
+                } catch (parse_err) {
+                    throw new ApiError(
+                        `Failed to parse response JSON: ${(parse_err as Error).message}`,
+                        'about:blank',
+                        response.status,
+                        'INVALID_JSON'
+                    );
+                }
+            }
         }
 
         use_trace_store.getState().update_span(context.span_id, {
@@ -277,10 +303,8 @@ export async function api_request<T = unknown>(
             attributes: build_trace_attributes(response)
         });
 
-        clear();
         return result as T;
     } catch (err) {
-        clear();
         throw err;
     }
 }

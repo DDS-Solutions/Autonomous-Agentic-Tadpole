@@ -183,7 +183,11 @@ impl Supervisor {
                                     continue;
                                 }
                             }
-                            Err(_) => {
+                            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                                warn!("⚠️ [Supervisor:{}] Cascade receiver lagged, skipped {} messages for child '{}'", supervisor_name, skipped, name_str);
+                                continue;
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
                                 // Broadcast channel closed during shutdown
                                 break;
                             }

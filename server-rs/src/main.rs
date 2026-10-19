@@ -28,23 +28,14 @@ use server_rs::{
 use std::{net::SocketAddr, sync::Arc};
 
 fn main() -> anyhow::Result<()> {
-    // 1. Load configuration and validate environment variables early
-    let config = Config::load()?;
-
-    // 2. Set current working directory to WORKSPACE_ROOT if set and valid
-    if let Some(ref canonical_path) = config.workspace_root {
-        if let Err(e) = std::env::set_current_dir(canonical_path) {
-            eprintln!("⚠️ [Sidecar] Failed to change directory to canonicalized WORKSPACE_ROOT ({:?}): {:?}", canonical_path, e);
-        } else {
-            println!("🏠 [Sidecar] Workspace Root Set and Canonicalized: {:?}", canonical_path);
-        }
+    // 0. Hyper-Fast Path: Handle version/help/status before ANY environment/schema validation
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(()) = startup::handle_admin_cli(&args)? {
+        return Ok(());
     }
 
-    // ### 🛠️ Resiliency: Emergency Panic Hook
-    // Captures accidental runtime panics (e.g., index-out-of-bounds or failed
-    // unwrap) and writes a high-fidelity diagnostic log to the workspace root.
-    // This bypasses the normal `tracing` facade to ensure the failure context
-    // is persisted even if the telemetry stack is what triggered the crash.
+    // 1. Resiliency: Register emergency panic hook before Config::load() and runtime bootstrap
+    // Captures accidental runtime panics and writes a high-fidelity diagnostic log to disk.
     std::panic::set_hook(Box::new(|panic_info| {
         let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
             s.to_string()
@@ -74,7 +65,7 @@ fn main() -> anyhow::Result<()> {
             std::path::PathBuf::from("sidecar_panic.log")
         };
 
-        // Direct filesystem write (bypass tracing/logging stack) with restrictive permissions on Unix
+        // Direct filesystem write with restrictive permissions on Unix
         let mut options = std::fs::OpenOptions::new();
         options.create(true).append(true);
         #[cfg(unix)]
@@ -93,25 +84,27 @@ fn main() -> anyhow::Result<()> {
         eprintln!("{}", log_msg);
     }));
 
+    // 2. Load configuration and validate environment variables early
+    let config = Config::load()?;
+
+    // 3. Set current working directory to WORKSPACE_ROOT if set and valid
+    if let Some(ref canonical_path) = config.workspace_root {
+        if let Err(e) = std::env::set_current_dir(canonical_path) {
+            eprintln!("⚠️ [Sidecar] Failed to change directory to canonicalized WORKSPACE_ROOT ({:?}): {:?}", canonical_path, e);
+        } else {
+            println!("🏠 [Sidecar] Workspace Root Set and Canonicalized: {:?}", canonical_path);
+        }
+    }
+
     println!("🚀 [Sidecar] Initializing Tokio Runtime...");
 
     // ### 🧵 Resource Calibration: Custom Tokio Runtime
-    let rt = startup::build_custom_runtime()?;
+    let rt = startup::build_custom_runtime(Some(&config))?;
 
-    rt.block_on(async_main(config))
+    rt.block_on(async_main(config, args))
 }
 
-async fn async_main(config: Config) -> anyhow::Result<()> {
-    // --- [STAGE: INTENT DETECTION] ---
-    // Detect flags that don't require the full engine (Code Graph, mDNS, etc.)
-    // Optimized for sub-100ms response for administrative queries.
-    let args: Vec<String> = std::env::args().collect();
-
-    // Hyper-Fast Path: Handle version/help before ANY initialization.
-    if let Some(()) = startup::handle_admin_cli(&args)? {
-        return Ok(());
-    }
-
+async fn async_main(config: Config, args: Vec<String>) -> anyhow::Result<()> {
     // 2. Initialize Tracing & Load Env
     startup::init_tracing(config.disable_telemetry);
     startup::load_environment();

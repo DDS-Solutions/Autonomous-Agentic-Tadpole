@@ -363,7 +363,7 @@ pub async fn hybrid_rag_search_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     use crate::services::rag_fusion::{RagCandidate, RagEngineWeights, fuse_search_results};
-    let top_k = query.top_k.unwrap_or(10);
+    let top_k = query.top_k.unwrap_or(10).clamp(1, 100);
     let weights = RagEngineWeights::default();
 
     if query.q.trim().is_empty() {
@@ -501,18 +501,22 @@ pub async fn delete_agent_memory(
 
         let path_str = memory_path.to_string_lossy().to_string();
 
-        if let Ok(conn) = lancedb::connect(&format!("file://{}", path_str))
+        let conn = lancedb::connect(&format!("file://{}", path_str))
             .execute()
             .await
-        {
-            if let Ok(table) = conn.open_table("memories").execute().await {
-                let escaped_row_id = escape_lancedb_string_literal(&row_id);
-                let predicate = format!("id = '{}'", escaped_row_id);
-                table.delete(&predicate).await.map_err(|e| {
-                    AppError::InternalServerError(format!("Failed to delete record: {}", e))
-                })?;
-            }
-        }
+            .map_err(|e| AppError::InternalServerError(format!("Failed to connect to vector database: {}", e)))?;
+
+        let table = conn
+            .open_table("memories")
+            .execute()
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("Failed to open memories table: {}", e)))?;
+
+        let escaped_row_id = escape_lancedb_string_literal(&row_id);
+        let predicate = format!("id = '{}'", escaped_row_id);
+        table.delete(&predicate).await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to delete record: {}", e))
+        })?;
 
         Ok((
             StatusCode::OK,

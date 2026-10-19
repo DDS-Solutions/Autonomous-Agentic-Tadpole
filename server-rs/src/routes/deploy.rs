@@ -21,12 +21,13 @@
 //! - **Trace Scope**: `server-rs::routes::deploy`
 
 use crate::error::AppError;
+use crate::secret_redactor::SecretRedactor;
 use crate::state::AppState;
 
 use axum::extract::Query;
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     Json,
 };
@@ -56,31 +57,11 @@ pub struct DeployParams {
 /// **Query Params**: `target` (1 or 2). Defaults to 1.
 ///
 /// **Security**: Requires a valid `Authorization: Bearer <NEURAL_TOKEN>` header.
-#[tracing::instrument(skip(state, headers), name = "system::deploy")]
+#[tracing::instrument(skip(_state), name = "system::deploy")]
 pub async fn trigger_deploy(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Query(params): Query<DeployParams>,
-    headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
-    // --- Authentication Gate ---
-    let token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or("");
-
-    if crate::middleware::auth::match_token(token, &state).is_none() {
-        tracing::warn!("🚫 Unauthorized deploy attempt blocked.");
-        return Ok((
-            StatusCode::UNAUTHORIZED,
-            Json(DeployResponse {
-                status: "unauthorized".to_string(),
-                output: None,
-                error: Some("Missing or invalid Authorization header.".to_string()),
-            }),
-        ));
-    }
-
     let target = params.target.unwrap_or(1);
     let script_file = match target {
         1 => "deploy-bunker-1.ps1",
@@ -187,8 +168,9 @@ pub async fn trigger_deploy(
 
     match result {
         Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let redactor = SecretRedactor::from_env();
+            let stdout = redactor.scrub(&String::from_utf8_lossy(&output.stdout));
+            let stderr = redactor.scrub(&String::from_utf8_lossy(&output.stderr));
 
             if output.status.success() {
                 tracing::info!("✅ Deployment succeeded.");
@@ -236,13 +218,13 @@ pub async fn trigger_deploy(
             ))
         }
         Err(_elapsed) => {
-            tracing::error!("⏱️ Deployment script timed out after 300 seconds");
+            tracing::error!("⏱️ Deployment script timed out after 110 seconds");
             Ok((
                 StatusCode::GATEWAY_TIMEOUT,
                 Json(DeployResponse {
                     status: "error".to_string(),
                     output: None,
-                    error: Some("Deployment execution timed out after 300 seconds.".to_string()),
+                    error: Some("Deployment execution timed out after 110 seconds.".to_string()),
                 }),
             ))
         }
@@ -252,30 +234,10 @@ pub async fn trigger_deploy(
 /// POST /engine/pre-pr — Triggers the Pre-PR Quality Gate checks.
 ///
 /// **Security**: Requires a valid `Authorization: Bearer <NEURAL_TOKEN>` header.
-#[tracing::instrument(skip(state, headers), name = "system::pre_pr")]
+#[tracing::instrument(skip(_state), name = "system::pre_pr")]
 pub async fn trigger_pre_pr(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    // --- Authentication Gate ---
-    let token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or("");
-
-    if crate::middleware::auth::match_token(token, &state).is_none() {
-        tracing::warn!("🚫 Unauthorized pre-pr attempt blocked.");
-        return Ok((
-            StatusCode::UNAUTHORIZED,
-            Json(DeployResponse {
-                status: "unauthorized".to_string(),
-                output: None,
-                error: Some("Missing or invalid Authorization header.".to_string()),
-            }),
-        ));
-    }
-
     tracing::info!("🚀 Authenticated pre-pr triggered...");
 
     let mut cmd = tokio::process::Command::new("python");
@@ -302,8 +264,9 @@ pub async fn trigger_pre_pr(
 
     match result {
         Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let redactor = SecretRedactor::from_env();
+            let stdout = redactor.scrub(&String::from_utf8_lossy(&output.stdout));
+            let stderr = redactor.scrub(&String::from_utf8_lossy(&output.stderr));
 
             if output.status.success() {
                 tracing::info!("✅ Pre-PR Gate succeeded.");
