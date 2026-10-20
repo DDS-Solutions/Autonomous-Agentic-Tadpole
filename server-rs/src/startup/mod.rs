@@ -376,6 +376,7 @@ pub async fn spawn_background_tasks(
     if intent == BootstrapIntent::Full {
         warmup_tasks.push(Box::new(services::CodeGraphWarmupService));
         warmup_tasks.push(Box::new(services::CodeGraphDbRefreshService));
+        warmup_tasks.push(Box::new(services::SymbolGraphWarmupService));
         warmup_tasks.push(Box::new(services::RecoverActiveAgentsService));
     }
 

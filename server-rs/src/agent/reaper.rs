@@ -43,6 +43,26 @@ impl SwarmReaper {
         let threshold = Utc::now() - Duration::hours(48);
         tracing::info!("🧹 [Reaper] Starting sweep for missions older than {}", threshold);
 
+        // 0. Sliding-Window Checkpoint Pruning: Retain only the latest 3 turn checkpoints for terminal missions
+        let prune_res = sqlx::query(
+            "DELETE FROM mission_checkpoints 
+             WHERE mission_id IN (SELECT id FROM mission_history WHERE status IN ('completed', 'failed', 'cancelled'))
+               AND rowid NOT IN (
+                   SELECT rowid FROM (
+                       SELECT rowid, ROW_NUMBER() OVER (PARTITION BY mission_id ORDER BY turn_index DESC) as rn
+                       FROM mission_checkpoints
+                   ) WHERE rn <= 3
+               )"
+        )
+        .execute(pool)
+        .await;
+        if let Ok(result) = prune_res {
+            let pruned_count = result.rows_affected();
+            if pruned_count > 0 {
+                tracing::info!("♻️ [Reaper] Pruned {} redundant mission checkpoints for terminal missions.", pruned_count);
+            }
+        }
+
         // 1. Identify candidate missions for reaping
         let missions: Vec<(String,)> = sqlx::query_as(
             "SELECT id FROM mission_history 
@@ -100,6 +120,7 @@ impl SwarmReaper {
             sqlx::query("DELETE FROM agent_directives WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM peer_reviews WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM mission_nodes WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
+            sqlx::query("DELETE FROM mission_checkpoints WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             
             sqlx::query("DELETE FROM mission_history WHERE id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
 

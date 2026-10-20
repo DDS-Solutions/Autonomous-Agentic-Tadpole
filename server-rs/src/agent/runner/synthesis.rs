@@ -1213,6 +1213,7 @@ mod tests {
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
                 tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
                 #[cfg(feature = "vector-memory")]

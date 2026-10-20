@@ -104,6 +104,8 @@ pub struct ResourceHub {
     pub is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool,
     /// Shared in-memory tool cache with mtime and file size invalidation.
     pub tool_cache: Arc<parking_lot::Mutex<crate::agent::runner::tools::cache::SharedToolCache>>,
+    /// Sovereign inference concurrency governor (serializes local model execution under privacy mode).
+    pub inference_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 impl ResourceHub {

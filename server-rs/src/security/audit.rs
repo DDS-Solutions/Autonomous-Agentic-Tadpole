@@ -86,15 +86,52 @@ impl MerkleAuditTrail {
     /// # Environment Variables
     /// * `AUDIT_PRIVATE_KEY`: Hex-encoded 32-byte Ed25519 secret key.
     pub fn new(pool: SqlitePool) -> Self {
-        let signing_key = std::env::var("AUDIT_PRIVATE_KEY").ok().and_then(|key| {
-            // SEC: Wrap hex source and decoded bytes in Zeroizing to scrub from memory on drop
-            let hex_source = Zeroizing::new(key);
-            let mut decoded = Zeroizing::new(hex::decode(hex_source.as_str()).ok()?);
-            let bytes: [u8; 32] = decoded.as_slice().try_into().ok()?;
-            // Explicit zeroize of the decoded Vec before it drops
-            decoded.iter_mut().for_each(|b| *b = 0);
-            Some(SigningKey::from_bytes(&bytes))
-        });
+        let signing_key = std::env::var("AUDIT_PRIVATE_KEY")
+            .ok()
+            .and_then(|key| {
+                // SEC: Wrap hex source and decoded bytes in Zeroizing to scrub from memory on drop
+                let hex_source = Zeroizing::new(key);
+                let mut decoded = Zeroizing::new(hex::decode(hex_source.as_str()).ok()?);
+                let bytes: [u8; 32] = decoded.as_slice().try_into().ok()?;
+                // Explicit zeroize of the decoded Vec before it drops
+                decoded.iter_mut().for_each(|b| *b = 0);
+                Some(SigningKey::from_bytes(&bytes))
+            })
+            .or_else(|| {
+                // Sovereign key auto-generation and persistent loading from data/.keys/audit_ed25519.key
+                let key_dir = std::path::Path::new("data").join(".keys");
+                let key_path = key_dir.join("audit_ed25519.key");
+                if key_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&key_path) {
+                        let hex_clean = content.trim();
+                        if let Ok(bytes_vec) = hex::decode(hex_clean) {
+                            if let Ok(bytes) = <[u8; 32]>::try_from(bytes_vec.as_slice()) {
+                                std::env::set_var("AUDIT_PRIVATE_KEY", hex_clean);
+                                return Some(SigningKey::from_bytes(&bytes));
+                            }
+                        }
+                    }
+                }
+                // Generate fresh keypair if no valid key file exists
+                if let Err(e) = std::fs::create_dir_all(&key_dir) {
+                    tracing::warn!("⚠️ [SecurityAudit] Failed to create .keys directory: {}", e);
+                    return None;
+                }
+                let mut seed = [0u8; 32];
+                use rand::RngExt;
+                let mut rng = rand::rng();
+                rng.fill(&mut seed);
+                let key = SigningKey::from_bytes(&seed);
+                let hex_str = hex::encode(seed);
+                seed.fill(0);
+                if let Err(e) = std::fs::write(&key_path, &hex_str) {
+                    tracing::warn!("⚠️ [SecurityAudit] Failed to write sovereign audit key: {}", e);
+                } else {
+                    tracing::info!("🔑 [SecurityAudit] Generated persistent sovereign Ed25519 key at {}", key_path.display());
+                }
+                std::env::set_var("AUDIT_PRIVATE_KEY", &hex_str);
+                Some(key)
+            });
 
         let verifying_key = signing_key.as_ref().map(|k| k.verifying_key());
 

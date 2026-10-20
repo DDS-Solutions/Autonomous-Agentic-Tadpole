@@ -35,11 +35,13 @@ impl EngineAgent {
         false
     }
  
-    /// Resets agent failure telemetry and status.
+    /// Resets agent failure telemetry, status, and active mission state.
     pub fn reset(&mut self) {
         self.health.failure_count = 0;
         self.health.last_failure_at = None;
         self.health.status = "idle".to_string();
+        self.state.active_mission = None;
+        self.state.current_task = None;
     }
  
     /// Updates the active mission context.
@@ -181,7 +183,10 @@ impl AgentConfigUpdate {
             changed = true;
         }
         if let Some(skills) = &self.skills {
-            agent.capabilities.skills = skills.clone();
+            agent.capabilities.skills = skills
+                .iter()
+                .map(|s| s.trim().to_lowercase().replace(' ', "_").replace('-', "_"))
+                .collect();
             changed = true;
         }
         if let Some(workflow) = &self.workflows {

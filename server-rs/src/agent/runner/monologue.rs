@@ -17,11 +17,14 @@ use crate::agent::runner::turn_compactor::safe_truncate_str;
 use crate::agent::runner::RunContext;
 use crate::error::AppError;
 
-const MAX_MONOLOGUE_BYTES: usize = 8192;
-const MAX_SUMMARY_BYTES: usize = 2000;
+pub const MAX_MONOLOGUE_BYTES: usize = 8192;
+pub const MAX_SUMMARY_BYTES: usize = 2000;
+pub const MAX_TOOL_LOG_CHARS: usize = 2000;
+pub const MAX_FALLBACK_LINE_CHARS: usize = 150;
+pub const PINNED_TAIL_TURNS: usize = 4;
 
 impl super::AgentRunner {
-    /// Truncates embedded markdown code blocks in a string if they exceed 2,000 characters.
+    /// Truncates embedded markdown code blocks in a string if they exceed `MAX_TOOL_LOG_CHARS` (2,000 characters).
     pub(crate) fn truncate_embedded_tool_logs(content: &str) -> String {
         let mut result = String::with_capacity(content.len());
         let mut current_pos = 0;
@@ -34,24 +37,18 @@ impl super::AgentRunner {
                 let abs_end = abs_start + 3 + end_idx;
                 let code_block_content = &content[abs_start + 3..abs_end];
 
-                let (header, mut body) = if let Some(idx) = code_block_content.find('\n') {
-                    (&code_block_content[..idx], &code_block_content[idx + 1..])
-                } else {
-                    ("", code_block_content)
+                let (header, body) = match code_block_content.find('\n') {
+                    Some(idx) => (&code_block_content[..idx], &code_block_content[idx + 1..]),
+                    None => ("", code_block_content),
                 };
 
-                if body.ends_with('\n') {
-                    body = &body[..body.len() - 1];
-                    if body.ends_with('\r') {
-                        body = &body[..body.len() - 1];
-                    }
-                }
+                let trimmed_body = body.trim_end_matches(['\r', '\n']);
 
-                if body.len() > 2000 {
+                if trimmed_body.len() > MAX_TOOL_LOG_CHARS {
                     result.push_str("```");
                     result.push_str(header);
                     result.push_str("\n[Raw tool result evicted to save context — was ");
-                    result.push_str(&body.len().to_string());
+                    result.push_str(&trimmed_body.len().to_string());
                     result.push_str(" bytes]\n```");
                 } else {
                     result.push_str(&content[abs_start..abs_end + 3]);
@@ -84,10 +81,10 @@ impl super::AgentRunner {
             if in_code_block {
                 continue;
             }
-            if trimmed.len() > 150 {
+            if trimmed.len() > MAX_FALLBACK_LINE_CHARS {
                 lines.push(format!(
                     "{}... [truncated]",
-                    safe_truncate_str(trimmed, 150)
+                    safe_truncate_str(trimmed, MAX_FALLBACK_LINE_CHARS)
                 ));
             } else if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
@@ -127,29 +124,26 @@ impl super::AgentRunner {
             return Ok(());
         }
 
-        let tail_count = 4;
         let monologue_len = monologue.len();
-
-        let (older_turns, tail_turns) = if monologue_len > tail_count {
-            let split_idx = monologue_len - tail_count;
-            (
-                monologue[..split_idx].to_vec(),
-                monologue[split_idx..].to_vec(),
-            )
-        } else if monologue_len > 1 {
-            (
-                monologue[..monologue_len - 1].to_vec(),
-                monologue[monologue_len - 1..].to_vec(),
-            )
-        } else {
-            (monologue.clone(), Vec::new())
-        };
-
-        if older_turns.is_empty() {
+        if monologue_len == 0 {
             return Ok(());
         }
 
-        let history = older_turns.join("\n\n");
+        let split_idx = if monologue_len > PINNED_TAIL_TURNS {
+            monologue_len - PINNED_TAIL_TURNS
+        } else if monologue_len > 1 {
+            monologue_len - 1
+        } else {
+            1
+        };
+
+        let tail_turns = if split_idx < monologue_len {
+            monologue.split_off(split_idx)
+        } else {
+            Vec::new()
+        };
+
+        let history = monologue.join("\n\n");
         let prompt = format!(
             "SUMMARIZE YOUR PREVIOUS REASONING STEPS INTO A SINGLE CONCISE PARAGRAPH. \
              RETAIN ALL KEY INSIGHTS, VARIABLES, AND HYPOTHESES. \
@@ -191,6 +185,9 @@ impl super::AgentRunner {
 #[cfg(test)]
 mod tests {
     use crate::agent::runner::AgentRunner;
+    use crate::agent::runner::RunContext;
+    use crate::state::AppState;
+    use std::sync::Arc;
 
     #[test]
     fn test_truncate_embedded_tool_logs() {
@@ -210,5 +207,38 @@ mod tests {
         assert!(summary.contains("First thought"));
         assert!(summary.contains("Second thought line that is normal"));
         assert!(summary.contains("[Code block header omitted]"));
+    }
+
+    #[tokio::test]
+    async fn test_compress_monologue() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+        let ctx = RunContext {
+            agent_id: "test-monologue-agent".to_string(),
+            ..Default::default()
+        };
+
+        // Case 1: Monologue under budget is untouched
+        let mut monologue_small = vec!["Step 1: Analyzed input".to_string()];
+        let res = runner.compress_monologue(&ctx, &mut monologue_small).await;
+        assert!(res.is_ok());
+        assert_eq!(monologue_small.len(), 1);
+        assert_eq!(monologue_small[0], "Step 1: Analyzed input");
+
+        // Case 2: Monologue over budget triggers truncation / deterministic fallback summary
+        let large_step = format!("Thought step: {}", "X".repeat(9000));
+        let mut monologue_large = vec![
+            "Turn 0: Start".to_string(),
+            large_step,
+            "Turn 2: Tail turn".to_string(),
+        ];
+        let res = runner.compress_monologue(&ctx, &mut monologue_large).await;
+        assert!(res.is_ok());
+        assert!(!monologue_large.is_empty());
+        assert!(
+            monologue_large[0].contains("DETERMINISTIC FALLBACK SUMMARY:")
+                || monologue_large[0].contains("CONSOLIDATED REASONING:")
+        );
+        assert_eq!(monologue_large.last().map(|s| s.as_str()), Some("Turn 2: Tail turn"));
     }
 }

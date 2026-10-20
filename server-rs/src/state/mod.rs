@@ -203,6 +203,14 @@ impl AppState {
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
                 tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                inference_semaphore: {
+                    let permits = if std::env::var("PRIVACY_MODE").map(|v| v == "true" || v == "1").unwrap_or(false) {
+                        1
+                    } else {
+                        std::env::var("INFERENCE_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(4)
+                    };
+                    Arc::new(tokio::sync::Semaphore::new(permits))
+                },
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -348,6 +356,7 @@ impl AppState {
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
                 tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -722,6 +731,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
                 tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -1312,6 +1322,7 @@ impl Default for AppState {
             git_path: which::which("git").ok(),
             is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
             tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+            inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
         });
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

@@ -14,6 +14,31 @@
 
 use super::AgentRunner;
 
+struct OversightDropGuard {
+    entry_id: String,
+    state: std::sync::Arc<crate::state::AppState>,
+    completed: bool,
+}
+
+impl Drop for OversightDropGuard {
+    fn drop(&mut self) {
+        if !self.completed {
+            let entry_id = self.entry_id.clone();
+            let state = self.state.clone();
+            state.comms.oversight_queue.remove(&entry_id);
+            state.comms.oversight_resolvers.remove(&entry_id);
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    "UPDATE oversight_log SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
+                )
+                .bind(&entry_id)
+                .execute(&state.resources.pool)
+                .await;
+            });
+        }
+    }
+}
+
 impl AgentRunner {
     // ─────────────────────────────────────────────────────────
     //  OVERSIGHT (HUMAN-IN-THE-LOOP)
@@ -94,6 +119,12 @@ impl AgentRunner {
             .oversight_queue
             .insert(entry_id.clone(), entry.clone());
 
+        let mut drop_guard = OversightDropGuard {
+            entry_id: entry_id.clone(),
+            state: self.state.clone(),
+            completed: false,
+        };
+
         // 4. Notify the UI
         self.state.emit_event(serde_json::json!({
             "type": "oversight:new",
@@ -114,6 +145,7 @@ impl AgentRunner {
         let approved = match tokio::time::timeout(timeout_duration, rx).await {
             Ok(Ok(decision)) => {
                 self.state.comms.oversight_queue.remove(&entry_id);
+                self.state.comms.oversight_resolvers.remove(&entry_id);
                 decision
             }
             Ok(Err(_)) => {
@@ -137,6 +169,7 @@ impl AgentRunner {
             }
         };
 
+        drop_guard.completed = true;
         Ok(approved)
     }
 

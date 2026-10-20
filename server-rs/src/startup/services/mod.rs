@@ -14,7 +14,7 @@ pub mod telemetry;
 pub mod security;
 pub mod jobs;
 
-pub use code_graph::{CodeGraphDbRefreshService, CodeGraphWarmupService};
+pub use code_graph::{CodeGraphDbRefreshService, CodeGraphWarmupService, SymbolGraphWarmupService};
 pub use networking::{SwarmDiscoveryService, SwarmPulseService};
 pub use telemetry::{HeartbeatService, MetricAggregatorService, SystemHealthMonitorService, RecoverActiveAgentsService, SpanWatchdogService};
 pub use security::{BudgetFlushService, PrivacyGuardService, SecurityEvictionService};

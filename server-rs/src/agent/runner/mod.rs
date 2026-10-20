@@ -679,8 +679,14 @@ impl AgentRunner {
             .map_err(AppError::Sqlx)?;
 
             for skill_id in &agent_data.capabilities.skills {
+                let norm_skill = skill_id.trim().to_lowercase().replace(' ', "_").replace('-', "_");
                 let sub = subs.iter().find(|row| {
-                    row.try_get::<String, _>("skill_id").ok().as_ref() == Some(skill_id)
+                    if let Ok(db_skill) = row.try_get::<String, _>("skill_id") {
+                        let norm_db = db_skill.trim().to_lowercase().replace(' ', "_").replace('-', "_");
+                        norm_db == norm_skill
+                    } else {
+                        false
+                    }
                 });
 
                 match sub {
@@ -699,7 +705,13 @@ impl AgentRunner {
                             )));
                         }
 
-                        if let Some(manifest) = self.state.registry.skill_registry.get(skill_id) {
+                        if let Some(manifest) = self
+                            .state
+                            .registry
+                            .skill_registry
+                            .get(skill_id)
+                            .or_else(|| self.state.registry.skill_registry.get(&norm_skill))
+                        {
                             let current_hash = crate::routes::agentic_engine::compute_skill_scope_hash(&manifest);
                             let approved_hash: String = row.try_get("scope_hash").unwrap_or_default();
 

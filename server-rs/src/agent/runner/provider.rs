@@ -533,8 +533,16 @@ impl AgentRunner {
 
             // Unified provider dispatch (local and cloud share the same failure tracking path)
             let provider = self.resolve_provider(ctx, client);
+            let _inference_permit = self
+                .state
+                .resources
+                .inference_semaphore
+                .acquire()
+                .await
+                .map_err(|e| AppError::InternalServerError(format!("Inference semaphore acquisition failed: {}", e)))?;
             let start = std::time::Instant::now();
             let result = provider.generate_messages(&system_prompt, &messages, tools.clone()).await;
+            drop(_inference_permit);
             let duration = start.elapsed().as_secs_f32() * 1000.0;
             
             // Record latency if successful (we don't record failures to avoid skewing the performance baseline)

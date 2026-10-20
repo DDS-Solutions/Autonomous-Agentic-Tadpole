@@ -14,8 +14,8 @@ use crate::intelligence::graph::{CodeSymbolGraph, SymbolNode};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::time::timeout;
 use std::time::Duration;
+use tokio::time::timeout;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeGraphLink {
@@ -62,39 +62,58 @@ impl IntelligenceService {
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
-    pub async fn list_graph(&self, path_prefix: Option<String>, max_nodes: Option<usize>) -> Result<GraphResponse, AppError> {
+    pub async fn list_graph(
+        &self,
+        path_prefix: Option<String>,
+        max_nodes: Option<usize>,
+    ) -> Result<GraphResponse, AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
         let prefix_clean = path_prefix.map(|p| p.replace('\\', "/"));
         if let Some(ref prefix) = prefix_clean {
             if crate::utils::security::validate_path(&workspace_root, prefix).is_err() {
-                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+                return Err(AppError::Forbidden(
+                    "Invalid path boundary: potential path traversal detected".to_string(),
+                ));
             }
         }
 
         let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
-        let limit = max_nodes.unwrap_or(20_000).min(20_000);
+        let limit = max_nodes
+            .unwrap_or(crate::intelligence::graph::constants::MAX_NODES)
+            .min(crate::intelligence::graph::constants::MAX_NODES);
 
         let (nodes, links, anomalies) = tokio::task::spawn_blocking(move || {
             let guard = swap_clone.load();
 
             let mut nodes = Vec::new();
             let mut links = Vec::new();
+            let mut node_indices = std::collections::HashSet::new();
 
             // 1. Filter nodes based on optional path prefix
             for idx in guard.graph.node_indices() {
                 if let Some(node) = guard.graph.node_weight(idx) {
                     let matches = if let Some(ref prefix) = prefix_clean {
-                        let real_path = guard.obfuscated_to_real_path.get(&node.path)
+                        let real_path = guard
+                            .obfuscated_to_real_path
+                            .get(&node.path)
                             .map(|p| p.as_str())
                             .unwrap_or(&node.path);
-                        let prefix_dir = if prefix.ends_with('/') { prefix.clone() } else { format!("{}/", prefix) };
-                        real_path == prefix.as_str() || real_path.starts_with(&prefix_dir) || &node.path == prefix || node.path.starts_with(&prefix_dir)
+                        let prefix_dir = if prefix.ends_with('/') {
+                            prefix.clone()
+                        } else {
+                            format!("{}/", prefix)
+                        };
+                        real_path == prefix.as_str()
+                            || real_path.starts_with(&prefix_dir)
+                            || &node.path == prefix
+                            || node.path.starts_with(&prefix_dir)
                     } else {
                         true
                     };
 
                     if matches {
+                        node_indices.insert(idx);
                         nodes.push(node.clone());
                         if nodes.len() >= limit {
                             break;
@@ -108,14 +127,13 @@ impl IntelligenceService {
                 nodes.truncate(limit);
             }
 
-            // 2. Filter edges: only include if both source and target nodes exist in the filtered node set
-            let filtered_keys: std::collections::HashSet<String> = nodes
-                .iter()
-                .map(|n| format!("{}:{}", n.path, n.name))
-                .collect();
-
+            // 2. Filter edges: zero string allocations for non-matching edges
             use petgraph::visit::EdgeRef;
             for edge in guard.graph.edge_references() {
+                if !node_indices.contains(&edge.source()) || !node_indices.contains(&edge.target())
+                {
+                    continue;
+                }
                 let source = match guard.graph.node_weight(edge.source()) {
                     Some(s) => s,
                     None => continue,
@@ -124,15 +142,10 @@ impl IntelligenceService {
                     Some(t) => t,
                     None => continue,
                 };
-                let src_key = format!("{}:{}", source.path, source.name);
-                let tgt_key = format!("{}:{}", target.path, target.name);
-
-                if filtered_keys.contains(&src_key) && filtered_keys.contains(&tgt_key) {
-                    links.push(CodeGraphLink {
-                        source: src_key,
-                        target: tgt_key,
-                    });
-                }
+                links.push(CodeGraphLink {
+                    source: format!("{}:{}", source.path, source.name),
+                    target: format!("{}:{}", target.path, target.name),
+                });
             }
 
             let anomalies = guard.find_anomalies();
@@ -162,19 +175,29 @@ impl IntelligenceService {
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
     pub async fn rebuild_graph(&self, dry_run: bool) -> Result<GraphRebuildResponse, AppError> {
         // Atomic concurrency gate: reject concurrent rebuild requests with 409 Conflict
-        if self.state.resources.is_rebuilding_symbol_graph.compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-        ).is_err() {
-            return Err(AppError::Conflict("A symbol graph rebuild is already in progress".to_string()));
+        if self
+            .state
+            .resources
+            .is_rebuilding_symbol_graph
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .is_err()
+        {
+            return Err(AppError::Conflict(
+                "A symbol graph rebuild is already in progress".to_string(),
+            ));
         }
 
         struct RebuildGuard(Arc<crate::state::hubs::res::ResourceHub>);
         impl Drop for RebuildGuard {
             fn drop(&mut self) {
-                self.0.is_rebuilding_symbol_graph.store(false, std::sync::atomic::Ordering::SeqCst);
+                self.0
+                    .is_rebuilding_symbol_graph
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
             }
         }
         let rebuild_guard = RebuildGuard(Arc::clone(&self.state.resources));
@@ -191,7 +214,11 @@ impl IntelligenceService {
             let salt = resources.obfuscation_salt.clone();
             let (root, config, repository) = {
                 let graph = graph_swap.load();
-                (graph.root.clone(), graph.config.clone(), graph.repository.clone())
+                (
+                    graph.root.clone(),
+                    graph.config.clone(),
+                    graph.repository.clone(),
+                )
             };
 
             let (temp_graph, summary, success) = tokio::task::spawn_blocking(move || {
@@ -212,7 +239,9 @@ impl IntelligenceService {
                 Ok::<_, AppError>((temp_graph, summary, success))
             })
             .await
-            .map_err(|e| AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e)))??;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Graph rebuild thread panicked: {}", e))
+            })??;
 
             let mut status = if success { "success" } else { "warning" };
             if success && !dry_run {
@@ -221,8 +250,13 @@ impl IntelligenceService {
                 let db_root = resources.base_dir.clone();
                 let db_path = db_root.join(".code-review-graph").join("graph.db");
                 if let Err(e) = crate::intelligence::graph_store::refresh_code_review_graph_db(
-                    db_root, db_path, resources.obfuscation_salt.clone(), resources.git_path.clone(),
-                ).await {
+                    db_root,
+                    db_path,
+                    resources.obfuscation_salt.clone(),
+                    resources.git_path.clone(),
+                )
+                .await
+                {
                     tracing::warn!("[graph_store] SQLite graph sync failed: {}", e);
                     status = "warning";
                 }
@@ -239,11 +273,21 @@ impl IntelligenceService {
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
-    pub async fn blast_radius(&self, name: &str, path: &str, max_nodes: Option<usize>) -> Result<Vec<SymbolNode>, AppError> {
+    pub async fn blast_radius(
+        &self,
+        name: &str,
+        path: &str,
+        max_nodes: Option<usize>,
+    ) -> Result<Vec<SymbolNode>, AppError> {
         Ok(self.blast_radius_result(name, path, max_nodes).await?.0)
     }
 
-    async fn blast_radius_result(&self, name: &str, path: &str, max_nodes: Option<usize>) -> Result<(Vec<SymbolNode>, bool), AppError> {
+    async fn blast_radius_result(
+        &self,
+        name: &str,
+        path: &str,
+        max_nodes: Option<usize>,
+    ) -> Result<(Vec<SymbolNode>, bool), AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
         let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
@@ -253,27 +297,45 @@ impl IntelligenceService {
         let task_future = tokio::task::spawn_blocking(move || {
             // Verify input path boundary unconditionally first
             if crate::utils::security::validate_path(&workspace_root, &query_path).is_err() {
-                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+                return Err(AppError::Forbidden(
+                    "Invalid path boundary: potential path traversal detected".to_string(),
+                ));
             }
 
-            tracing::debug!("[intelligence] Calculating blast radius for symbol: {}", query_name);
+            tracing::debug!(
+                "[intelligence] Calculating blast radius for symbol: {}",
+                query_name
+            );
             let guard = swap_clone.load();
 
             // Reverse-resolve the physical raw path from the obfuscated path, or use directly if valid
-            let raw_path = guard.obfuscated_to_real_path.get(&query_path)
+            let raw_path = guard
+                .obfuscated_to_real_path
+                .get(&query_path)
                 .map(|p| p.as_str())
                 .unwrap_or(&query_path);
 
             // Verify resolved path resides within workspace boundary
             if crate::utils::security::validate_path(&workspace_root, raw_path).is_err() {
-                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+                return Err(AppError::Forbidden(
+                    "Invalid path boundary: potential path traversal detected".to_string(),
+                ));
             }
 
-            Ok::<_, AppError>(guard.calculate_blast_radius_bounded(&query_name, raw_path, max_nodes))
+            Ok::<_, AppError>(guard.calculate_blast_radius_bounded(
+                &query_name,
+                raw_path,
+                max_nodes,
+            ))
         });
 
         let affected = match timeout(Duration::from_secs(5), task_future).await {
-            Ok(res) => res.map_err(|e| AppError::InternalServerError(format!("Blast radius processing thread panicked: {}", e)))??,
+            Ok(res) => res.map_err(|e| {
+                AppError::InternalServerError(format!(
+                    "Blast radius processing thread panicked: {}",
+                    e
+                ))
+            })??,
             Err(_) => {
                 return Err(AppError::DomainError {
                     code: "BR_TIMEOUT".to_string(),
@@ -287,7 +349,12 @@ impl IntelligenceService {
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
-    pub async fn resolve_context(&self, name: &str, path: &str, budget: usize) -> Result<ResolveResponse, AppError> {
+    pub async fn resolve_context(
+        &self,
+        name: &str,
+        path: &str,
+        budget: usize,
+    ) -> Result<ResolveResponse, AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
         let graph_swap = self.state.resources.get_symbol_graph().await?;
         let swap_clone = Arc::clone(&graph_swap);
@@ -300,33 +367,45 @@ impl IntelligenceService {
         let task_future = tokio::task::spawn_blocking(move || {
             // Verify input path boundary unconditionally first
             if crate::utils::security::validate_path(&workspace_root, &query_path).is_err() {
-                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+                return Err(AppError::Forbidden(
+                    "Invalid path boundary: potential path traversal detected".to_string(),
+                ));
             }
 
-            tracing::debug!("[intelligence] Resolving context for symbol: {}", query_name);
+            tracing::debug!(
+                "[intelligence] Resolving context for symbol: {}",
+                query_name
+            );
             let guard = swap_clone.load();
 
             // Reverse-resolve the physical raw path from the obfuscated path, or use directly if valid
-            let raw_path = guard.obfuscated_to_real_path.get(&query_path)
+            let raw_path = guard
+                .obfuscated_to_real_path
+                .get(&query_path)
                 .map(|p| p.as_str())
                 .unwrap_or(&query_path);
 
             // Verify resolved path resides within workspace boundary
             if crate::utils::security::validate_path(&workspace_root, raw_path).is_err() {
-                return Err(AppError::Forbidden("Invalid path boundary: potential path traversal detected".to_string()));
+                return Err(AppError::Forbidden(
+                    "Invalid path boundary: potential path traversal detected".to_string(),
+                ));
             }
 
             let bpe_ref = bpe_arc.as_deref();
             let symbols = guard.resolve_context(&query_name, raw_path, budget, bpe_ref);
-            
+
             // Calculate accumulated tokens
             let accumulated_tokens = symbols.iter().map(|s| s.tokens).sum();
 
             Ok::<_, AppError>((symbols, accumulated_tokens))
         });
 
-        let (symbols, accumulated_tokens) = match timeout(Duration::from_secs(5), task_future).await {
-            Ok(res) => res.map_err(|e| AppError::InternalServerError(format!("Context resolution thread panicked: {}", e)))??,
+        let (symbols, accumulated_tokens) = match timeout(Duration::from_secs(5), task_future).await
+        {
+            Ok(res) => res.map_err(|e| {
+                AppError::InternalServerError(format!("Context resolution thread panicked: {}", e))
+            })??,
             Err(_) => {
                 return Err(AppError::DomainError {
                     code: "BR_TIMEOUT".to_string(),
@@ -345,12 +424,23 @@ impl IntelligenceService {
     }
 
     #[tracing::instrument(skip(self), fields(user_id, request_id))]
-    pub async fn get_impacted_tests(&self, name: &str, path: &str) -> Result<Vec<String>, AppError> {
-        let (affected, truncated) = self.blast_radius_result(name, path, Some(crate::intelligence::graph::constants::MAX_NODES)).await?;
+    pub async fn get_impacted_tests(
+        &self,
+        name: &str,
+        path: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let (affected, truncated) = self
+            .blast_radius_result(
+                name,
+                path,
+                Some(crate::intelligence::graph::constants::MAX_NODES),
+            )
+            .await?;
         if truncated {
             return Err(AppError::DomainError {
                 code: "BR_TRUNCATED".to_string(),
-                detail: "Impacted-test analysis exceeded traversal bounds; run the full test suite".to_string(),
+                detail: "Impacted-test analysis exceeded traversal bounds; run the full test suite"
+                    .to_string(),
                 help_link: None,
             });
         }
@@ -363,9 +453,9 @@ impl IntelligenceService {
 
             let path_obj = std::path::Path::new(&p);
             let file_name = path_obj.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            let is_in_test_dir = p.starts_with("tests/") 
+            let is_in_test_dir = p.starts_with("tests/")
                 || p.contains("/tests/")
-                || p.starts_with("test/") 
+                || p.starts_with("test/")
                 || p.contains("/test/");
             let is_test_file = file_name.ends_with(".test.ts")
                 || file_name.ends_with(".test.tsx")
@@ -378,9 +468,7 @@ impl IntelligenceService {
                 || file_name.ends_with("_tests.rs")
                 || file_name.ends_with("_test.py")
                 || file_name.starts_with("test_");
-            let is_test_symbol = n.starts_with("test_")
-                || n.ends_with("_test")
-                || k == "test";
+            let is_test_symbol = n.starts_with("test_") || n.ends_with("_test") || k == "test";
 
             let is_test = is_in_test_dir || is_test_file || is_test_symbol;
 

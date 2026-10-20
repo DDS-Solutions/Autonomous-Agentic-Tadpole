@@ -90,6 +90,7 @@ impl AgentRunner {
                         final_filename
                     );
                     let mut codebase_fc = fc.clone();
+                    codebase_fc.name = "read_codebase_file".to_string();
                     if let Some(obj) = codebase_fc.args.as_object_mut() {
                         obj.insert("path".to_string(), serde_json::Value::String(final_filename.clone()));
                     } else {

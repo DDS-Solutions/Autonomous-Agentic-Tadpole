@@ -202,7 +202,7 @@ pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppErr
     }
 
     let agent_res = sqlx::query::<sqlx::Sqlite>(
-        "UPDATE agents SET status = 'idle' WHERE status IN ('busy', 'working')",
+        "UPDATE agents SET status = 'idle', active_mission = NULL, current_task = NULL WHERE status IN ('busy', 'working') OR active_mission IS NOT NULL",
     )
     .execute(pool)
     .await?;

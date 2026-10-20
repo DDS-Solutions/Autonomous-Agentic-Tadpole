@@ -129,4 +129,39 @@ impl SystemService for CodeGraphDbRefreshService {
     }
 }
 
+pub struct SymbolGraphWarmupService;
+
+#[async_trait]
+impl SystemService for SymbolGraphWarmupService {
+    fn name(&self) -> &'static str { "SymbolGraphWarmup" }
+    fn is_critical(&self) -> bool { false }
+    fn registry_key(&self) -> &'static str { "SymbolGraph" }
+    fn start_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(60)
+    }
+    async fn start(
+        &self,
+        context: SystemContext,
+    ) -> Result<(), anyhow::Error> {
+        let app_state = context.app_state;
+        let started = std::time::Instant::now();
+        match app_state.resources.get_symbol_graph().await {
+            Ok(graph_swap) => {
+                let guard = graph_swap.load();
+                tracing::info!(
+                    nodes = guard.graph.node_count(),
+                    edges = guard.graph.edge_count(),
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "[SymbolGraphWarmup] Symbol graph pre-warmed successfully"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("[SymbolGraphWarmup] Symbol graph pre-warm warning: {}", e);
+                Ok(())
+            }
+        }
+    }
+}
+
 // Metadata: [code_graph]

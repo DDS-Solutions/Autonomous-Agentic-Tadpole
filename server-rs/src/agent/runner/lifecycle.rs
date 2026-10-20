@@ -189,17 +189,26 @@ impl AgentRunner {
         }
         if let Some(mission_id) = agent.state.active_mission.as_ref()
             .and_then(|mission| mission.get("id")).and_then(|id| id.as_str()) {
-            let previous = self.state.comms.mission_contexts.get(mission_id).map(|ctx| ctx.clone())
-                .ok_or_else(|| AppError::Conflict("Agent already has an active mission".to_string()))?;
-            if previous.accounting.task_id == execution_id {
-                return Err(AppError::Conflict("Execution already owns an initialized mission".to_string()));
+            if let Some(previous) = self.state.comms.mission_contexts.get(mission_id).map(|ctx| ctx.clone()) {
+                if previous.accounting.task_id == execution_id {
+                    return Err(AppError::Conflict("Execution already owns an initialized mission".to_string()));
+                }
+                // Drop marks the old execution stopped without taking this lock.
+                // Settle its received usage before assigning a replacement mission.
+                previous.accounting.wait_finished().await?;
+                self.persist_terminal_state_locked(&previous, &previous.accounting.usage(), true, "Mission preempted by incoming dispatch").await?;
+                agent = self.state.registry.agents.get(agent_id)
+                    .ok_or_else(|| AppError::NotFound(format!("Agent '{}' was deleted", agent_id)))?.clone();
+            } else {
+                // Ghost/stale active_mission with no active in-memory context: reconcile to None
+                tracing::warn!("🧹 [Lifecycle] Reconciling stale active_mission '{}' for agent '{}'", mission_id, agent_id);
+                agent.state.active_mission = None;
+                self.state.registry.agents.insert(agent_id.to_string(), agent.clone());
+                let _ = sqlx::query("UPDATE agents SET active_mission = NULL WHERE id = ?")
+                    .bind(agent_id)
+                    .execute(&self.state.resources.pool)
+                    .await;
             }
-            // Drop marks the old execution stopped without taking this lock.
-            // Settle its received usage before assigning a replacement mission.
-            previous.accounting.wait_finished().await?;
-            self.persist_terminal_state_locked(&previous, &previous.accounting.usage(), true, "Mission preempted by incoming dispatch").await?;
-            agent = self.state.registry.agents.get(agent_id)
-                .ok_or_else(|| AppError::NotFound(format!("Agent '{}' was deleted", agent_id)))?.clone();
         }
         // Support registry-only startup seeds explicitly, never via an update upsert.
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agents WHERE id = ?)")

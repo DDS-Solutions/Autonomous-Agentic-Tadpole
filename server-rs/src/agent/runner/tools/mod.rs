@@ -305,9 +305,12 @@ impl AgentRunner {
                 if let Some(handler) = self.state.registry.tool_registry.get(&fc.name).or_else(|| self.state.registry.tool_registry.get(&normalized_name)) {
                     let tool_timeout_secs = if matches!(
                         normalized_name.as_str(),
-                        "issue_alpha_directive" | "spawn_subagent" | "send_mission_directive" | "recruit_specialist"
-                    ) {
-                        300
+                        "issue_alpha_directive" | "spawn_subagent" | "send_mission_directive" | "recruit_specialist" | "read_codebase_file"
+                    ) || validation.oversight_required {
+                        std::env::var("OVERSIGHT_TIMEOUT_SECS")
+                            .ok()
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(300)
                     } else {
                         60
                     };

@@ -41,6 +41,7 @@ scratch/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+*.pid.lock
 server-rs/data/*.db
 server-rs/*.db
 

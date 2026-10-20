@@ -198,14 +198,17 @@ pub async fn execute_sandboxed(
         cmd.env("TADPOLE_SKILL_ARGS", args_json);
         cmd.current_dir(workspace_root);
         cmd.kill_on_drop(true);
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
 
-        let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
-            .map_err(|_| AppError::InfrastructureError {
-                provider_id: "legacy_skill".to_string(),
-                detail: "Legacy execution timed out after 60s".to_string(),
-                help_link: None,
-            })?
-            .map_err(AppError::Io)?;
+        let child = cmd.spawn().map_err(AppError::Io)?;
+        let effective_limit_mb = config.memory_limit_mb.unwrap_or(1024) as u64;
+        let output = wait_child_with_memory_guard(
+            child,
+            effective_limit_mb,
+            std::time::Duration::from_secs(60),
+            "legacy_skill",
+        ).await?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         if output.status.success() {
@@ -217,6 +220,54 @@ pub async fn execute_sandboxed(
                 detail: format!("Legacy execution failed: {}\nstdout: {}", stderr, stdout),
                 help_link: None,
             })
+        }
+    }
+}
+
+async fn wait_child_with_memory_guard(
+    child: tokio::process::Child,
+    memory_limit_mb: u64,
+    timeout_duration: std::time::Duration,
+    provider_id: &str,
+) -> Result<std::process::Output, AppError> {
+    let pid = child.id();
+    let start = std::time::Instant::now();
+    let limit_bytes = memory_limit_mb.saturating_mul(1024 * 1024);
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(200));
+    interval.tick().await;
+
+    let mut wait_output_fut = std::pin::pin!(child.wait_with_output());
+
+    loop {
+        tokio::select! {
+            res = &mut wait_output_fut => {
+                return res.map_err(AppError::Io);
+            }
+            _ = interval.tick() => {
+                if start.elapsed() >= timeout_duration {
+                    return Err(AppError::InfrastructureError {
+                        provider_id: provider_id.to_string(),
+                        detail: format!("Execution timed out after {}s", timeout_duration.as_secs()),
+                        help_link: None,
+                    });
+                }
+                if let Some(pid_val) = pid {
+                    let mut sys = sysinfo::System::new();
+                    let sys_pid = sysinfo::Pid::from(pid_val as usize);
+                    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[sys_pid]), false);
+                    if let Some(proc) = sys.process(sys_pid) {
+                        let mem = proc.memory();
+                        if mem > limit_bytes {
+                            return Err(AppError::Forbidden(format!(
+                                "Sandbox memory violation: process (PID {}) consumed {} MB, exceeding limit of {} MB",
+                                pid_val,
+                                mem / (1024 * 1024),
+                                memory_limit_mb
+                            )));
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -314,14 +365,17 @@ pub async fn execute_sandboxed_shell(
         cmd.arg(flag).arg(command_str);
         cmd.current_dir(workspace_root);
         cmd.kill_on_drop(true);
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
 
-        let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
-            .map_err(|_| AppError::InfrastructureError {
-                provider_id: "host_shell".to_string(),
-                detail: "Host shell execution timed out after 60s".to_string(),
-                help_link: None,
-            })?
-            .map_err(AppError::Io)?;
+        let child = cmd.spawn().map_err(AppError::Io)?;
+        let effective_limit_mb = config.memory_limit_mb.unwrap_or(1024) as u64;
+        let output = wait_child_with_memory_guard(
+            child,
+            effective_limit_mb,
+            std::time::Duration::from_secs(60),
+            "host_shell",
+        ).await?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         if output.status.success() {

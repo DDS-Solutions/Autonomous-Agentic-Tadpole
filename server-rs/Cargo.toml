@@ -13,6 +13,7 @@ axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "fs", "compression-full", "timeout", "catch-panic"] }
 tower = { version = "0.5.3", features = ["util", "make"] }
 futures = "0.3"
+socket2 = "0.5"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

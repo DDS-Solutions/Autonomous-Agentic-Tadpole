@@ -142,11 +142,21 @@ async fn async_main(config: Config, args: Vec<String>) -> anyhow::Result<()> {
         config.socket_addr
     );
 
-    // ### 📡 Networking: Endpoint Initialization (TCP Bind)
-    // Dispatches the engine to the specified loopback port.
-    // Includes specific fault-handling for port-binding failures (e.g.,
-    // zombie sidecar instances using Port 8000).
-    let listener = match tokio::net::TcpListener::bind(config.socket_addr).await {
+    // ### 📡 Networking: Endpoint Initialization (TCP Bind with SO_REUSEADDR)
+    // Dispatches the engine to the specified loopback port using socket2 for fast socket rebinding.
+    let listener = match (|| -> std::io::Result<tokio::net::TcpListener> {
+        use socket2::{Socket, Domain, Type};
+        let domain = if config.socket_addr.is_ipv4() { Domain::IPV4 } else { Domain::IPV6 };
+        let socket = Socket::new(domain, Type::STREAM, None)?;
+        socket.set_reuse_address(true)?;
+        #[cfg(not(windows))]
+        let _ = socket.set_reuse_port(true);
+        socket.set_nonblocking(true)?;
+        socket.bind(&config.socket_addr.into())?;
+        socket.listen(1024)?;
+        let std_listener: std::net::TcpListener = socket.into();
+        tokio::net::TcpListener::from_std(std_listener)
+    })() {
         Ok(l) => l,
         Err(e) => {
             let msg = if e.kind() == std::io::ErrorKind::AddrInUse {
@@ -159,6 +169,27 @@ async fn async_main(config: Config, args: Vec<String>) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!(msg));
         }
     };
+
+    // Engine PID Lockfile Protocol
+    let pid_lock_path = std::path::PathBuf::from("data").join("engine.pid.lock");
+    if let Some(parent) = pid_lock_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let pid = std::process::id();
+    if let Err(e) = std::fs::write(&pid_lock_path, pid.to_string()) {
+        tracing::warn!("⚠️ [Main] Failed to write engine PID lock: {}", e);
+    } else {
+        tracing::info!("🔒 [Main] Engine PID {} locked in {}", pid, pid_lock_path.display());
+    }
+
+    struct PidLockGuard(std::path::PathBuf);
+    impl Drop for PidLockGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+            tracing::info!("🔓 [Main] Engine PID lock cleared.");
+        }
+    }
+    let _pid_guard = PidLockGuard(pid_lock_path);
 
     // 5. Launch Background Tasks only after successful socket bind
     let actors = server_rs::system::actors::manager::spawn_system_actors(&app_state).await;
