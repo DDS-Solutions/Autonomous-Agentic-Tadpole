@@ -39,12 +39,15 @@ TARGET_SKILLS = [
     "debrief_mission",
     "mission_diagnose",
     "tool_loop_guard",
-    "execution"
+    "execution",
+    "share_finding",
+    "parse_errors"
 ]
 
 TARGET_WORKFLOWS = [
     "Mission Analysis",
     "mission_analysis",
+    "error_sentinel_triage",
     "quality_gate_review",
     "compliance_check",
     "security_audit",

@@ -211,8 +211,10 @@ Primary API groups:
 
 Operational capabilities include:
 
-- pending oversight decisions
-- oversight ledger
+- pending oversight decisions with 1-click guided remediation auto-population
+- oversight ledger and audit logs
+- **Error Sentinel Triage**: Agent QA-99 mid-flight fault classification (`directives/error_sentinel_triage.md`) attaching remediation prescriptions to tripped circuit breaker entries
+- **RFC 9457 Problem Details Remediation Engine**: Structured `remediation` metadata emitted across all HTTP, tool execution, and runtime error paths
 - security quotas
 - mission quotas
 - audit trail

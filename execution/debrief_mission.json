@@ -1,0 +1,22 @@
+{
+  "name": "debrief_mission",
+  "description": "Performs mission debriefing and wisdom extraction for Agent QA-99. Commits institutional learnings to LONG_TERM_MEMORY.md and faults to directives/FAULT_REGISTRY.md.",
+  "execution_command": "python execution/debrief_mission.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "mission_id": {
+        "type": "string",
+        "description": "Unique mission ID to debrief."
+      },
+      "commit": {
+        "type": "boolean",
+        "description": "If true, persist extracted learnings to long-term memory and fault registry."
+      }
+    },
+    "required": ["mission_id"]
+  },
+  "oversight_required": true,
+  "tags": ["memory", "debrief", "scribe", "quality_assurance"],
+  "category": "operations"
+}

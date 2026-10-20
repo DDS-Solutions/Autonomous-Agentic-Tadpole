@@ -27,6 +27,7 @@ impl Drop for OversightDropGuard {
             let state = self.state.clone();
             state.comms.oversight_queue.remove(&entry_id);
             state.comms.oversight_resolvers.remove(&entry_id);
+            state.comms.oversight_answers.remove(&entry_id);
             tokio::spawn(async move {
                 let _ = sqlx::query(
                     "UPDATE oversight_log SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
@@ -48,9 +49,20 @@ impl AgentRunner {
     /// Returns true if approved, false if rejected.
     pub async fn submit_oversight(
         &self,
-        mut tool_call: crate::agent::types::ToolCallAudit,
+        tool_call: crate::agent::types::ToolCallAudit,
         mission_id: Option<String>,
     ) -> Result<bool, crate::error::AppError> {
+        let (approved, _) = self.submit_oversight_with_guidance(tool_call, mission_id).await?;
+        Ok(approved)
+    }
+
+    /// Submits a tool call or circuit-breaker event for manual approval with optional operator guidance.
+    /// Returns (approved: bool, guidance: Option<String>).
+    pub async fn submit_oversight_with_guidance(
+        &self,
+        mut tool_call: crate::agent::types::ToolCallAudit,
+        mission_id: Option<String>,
+    ) -> Result<(bool, Option<String>), crate::error::AppError> {
         let entry_id = uuid::Uuid::new_v4().to_string();
 
         tool_call.mission_id = mission_id.clone();
@@ -170,7 +182,8 @@ impl AgentRunner {
         };
 
         drop_guard.completed = true;
-        Ok(approved)
+        let guidance = self.state.comms.oversight_answers.remove(&entry_id).map(|(_, a)| a);
+        Ok((approved, guidance))
     }
 
 

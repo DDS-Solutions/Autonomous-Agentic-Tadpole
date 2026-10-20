@@ -24,11 +24,13 @@ import {
     Plus,
     WifiOff,
     ShieldCheck,
-    Network
+    Network,
+    Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tw_Empty_State, Tooltip } from '../components/ui';
 import { useEngineStatus } from '../hooks/use_engine_status';
+import { useErrorRemediation } from '../hooks/useErrorRemediation';
 import { use_workspace_store } from '../stores/workspace_store';
 import { use_agent_store } from '../stores/agent_store';
 import type { Agent } from '../contracts/agent/domain';
@@ -64,6 +66,8 @@ export default function Oversight_Dashboard() {
     const [is_simulated, set_is_simulated] = useState(false);
     const [has_attempted_fetch, set_has_attempted_fetch] = useState(false);
     const [selected_cluster_id, set_selected_cluster_id] = useState<string>('all');
+    const [guidance_map, set_guidance_map] = useState<Record<string, string>>({});
+    const { get_remediation } = useErrorRemediation();
     const { clusters, active_proposals, apply_proposal, dismiss_proposal } = use_workspace_store();
     const { agents: all_agents, update_agent: store_update_agent } = use_agent_store();
 
@@ -154,7 +158,8 @@ export default function Oversight_Dashboard() {
         };
     }, [pending, ledger, selected_cluster_id, active_collaborators]);
 
-    const handle_decide = async (id: string, decision: 'approved' | 'rejected') => {
+    const handle_decide = async (id: string, decision: 'approved' | 'rejected', answer?: string) => {
+        const final_answer = answer !== undefined ? answer : guidance_map[id];
         if (is_simulated) {
             // Simulated local move
             const entry = pending.find(p => p.id === id);
@@ -166,9 +171,18 @@ export default function Oversight_Dashboard() {
         }
 
         try {
-            await tadpole_os_service.decide_oversight(id, decision);
+            if (final_answer) {
+                await tadpole_os_service.decide_oversight(id, decision, final_answer);
+            } else {
+                await tadpole_os_service.decide_oversight(id, decision);
+            }
             // Optimistic update
             set_pending(prev => prev.filter(p => p.id !== id));
+            set_guidance_map(prev => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         } catch {
             // Silently fail, would be logged in a real environment
         }
@@ -405,6 +419,45 @@ export default function Oversight_Dashboard() {
                                         <pre className="text-xs bg-black/50 p-2 rounded text-zinc-400 font-mono overflow-auto max-w-2xl">
                                             {JSON.stringify(entry.tool_call?.params || entry.params || {}, null, 2)}
                                         </pre>
+                                        {(() => {
+                                            const params_obj = (entry.tool_call?.params || entry.params || {}) as Record<string, unknown>;
+                                            const direct_hint = typeof params_obj.remediation === 'string' ? params_obj.remediation : undefined;
+                                            const code_hint = entry.error_code ? get_remediation({ error_code: entry.error_code, help_link: entry.help_link })?.label : undefined;
+                                            const circuit_hint = (entry.tool_call?.skill || entry.skill || '').includes('CIRCUIT_BREAKER')
+                                                ? 'Pivot execution strategy, verify parameters, or modify tool arguments.'
+                                                : undefined;
+                                            const suggested_remediation = direct_hint || code_hint || circuit_hint;
+
+                                            return (
+                                                <>
+                                                    {suggested_remediation && (
+                                                        <div className="pt-2 flex items-center gap-1.5 flex-wrap">
+                                                            <span className="text-[11px] text-zinc-400 font-medium">Suggested Remediation:</span>
+                                                            <button
+                                                                type="button"
+                                                                data-testid={`suggested-remediation-btn-${entry.id}`}
+                                                                onClick={() => set_guidance_map(prev => ({ ...prev, [entry.id]: suggested_remediation }))}
+                                                                className="text-[11px] bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/60 rounded px-2 py-0.5 transition-colors text-left flex items-center gap-1 cursor-pointer"
+                                                                title="Click to copy suggested remediation into guidance input"
+                                                            >
+                                                                <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                                                                <span>{suggested_remediation}</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    <div className="pt-2">
+                                                        <input
+                                                            type="text"
+                                                            data-testid={`oversight-guidance-input-${entry.id}`}
+                                                            placeholder="Optional operator guidance / instructions for agent..."
+                                                            value={guidance_map[entry.id] || ''}
+                                                            onChange={(e) => set_guidance_map(prev => ({ ...prev, [entry.id]: e.target.value }))}
+                                                            className="w-full text-xs bg-zinc-950/70 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500/70 transition-colors"
+                                                        />
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                     <div className="flex gap-2 w-full md:w-auto">
                                         <Tooltip content={i18n.t('oversight.approve_action_tooltip')} position="top">

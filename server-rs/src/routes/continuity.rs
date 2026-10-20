@@ -74,11 +74,22 @@ pub async fn list_jobs_handler(
 #[tracing::instrument(skip(state, req), name = "continuity::create_job")]
 pub async fn create_job_handler(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<CreateJobRequest>,
+    Json(mut req): Json<CreateJobRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Validate agent exists: if workflow_id is None, agent_id must be non-empty and present in registry
+    // 1. Normalize workflow_id: Treat empty or whitespace strings as None
+    if let Some(ref wf) = req.workflow_id {
+        if wf.trim().is_empty() {
+            req.workflow_id = None;
+        } else {
+            req.workflow_id = Some(wf.trim().to_string());
+        }
+    }
+
+    req.agent_id = req.agent_id.trim().to_string();
+
+    // 2. Validate agent and workflow targets
     if req.workflow_id.is_none() {
-        if req.agent_id.trim().is_empty() {
+        if req.agent_id.is_empty() {
             return Err(AppError::BadRequest(
                 "agent_id is required when workflow_id is not specified".to_string(),
             ));
@@ -89,11 +100,46 @@ pub async fn create_job_handler(
                 req.agent_id
             )));
         }
-    } else if !req.agent_id.is_empty() && !state.registry.agents.contains_key(&req.agent_id) {
-        return Err(AppError::NotFound(format!(
-            "Agent '{}' not found",
-            req.agent_id
-        )));
+    } else {
+        let wf_id = req.workflow_id.as_ref().unwrap();
+        let wf_exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workflows WHERE id = ?1")
+            .bind(wf_id)
+            .fetch_one(&state.resources.pool)
+            .await
+            .unwrap_or(0) > 0;
+        if !wf_exists {
+            return Err(AppError::NotFound(format!(
+                "Workflow '{}' not found. Only continuity workflows can be scheduled.",
+                wf_id
+            )));
+        }
+
+        // If agent_id is empty for a workflow, resolve supervisor from first step or registry
+        if req.agent_id.is_empty() {
+            let step_agent = sqlx::query_scalar::<_, String>(
+                "SELECT agent_id FROM workflow_steps WHERE workflow_id = ?1 ORDER BY step_order ASC LIMIT 1"
+            )
+            .bind(wf_id)
+            .fetch_optional(&state.resources.pool)
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(agent) = step_agent {
+                req.agent_id = agent;
+            } else if let Some(first_agent) = state.registry.agents.iter().next() {
+                req.agent_id = first_agent.key().clone();
+            } else {
+                return Err(AppError::BadRequest(
+                    "No agent available to supervise workflow execution".to_string(),
+                ));
+            }
+        } else if !state.registry.agents.contains_key(&req.agent_id) {
+            return Err(AppError::NotFound(format!(
+                "Agent '{}' not found",
+                req.agent_id
+            )));
+        }
     }
 
     let job = create_job(&state.resources.pool, req)
@@ -139,8 +185,26 @@ pub async fn get_job_handler(
 pub async fn update_job_handler(
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<String>,
-    Json(req): Json<UpdateJobRequest>,
+    Json(mut req): Json<UpdateJobRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    if let Some(ref wf) = req.workflow_id {
+        let trimmed = wf.trim();
+        if !trimmed.is_empty() {
+            let wf_exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workflows WHERE id = ?1")
+                .bind(trimmed)
+                .fetch_one(&state.resources.pool)
+                .await
+                .unwrap_or(0) > 0;
+            if !wf_exists {
+                return Err(AppError::NotFound(format!(
+                    "Workflow '{}' not found",
+                    trimmed
+                )));
+            }
+            req.workflow_id = Some(trimmed.to_string());
+        }
+    }
+
     let job = update_job(&state.resources.pool, &job_id, req).await?;
     Ok(Json(json!(job)))
 }

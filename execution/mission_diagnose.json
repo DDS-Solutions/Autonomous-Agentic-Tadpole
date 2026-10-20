@@ -1,0 +1,17 @@
+{
+  "name": "mission_diagnose",
+  "description": "Performs diagnostics on active or failed missions by correlating SQLite mission logs with OpenTelemetry execution spans to detect abrupt halts, unclosed spans, and crash signatures.",
+  "execution_command": "python execution/mission_diagnose.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "mission_id": {
+        "type": "string",
+        "description": "The unique identifier of the mission to diagnose. If omitted, diagnoses the most recent mission."
+      }
+    }
+  },
+  "oversight_required": false,
+  "tags": ["diagnostics", "telemetry", "sentinel", "quality_assurance"],
+  "category": "operations"
+}

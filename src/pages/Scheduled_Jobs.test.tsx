@@ -344,6 +344,54 @@ describe('Scheduled_Jobs Page', () => {
         expect(options).toContain('Beta Agent (Tester)');
         expect(options).not.toContain('Alpha Agent (Dev)');
     });
+
+    it('renders the Schedule Helper mini-panel and updates cron expression via interval controls', async () => {
+        await act(async () => {
+            render(<Scheduled_Jobs />);
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /scheduled_jobs.new_job/i }));
+        });
+
+        // Verify Schedule Helper is rendered
+        expect(screen.getByText('scheduled_jobs.schedule_config')).toBeInTheDocument();
+        expect(screen.getByText('scheduled_jobs.tab_intervals')).toBeInTheDocument();
+        expect(screen.getByText('scheduled_jobs.tab_calendar')).toBeInTheDocument();
+
+        const cron_input = screen.getByLabelText(/scheduled_jobs.cron_expression/i) as HTMLInputElement;
+
+        // Change interval value to 20
+        const interval_input = screen.getByLabelText('scheduled_jobs.interval_label');
+        await act(async () => {
+            fireEvent.change(interval_input, { target: { value: '20' } });
+        });
+
+        // The cron expression input should now be updated to */20 * * * *
+        expect(cron_input.value).toBe('*/20 * * * *');
+        expect(screen.getByText(/scheduled_jobs.estimated_schedule/i)).toBeInTheDocument();
+    });
+
+    it('updates cron expression when switching to calendar date and time mode', async () => {
+        await act(async () => {
+            render(<Scheduled_Jobs />);
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /scheduled_jobs.new_job/i }));
+        });
+
+        // Switch to Calendar tab
+        const cal_tab = screen.getByRole('button', { name: /scheduled_jobs.tab_calendar/i });
+        await act(async () => {
+            fireEvent.click(cal_tab);
+        });
+
+        const cron_input = screen.getByLabelText(/scheduled_jobs.cron_expression/i) as HTMLInputElement;
+
+        // Default calendar synthesis should produce a valid 5-part cron
+        expect(cron_input.value.split(' ')).toHaveLength(5);
+    });
 });
 
 

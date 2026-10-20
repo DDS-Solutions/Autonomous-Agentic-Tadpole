@@ -34,6 +34,12 @@ pub async fn create_job(pool: &SqlitePool, req: CreateJobRequest) -> Result<Sche
         .as_ref()
         .and_then(|m| serde_json::to_string(m).ok());
 
+    // Normalize workflow_id: empty or whitespace string is converted to None
+    let normalized_workflow_id = req.workflow_id.and_then(|w| {
+        let trimmed = w.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    });
+
     // Compute next_run_at from cron expression
     // Validates the cron string and calculates the first execution time relative to now.
     let next_run = compute_next_run(&req.cron_expr, &now)?;
@@ -45,11 +51,11 @@ pub async fn create_job(pool: &SqlitePool, req: CreateJobRequest) -> Result<Sche
          VALUES (?1,?2,?3,?4,?5,?6,?7,1,?8,0,?9,?10,?11)",
     )
     .bind(&job_id)
-    .bind(&req.agent_id)
-    .bind(&req.workflow_id)
-    .bind(&req.name)
+    .bind(req.agent_id.trim())
+    .bind(&normalized_workflow_id)
+    .bind(req.name.trim())
     .bind(&req.prompt)
-    .bind(&req.cron_expr)
+    .bind(req.cron_expr.trim())
     .bind(budget)
     .bind(next_run)
     .bind(max_failures)
@@ -116,8 +122,13 @@ pub async fn update_job(
             .await?;
     }
     if let Some(workflow_id) = &req.workflow_id {
+        let normalized = if workflow_id.trim().is_empty() {
+            None
+        } else {
+            Some(workflow_id.trim().to_string())
+        };
         sqlx::query("UPDATE scheduled_jobs SET workflow_id = ?1 WHERE id = ?2")
-            .bind(workflow_id)
+            .bind(normalized)
             .bind(job_id)
             .execute(pool)
             .await?;

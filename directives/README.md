@@ -36,6 +36,7 @@ Examples:
 
 - planning and retrospectives
 - incident response
+- error sentinel triage (`error_sentinel_triage.md` for QA-99 mid-flight fault classification)
 - security audit
 - market research
 - product sync

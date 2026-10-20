@@ -12,7 +12,7 @@
 //! Standardized Error System for the Tadpole OS Tooling Layer.
 //! Features RecoveryAction metadata to guide autonomous agent self-annealing.
 
-use crate::error::AppError;
+use crate::error::{AppError, Classify};
 
 /// Defines the recovery path for an autonomous agent.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -76,6 +76,18 @@ impl ToolExecutionError {
 
     pub fn is_transient(&self) -> bool {
         matches!(self.recovery_strategy(), RecoveryAction::RetryWithBackoff { .. })
+    }
+
+    /// Actionable remediation hint for the LLM agent or HITL oversight.
+    pub fn remediation_hint(&self) -> &'static str {
+        match self {
+            Self::Transient { .. } => "Transient tool failure. Wait for cooldown and retry with backoff.",
+            Self::SecurityBlocked(_) => "Tool execution blocked by security policy. Check authority level or submit for HITL oversight.",
+            Self::HierarchyBlocked(_) => "Tool execution blocked by agent hierarchy. Escalate or recruit specialist with appropriate clearance.",
+            Self::Validation(_) => "Tool parameter validation failed. Verify argument schema and correct malformed inputs.",
+            Self::ExecutionFailed(_) => "Tool runtime failure. Inspect error detail, verify environment, and refine parameters.",
+            Self::AppError(e) => e.remediation_hint(),
+        }
     }
 }
 

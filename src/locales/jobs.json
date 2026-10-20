@@ -60,5 +60,21 @@
   "event_deletion_failed": "Deletion Failed: {{error}}",
   "event_updated": "Updated scheduled job: {{name}}",
   "event_created": "Created new scheduled job: {{name}}",
-  "event_failed_action": "Failed to {{action}} scheduled job."
+  "event_failed_action": "Failed to {{action}} scheduled job.",
+  "schedule_config": "Schedule Helper",
+  "schedule_config_tooltip": "Configure recurring intervals or specific calendar date and time to automatically populate standard cron syntax.",
+  "tab_intervals": "Intervals",
+  "tab_calendar": "Calendar Date & Time",
+  "unit_minutes": "Minutes",
+  "unit_hours": "Hours",
+  "unit_days": "Days",
+  "unit_months": "Months",
+  "frequency_label": "Frequency",
+  "interval_label": "Every",
+  "date_label": "Date",
+  "time_label": "Time",
+  "day_label": "Day",
+  "tz_local": "LOCAL",
+  "tz_utc": "UTC",
+  "estimated_schedule": "Estimated Schedule"
 }

@@ -55,6 +55,8 @@ pub struct CommunicationHub {
     pub oversight_queue: DashMap<String, OversightEntry>,
     /// Resolvers for pending oversight promises.
     pub oversight_resolvers: DashMap<String, oneshot::Sender<bool>>,
+    /// Captured guidance/answers from operator decisions on pending oversight entries.
+    pub oversight_answers: DashMap<String, String>,
     /// Active AbortHandles and TaskIds for running agents, allowing for definitive task cancellation and safe eviction.
     pub active_runners: DashMap<String, RunnerHandle>,
     /// Retains received usage and owning run identity through cancellation/storage failures.

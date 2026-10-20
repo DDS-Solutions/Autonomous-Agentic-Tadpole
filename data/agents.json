@@ -726,7 +726,7 @@
     "name": "QA-99",
     "role": "Quality Assurance",
     "department": "Quality Assurance",
-    "description": "Post-mission tactical auditor and behavioral drift detector.",
+    "description": "Tactical error sentinel, behavioral drift detector, and sovereign scribe.",
     "model": "gemma4:e4b",
     "model_config": {
       "provider": "ollama",
@@ -751,11 +751,13 @@
       "mission_diagnose",
       "tool_loop_guard",
       "execution",
-      "share_finding"
+      "share_finding",
+      "parse_errors"
     ],
     "workflows": [
       "Mission Analysis",
       "mission_analysis",
+      "error_sentinel_triage",
       "quality_gate_review",
       "compliance_check",
       "security_audit",

@@ -205,6 +205,8 @@ Successful agent deletion commits dependent database cleanup before removing the
 
 ## Oversight
 
+The Oversight engine provides human-in-the-loop (HITL) review for privileged tools, budget thresholds, and circuit-breaker activations. Decisions accept `'approved' | 'rejected'` with optional operator `answer` (guidance). Suggested remediation strings populated by the engine or QA-99 Sentinel allow one-click guided approval.
+
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/v1/oversight/ledger` | `routes::oversight::get_ledger` | Protected |
@@ -220,7 +222,7 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `PUT` | `/v1/oversight/security/quotas/{id}` | `routes::oversight::update_agent_quota` | Protected |
 | `PUT` | `/v1/oversight/settings` | `routes::oversight::update_settings` | Protected |
 | `GET` | `/v1/oversight/token-burn` | `routes::oversight::get_token_burn` | Protected |
-| `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected |
+| `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected. Body: `{"decision": "approved"|"rejected", "answer": Option<String>}` |
 
 ## Skills
 

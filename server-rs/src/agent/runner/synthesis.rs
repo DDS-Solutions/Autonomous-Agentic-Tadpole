@@ -1136,6 +1136,7 @@ mod tests {
                 tx, event_tx: etx, telemetry_tx: ttx, audio_stream_tx: atx, pulse_tx: ptx,
                 oversight_queue: dashmap::DashMap::new(),
                 oversight_resolvers: dashmap::DashMap::new(),
+                oversight_answers: dashmap::DashMap::new(),
                 active_runners: dashmap::DashMap::new(),
                 mission_contexts: dashmap::DashMap::new(),
                 event_sequence: std::sync::atomic::AtomicU64::new(0),

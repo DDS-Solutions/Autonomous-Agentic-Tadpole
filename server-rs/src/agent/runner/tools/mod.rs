@@ -105,7 +105,8 @@ impl AgentRunner {
             }
             Err(e) => {
                 let recovery = e.recovery_strategy();
-                let error_msg = format!("(TOOL FAILURE: {} | RECOVERY: {:?})", e, recovery);
+                let hint = e.remediation_hint();
+                let error_msg = format!("(TOOL FAILURE: {} | RECOVERY: {:?} | REMEDIATION: {})", e, recovery, hint);
                 *output_text = error_msg;
                 
                 // Even on error, we return Ok(Some) to surface the failure to the agent

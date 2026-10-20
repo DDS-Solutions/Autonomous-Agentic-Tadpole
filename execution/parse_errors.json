@@ -1,0 +1,12 @@
+{
+  "name": "parse_errors",
+  "description": "Runs cargo check in server-rs and parses compiler diagnostics into structured machine-readable JSON for autonomous self-healing code repair.",
+  "execution_command": "python execution/parse_errors.py",
+  "schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "oversight_required": false,
+  "tags": ["compiler", "rust", "diagnostics", "self_annealing"],
+  "category": "operations"
+}

@@ -1307,6 +1307,8 @@ pub struct SwarmNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OversightDecision {
     pub decision: String,
+    #[serde(default)]
+    pub answer: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -212,6 +212,51 @@ describe('Oversight_Dashboard Page', () => {
         expect(itemBadge).toBeInTheDocument();
         expect(itemBadge).toHaveTextContent(/Parent Delegation Directive/i);
     });
+
+    it('renders suggested remediation button and populates operator guidance on click', async () => {
+        (tadpole_os_service.get_pending_oversight as Mock).mockResolvedValue([
+            {
+                id: 'p-breaker-1',
+                agent_id: 'agent-1',
+                role: 'Worker',
+                skill: '[CIRCUIT_BREAKER] read_file',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: {
+                    name: 'read_file',
+                    params: {
+                        path: 'invalid.txt',
+                        remediation: 'Verify file path or provide alternative parameter.'
+                    },
+                    agent_id: 'agent-1',
+                    skill: '[CIRCUIT_BREAKER] read_file'
+                }
+            }
+        ]);
+        (tadpole_os_service.decide_oversight as Mock).mockResolvedValue({ status: 'success' });
+
+        render(<MemoryRouter><Oversight_Dashboard /></MemoryRouter>);
+
+        // Find suggested remediation button
+        const remediationBtn = await screen.findByTestId('suggested-remediation-btn-p-breaker-1');
+        expect(remediationBtn).toBeInTheDocument();
+        expect(remediationBtn).toHaveTextContent(/Verify file path or provide alternative parameter/i);
+
+        // Click suggested remediation button
+        fireEvent.click(remediationBtn);
+
+        // Input should now be populated with the remediation
+        const guidanceInput = screen.getByTestId('oversight-guidance-input-p-breaker-1');
+        expect(guidanceInput).toHaveValue('Verify file path or provide alternative parameter.');
+
+        // Clicking approve should pass the populated guidance to decide_oversight
+        const approveBtn = screen.getByRole('button', { name: /^Approve$/i });
+        fireEvent.click(approveBtn);
+
+        await waitFor(() => {
+            expect(tadpole_os_service.decide_oversight).toHaveBeenCalledWith('p-breaker-1', 'approved', 'Verify file path or provide alternative parameter.');
+        });
+    });
 });
 
 

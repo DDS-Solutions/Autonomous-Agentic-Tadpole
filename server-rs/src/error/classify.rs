@@ -58,13 +58,16 @@ pub enum ErrorScope {
     Process,
 }
 
-/// Trait implemented by errors to provide recovery classification.
+/// Trait implemented by errors to provide recovery classification and actionable remediation.
 pub trait Classify {
     /// Returns the operational error class.
     fn error_class(&self) -> ErrorClass;
 
     /// Returns the blast radius scope.
     fn error_scope(&self) -> ErrorScope;
+
+    /// Returns an actionable, human- and agent-interpretable remediation hint.
+    fn remediation_hint(&self) -> &'static str;
 
     /// Returns true if the error is transient and can be retried automatically.
     fn is_retryable(&self) -> bool {
@@ -230,6 +233,78 @@ impl Classify for AppError {
             AppError::WalkDir(_) => ErrorScope::Call,
 
             AppError::Anyhow(_) => ErrorScope::Call,
+        }
+    }
+
+    fn remediation_hint(&self) -> &'static str {
+        match self {
+            AppError::RateLimit(_) => "Rate limit exceeded. Wait for cooldown or switch to an alternate provider model.",
+            AppError::Unauthorized(_) => "Authentication failed. Verify NEURAL_TOKEN in .env or Settings matches the server bearer token.",
+            AppError::Forbidden(_) => "Access denied by security policy. Verify agent authority level or request executive clearance.",
+            AppError::BadRequest(_) => "Invalid request parameters. Inspect argument types, required fields, and JSON schema.",
+            AppError::ContextOverflow(_) => "Context window exceeded. Compact conversation history, summarize findings, or offload observations.",
+            AppError::NotFound(_) => "Target resource not found. Verify file path, workflow ID, or agent ID before retrying.",
+            AppError::Conflict(_) => "State conflict detected. Refresh active state or retry with updated concurrency version.",
+            AppError::Skill(ref s) => match s {
+                crate::agent::skill_error::SkillError::ValidationError(_) => "Skill parameter validation error. Verify required parameter names and types.",
+                crate::agent::skill_error::SkillError::RecruitmentFailure { .. } => "Agent recruitment failed. Ensure target specialist is registered and unblocked.",
+                crate::agent::skill_error::SkillError::SanitizationViolation(_) => "Command violated safety filter. Remove shell escape characters or unescaped variables.",
+            },
+            AppError::Graph(_) => "Symbol graph traversal error. Verify symbol name and index status with IntelligenceService.",
+            AppError::Runner(ref r) => match r {
+                crate::agent::runner::error::RunnerError::BudgetExhausted(_) => "Mission financial budget exhausted. Increase budget limit in task config or request quota extension.",
+                crate::agent::runner::error::RunnerError::RecursionBlocked(_) => "Tool loop detected. Change strategy, use a different tool, or request operator guidance.",
+                crate::agent::runner::error::RunnerError::SentinelGate(_) => "Sentinel safety gate blocked mutation. Submit mutation proposal for oversight approval.",
+                crate::agent::runner::error::RunnerError::Compression(_) => "Context compression failure. Clear transient conversation buffer and re-prompt.",
+            },
+            AppError::Reqwest(ref e) => {
+                if e.is_timeout() {
+                    "HTTP request timed out. Verify network latency or increase endpoint timeout."
+                } else if e.is_connect() {
+                    "Failed to connect to endpoint. Verify host is running and reachable."
+                } else {
+                    "HTTP request failed. Check remote endpoint status and status code."
+                }
+            }
+            AppError::Sqlx(ref e) => {
+                let msg = e.to_string();
+                if msg.contains("FOREIGN KEY") {
+                    "Foreign key constraint failed. Ensure referenced parent record exists or pass NULL."
+                } else if msg.contains("UNIQUE") {
+                    "Unique constraint violated. Record with this identifier already exists; use update or select."
+                } else if msg.contains("locked") || msg.contains("busy") {
+                    "Database is locked by another transaction. Wait 250ms and retry."
+                } else {
+                    "Database operation failed. Verify SQL schema integrity and connection pool."
+                }
+            }
+            AppError::Io(ref e) => match e.kind() {
+                std::io::ErrorKind::NotFound => "File or directory not found. Verify path exists relative to workspace root.",
+                std::io::ErrorKind::PermissionDenied => "File permission denied. Ensure file is not locked and has write permissions.",
+                std::io::ErrorKind::TimedOut => "IO operation timed out. Check storage subsystem latency and retry.",
+                _ => "Filesystem IO failure. Verify disk space, path validity, and process locks.",
+            },
+            AppError::Serde(_) => "JSON serialization/deserialization failed. Verify that payload is valid, well-formed JSON.",
+            AppError::InfrastructureError { .. } => "Underlying infrastructure service failed. Check provider connectivity and daemon health.",
+            AppError::QuantizationFallback { .. } => "Out-of-memory detected during inference. Fall back to efficient quantization (q4_K_M).",
+            AppError::InternalServerError(ref msg) => {
+                let lower = msg.to_lowercase();
+                if lower.contains("resource_guard") {
+                    "Resource guard tripped. Free system memory or reduce concurrency."
+                } else if lower.contains("dns error") || lower.contains("connectionrefused") {
+                    "Connection refused. Verify local service daemon is running on expected port."
+                } else if lower.contains("invalid api key") {
+                    "Provider API key rejected. Update provider credential in .env or Settings."
+                } else {
+                    "Internal server error. Inspect tracing logs with [error] filter for root cause."
+                }
+            }
+            AppError::IntelBoundaryViolation(_) => "Module boundary violation. Access restricted to approved dependency paths.",
+            AppError::IntelPathUnknown(_) => "Intelligence path unknown. Index workspace symbols with symbol graph before querying.",
+            AppError::DomainError { .. } => "Domain policy violated. Check domain rules and required prerequisites.",
+            AppError::NotImplemented(_) => "Feature is not implemented in this build. Compile with required Cargo feature flags.",
+            AppError::WalkDir(_) => "Directory traversal error. Check directory accessibility and symbolic link loops.",
+            AppError::Anyhow(_) => "Execution error encountered. Inspect error details and adjust tool inputs.",
         }
     }
 }

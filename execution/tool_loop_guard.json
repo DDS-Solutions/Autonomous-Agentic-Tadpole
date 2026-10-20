@@ -1,0 +1,21 @@
+{
+  "name": "tool_loop_guard",
+  "description": "Evaluates tool invocation history using deterministic SHA-256 hashing to verify loop traps, repetition breaches, and circuit-breaker conditions.",
+  "execution_command": "python execution/tool_loop_guard.py",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "tool_name": {
+        "type": "string",
+        "description": "Name of the tool being evaluated for loops."
+      },
+      "max_iterations": {
+        "type": "integer",
+        "description": "Maximum allowed iterations before tripping circuit breaker. Default: 10."
+      }
+    }
+  },
+  "oversight_required": false,
+  "tags": ["circuit_breaker", "loop_guard", "safety", "operations"],
+  "category": "operations"
+}

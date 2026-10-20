@@ -545,7 +545,62 @@ impl AgentRunner {
                                 *count
                             };
 
-                            if rep_count >= 5 {
+                            // 🛡️ [Circuit Breaker: AGENTS.md / CLAUDE.md Operating Principle 2]
+                            let mut warning_prefix = String::new();
+
+                            if rep_count == 3 {
+                                tracing::warn!(
+                                    "🚨 [Circuit Breaker] Trip at attempt 3 for tool '{}' on agent '{}'. Pausing for human guidance.",
+                                    fc.name, ctx_clone.agent_id
+                                );
+                                let audit = crate::agent::types::ToolCallAudit {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    agent_id: ctx_clone.agent_id.clone(),
+                                    mission_id: Some(ctx_clone.mission_id.clone()),
+                                    skill: format!("[CIRCUIT_BREAKER] {}", fc.name),
+                                    params: serde_json::json!({
+                                        "tool": fc.name,
+                                        "arguments": fc.args,
+                                        "consecutive_attempts": rep_count,
+                                        "reason": "Tool loop detected (3 identical consecutive executions)",
+                                        "remediation": format!("Tool '{}' is repeating without progress. Pivot execution strategy, verify file path or resource state, or provide updated arguments.", fc.name),
+                                        "sentinel": "QA-99",
+                                        "triage_workflow": "error_sentinel_triage"
+                                    }),
+                                    department: ctx_clone.department.clone(),
+                                    description: format!(
+                                        "[QA-99 Sentinel Triage] Circuit Breaker: Tool '{}' called 3 consecutive times with identical parameters. Suggested remediation available for 1-click approval.",
+                                        fc.name
+                                    ),
+                                    timestamp: chrono::Utc::now().to_rfc3339(),
+                                };
+
+                                runner.broadcast_sys(
+                                    &format!("⚠️ Circuit Breaker: Agent '{}' paused on tool '{}' awaiting operator guidance.", ctx_clone.agent_id, fc.name),
+                                    "warning",
+                                    Some(ctx_clone.mission_id.clone()),
+                                );
+
+                                let (approved, guidance) = runner.submit_oversight_with_guidance(audit, Some(ctx_clone.mission_id.clone())).await.unwrap_or((false, None));
+
+                                if approved {
+                                    {
+                                        let mut lock = tracker.lock();
+                                        lock.remove(&(fc.name.clone(), args_hash.clone()));
+                                    }
+                                    if let Some(ref guide) = guidance {
+                                        warning_prefix = format!("[OPERATOR GUIDANCE] Operator approved tool continuation with instructions: {}\n", guide);
+                                    }
+                                } else {
+                                    let rejected_tool = fc.name.clone();
+                                    return (
+                                        rejected_tool.clone(),
+                                        Ok(Some(format!("[OPERATOR REJECTION] Operator rejected tool '{}'. Pivot strategy or conclude task without this tool.", rejected_tool))),
+                                        format!("[OPERATOR REJECTION] Tool '{}' was rejected by operator oversight.", rejected_tool),
+                                        None,
+                                    );
+                                }
+                            } else if rep_count >= 5 {
                                 tracing::error!(
                                     "🚨 [Loop Guard] Tool loop blocked: '{}' executed {} times with identical parameters for agent {}",
                                     fc.name,
@@ -563,17 +618,13 @@ impl AgentRunner {
                                     format!("[TOOL_ERROR] RecursionBlocked: {}", err_msg),
                                     None,
                                 );
-                            }
-
-                            let warning_prefix = if rep_count >= 3 {
-                                format!(
+                            } else if rep_count > 3 {
+                                warning_prefix = format!(
                                     "[TOOL_WARNING] You have called '{}' {} times with identical parameters. Ensure forward progress or adjust strategy.\n",
                                     fc.name,
                                     rep_count
-                                )
-                            } else {
-                                String::new()
-                            };
+                                );
+                            }
 
                             // 🎯 [SharedToolCache / get_tool_result] Only cache strictly idempotent read-only tools with mtime invalidation
                             let is_cacheable = crate::agent::runner::tools::cache::SharedToolCache::is_cacheable(&fc.name);

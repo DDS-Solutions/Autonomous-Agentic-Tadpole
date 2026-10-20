@@ -18,6 +18,8 @@ import { use_agent_store, use_agent_registry_store } from '../stores/agent_store
 import { event_bus } from '../services/event_bus';
 import { Tooltip } from '../components/ui';
 import { Confirm_Dialog } from '../components/ui/Confirm_Dialog';
+import { Cron_Config_Mini_Panel } from '../components/jobs/Cron_Config_Mini_Panel';
+import { describe_cron } from '../utils/cron_builder';
 import { i18n } from '../i18n';
 import { get_safe_date } from '../utils/date_utils';
 
@@ -70,7 +72,7 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
     set_editing_job_id,
     handle_job_submit
 }) => {
-    const handle_input_change = useCallback((key: keyof job_config_state, value: string | number | boolean | string[]) => {
+    const handle_input_change = useCallback((key: keyof job_config_state, value: string | number | boolean | string[] | null) => {
         set_job_config(prev => ({ ...prev, [key]: value }));
     }, [set_job_config]);
 
@@ -82,13 +84,20 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                 </h2>
                 <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
                     <button
-                        onClick={() => { set_job_type('agent'); set_target_search(''); }}
+                        onClick={() => { 
+                            set_job_type('agent'); 
+                            set_target_search('');
+                            set_job_config(prev => ({ ...prev, workflow_id: null }));
+                        }}
                         className={`px-3 py-1 text-[10px] font-bold rounded ${job_type === 'agent' ? 'bg-green-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                     >
                         {i18n.t('scheduled_jobs.single_agent')}
                     </button>
                     <button
-                        onClick={() => { set_job_type('workflow'); set_target_search(''); }}
+                        onClick={() => { 
+                            set_job_type('workflow'); 
+                            set_target_search('');
+                        }}
                         className={`px-3 py-1 text-[10px] font-bold rounded ${job_type === 'workflow' ? 'bg-green-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                     >
                         {i18n.t('scheduled_jobs.multi_step_workflow')}
@@ -99,12 +108,12 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                 {/* Job Name */}
                 <div>
                     <Tooltip content={i18n.t('scheduled_jobs.job_name_tooltip')} position="top">
-                        <label htmlFor="job_name" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.job_name')}</label>
+                        <label htmlFor="job_name" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.job_name')}</label>
                     </Tooltip>
                     <input 
                         id="job_name" required 
                         type="text" 
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm" 
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                         value={current_job_config.name} 
                         onChange={e => handle_input_change('name', e.target.value)} 
                         placeholder={i18n.t('scheduled_jobs.job_name_placeholder')} 
@@ -117,24 +126,24 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                         {job_type === 'agent' ? (
                             <>
                                 <Tooltip content={i18n.t('scheduled_jobs.target_agent_tooltip')} position="top">
-                                    <label htmlFor="target_agent" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.target_agent')}</label>
+                                    <label htmlFor="target_agent" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.target_agent')}</label>
                                 </Tooltip>
                                 <div className="space-y-2">
                                     <input 
                                         type="text" 
                                         placeholder={i18n.t('scheduled_jobs.filter_agents')} 
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-1.5 text-[10px] font-mono focus:border-green-500/50 outline-none"
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                                         value={target_search}
                                         onChange={e => set_target_search(e.target.value)}
                                     />
                                     <select 
                                         id="target_agent" 
                                         required 
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm" 
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                                         value={current_job_config.agent_id || ''} 
                                         onChange={e => {
                                             handle_input_change('agent_id', e.target.value);
-                                            handle_input_change('workflow_id', '');
+                                            handle_input_change('workflow_id', null);
                                         }}
                                     >
                                         <option value="">{i18n.t('scheduled_jobs.select_agent')}</option>
@@ -145,24 +154,23 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                         ) : (
                             <>
                                 <Tooltip content={i18n.t('scheduled_jobs.target_workflow_tooltip')} position="top">
-                                    <label htmlFor="target_workflow" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.target_workflow')}</label>
+                                    <label htmlFor="target_workflow" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.target_workflow')}</label>
                                 </Tooltip>
                                 <div className="space-y-2">
                                     <input 
                                         type="text" 
                                         placeholder={i18n.t('scheduled_jobs.filter_workflows')} 
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-1.5 text-[10px] font-mono focus:border-green-500/50 outline-none"
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                                         value={target_search}
                                         onChange={(e) => set_target_search(e.target.value)}
                                     />
                                     <select 
                                         id="target_workflow" 
                                         required 
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm" 
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                                         value={current_job_config.workflow_id || ''} 
                                         onChange={e => {
-                                            handle_input_change('workflow_id', e.target.value);
-                                            handle_input_change('agent_id', '');
+                                            handle_input_change('workflow_id', e.target.value || null);
                                         }}
                                     >
                                         <option value="">{i18n.t('scheduled_jobs.select_workflow')}</option>
@@ -170,10 +178,13 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                                             {filtered_workflows.filter(w => w.type === 'continuity').map(w => (
                                                 <option key={w.id} value={w.id} className="text-zinc-300 bg-zinc-950">{w.name}</option>
                                             ))}
+                                            {filtered_workflows.filter(w => w.type === 'continuity').length === 0 && (
+                                                <option value="" disabled className="text-zinc-600 bg-zinc-950">No executable continuity workflows found</option>
+                                            )}
                                         </optgroup>
                                         <optgroup label={i18n.t('scheduled_jobs.guiding_protocols')} className="bg-zinc-900 text-amber-400 font-mono text-[10px]">
                                             {filtered_workflows.filter(w => w.type === 'passive').map(w => (
-                                                <option key={w.id} value={w.id} className="text-zinc-300 bg-zinc-950">{w.name}</option>
+                                                <option key={w.id} value={w.id} disabled className="text-zinc-600 bg-zinc-950">{w.name} (Guidance Only)</option>
                                             ))}
                                         </optgroup>
                                     </select>
@@ -181,34 +192,49 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                             </>
                         )}
                     </div>
+
+                    {/* Schedule Helper Mini-Panel (Right Column) */}
+                    <div className="min-w-0">
+                        <Cron_Config_Mini_Panel 
+                            current_cron={current_job_config.cron_expr}
+                            on_cron_change={(new_cron) => handle_input_change('cron_expr', new_cron)}
+                        />
+                    </div>
                 </div>
 
                 {/* Cron Expression */}
                 <div>
                     <Tooltip content={i18n.t('scheduled_jobs.cron_tooltip')} position="top">
-                        <label htmlFor="cron_expr" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.cron_expression')}</label>
+                        <label htmlFor="cron_expr" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.cron_expression')}</label>
                     </Tooltip>
                     <input 
                         id="cron_expr" required 
                         type="text" 
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm font-mono" 
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                         value={current_job_config.cron_expr} 
                         onChange={e => handle_input_change('cron_expr', e.target.value)} 
                         placeholder={i18n.t('scheduled_jobs.cron_placeholder')} 
                     />
+                    {/* Live Human-Readable Schedule Preview */}
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-400 font-mono">
+                        <Clock size={12} className="text-green-500 shrink-0" />
+                        <span className="text-[11px] text-zinc-400">
+                            {i18n.t('scheduled_jobs.estimated_schedule')}: <strong className="text-green-400 font-semibold">{describe_cron(current_job_config.cron_expr)}</strong>
+                        </span>
+                    </div>
                 </div>
                 
                 {/* Mission Prompt (if Agent job) */}
                 {job_type === 'agent' && (
                     <div>
                         <Tooltip content={i18n.t('scheduled_jobs.mission_prompt_tooltip')} position="top">
-                            <label htmlFor="mission_prompt" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.mission_prompt')}</label>
+                            <label htmlFor="mission_prompt" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.mission_prompt')}</label>
                         </Tooltip>
                         <textarea 
                             id="mission_prompt" 
                             required 
                             rows={3} 
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm resize-none custom-scrollbar" 
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all resize-none custom-scrollbar" 
                             value={current_job_config.prompt} 
                             onChange={e => handle_input_change('prompt', e.target.value)} 
                             placeholder={i18n.t('scheduled_jobs.mission_prompt_placeholder')} 
@@ -220,24 +246,24 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Tooltip content={i18n.t('scheduled_jobs.budget_cap_tooltip')} position="top">
-                            <label htmlFor="budget_usd" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.budget_cap')}</label>
+                            <label htmlFor="budget_usd" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.budget_cap')}</label>
                         </Tooltip>
                         <input 
                             id="budget_usd" 
                             type="number" step="0.01" 
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm" 
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                             value={current_job_config.budget_usd} 
                             onChange={e => handle_input_change('budget_usd', parseFloat(e.target.value) || 0)} 
                         />
                     </div>
                     <div>
                         <Tooltip content={i18n.t('scheduled_jobs.max_failures_tooltip')} position="top">
-                            <label htmlFor="max_failures" className="block text-xs font-mono text-zinc-500 mb-1 cursor-help">{i18n.t('scheduled_jobs.max_failures_label')}</label>
+                            <label htmlFor="max_failures" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.max_failures_label')}</label>
                         </Tooltip>
                         <input 
                             id="max_failures" 
                             type="number" 
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm" 
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all" 
                             value={current_job_config.max_failures} 
                             onChange={e => handle_input_change('max_failures', parseInt(e.target.value, 10) || 0)} 
                         />
@@ -246,13 +272,13 @@ const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                 
                 {/* Submission Buttons */}
                 <div className="flex gap-2 pt-2 border-t border-zinc-800">
-                    <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold shadow-lg shadow-emerald-500/20">
+                    <button type="submit" className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-bold text-white shadow-lg shadow-emerald-500/20 uppercase tracking-wider transition-all">
                         {editing_job_id ? i18n.t('scheduled_jobs.update_sync') : i18n.t('scheduled_jobs.save_job')}
                     </button>
                     <button type="button" onClick={() => {
                         set_creating(false);
                         set_editing_job_id(null);
-                    }} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-300">
+                    }} className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-bold text-zinc-300 uppercase tracking-wider transition-all">
                         {i18n.t('common.btn_cancel')}
                     </button>
                 </div>
@@ -489,18 +515,27 @@ const Scheduled_Jobs: React.FC = () => {
     const handle_job_submit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const sanitized_config: job_config_state = {
+                ...job_config,
+                name: job_config.name.trim(),
+                cron_expr: job_config.cron_expr.trim(),
+                workflow_id: job_type === 'workflow' ? (job_config.workflow_id?.trim() || null) : null,
+                agent_id: job_type === 'agent' ? job_config.agent_id.trim() : (job_config.agent_id?.trim() || (agents[0]?.id || '')),
+                prompt: job_type === 'agent' ? job_config.prompt.trim() : (job_config.prompt?.trim() || '')
+            };
+
             if (editing_job_id) {
-                await tadpole_os_service.update_scheduled_job(editing_job_id, job_config);
+                await tadpole_os_service.update_scheduled_job(editing_job_id, sanitized_config);
                 event_bus.emit_log({
                     source: 'System',
-                    text: i18n.t('scheduled_jobs.event_updated', { name: job_config.name }),
+                    text: i18n.t('scheduled_jobs.event_updated', { name: sanitized_config.name }),
                     severity: 'success'
                 });
             } else {
-                await tadpole_os_service.create_scheduled_job(job_config);
+                await tadpole_os_service.create_scheduled_job(sanitized_config);
                 event_bus.emit_log({
                     source: 'System',
-                    text: i18n.t('scheduled_jobs.event_created', { name: job_config.name }),
+                    text: i18n.t('scheduled_jobs.event_created', { name: sanitized_config.name }),
                     severity: 'success'
                 });
             }
@@ -510,9 +545,10 @@ const Scheduled_Jobs: React.FC = () => {
             fetch_jobs();
         } catch (error: unknown) { 
             console.error('Failed to handle job:', error);
+            const err_msg = error instanceof Error ? error.message : i18n.t('common.unknown_error');
             event_bus.emit_log({
                 source: 'System',
-                text: i18n.t('scheduled_jobs.event_failed_action', { action: editing_job_id ? 'update' : 'create' }),
+                text: `${i18n.t('scheduled_jobs.event_failed_action', { action: editing_job_id ? 'update' : 'create' })}: ${err_msg}`,
                 severity: 'error'
             });
         }

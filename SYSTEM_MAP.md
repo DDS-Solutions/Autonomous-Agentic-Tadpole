@@ -73,6 +73,7 @@ This map reflects the current code layout and should be used as the first orient
 | Cyclic Loop Detection & Monologue Compactor | `server-rs/src/agent/runner/{loop_detector,monologue}.rs` | Period 1-4 cyclical tool loop detection and 2-stage monologue compaction (embedded log trimming + older turn summarization). |
 | SSRF Security Guard | `server-rs/src/security/ssrf_guard.rs` | Public IP and scheme validation, private/local CIDR rejection, and DNS pre-resolution IP pinning for outbound agent tool requests. |
 | Telemetry Span Watchdog | `server-rs/src/telemetry/span_watchdog.rs` | Background watchdog reaping leaked/orphaned telemetry spans with provider-aware TTLs (60s cloud, 300s local Ollama). |
+| Error Sentinel & Remediation Engine | `server-rs/src/error/classify.rs`, `src/hooks/useErrorRemediation.ts`, `directives/error_sentinel_triage.md` | RFC 9457 ProblemDetails remediation metadata, QA-99 mid-flight error triage, and 1-click guided oversight approval. |
 | Mission Bench Rig | `tests/mission_bench/` | 5-scenario blind-judge benchmark harness (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) asserting system invariants. |
 | Structured Message Pipeline | `server-rs/src/agent/types.rs`, `server-rs/src/agent/runner/provider.rs` | Strongly typed `ChatMessage` protocol with native Anthropic/Gemini ephemeral prompt caching. |
 | Ground Truth Evaluation | `evals/tasks.json`, `evals/run.py` | 20-task ground truth architectural evaluation benchmark suite (`npm run test:evals`). |

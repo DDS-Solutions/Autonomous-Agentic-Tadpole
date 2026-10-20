@@ -344,9 +344,17 @@ pub async fn decide_oversight(
 
     if let Some(entry) = removed_entry {
         // 2. Update audit trail & Persistent Log (Synchronous)
+        let sanitized_answer = payload.answer.as_ref().map(|ans| crate::utils::security::redact_secrets(ans.trim()));
+        if let Some(ref ans) = sanitized_answer {
+            if !ans.is_empty() {
+                state.comms.oversight_answers.insert(entry.id.clone(), ans.clone());
+            }
+        }
+
         let params = serde_json::to_string(&json!({
             "entry_id": entry.id,
-            "approved": approved
+            "approved": approved,
+            "answer": sanitized_answer
         }))
         .unwrap_or_default();
         
@@ -383,10 +391,15 @@ pub async fn decide_oversight(
 
         // 4. Log the decision in system broadcasts
         let decision_label = if approved { "APPROVED" } else { "REJECTED" };
+        let guidance_notice = if sanitized_answer.as_ref().is_some_and(|a| !a.is_empty()) {
+            " (with operator guidance)"
+        } else {
+            ""
+        };
         state.broadcast_sys(
             &format!(
-                "⚖️ Oversight: Decision for {} recorded as {}.",
-                entry.id, decision_label
+                "⚖️ Oversight: Decision for {} recorded as {}{}.",
+                entry.id, decision_label, guidance_notice
             ),
             if approved { "success" } else { "warning" },
             entry.mission_id.clone(),
@@ -397,12 +410,13 @@ pub async fn decide_oversight(
             "type": "oversight:decision",
             "data": {
                 "id": entry_id,
-                "decision": payload.decision
+                "decision": payload.decision,
+                "answer": sanitized_answer
             }
         }));
 
         Ok(Json(
-            json!({ "status": "ok", "decision": payload.decision }),
+            json!({ "status": "ok", "decision": payload.decision, "answer": sanitized_answer }),
         ))
     } else {
         Err(AppError::NotFound(

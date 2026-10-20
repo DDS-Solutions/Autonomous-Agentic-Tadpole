@@ -73,6 +73,8 @@ pub struct ProblemDetails {
     pub error_code: Option<String>,
     pub help_link: Option<String>,
     pub severity: String, // CRITICAL, ERROR, WARNING
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remediation: Option<String>,
 }
 
 impl ProblemDetails {
@@ -103,6 +105,7 @@ impl ProblemDetails {
                 error_code: Some(slug.to_uppercase()),
                 help_link: None,
                 severity: severity.to_string(),
+                remediation: None,
             }),
         )
     }
@@ -415,6 +418,7 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        let remediation = self.remediation_hint().to_string();
         let metadata = self.resolve_metadata();
         let status = metadata.status_code;
         let slug = metadata.type_slug;
@@ -436,6 +440,7 @@ impl IntoResponse for AppError {
             error_code: metadata.error_code,
             help_link: metadata.help_link,
             severity: metadata.severity.to_string(),
+            remediation: Some(remediation),
         });
 
         let mut res = (status, body).into_response();
@@ -601,6 +606,19 @@ mod tests {
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         // We can't easily extract the body here, but the IntoResponse impl does the masking
+    }
+
+    #[test]
+    fn test_app_error_remediation_hint() {
+        let err = AppError::RateLimit("exceeded".to_string());
+        let hint = err.remediation_hint();
+        assert!(hint.contains("Rate limit exceeded"));
+
+        let err_auth = AppError::Unauthorized("invalid token".to_string());
+        assert!(err_auth.remediation_hint().contains("NEURAL_TOKEN"));
+
+        let err_bad = AppError::BadRequest("missing field".to_string());
+        assert!(err_bad.remediation_hint().contains("Invalid request parameters"));
     }
 
     #[tokio::test]
