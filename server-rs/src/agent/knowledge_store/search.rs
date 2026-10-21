@@ -23,13 +23,15 @@ impl KnowledgeStore {
     ///
     /// When `vector-memory` feature is disabled, falls back to SQLite-only
     /// confidence/topic filtering (no semantic ranking).
+    pub const MAX_KNOWLEDGE_SEARCH_LIMIT: usize = 200;
+
     pub async fn search(
         &self,
         req: &KnowledgeSearchRequest,
         http_client: reqwest::Client,
     ) -> Result<Vec<KnowledgeEntry>, AppError> {
-        let limit = req.limit.unwrap_or(10) as i64;
-        let min_confidence = req.min_confidence.unwrap_or(0.3) as f64;
+        let limit = req.limit.unwrap_or(10).clamp(1, Self::MAX_KNOWLEDGE_SEARCH_LIMIT) as i64;
+        let min_confidence = (req.min_confidence.unwrap_or(0.3) as f64).clamp(0.0, 1.0);
 
         // ── Vector path (LanceDB with native filter) ───────────────────────
         #[cfg(feature = "vector-memory")]
@@ -166,6 +168,12 @@ impl KnowledgeStore {
         #[cfg(not(feature = "vector-memory"))]
         {
             let _ = http_client;
+            let query_pattern = if req.query.trim().is_empty() {
+                None
+            } else {
+                Some(format!("%{}%", req.query.trim()))
+            };
+
             let candidate_rows = sqlx::query(
                 r#"SELECT id, text, content_hash, topic, cluster_id, source_node_id,
                           source_agent_id, confidence, ttl, human_confirmed,
@@ -176,6 +184,7 @@ impl KnowledgeStore {
                    WHERE (? IS NULL OR topic = ?)
                      AND (? IS NULL OR cluster_id = ? OR cluster_id IS NULL)
                      AND (? IS NULL OR concept_type = ?)
+                     AND (? IS NULL OR text LIKE ? OR title LIKE ? OR topic LIKE ?)
                      AND confidence >= ?
                      AND (ttl IS NULL OR ttl > unixepoch())
                    ORDER BY confidence DESC
@@ -187,6 +196,10 @@ impl KnowledgeStore {
             .bind(&req.cluster_id)
             .bind(&req.concept_type)
             .bind(&req.concept_type)
+            .bind(&query_pattern)
+            .bind(&query_pattern)
+            .bind(&query_pattern)
+            .bind(&query_pattern)
             .bind(min_confidence)
             .bind(limit)
             .fetch_all(&self.pool)

@@ -390,22 +390,26 @@ impl AgentRunner {
                     path_str,
                     resolved
                 );
-                final_path = crate::utils::security::SafePath::from_trusted(root.join(resolved));
+                if let Ok(safe_p) = crate::utils::security::validate_path(&root, resolved) {
+                    final_path = safe_p;
+                }
             }
         }
 
         // 🧩 Deep Resolution: If it's just a filename, try to find it in the src/ directory.
         if tokio::fs::metadata(&final_path).await.is_err()
-            && !path_str.contains("/")
-            && !path_str.contains("\\")
+            && !path_str.contains('/')
+            && !path_str.contains('\\')
         {
             let common_dirs = ["src", "src/agent", "server-rs/src", "server-rs/src/agent"];
             for dir in common_dirs {
-                let alt_path = root.join(dir).join(path_str);
-                if tokio::fs::metadata(&alt_path).await.is_ok() {
-                    tracing::info!("🧩 [Context] Resolved ambiguous codebase path '{}' to '{:?}' via common-dirs", path_str, alt_path);
-                    final_path = crate::utils::security::SafePath::from_trusted(alt_path);
-                    break;
+                let candidate_rel = format!("{}/{}", dir, path_str);
+                if let Ok(safe_p) = crate::utils::security::validate_path(&root, &candidate_rel) {
+                    if tokio::fs::metadata(&safe_p).await.is_ok() {
+                        tracing::info!("🧩 [Context] Resolved ambiguous codebase path '{}' to '{:?}' via common-dirs", path_str, safe_p);
+                        final_path = safe_p;
+                        break;
+                    }
                 }
             }
         }

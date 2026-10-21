@@ -70,6 +70,9 @@ impl FileDiscoverer for FileDiscoveryService {
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
+                if name.starts_with("target") {
+                    return false;
+                }
                 !exclusions.iter().any(|ex| name == *ex)
             })
         {

@@ -24,9 +24,9 @@ $backupFile = Join-Path $BackupDir "tadpole_$timestamp.db"
 
 # Execute SQLite backup via python sqlite3 standard library (no external binary required)
 $pyScript = @"
-import sqlite3
-source = sqlite3.connect('$($DbPath -replace '\\', '/')')
-dest = sqlite3.connect('$($backupFile -replace '\\', '/')')
+import sys, sqlite3
+source = sqlite3.connect(sys.argv[1])
+dest = sqlite3.connect(sys.argv[2])
 with dest:
     source.backup(dest)
 dest.close()
@@ -34,7 +34,7 @@ source.close()
 print('OK')
 "@
 
-$result = python -c $pyScript
+$result = python -c $pyScript "$DbPath" "$backupFile"
 if ($LASTEXITCODE -eq 0 -and (Test-Path $backupFile)) {
     $size = (Get-Item $backupFile).Length
     Write-Host "[BACKUP] Created: $backupFile ($([math]::Round($size / 1KB, 2)) KB)"

@@ -38,6 +38,8 @@ impl SharedToolCache {
         }
     }
 
+    pub const MAX_CACHE_ENTRIES: usize = 1000;
+
     /// Determines if a tool name is strictly idempotent and safe for replay caching.
     /// Commands, test suites, mission completion, and filesystem mutations are strictly excluded.
     pub fn is_cacheable(tool_name: &str) -> bool {
@@ -46,7 +48,6 @@ impl SharedToolCache {
             "read_file"
                 | "list_files"
                 | "list_file_symbols"
-                | "search_mission_knowledge"
                 | "fetch_status"
         )
     }
@@ -113,6 +114,10 @@ impl SharedToolCache {
                 mtime = metadata.modified().ok();
                 size = metadata.len();
             }
+        }
+
+        if self.cache.len() >= Self::MAX_CACHE_ENTRIES {
+            self.cache.clear();
         }
 
         self.cache.insert(

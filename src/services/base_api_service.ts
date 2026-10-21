@@ -305,6 +305,13 @@ export async function api_request<T = unknown>(
 
         return result as T;
     } catch (err) {
+        use_trace_store.getState().update_span(context.span_id, {
+            end_time: Date.now(),
+            status: 'error',
+            attributes: {
+                error: err instanceof Error ? err.message : String(err)
+            }
+        });
         throw err;
     }
 }

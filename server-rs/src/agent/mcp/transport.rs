@@ -162,18 +162,12 @@ pub async fn mcp_message_handler(
 
             let snapshot = state.registry.skills.snapshot();
             
-            let tool_ctx = crate::agent::types::ToolContext {
-                mission_id: "mcp-bridge".to_string(),
-                agent_id: "mcp-client".to_string(),
-                workspace_root: workspace_root.clone(),
-                fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.clone()),
-                state: state.clone(),
-                trace_id: uuid::Uuid::new_v4().to_string(),
-                budget_usd: 0.0,
-                budget_limit_usd: 10.0,
-                security_policy: serde_json::json!({}),
-                active_node_id: None,
-            };
+            let tool_ctx = crate::agent::types::ToolContext::ephemeral(
+                state.clone(),
+                workspace_root.clone(),
+                "mcp-bridge".to_string(),
+                "mcp-client".to_string(),
+            );
 
             match state.registry.mcp_host.call_tool(tool_name, arguments, &tool_ctx, &snapshot.skills).await {
                 Ok(McpResult::Raw(output)) => {

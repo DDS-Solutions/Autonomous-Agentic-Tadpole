@@ -24,6 +24,7 @@ pub struct SafePath(PathBuf);
 
 impl SafePath {
     /// Internal: Creates a SafePath from a trusted source.
+    #[allow(dead_code)]
     pub(crate) fn from_trusted(p: PathBuf) -> Self {
         Self(p)
     }
@@ -433,6 +434,18 @@ mod tests {
         assert!(!redacted.contains("AIzaSyA"));
         assert!(!redacted.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"));
         assert!(!redacted.contains("sovereign_secret_token_12345"));
+    }
+
+    #[test]
+    fn test_validate_path_traversal_protection() {
+        let base = std::env::current_dir().unwrap();
+        // Path traversal attempts must be rejected
+        assert!(validate_path(&base, "../outside.txt").is_err());
+        assert!(validate_path(&base, "../../etc/passwd").is_err());
+        assert!(validate_path(&base, "subdir/../../outside.txt").is_err());
+
+        // Normal within-base path should succeed
+        assert!(validate_path(&base, "Cargo.toml").is_ok());
     }
 }
 

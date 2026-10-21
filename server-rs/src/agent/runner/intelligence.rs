@@ -638,15 +638,25 @@ impl AgentRunner {
 
                             let result = if let Some((cached_output, cached_usage)) = cached {
                                 tracing::info!("🎯 [SharedToolCache Hit] Bypassing execution for idempotent tool '{}'", fc.name);
+                                let _ = runner.state.record_audit(
+                                    &ctx_clone.agent_id,
+                                    Some(&ctx_clone.mission_id),
+                                    ctx_clone.user_id.as_deref(),
+                                    &format!("[CACHE_HIT] {}", fc.name),
+                                    &runner.state.security.secret_redactor.redact(&args_str),
+                                ).await;
                                 local_text = cached_output.clone();
                                 if let Some(u) = cached_usage {
                                     local_usage = Some(u);
                                 }
                                 Ok(Some(cached_output))
                             } else {
-                                // Path extraction for cache invalidation & leasing
+                                // Path extraction for cache invalidation & leasing (supporting all file argument aliases)
                                 let target_path_opt = fc.args.get("path")
                                     .or_else(|| fc.args.get("file_path"))
+                                    .or_else(|| fc.args.get("filename"))
+                                    .or_else(|| fc.args.get("file_name"))
+                                    .or_else(|| fc.args.get("file"))
                                     .and_then(|v| v.as_str())
                                     .map(|p| {
                                         let pb = std::path::PathBuf::from(p);
@@ -654,7 +664,7 @@ impl AgentRunner {
                                     });
 
                                 // Invalidate cache on mutations
-                                if matches!(fc.name.as_str(), "write_file" | "write_to_file" | "patch_file" | "replace_file_content" | "edit_file" | "create_file") {
+                                if matches!(fc.name.as_str(), "write_file" | "write_to_file" | "patch_file" | "replace_file_content" | "edit_file" | "create_file" | "delete_file") {
                                     if let Some(ref path) = target_path_opt {
                                         runner.state.resources.tool_cache.lock().invalidate_path(path);
                                     }

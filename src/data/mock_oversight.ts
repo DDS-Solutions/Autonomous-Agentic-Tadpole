@@ -29,6 +29,8 @@ export interface OversightEntry extends Partial<Omit<ToolCall, 'id'>> {
     decided_by?: string;
     decided_at?: string;
     created_at: string;
+    error_code?: string;
+    help_link?: string;
 }
 
 export interface LedgerEntry extends Partial<Omit<ToolCall, 'id'>> {

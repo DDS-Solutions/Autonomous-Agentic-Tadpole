@@ -57,20 +57,37 @@
 
   --spacing-sidebar: 260px;
 
-  --font-size-xs: 0.875rem;
-  --font-size-xs--line-height: 1.25rem;
-  --font-size-sm: 1rem;
-  --font-size-sm--line-height: 1.5rem;
-  --font-size-base: 1.125rem;
-  --font-size-base--line-height: 1.75rem;
-  --font-size-lg: 1.25rem;
-  --font-size-lg--line-height: 1.75rem;
-  --font-size-xl: 1.5rem;
-  --font-size-xl--line-height: 2rem;
-  --font-size-2xl: 1.875rem;
-  --font-size-2xl--line-height: 2.25rem;
-  --font-size-3xl: 2.25rem;
-  --font-size-3xl--line-height: 2.5rem;
+  /* Tailwind v4 Typography Scale Tokens */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.75rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: 2.5rem;
+
+  /* Backwards-compatible legacy font-size variables */
+  --font-size-xs: var(--text-xs);
+  --font-size-xs--line-height: var(--text-xs--line-height);
+  --font-size-sm: var(--text-sm);
+  --font-size-sm--line-height: var(--text-sm--line-height);
+  --font-size-base: var(--text-base);
+  --font-size-base--line-height: var(--text-base--line-height);
+  --font-size-lg: var(--text-lg);
+  --font-size-lg--line-height: var(--text-lg--line-height);
+  --font-size-xl: var(--text-xl);
+  --font-size-xl--line-height: var(--text-xl--line-height);
+  --font-size-2xl: var(--text-2xl);
+  --font-size-2xl--line-height: var(--text-2xl--line-height);
+  --font-size-3xl: var(--text-3xl);
+  --font-size-3xl--line-height: var(--text-3xl--line-height);
 }
 
 @layer base {

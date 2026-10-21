@@ -154,7 +154,7 @@ impl Supervisor {
                 let now = Instant::now();
 
                 // 2. Spawn the task and capture its AbortHandle for deterministic hard aborts
-                let join_handle = tokio::spawn(fut);
+                let mut join_handle = tokio::spawn(fut);
                 let abort_handle = join_handle.abort_handle();
 
                 {
@@ -164,32 +164,34 @@ impl Supervisor {
                     guard.is_alive = true;
                 }
 
-                // 3. Monitor for task completion OR OneForAll cascading restart signal
-                let termination_reason: Result<Result<(), tokio::task::JoinError>, String> = tokio::select! {
-                    res = join_handle => Ok(res),
-                    cascade_sender = restart_all_rx.recv() => {
-                        match cascade_sender {
-                            Ok(origin) => {
-                                if origin != name_str {
-                                    // Sibling triggered OneForAll restart: abort active task immediately
-                                    let mut guard = child_state.write();
-                                    if let Some(ref handle) = guard.current_handle {
-                                        handle.abort();
+                // 3. Monitor for task completion OR OneForAll cascading restart signal in inner loop
+                let termination_reason: Result<Result<(), tokio::task::JoinError>, String> = loop {
+                    tokio::select! {
+                        res = &mut join_handle => break Ok(res),
+                        cascade_sender = restart_all_rx.recv() => {
+                            match cascade_sender {
+                                Ok(origin) => {
+                                    if origin != name_str {
+                                        // Sibling triggered OneForAll restart: abort active task immediately
+                                        let mut guard = child_state.write();
+                                        if let Some(ref handle) = guard.current_handle {
+                                            handle.abort();
+                                        }
+                                        guard.is_alive = false;
+                                        break Err(format!("Cascading OneForAll restart triggered by sibling '{}'", origin));
+                                    } else {
+                                        // Originating actor already exited, continue waiting on join_handle
+                                        continue;
                                     }
-                                    guard.is_alive = false;
-                                    Err(format!("Cascading OneForAll restart triggered by sibling '{}'", origin))
-                                } else {
-                                    // Originating actor already exited, wait on join_handle
+                                }
+                                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                                    warn!("⚠️ [Supervisor:{}] Cascade receiver lagged, skipped {} messages for child '{}'", supervisor_name, skipped, name_str);
                                     continue;
                                 }
-                            }
-                            Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                                warn!("⚠️ [Supervisor:{}] Cascade receiver lagged, skipped {} messages for child '{}'", supervisor_name, skipped, name_str);
-                                continue;
-                            }
-                            Err(broadcast::error::RecvError::Closed) => {
-                                // Broadcast channel closed during shutdown
-                                break;
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    // Broadcast channel closed during shutdown
+                                    break Err("Cascade channel closed".to_string());
+                                }
                             }
                         }
                     }

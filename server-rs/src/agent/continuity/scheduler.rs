@@ -69,20 +69,21 @@ pub async fn create_job(pool: &SqlitePool, req: CreateJobRequest) -> Result<Sche
         .ok_or_else(|| AppError::InternalServerError("Failed to retrieve newly created job".to_string()))
 }
 
-/// Updates fields on a scheduled job.
+/// Updates fields on a scheduled job atomically in a transaction.
 pub async fn update_job(
     pool: &SqlitePool,
     job_id: &str,
     req: UpdateJobRequest,
 ) -> Result<ScheduledJob, AppError> {
     let now = Utc::now();
+    let mut tx = pool.begin().await?;
 
     if let Some(ref cron_expr) = req.cron_expr {
         let next_run = compute_next_run(cron_expr, &now)?;
         sqlx::query("UPDATE scheduled_jobs SET next_run_at = ?1 WHERE id = ?2")
             .bind(next_run)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
 
@@ -90,35 +91,35 @@ pub async fn update_job(
         sqlx::query("UPDATE scheduled_jobs SET name = ?1 WHERE id = ?2")
             .bind(name)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(prompt) = &req.prompt {
         sqlx::query("UPDATE scheduled_jobs SET prompt = ?1 WHERE id = ?2")
             .bind(prompt)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(cron_expr) = &req.cron_expr {
         sqlx::query("UPDATE scheduled_jobs SET cron_expr = ?1 WHERE id = ?2")
             .bind(cron_expr)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(budget) = req.budget_usd {
         sqlx::query("UPDATE scheduled_jobs SET budget_usd = ?1 WHERE id = ?2")
             .bind(budget)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(enabled) = req.enabled {
         sqlx::query("UPDATE scheduled_jobs SET enabled = ?1 WHERE id = ?2")
             .bind(enabled as i64)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(workflow_id) = &req.workflow_id {
@@ -130,20 +131,29 @@ pub async fn update_job(
         sqlx::query("UPDATE scheduled_jobs SET workflow_id = ?1 WHERE id = ?2")
             .bind(normalized)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(max_f) = req.max_failures {
         sqlx::query("UPDATE scheduled_jobs SET max_failures = ?1 WHERE id = ?2")
             .bind(max_f)
             .bind(job_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
 
-    get_job_by_id(pool, job_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Job not found: {}", job_id)))
+    let row = sqlx::query("SELECT * FROM scheduled_jobs WHERE id = ?1")
+        .bind(job_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+    let job = row
+        .map(|r| row_to_job(&r))
+        .ok_or_else(|| AppError::NotFound(format!("Job not found: {}", job_id)))?;
+
+    tx.commit().await?;
+
+    Ok(job)
 }
 
 /// Deletes a scheduled job and all its historical run logs.

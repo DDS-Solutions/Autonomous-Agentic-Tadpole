@@ -49,11 +49,11 @@ impl FilesystemAdapter {
     async fn get_safe_path(&self, requested_path: &str) -> Result<PathBuf> {
         // Platform-agnostic path normalization (slash standardization and drive strip)
         let mut cleaned = requested_path.replace('\\', "/");
-        if cleaned.len() >= 2 {
-            let first_char = cleaned.chars().next().unwrap();
-            let second_char = cleaned.chars().nth(1).unwrap();
+        let mut chars = cleaned.chars();
+        if let (Some(first_char), Some(second_char)) = (chars.next(), chars.next()) {
             if first_char.is_ascii_alphabetic() && second_char == ':' {
-                cleaned = cleaned[2..].to_string();
+                let prefix_len = first_char.len_utf8() + second_char.len_utf8();
+                cleaned = cleaned[prefix_len..].to_string();
             }
         }
         let cleaned = cleaned.trim_start_matches('/');

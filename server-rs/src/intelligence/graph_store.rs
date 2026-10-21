@@ -382,9 +382,12 @@ fn scan_files(root: &Path, salt: &str) -> Result<Vec<FileRecord>, AppError> {
         .into_iter()
         .filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
+            if name.starts_with("target") {
+                return false;
+            }
             !matches!(
                 name.as_ref(),
-                "target" | "node_modules" | ".git" | "dist" | "scratch"
+                "node_modules" | ".git" | "dist" | "scratch" | "3rdparty" | ".tmp" | "tmp" | "workspaces" | ".agent"
             )
         })
         .filter_map(|e| e.ok())

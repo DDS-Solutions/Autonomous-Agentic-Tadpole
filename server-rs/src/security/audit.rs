@@ -350,15 +350,22 @@ impl MerkleAuditTrail {
             return false;
         }
 
-        // Verify digital signature if applicable
-        if let (Some(pk), Some(sig_hex)) = (self.verifying_key, &entry.signature) {
-            if let Ok(sig_bytes) = hex::decode(sig_hex) {
-                if let Ok(sig_arr) = sig_bytes.try_into() {
-                    let signature = Signature::from_bytes(&sig_arr);
-                    return pk.verify(entry.current_hash.as_bytes(), &signature).is_ok();
+        // Verify digital signature if applicable (fail closed if signed mode active)
+        if let Some(ref pk) = self.verifying_key {
+            match entry.signature.as_deref() {
+                Some(sig_hex) => {
+                    if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                        if let Ok(sig_arr) = sig_bytes.try_into() {
+                            let signature = Signature::from_bytes(&sig_arr);
+                            return pk.verify(entry.current_hash.as_bytes(), &signature).is_ok();
+                        }
+                    }
+                    return false;
+                }
+                None => {
+                    return false;
                 }
             }
-            return false;
         }
 
         true
@@ -413,19 +420,26 @@ impl MerkleAuditTrail {
                 return Ok((verified, total)); // Tampered entry
             }
 
-            // Verify digital signature if applicable
-            if let (Some(pk), Some(sig_hex)) = (public_key, &entry.signature) {
-                let sig_bytes = hex::decode(sig_hex)?;
-                let signature = Signature::from_bytes(
-                    &sig_bytes
-                        .try_into()
-                        .map_err(|_| anyhow::anyhow!("Invalid signature"))?,
-                );
-                if pk
-                    .verify(entry.current_hash.as_bytes(), &signature)
-                    .is_err()
-                {
-                    return Ok((verified, total)); // Tampered signature
+            // Verify digital signature if applicable (fail closed if signed mode active)
+            if let Some(ref pk) = public_key {
+                match entry.signature.as_deref() {
+                    Some(sig_hex) => {
+                        let sig_bytes = hex::decode(sig_hex)?;
+                        let signature = Signature::from_bytes(
+                            &sig_bytes
+                                .try_into()
+                                .map_err(|_| anyhow::anyhow!("Invalid signature"))?,
+                        );
+                        if pk
+                            .verify(entry.current_hash.as_bytes(), &signature)
+                            .is_err()
+                        {
+                            return Ok((verified, total)); // Tampered signature
+                        }
+                    }
+                    None => {
+                        return Ok((verified, total)); // Missing signature in signed verification mode
+                    }
                 }
             }
 
@@ -581,6 +595,45 @@ mod tests {
 
         // Verify single record
         assert!(audit.verify_record(&entry));
+    }
+
+    #[tokio::test]
+    async fn test_signature_stripped_fails_verification() {
+        let pool = setup_db().await;
+        let mut rng = rand::rng();
+        let mut key_bytes = [0u8; 32];
+        rng.fill(&mut key_bytes);
+        let signing_key = SigningKey::from_bytes(&key_bytes);
+        let verifying_key = signing_key.verifying_key();
+
+        let audit = MerkleAuditTrail {
+            pool,
+            signing_key: Some(signing_key),
+            verifying_key: Some(verifying_key),
+            last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
+        };
+
+        let entry = audit
+            .record("agent-1", None, None, "action", "{}")
+            .await
+            .unwrap();
+        assert!(entry.signature.is_some());
+
+        // Strip signature in the database
+        sqlx::query("UPDATE audit_trail SET signature = NULL WHERE id = ?")
+            .bind(&entry.id)
+            .execute(&audit.pool)
+            .await
+            .unwrap();
+
+        // Chain verification in signed mode must fail closed
+        assert!(!audit.verify_chain(None).await.unwrap());
+
+        // Single record verification with signature None must return false
+        let mut stripped_entry = entry.clone();
+        stripped_entry.signature = None;
+        assert!(!audit.verify_record(&stripped_entry));
     }
 }
 

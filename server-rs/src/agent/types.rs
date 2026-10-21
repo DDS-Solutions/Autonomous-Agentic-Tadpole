@@ -659,6 +659,43 @@ pub struct ToolContext {
     pub budget_limit_usd: f64,
     pub security_policy: serde_json::Value,
     pub active_node_id: Option<String>,
+    pub depth: u32,
+    pub lineage: Vec<String>,
+    pub safe_mode: bool,
+    pub primary_goal: Option<String>,
+    pub last_accessed_files: std::sync::Arc<parking_lot::Mutex<Vec<String>>>,
+    pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
+    pub accounting: std::sync::Arc<crate::agent::runner::accounting::MissionAccounting>,
+}
+
+impl ToolContext {
+    /// Creates an ephemeral ToolContext with default metrics and accounting.
+    pub fn ephemeral(
+        state: std::sync::Arc<crate::state::AppState>,
+        workspace_root: std::path::PathBuf,
+        mission_id: String,
+        agent_id: String,
+    ) -> Self {
+        Self {
+            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.clone()),
+            workspace_root,
+            mission_id,
+            agent_id,
+            state,
+            trace_id: uuid::Uuid::new_v4().to_string(),
+            budget_usd: 0.0,
+            budget_limit_usd: 10.0,
+            security_policy: serde_json::json!({}),
+            active_node_id: None,
+            depth: 0,
+            lineage: Vec::new(),
+            safe_mode: false,
+            primary_goal: None,
+            last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
+            metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::default()),
+            accounting: std::sync::Arc::new(crate::agent::runner::accounting::MissionAccounting::default()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

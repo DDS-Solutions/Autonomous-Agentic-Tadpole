@@ -102,18 +102,12 @@ mod tests {
         let workspace = std::path::PathBuf::from(".");
 
         let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
-        let tool_ctx = crate::agent::types::ToolContext {
-            mission_id: "test".to_string(),
-            agent_id: "test".to_string(),
-            workspace_root: workspace.clone(),
-            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
-            state: state.clone(),
-            trace_id: "test".to_string(),
-            budget_usd: 0.0,
-            budget_limit_usd: 10.0,
-            security_policy: serde_json::json!({}),
-            active_node_id: None,
-        };
+        let tool_ctx = crate::agent::types::ToolContext::ephemeral(
+            state.clone(),
+            workspace.clone(),
+            "test".to_string(),
+            "test".to_string(),
+        );
 
         let result = host
             .call_tool(
@@ -143,18 +137,12 @@ mod tests {
         let workspace = std::path::PathBuf::from(".");
 
         let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
-        let tool_ctx = crate::agent::types::ToolContext {
-            mission_id: "test".to_string(),
-            agent_id: "test".to_string(),
-            workspace_root: workspace.clone(),
-            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
-            state: state.clone(),
-            trace_id: "test".to_string(),
-            budget_usd: 0.0,
-            budget_limit_usd: 10.0,
-            security_policy: serde_json::json!({}),
-            active_node_id: None,
-        };
+        let tool_ctx = crate::agent::types::ToolContext::ephemeral(
+            state.clone(),
+            workspace.clone(),
+            "test".to_string(),
+            "test".to_string(),
+        );
 
         // Testing list_file_symbols
         let result = host
@@ -185,18 +173,12 @@ mod tests {
         let workspace = std::path::PathBuf::from(".");
 
         let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
-        let tool_ctx = crate::agent::types::ToolContext {
-            mission_id: "test".to_string(),
-            agent_id: "test".to_string(),
-            workspace_root: workspace.clone(),
-            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace.clone()),
-            state: state.clone(),
-            trace_id: "test".to_string(),
-            budget_usd: 0.0,
-            budget_limit_usd: 10.0,
-            security_policy: serde_json::json!({}),
-            active_node_id: None,
-        };
+        let tool_ctx = crate::agent::types::ToolContext::ephemeral(
+            state.clone(),
+            workspace.clone(),
+            "test".to_string(),
+            "test".to_string(),
+        );
 
         let result = host
             .call_tool("non_existent", json!({}), &tool_ctx, &all_skills)

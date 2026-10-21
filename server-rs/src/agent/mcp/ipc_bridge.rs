@@ -79,6 +79,7 @@ pub struct IpcBridge {
     pipe_path: PathBuf,
     workspace_root: PathBuf,
     tool_registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,
+    state: Option<Arc<crate::state::AppState>>,
     shutdown: Arc<Notify>,
 }
 
@@ -106,6 +107,7 @@ impl IpcBridge {
     pub fn new(
         workspace_root: &std::path::Path,
         tool_registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,
+        state: Option<Arc<crate::state::AppState>>,
     ) -> Self {
         let pipe_path = Self::pipe_path_for(workspace_root);
 
@@ -121,6 +123,7 @@ impl IpcBridge {
             pipe_path,
             workspace_root: workspace_root.to_path_buf(),
             tool_registry,
+            state,
             shutdown: Arc::new(Notify::new()),
         }
     }
@@ -163,8 +166,9 @@ impl IpcBridge {
                         Ok(()) => {
                             let registry = Arc::clone(&self.tool_registry);
                             let root = self.workspace_root.clone();
+                            let state = self.state.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = Self::handle_connection(pipe, registry, root).await {
+                                if let Err(e) = Self::handle_connection(pipe, registry, root, state).await {
                                     tracing::warn!(target: "ipc_bridge", "Client connection error: {}", e);
                                 }
                             });
@@ -198,8 +202,9 @@ impl IpcBridge {
                         Ok((stream, _)) => {
                             let registry = Arc::clone(&self.tool_registry);
                             let root = self.workspace_root.clone();
+                            let state = self.state.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = Self::handle_connection(stream, registry, root).await {
+                                if let Err(e) = Self::handle_connection(stream, registry, root, state).await {
                                     tracing::warn!(target: "ipc_bridge", "Client connection error: {}", e);
                                 }
                             });
@@ -223,21 +228,36 @@ impl IpcBridge {
         stream: S,
         registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,
         workspace_root: PathBuf,
+        state: Option<Arc<crate::state::AppState>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
         let (reader, mut writer) = tokio::io::split(stream);
         let mut lines = BufReader::new(reader).lines();
+        const MAX_FRAME_BYTES: usize = 65_536; // 64 KB framing limit
 
         while let Some(line) = lines.next_line().await? {
+            if line.len() > MAX_FRAME_BYTES {
+                let err_resp = JsonRpcResponse::error(
+                    serde_json::Value::Null,
+                    -32600,
+                    format!("Frame size {} bytes exceeds maximum limit of {} bytes", line.len(), MAX_FRAME_BYTES),
+                );
+                let mut out = serde_json::to_string(&err_resp)?;
+                out.push('\n');
+                writer.write_all(out.as_bytes()).await?;
+                writer.flush().await?;
+                continue;
+            }
+
             let line = line.trim().to_string();
             if line.is_empty() {
                 continue;
             }
 
             let response = match serde_json::from_str::<JsonRpcRequest>(&line) {
-                Ok(req) => Self::dispatch(&req, &registry, &workspace_root).await,
+                Ok(req) => Self::dispatch(&req, &registry, &workspace_root, state.as_ref()).await,
                 Err(e) => {
                     tracing::debug!(target: "ipc_bridge", "[IPC_BRIDGE_002] Parse error: {}", e);
                     JsonRpcResponse::error(
@@ -257,10 +277,11 @@ impl IpcBridge {
         Ok(())
     }
 
-    async fn dispatch(
+    pub async fn dispatch(
         req: &JsonRpcRequest,
         registry: &crate::agent::runner::tools::registry::ToolRegistry,
         workspace_root: &std::path::Path,
+        state: Option<&Arc<crate::state::AppState>>,
     ) -> JsonRpcResponse {
         match req.method.as_str() {
             "list_tools" => {
@@ -319,21 +340,38 @@ impl IpcBridge {
                     .cloned()
                     .unwrap_or(serde_json::json!({}));
 
+                let live_state = match state {
+                    Some(s) => (*s).clone(),
+                    None => {
+                        return JsonRpcResponse::error(
+                            req.id.clone(),
+                            -32001,
+                            "IPC execution rejected: No authenticated server state attached to bridge".to_string(),
+                        );
+                    }
+                };
+
+                // Enforce safe mode / authorization on IPC caller: mutating tools require authenticated authorization
+                let is_mutation = matches!(
+                    tool_name,
+                    "write_file" | "delete_file" | "execute_shell" | "issue_alpha_directive"
+                );
+                if is_mutation {
+                    return JsonRpcResponse::error(
+                        req.id.clone(),
+                        -32003,
+                        format!("Security policy denied unauthenticated IPC mutation tool '{}'", tool_name),
+                    );
+                }
+
                 match registry.get(tool_name) {
                     Some(tool) => {
-                        let mock_state = Arc::new(crate::state::AppState::new_minimal_mock().await);
-                        let tool_ctx = crate::agent::types::ToolContext {
-                            mission_id: "ipc-mission".to_string(),
-                            agent_id: "ipc-client".to_string(),
-                            workspace_root: workspace_root.to_path_buf(),
-                            fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.to_path_buf()),
-                            state: mock_state,
-                            trace_id: uuid::Uuid::new_v4().to_string(),
-                            budget_usd: 0.0,
-                            budget_limit_usd: 10.0,
-                            security_policy: serde_json::json!({}),
-                            active_node_id: None,
-                        };
+                        let tool_ctx = crate::agent::types::ToolContext::ephemeral(
+                            live_state,
+                            workspace_root.to_path_buf(),
+                            "ipc-mission".to_string(),
+                            "ipc-client".to_string(),
+                        );
                         let mut usage = None;
                         match tool.execute(&tool_ctx, args, &mut usage).await {
                             Ok(output) => {
@@ -424,7 +462,7 @@ mod tests {
             method: "ping".to_string(),
             params: serde_json::Value::Null,
         };
-        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new(".")).await;
+        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new("."), None).await;
         assert_eq!(resp.result, Some(serde_json::json!("pong")));
         assert!(resp.error.is_none());
     }
@@ -441,9 +479,28 @@ mod tests {
                 "arguments": {}
             }),
         };
-        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new(".")).await;
+        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new("."), None).await;
         assert!(resp.result.is_none());
         assert!(resp.error.is_some());
-        assert_eq!(resp.error.unwrap().code, -32601);
+        assert_eq!(resp.error.unwrap().code, -32001); // State missing gate triggers first
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_call_tool_mutation_denied() {
+        let registry = crate::agent::runner::tools::registry::ToolRegistry::new();
+        let state = Arc::new(crate::state::AppState::new_minimal_mock().await);
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::json!(12),
+            method: "call_tool".to_string(),
+            params: serde_json::json!({
+                "name": "write_file",
+                "arguments": { "path": "pwned.txt", "content": "evil" }
+            }),
+        };
+        let resp = IpcBridge::dispatch(&req, &registry, std::path::Path::new("."), Some(&state)).await;
+        assert!(resp.result.is_none());
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap().code, -32003); // Security policy denied mutation
     }
 }

@@ -141,6 +141,21 @@ impl AgentRunner {
             )));
         }
 
+        // 1b. Enforce Safe Mode Mutation Blocking (SEC-02)
+        if ctx.safe_mode {
+            let is_mutation = fc.name.contains("write")
+                || fc.name.contains("delete")
+                || fc.name.contains("execute")
+                || fc.name.contains("run")
+                || fc.name == "spawn_agent";
+            if is_mutation {
+                return Err(ToolExecutionError::SecurityBlocked(format!(
+                    "Safe mode active: mutation tool '{}' is blocked for agent '{}'",
+                    fc.name, ctx.agent_id
+                )));
+            }
+        }
+
         let args_str = serde_json::to_string(&fc.args).unwrap_or_default();
         let mission_id_opt = Some(ctx.mission_id.clone());
 
@@ -164,7 +179,12 @@ impl AgentRunner {
             agent_id: ctx.agent_id.clone(),
             skill_name: fc.name.clone(),
             parameters: fc.args.clone(),
-            affected_path: fc.args.get("path").or_else(|| fc.args.get("file_path")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+            affected_path: fc.args.get("path")
+                .or_else(|| fc.args.get("file_path"))
+                .or_else(|| fc.args.get("filename"))
+                .or_else(|| fc.args.get("file_name"))
+                .or_else(|| fc.args.get("file"))
+                .and_then(|v| v.as_str()).map(|s| s.to_string()),
             reported_blast_radius: fc.args.get("blast_radius").and_then(|v| v.as_u64()).unwrap_or(1) as usize,
             oversight_required: validation.oversight_required,
         };
@@ -177,7 +197,12 @@ impl AgentRunner {
 
             // Compute verified blast radius from symbol graph if path or target is provided
             let mut verified_blast_radius = None;
-            if let Some(target_path) = fc.args.get("path").or_else(|| fc.args.get("file_path")).and_then(|v| v.as_str()) {
+            if let Some(target_path) = fc.args.get("path")
+                .or_else(|| fc.args.get("file_path"))
+                .or_else(|| fc.args.get("filename"))
+                .or_else(|| fc.args.get("file_name"))
+                .or_else(|| fc.args.get("file"))
+                .and_then(|v| v.as_str()) {
                 let symbol_name = fc.args.get("symbol").and_then(|v| v.as_str()).unwrap_or("*");
                 let intel_service = crate::intelligence::service::IntelligenceService::new(self.state.clone());
                 if let Ok(affected) = intel_service.blast_radius(symbol_name, target_path, Some(50)).await {
@@ -285,6 +310,13 @@ impl AgentRunner {
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
             active_node_id: ctx.active_node_id.lock().clone(),
+            depth: ctx.depth,
+            lineage: ctx.lineage.clone(),
+            safe_mode: ctx.safe_mode,
+            primary_goal: ctx.primary_goal.clone(),
+            last_accessed_files: ctx.last_accessed_files.clone(),
+            metrics: ctx.metrics.clone(),
+            accounting: ctx.accounting.clone(),
         };
 
         // Execution Loop with Self-Annealing
@@ -326,7 +358,7 @@ impl AgentRunner {
                     let snapshot = self.state.registry.skills.snapshot();
                     if let Some(skill) = snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|r| r.value().clone()) {
                         let mut out = String::new();
-                        match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage).await {
+                        match self.handle_dynamic_skill(ctx, fc, &mut out, &skill, usage, validation.oversight_required).await {
                             Ok(()) => Ok(out),
                             Err(e) => Err(ToolExecutionError::AppError(e)),
                         }
@@ -377,7 +409,7 @@ impl AgentRunner {
                             };
 
                             let mut out = String::new();
-                            match self.handle_dynamic_skill(ctx, fc, &mut out, &synthesized_skill, usage).await {
+                            match self.handle_dynamic_skill(ctx, fc, &mut out, &synthesized_skill, usage, validation.oversight_required).await {
                                 Ok(()) => Ok(out),
                                 Err(e) => Err(ToolExecutionError::AppError(e)),
                             }
@@ -442,6 +474,7 @@ impl AgentRunner {
         output_text: &mut String,
         skill: &crate::agent::script_skills::SkillDefinition,
         _usage: &mut Option<crate::agent::types::TokenUsage>,
+        oversight_approved: bool,
     ) -> Result<(), AppError> {
         // 🛡️ [Governance] Check Permission Policy & Oversight requirement
         let perm_mode = self
@@ -461,6 +494,7 @@ impl AgentRunner {
 
         if (skill.oversight_required || perm_mode == crate::security::permissions::PermissionMode::Prompt)
             && perm_mode != crate::security::permissions::PermissionMode::Allow
+            && !oversight_approved
         {
             *output_text = format!(
                 "Skill '{}' requires explicit human oversight approval or 'Allow' permission mode.",
@@ -481,6 +515,13 @@ impl AgentRunner {
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
             active_node_id: ctx.active_node_id.lock().clone(),
+            depth: ctx.depth,
+            lineage: ctx.lineage.clone(),
+            safe_mode: ctx.safe_mode,
+            primary_goal: ctx.primary_goal.clone(),
+            last_accessed_files: ctx.last_accessed_files.clone(),
+            metrics: ctx.metrics.clone(),
+            accounting: ctx.accounting.clone(),
         };
 
         let result = self
@@ -524,8 +565,13 @@ impl AgentRunner {
                             );
                         }
                         Err(e) => {
-                            final_output =
-                                format!("{}\n\n[VERIFICATION CRITICAL ERROR]: {}", final_output, e);
+                            *output_text = format!(
+                                "({} MUTATION COMPLETED BUT VERIFICATION FAILED):\n{}\n\n[VERIFICATION ERROR]: {}",
+                                skill.name, final_output, e
+                            );
+                            return Err(AppError::InternalServerError(format!(
+                                "Skill '{}' executed mutation but failed post-verification: {}", skill.name, e
+                            )));
                         }
                     }
                 }
