@@ -61,7 +61,7 @@ Invariants in `tests/invariants/` are strictly enforcing gates — change consta
 *   **Single Source of Truth:** Where external configurations govern security behavior (e.g. `.gitleaks.toml` for secret patterns), invariant suites parse that file directly at runtime to ensure 1:1 synchronization with runtime handlers.
 
 **GLOBAL IDENTITY CONTEXT:**
-All HTTP and telemetry requests executed under the agent swarm must identify utilizing the official system identity: `User-Agent: TadpoleOS/1.1.58`.
+All HTTP and telemetry requests executed under the agent swarm must identify utilizing the official system identity: `User-Agent: TadpoleOS/1.1.59`.
 
 **MANDATORY OUTPUT FORMAT:**
 Your final output MUST be structured exactly into the following five sections:

@@ -528,6 +528,17 @@ class Tadpole_OS_Socket_Client {
             this.mcp_pulse_listeners.forEach(l => l(data as unknown as Mcp_Pulse_Event));
         } else if (data.type === 'trace:span') {
             use_trace_store.getState().add_span(data.span as import('../stores/trace_store').Trace_Span);
+        } else if (data.type === 'trace:event') {
+            const level = String(data.level || 'INFO').toUpperCase();
+            if (level === 'ERROR' || level === 'WARN') {
+                const attrs = (data.attributes && typeof data.attributes === 'object') ? (data.attributes as Record<string, unknown>) : {};
+                const message = (attrs.message || data.message || `[${data.target || 'Trace'}] Alert`) as string;
+                event_bus.emit_log({
+                    source: (data.target as string) || 'Kernel',
+                    text: message,
+                    severity: level === 'ERROR' ? 'error' : 'warning'
+                });
+            }
         } else if (data.type === 'trace:span_update') {
             use_trace_store.getState().update_span((data.span_id || data.spanId) as string, data.update as Partial<import('../stores/trace_store').Trace_Span>);
         } else if (data.type === 'engine:scheduled_job_complete') {

@@ -59,7 +59,7 @@ def run_longtail_test(tail_duration_secs: int = 60):
         return
 
     headers = {
-        "User-Agent": "TadpoleOS/1.1.58",
+        "User-Agent": "TadpoleOS/1.1.59",
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "x-tadpole-role": "overlord"

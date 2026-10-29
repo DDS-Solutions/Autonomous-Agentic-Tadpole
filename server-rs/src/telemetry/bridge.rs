@@ -113,14 +113,58 @@ impl TelemetryBridge {
                     }
                 }
             }
+        } else if event_type == "trace:event" {
+            let level = msg["level"].as_str().unwrap_or("INFO");
+            if level.eq_ignore_ascii_case("ERROR") || level.eq_ignore_ascii_case("WARN") {
+                let attributes = &msg["attributes"];
+                let mission_id = attributes["mission_id"].as_str();
+                let agent_id = attributes["agent_id"].as_str().unwrap_or("System");
+                let target = msg["target"].as_str().unwrap_or("Bridge:Event");
+                
+                if let Some(mid) = mission_id {
+                    let text = attributes["message"].as_str()
+                        .or_else(|| attributes["text"].as_str())
+                        .unwrap_or("Trace Event Alert");
+
+                    let severity = if level.eq_ignore_ascii_case("ERROR") { "error" } else { "warning" };
+
+                    crate::agent::mission::log_step(
+                        &self.app_state.resources.pool,
+                        mid,
+                        agent_id,
+                        target,
+                        text,
+                        severity,
+                        Some(attributes.clone()),
+                    ).await?;
+                }
+            }
+        } else if event_type == "trace:span_update" {
+            if let Some(update) = msg.get("update") {
+                if update["status"].as_str() == Some("error") {
+                    if let Some(mission_id) = update["mission_id"].as_str() {
+                        let agent_id = update["agent_id"].as_str().unwrap_or("System");
+                        let text = update["attributes"]["message"].as_str()
+                            .or_else(|| update["attributes"]["error"].as_str())
+                            .unwrap_or("Span execution failed");
+
+                        crate::agent::mission::log_step(
+                            &self.app_state.resources.pool,
+                            mission_id,
+                            agent_id,
+                            "Bridge:SpanUpdate",
+                            text,
+                            "error",
+                            Some(update.clone()),
+                        ).await?;
+                    }
+                }
+            }
         }
 
         Ok(())
     }
+
 }
-
-
-
-
 
 // Metadata: [bridge]

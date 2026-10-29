@@ -100,6 +100,7 @@ pub struct RunContext {
     pub authority_level: RoleAuthorityLevel,
     pub resource_weights: std::collections::HashMap<String, f32>,
     pub security_policy: serde_json::Value,
+    pub execution_plane: crate::agent::types::ExecutionPlane,
     pub active_node_id: std::sync::Arc<parking_lot::Mutex<Option<String>>>,
     pub conflict: std::sync::Arc<crate::security::conflict::ConflictManager>,
     pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
@@ -146,6 +147,7 @@ impl Default for RunContext {
             authority_level: RoleAuthorityLevel::Specialist,
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
+            execution_plane: crate::agent::types::ExecutionPlane::default(),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
             conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
@@ -188,6 +190,7 @@ impl RunContext {
             recent_findings: self.recent_findings.clone(),
             structured_output: Some(false),
             primary_goal: self.primary_goal.clone(),
+            execution_plane: Some(self.execution_plane),
             ..Default::default()
         }
     }
@@ -227,7 +230,7 @@ impl RunContext {
             agent_id: ctx.agent_id.clone(),
             name,
             role,
-            department,
+            department: department.clone(),
             authority_level,
             mission_id: ctx.mission_id.clone(),
             depth: ctx.depth,
@@ -242,6 +245,14 @@ impl RunContext {
             budget_usd: ctx.budget_usd,
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
+            execution_plane: if department.eq_ignore_ascii_case("smb")
+                || department.eq_ignore_ascii_case("business")
+                || department.eq_ignore_ascii_case("digital-twin")
+            {
+                crate::agent::types::ExecutionPlane::SmbDigitalTwin
+            } else {
+                crate::agent::types::ExecutionPlane::EngineMaintenance
+            },
             trace_id: ctx.trace_id.clone(),
             traceparent: Some(ctx.trace_id.clone()),
             model_config,

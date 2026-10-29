@@ -6,7 +6,7 @@
 //! ### ⚠️ Invariants & Non-Negotiables
 //! - `[Structural]` Object keys deterministically sorted and JSON-escaped via `serde_json::to_string`; structurally distinct arguments yield distinct signatures.
 //! - `[Structural]` Recursion capped at depth 32; overflow degrades to `"[DEPTH_EXCEEDED]"` marker without panic.
-//! - `[Structural]` Sliding window holds last 12 signatures; periodicity detected for periods 1–4.
+//! - `[Structural]` Sliding window holds last 16 signatures; periodicity detected for periods 1–4.
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Local Errors**: none
@@ -48,6 +48,29 @@ fn normalize_json_inner(val: &serde_json::Value, depth: usize) -> String {
     }
 }
 
+/// Result of evaluating an agent's execution history for repetitive tool loops.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopCheckResult {
+    /// Normal execution pattern, no repetition detected.
+    Ok,
+    /// Repetition warning (e.g. 2nd identical tool call with same arguments and output, or periodic cycle warning).
+    /// Indicates the agent should receive a steering advisory to change approaches.
+    Warning,
+    /// Terminal loop threshold breached (e.g. 3rd identical call or periodic cycle).
+    /// Agent execution must halt to prevent infinite resource drain.
+    Terminal,
+}
+
+impl LoopCheckResult {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, LoopCheckResult::Terminal)
+    }
+
+    pub fn is_warning(&self) -> bool {
+        matches!(self, LoopCheckResult::Warning)
+    }
+}
+
 /// Detects repetitive periodic tool execution loops (periods 1 to 4).
 #[derive(Debug, Clone)]
 pub struct DoomLoopDetector {
@@ -74,7 +97,7 @@ impl DoomLoopDetector {
         tool_name: &str,
         arguments: &str,
         output: &str,
-    ) -> bool {
+    ) -> LoopCheckResult {
         let normalized_args = match serde_json::from_str::<serde_json::Value>(arguments) {
             Ok(val) => normalize_json(&val),
             Err(_) => arguments.trim().to_string(),
@@ -93,18 +116,24 @@ impl DoomLoopDetector {
         );
         self.signatures.push_back(sig);
 
-        if self.signatures.len() > 12 {
+        if self.signatures.len() > 16 {
             self.signatures.pop_front();
         }
 
-        self.has_loop()
+        self.evaluate_loop()
     }
 
-    fn has_loop(&self) -> bool {
+    pub fn has_loop(&self) -> bool {
+        self.evaluate_loop().is_terminal()
+    }
+
+    fn evaluate_loop(&self) -> LoopCheckResult {
         let n = self.signatures.len();
+
+        // 1. Check for Terminal loop:
+        // Any period 1..=4 with 3 full repetitions (e.g. A->A->A, or A->B->A->B->A->B)
         for period in 1..=4 {
-            let reps = if period == 1 { 3 } else { 2 };
-            let needed = period * reps;
+            let needed = period * 3;
             if n < needed {
                 continue;
             }
@@ -118,10 +147,32 @@ impl DoomLoopDetector {
                 }
             }
             if is_loop {
-                return true;
+                return LoopCheckResult::Terminal;
             }
         }
-        false
+
+        // 2. Check for Warning loop:
+        // Any period 1..=4 with 2 full repetitions (e.g. A->A, or A->B->A->B)
+        for period in 1..=4 {
+            let needed = period * 2;
+            if n < needed {
+                continue;
+            }
+
+            let start_idx = n - needed;
+            let mut is_loop = true;
+            for i in 0..needed {
+                if self.signatures[start_idx + i] != self.signatures[start_idx + (i % period)] {
+                    is_loop = false;
+                    break;
+                }
+            }
+            if is_loop {
+                return LoopCheckResult::Warning;
+            }
+        }
+
+        LoopCheckResult::Ok
     }
 }
 
@@ -135,17 +186,21 @@ mod tests {
         let agent = "test-agent";
 
         // Period 1 loop: tool called 3 times with same args and same output
-        assert!(!detector.check(agent, "toolA", "{}", "out1"));
-        assert!(!detector.check(agent, "toolA", "{}", "out1"));
-        assert!(detector.check(agent, "toolA", "{}", "out1"));
+        assert_eq!(detector.check(agent, "toolA", "{}", "out1"), LoopCheckResult::Ok);
+        assert_eq!(detector.check(agent, "toolA", "{}", "out1"), LoopCheckResult::Warning);
+        assert_eq!(detector.check(agent, "toolA", "{}", "out1"), LoopCheckResult::Terminal);
+        assert!(detector.has_loop());
 
         // Reset
         let mut detector2 = DoomLoopDetector::new();
         // Period 2 loop: toolA -> toolB -> toolA -> toolB
-        assert!(!detector2.check(agent, "toolA", "{}", "outA"));
-        assert!(!detector2.check(agent, "toolB", "{}", "outB"));
-        assert!(!detector2.check(agent, "toolA", "{}", "outA"));
-        assert!(detector2.check(agent, "toolB", "{}", "outB"));
+        assert_eq!(detector2.check(agent, "toolA", "{}", "outA"), LoopCheckResult::Ok);
+        assert_eq!(detector2.check(agent, "toolB", "{}", "outB"), LoopCheckResult::Ok);
+        assert_eq!(detector2.check(agent, "toolA", "{}", "outA"), LoopCheckResult::Ok);
+        assert_eq!(detector2.check(agent, "toolB", "{}", "outB"), LoopCheckResult::Warning);
+        assert_eq!(detector2.check(agent, "toolA", "{}", "outA"), LoopCheckResult::Warning);
+        assert_eq!(detector2.check(agent, "toolB", "{}", "outB"), LoopCheckResult::Terminal);
+        assert!(detector2.has_loop());
     }
 
     #[test]

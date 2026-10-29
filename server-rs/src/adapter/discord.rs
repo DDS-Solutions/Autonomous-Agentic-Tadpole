@@ -39,7 +39,7 @@ impl DiscordAdapter {
         Self {
             webhook_url,
             client: Client::builder()
-                .user_agent("TadpoleOS/1.1.58")
+                .user_agent("TadpoleOS/1.1.59")
                 .build()
                 .unwrap_or_else(|_| Client::new()),
         }

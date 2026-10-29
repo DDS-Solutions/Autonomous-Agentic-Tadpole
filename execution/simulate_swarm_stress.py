@@ -68,7 +68,7 @@ def run_stress_test(tail_duration_secs: int = 45):
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": "TadpoleOS/1.1.58"
+        "User-Agent": "TadpoleOS/1.1.59"
     }
 
     # 1. Verify Server Health

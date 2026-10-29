@@ -1,0 +1,27 @@
+# Tadpole OS Sovereign Python Quality Configuration
+# Parity with ESLint (Frontend) and Clippy (Backend)
+
+line-length = 120
+target-version = "py310"
+
+# Exclude generated, build, and temporary directories
+exclude = [
+    ".git",
+    ".tmp",
+    "node_modules",
+    "target",
+    "dist",
+    "data",
+    "logs",
+]
+
+[lint]
+# Select syntax errors, runtime bugs, and Pyflakes logic defects
+select = ["E9", "F63", "F7", "F82", "F"]
+
+# Allow lightweight script patterns (unused imports/variables in scratch scripts)
+ignore = [
+    "F401",  # Unused imports in script execution modules
+    "F541",  # f-string without placeholders
+    "F841",  # Local variable assigned but unused
+]

@@ -20,7 +20,7 @@ import requests
 
 BASE_URL = "http://127.0.0.1:8000"
 HEADERS = {
-    "User-Agent": "TadpoleOS/1.1.58",
+    "User-Agent": "TadpoleOS/1.1.59",
     "Content-Type": "application/json"
 }
 

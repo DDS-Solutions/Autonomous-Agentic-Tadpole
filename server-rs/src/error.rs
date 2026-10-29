@@ -641,7 +641,7 @@ mod tests {
         drop(refused_listener);
         let client = reqwest::Client::builder()
             .no_proxy()
-            .user_agent("TadpoleOS/1.1.58")
+            .user_agent("TadpoleOS/1.1.59")
             .timeout(std::time::Duration::from_secs(3))
             .build().unwrap();
         let err_conn = client

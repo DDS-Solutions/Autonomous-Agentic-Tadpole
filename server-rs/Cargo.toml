@@ -1,6 +1,6 @@
 [package]
 name = "server-rs"
-version = "1.1.58"
+version = "1.1.59"
 edition = "2021"
 rust-version = "1.99.0"
 
@@ -117,3 +117,11 @@ neural-audio = ["dep:ort", "dep:hound", "dep:ndarray", "dep:whisper-rs"]
 [dev-dependencies]
 tempfile = "3.14"
 criterion = { version = "0.8.2", features = ["async_tokio"] }
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+field_reassign_with_default = "allow"
+all = "warn"
+

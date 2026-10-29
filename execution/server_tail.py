@@ -127,7 +127,7 @@ def fetch_endpoint(base_url: str, path: str, token: Optional[str],
                "latency_ms": float, "size_bytes": int }
     """
     url = f"{base_url}{path}"
-    headers = {"Accept": "application/json", "User-Agent": "TadpoleOS/1.1.58"}
+    headers = {"Accept": "application/json", "User-Agent": "TadpoleOS/1.1.59"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
 

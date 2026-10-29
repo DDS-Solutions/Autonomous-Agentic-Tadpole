@@ -25,7 +25,10 @@ pub fn safe_truncate_str(s: &str, max_chars: usize) -> &str {
     }
 }
 
-pub const DEFAULT_OVERFLOW_THRESHOLD_CHARS: usize = 8192;
+pub const DEFAULT_OVERFLOW_THRESHOLD_CHARS: usize = 24_000;
+
+#[allow(unused_imports)]
+pub use compact_conversation_history as build_sandboxed_transcript;
 
 /// Compacts a tool execution observation. If the raw output exceeds the threshold (default: 8192 characters),
 /// writes the complete output to `.tmp/tool_overflow/` and returns a compacted reference pointer.

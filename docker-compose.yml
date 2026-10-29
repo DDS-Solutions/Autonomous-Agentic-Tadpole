@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tadpole-os:1.1.58
+    image: tadpole-os:1.1.59
     container_name: tadpole-os
     # SECURE BINDING: Binds to localhost loopback by default.
     # To expose via VPN/Tailscale or LAN, update the bind address as needed.

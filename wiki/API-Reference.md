@@ -29,12 +29,12 @@
 | `GET` | `/v1/engine/ws` | WebSocket telemetry stream (requires `Sec-WebSocket-Protocol: bearer.<token>`) |
 | `GET` | `/v1/engine/live-voice` | Live voice WebSocket stream (requires `Sec-WebSocket-Protocol: bearer.<token>`) |
 
-### Health Response Schema (v1.1.58+)
+### Health Response Schema (v1.1.59+)
 
 ```json
 {
   "status": "tadpole_online_rust",
-  "version": "1.1.58",
+  "version": "1.1.59",
   "heartbeat": "2026-06-26T22:00:00Z",
   "uptime_seconds": 3600,
   "database": {

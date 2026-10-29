@@ -56,7 +56,7 @@ def run_swarm_mission_and_tail(agent_id: str = "2", timeout_secs: int = 75):
         return
 
     headers = {
-        "User-Agent": "TadpoleOS/1.1.58",
+        "User-Agent": "TadpoleOS/1.1.59",
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "x-tadpole-role": "overlord"

@@ -31,7 +31,11 @@ export class ErrorBus {
 
     public emit(error: ApiError): void {
         this.listeners.forEach(l => {
-            try { l(error); } catch { /* ignore */ }
+            try { 
+                l(error); 
+            } catch (err) {
+                console.error('[error_bus] Listener error:', err);
+            }
         });
     }
 

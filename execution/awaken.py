@@ -258,7 +258,8 @@ def main():
             continue
             
         for r, _, files in os.walk(target_path):
-            if any(part in r for part in ['.git', 'node_modules', 'target', 'dist', '.tmp', 'reports', 'coverage', 'scratch']):
+            norm_r = r.replace('\\', '/')
+            if any(part in norm_r for part in ['.git', 'node_modules', 'target', 'dist', '.tmp', 'reports', 'coverage', 'scratch', 'docs/audits', 'tests/invariants', 'tests/unit', 'tests/mission_bench']):
                 continue
                 
             for f in files:

@@ -58,7 +58,31 @@ PATHS = {
     "server-rs/src/routes/templates.rs": r'TadpoleOS/([0-9.]+)',
     "scripts/deploy-linuxlite.ps1": r'version\s*=\s*"([^"]+)"',
     "src-tauri/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "crates/wasm-codec/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "server-rs/src/error.rs": r'TadpoleOS/([0-9.]+)',
+    "server-rs/src/test_support.rs": r'TadpoleOS/([0-9.]+)',
+    "server-rs/src/security/sandbox.rs": r'tadpole-os:([0-9.]+)',
+    "docker-compose.yml": r'tadpole-os:([0-9.]+)',
+    "directives/codebase_inspection_protocol.md": r'TadpoleOS/([0-9.]+)',
+    "src/pages/Template_Store.tsx": r'TadpoleOS/([0-9.]+)',
     "index.html": r'"softwareVersion":\s*"([^"]+)"',
+    "playwright.config.ts": r'TadpoleOS/([0-9.]+)',
+    "evals/eval_results.json": r'"version":\s*"([^"]+)"',
+    "evals/tasks.json": r'"version":\s*"([^"]+)"',
+    "wiki/Home.md": r'> \*\*Version:\*\* v([0-9.]+)',
+    "wiki/API-Reference.md": r'"version":\s*"([^"]+)"',
+    "wiki/Getting-Started.md": r'"version":\s*"([^"]+)"',
+    "execution/configure_all_agents_gemma4.py": r'TadpoleOS/([0-9.]+)',
+    "execution/fix_agent2_skills.py": r'TadpoleOS/([0-9.]+)',
+    "execution/invoke_and_tail_swarm_mission.py": r'TadpoleOS/([0-9.]+)',
+    "execution/restore_sqlite.py": r'TadpoleOS/([0-9.]+)',
+    "execution/run_dual_missions_tail.py": r'TadpoleOS/([0-9.]+)',
+    "execution/run_specialized_missions_longtail.py": r'TadpoleOS/([0-9.]+)',
+    "execution/server_tail.py": r'TadpoleOS/([0-9.]+)',
+    "execution/simulate_swarm_stress.py": r'TadpoleOS/([0-9.]+)',
+    "execution/verify_live_improvements.py": r'TadpoleOS/([0-9.]+)',
+    "execution/verify_safe_skills_passthrough.py": r'TadpoleOS/([0-9.]+)',
+    "execution/verify_temporal_and_delegation.py": r'TadpoleOS/([0-9.]+)',
 }
 
 def bump_version(current_version, part):
@@ -120,8 +144,9 @@ def sync():
 
         content = file_path.read_text(encoding='utf-8')
 
-        # Update content using regex with count=1 to prevent clobbering unintended fields
-        new_content = re.sub(pattern, lambda m: m.group(0).replace(m.group(1), current_version), content, count=1, flags=re.MULTILINE)
+        # Update content using regex: count=1 for top-level version fields to avoid clobbering deps, count=0 for User-Agent/tags
+        replace_count = 1 if "^version" in pattern else 0
+        new_content = re.sub(pattern, lambda m: m.group(0).replace(m.group(1), current_version), content, count=replace_count, flags=re.MULTILINE)
 
         if new_content != content:
             file_path.write_text(new_content, encoding='utf-8')

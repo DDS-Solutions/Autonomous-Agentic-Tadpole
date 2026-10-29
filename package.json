@@ -1,7 +1,7 @@
 {
   "name": "A-A-Tadpole-OS",
   "private": true,
-  "version": "1.1.58",
+  "version": "1.1.59",
   "keywords": [
     "react",
     "rust",

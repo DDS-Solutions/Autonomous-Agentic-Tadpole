@@ -41,7 +41,7 @@ export default defineConfig({
     use: {
         /* Base URL to use in actions like `await page.goto('/')`. */
         baseURL: 'http://127.0.0.1:4173',
-        userAgent: 'TadpoleOS/1.1.58',
+        userAgent: 'TadpoleOS/1.1.59',
 
         /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
         trace: 'on-first-retry',
@@ -54,7 +54,7 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
-            use: { ...devices['Desktop Chrome'], userAgent: 'TadpoleOS/1.1.58' },
+            use: { ...devices['Desktop Chrome'], userAgent: 'TadpoleOS/1.1.59' },
         },
     ],
 

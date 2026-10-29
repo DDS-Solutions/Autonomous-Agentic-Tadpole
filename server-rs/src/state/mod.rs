@@ -530,7 +530,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
 
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .user_agent("TadpoleOS/1.1.58")
+                .user_agent("TadpoleOS/1.1.59")
                 .pool_max_idle_per_host(10)
                 .pool_idle_timeout(std::time::Duration::from_secs(60))
                 .connect_timeout(std::time::Duration::from_secs(10))

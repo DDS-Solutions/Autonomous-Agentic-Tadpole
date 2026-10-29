@@ -19,12 +19,56 @@ use std::future::Future;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-/// Computes a deterministic SHA-256 hash of a JSON payload for parameter integrity verification.
-pub fn hash_payload(val: &serde_json::Value) -> String {
+use std::collections::BTreeMap;
+
+/// Standard immaterial fields that are transient/environmental and should not invalidate
+/// durable workflow step memoization across runs.
+pub const DEFAULT_IMMATERIAL_FIELDS: &[&str] = &[
+    "timestamp",
+    "created_at",
+    "updated_at",
+    "trace_id",
+    "span_id",
+    "request_id",
+    "run_id",
+    "session_id",
+    "client_timestamp",
+];
+
+/// Recursively canonicalizes a JSON value by:
+/// 1. Stripping immaterial / transient fields (case-insensitive match).
+/// 2. Deterministically ordering Object keys via `BTreeMap`.
+pub fn canonicalize_json(val: &serde_json::Value, ignore_keys: &[&str]) -> serde_json::Value {
+    match val {
+        serde_json::Value::Object(map) => {
+            let mut sorted = BTreeMap::new();
+            for (k, v) in map {
+                if !ignore_keys.iter().any(|&ign| ign.eq_ignore_ascii_case(k)) {
+                    sorted.insert(k.clone(), canonicalize_json(v, ignore_keys));
+                }
+            }
+            serde_json::Value::Object(sorted.into_iter().collect())
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(|item| canonicalize_json(item, ignore_keys)).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Computes a deterministic SHA-256 hash of a JSON payload with configurable immaterial field masking.
+pub fn hash_payload_with_immaterial_mask(val: &serde_json::Value, ignore_keys: &[&str]) -> String {
+    let canonical_val = canonicalize_json(val, ignore_keys);
     let mut hasher = Sha256::new();
-    let canonical = serde_json::to_string(val).unwrap_or_default();
-    hasher.update(canonical.as_bytes());
+    let canonical_str = serde_json::to_string(&canonical_val).unwrap_or_default();
+    hasher.update(canonical_str.as_bytes());
     hex::encode(hasher.finalize())
+}
+
+/// Computes a deterministic SHA-256 hash of a JSON payload for parameter integrity verification.
+/// Applies canonical key sorting and standard immaterial field masking to prevent false cache misses.
+pub fn hash_payload(val: &serde_json::Value) -> String {
+    hash_payload_with_immaterial_mask(val, DEFAULT_IMMATERIAL_FIELDS)
 }
 
 /// Initializes a durable workflow instance in SQLite.
@@ -404,6 +448,62 @@ mod tests {
         ).await;
 
         assert!(res.is_err(), "Step failure must propagate as Err");
+    }
+
+    #[test]
+    fn test_hash_payload_canonical_key_sorting() {
+        let payload1 = serde_json::json!({
+            "zebra": 1,
+            "apple": 2,
+            "nested": {
+                "beta": "two",
+                "alpha": "one"
+            }
+        });
+
+        let payload2 = serde_json::json!({
+            "apple": 2,
+            "zebra": 1,
+            "nested": {
+                "alpha": "one",
+                "beta": "two"
+            }
+        });
+
+        let hash1 = hash_payload(&payload1);
+        let hash2 = hash_payload(&payload2);
+        assert_eq!(hash1, hash2, "Canonical key sorting must yield identical hash regardless of JSON object key order");
+    }
+
+    #[test]
+    fn test_hash_payload_immaterial_field_masking() {
+        let payload_base = serde_json::json!({
+            "symbol": "AppState",
+            "path": "server-rs/src/state/mod.rs",
+            "timestamp": "2026-10-22T10:00:00Z",
+            "request_id": "req-xyz-123",
+            "trace_id": "trace-001"
+        });
+
+        let payload_different_transients = serde_json::json!({
+            "symbol": "AppState",
+            "path": "server-rs/src/state/mod.rs",
+            "timestamp": "2026-10-22T18:30:00Z",
+            "request_id": "req-abc-999",
+            "trace_id": "trace-777",
+            "client_timestamp": 1729612800
+        });
+
+        let hash_base = hash_payload(&payload_base);
+        let hash_diff = hash_payload(&payload_different_transients);
+        assert_eq!(hash_base, hash_diff, "Transient immaterial fields must be masked out to prevent false cache invalidation");
+
+        // Material change must yield distinct hash
+        let payload_material_change = serde_json::json!({
+            "symbol": "IntelligenceService",
+            "path": "server-rs/src/state/mod.rs"
+        });
+        assert_ne!(hash_base, hash_payload(&payload_material_change), "Material business parameter change must produce a distinct hash");
     }
 }
 

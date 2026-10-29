@@ -106,7 +106,7 @@ curl http://127.0.0.1:8000/v1/engine/health
 # Expected response
 {
   "status": "healthy",
-  "version": "1.1.58",
+  "version": "1.1.59",
   "heartbeat": "2026-06-26T...",
   "database": { "status": "healthy", "pool_size": 5, ... },
   "uptime_seconds": 12

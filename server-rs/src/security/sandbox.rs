@@ -315,7 +315,7 @@ pub async fn execute_sandboxed_shell(
         let container_name = format!("tadpole-sbx-{}", uuid::Uuid::new_v4());
         docker_cmd.arg("--name").arg(&container_name);
 
-        let sandbox_image = std::env::var("SANDBOX_IMAGE").unwrap_or_else(|_| "tadpole-os:1.1.58".to_string());
+        let sandbox_image = std::env::var("SANDBOX_IMAGE").unwrap_or_else(|_| "tadpole-os:1.1.59".to_string());
         docker_cmd.arg(&sandbox_image);
         docker_cmd.arg("sh").arg("-c").arg(command_str);
         docker_cmd.kill_on_drop(true);

@@ -37,7 +37,7 @@ use crate::secret_redactor::SecretRedactor;
 use once_cell::sync::Lazy;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
-use tracing::{span, Subscriber};
+use tracing::{span, Event, Subscriber};
 use tracing_subscriber::Layer;
 
 /// Global broadcast channel for telemetry events.
@@ -199,6 +199,32 @@ where
         });
 
         let _ = TELEMETRY_TX.send(event);
+    }
+
+    fn on_event(&self, event: &Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        let metadata = event.metadata();
+        let level = metadata.level().as_str();
+        let target = metadata.target();
+
+        let mut attributes = ::serde_json::json!({});
+        let mut visitor = FieldVisitor::new(&mut attributes, &self.redactor);
+        event.record(&mut visitor);
+
+        let current_span = ctx.lookup_current();
+        let span_id = current_span.as_ref().map(|s| format!("{:x}", s.id().into_u64()));
+        let trace_id = current_span.as_ref().and_then(|s| s.extensions().get::<String>().cloned());
+
+        let event_payload = ::serde_json::json!({
+            "type": "trace:event",
+            "level": level,
+            "target": target,
+            "span_id": span_id,
+            "trace_id": trace_id,
+            "timestamp": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+            "attributes": attributes
+        });
+
+        let _ = TELEMETRY_TX.send(event_payload);
     }
 
     fn on_close(&self, id: span::Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {

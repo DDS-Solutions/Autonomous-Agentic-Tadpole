@@ -173,6 +173,25 @@ pub enum ProviderStatus {
     Red,
 }
 
+/// ### Protocol: ExecutionPlane
+/// Represents the dual-plane sovereign execution hierarchy governing swarm autonomy.
+/// - Plane 1 (EngineMaintenance): Recursively operates, diagnoses, fixes, and improves the codebase.
+/// - Plane 2 (SmbDigitalTwin): Company-agnostic SMB business twin runtime governed by FR-11 permission firewall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExecutionPlane {
+    #[serde(alias = "plane-1", alias = "engine_maintenance", alias = "EngineMaintenance")]
+    EngineMaintenance,
+    #[serde(alias = "plane-2", alias = "smb_digital_twin", alias = "SmbDigitalTwin")]
+    SmbDigitalTwin,
+}
+
+impl Default for ExecutionPlane {
+    fn default() -> Self {
+        Self::EngineMaintenance
+    }
+}
+
 pub trait Validatable {
     fn validate(&self) -> Result<(), String>;
 }
@@ -1069,6 +1088,7 @@ impl EngineAgent {
             authority_level: crate::agent::types::RoleAuthorityLevel::from_role(&self.identity.role),
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
+            execution_plane: ExecutionPlane::default(),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
             conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
@@ -1117,6 +1137,8 @@ pub struct TaskPayload {
     pub enabled_skills: Option<Vec<String>>,
     #[serde(default, alias = "autoResume")]
     pub auto_resume: Option<bool>,
+    #[serde(default, alias = "executionPlane")]
+    pub execution_plane: Option<ExecutionPlane>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]

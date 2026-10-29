@@ -25,7 +25,7 @@ This guide ensures release builds are clean, verified, and complete.
 
 ## 2. Version Bump & Sync
 
-- [ ] Bump version in `version.json` (e.g. `1.1.58`).
+- [ ] Bump version in `version.json` (e.g. `1.1.59`).
 - [ ] Run version synchronization:
   ```bash
   npm run version:sync

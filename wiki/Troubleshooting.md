@@ -188,7 +188,7 @@ Panic logs include the thread name, panic message, and source location.
 
 ```bash
 python execution/parity_guard.py
-# Error: Documentation version mismatch: README says v1.1.57 but version.json says v1.1.58
+# Error: Documentation version mismatch: README says v1.1.57 but version.json says v1.1.59
 ```
 
 **Fix:** Run the version sync:

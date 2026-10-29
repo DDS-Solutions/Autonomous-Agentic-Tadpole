@@ -13,7 +13,7 @@
 
 # Tadpole OS System Map
 
-**Version**: 1.1.58
+**Version**: 1.1.59
 **Runtime shape**: React dashboard + Rust Axum engine + SQLite persistence + Python execution layer.
 
 This map reflects the current code layout and should be used as the first orientation document when reviewing the system.
@@ -63,7 +63,9 @@ This map reflects the current code layout and should be used as the first orient
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
 | Conflict Management | `server-rs/src/security/conflict.rs` | 30s TTL file write leases preventing multi-agent race conditions during concurrent workspace edits. |
 | Dependency Guard | `server-rs/src/security/dependency_guard.rs` | Thread-safe cached system binary discovery (`git`, `python`, `node`, `docker`, `cargo`). |
-| Cognition Spine & Compactor | `server-rs/src/agent/runner/{turn_compactor,execution_metrics,parser,refinement}.rs` | Pinned-tail context compaction (last 3 turns uncompressed), disk spill to `.tmp/tool_overflow/`, balanced-brace tool syntax recovery, atomic telemetry rollup, and structured error diagnostics. |
+| Dual-Plane Partitioning & FR-11 Firewall | `directives/IDENTITY.md`, `server-rs/src/agent/runner/tools/security.rs`, `server-rs/src/agent/types.rs` | Execution plane segregation (Plane 1 Engine-Maintenance vs Plane 2 SMB-Digital-Twin), strictly denying Plane 2 host shell access and engine codebase writes. |
+| Cognition Spine & 24KB Compactor | `server-rs/src/agent/runner/{turn_compactor,execution_metrics,parser,refinement}.rs` | 24KB threshold observation spill to `.tmp/tool_overflow/` with safe UTF-8 character boundary slicing, pinned-tail retention, and balanced-brace tool recovery. |
+| Pre-Commit UI Quality Guard | `execution/ui_quality_guard.py` | Zero-dependency static TSX scanner enforcing `DESIGN.md` rules (pure black avoidance, untinted grays, badge contrast, icon button/SVG aria labels, card inception). |
 | Telemetry File Sink | `server-rs/src/telemetry/sink.rs` | 7-day auto-rotating JSONL file sink for system event logs with automatic daily sweeping. |
 | Clean-Room WASM Codec | `crates/wasm-codec/` | High-efficiency MIT-licensed Postcard binary pulse serializer/deserializer. |
 | Multi-Agent Starter Kits | `starter_kits/` | Ready-to-deploy swarms (Customer Success, Explorer Scout, Finance Compliance, Marketing Growth). |

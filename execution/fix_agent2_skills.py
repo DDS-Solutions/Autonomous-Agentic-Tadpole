@@ -39,7 +39,7 @@ def get_neural_token() -> str:
 token = get_neural_token()
 headers = {
     "Authorization": f"Bearer {token}",
-    "User-Agent": "TadpoleOS/1.1.58",
+    "User-Agent": "TadpoleOS/1.1.59",
     "Content-Type": "application/json"
 }
 

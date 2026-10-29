@@ -52,7 +52,7 @@ impl ProviderStub {
             let release = handler_release.clone();
             let text = text.clone();
             async move {
-                assert_eq!(headers.get("user-agent").unwrap(), "TadpoleOS/1.1.58");
+                assert_eq!(headers.get("user-agent").unwrap(), "TadpoleOS/1.1.59");
                 let call_index = calls.fetch_add(1, Ordering::SeqCst);
                 entered.notify_one();
                 if call_index == block_at {
@@ -111,7 +111,7 @@ pub(crate) async fn state_with_agent(agent_id: &str, base_url: &str) -> Arc<AppS
     Arc::get_mut(&mut state.resources).unwrap().http_client = Arc::new(
         reqwest::Client::builder()
             .no_proxy()
-            .user_agent("TadpoleOS/1.1.58")
+            .user_agent("TadpoleOS/1.1.59")
             .build()
             .unwrap(),
     );

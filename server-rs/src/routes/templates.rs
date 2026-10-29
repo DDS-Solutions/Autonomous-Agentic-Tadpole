@@ -850,7 +850,7 @@ pub async fn get_template_catalog() -> Result<axum::response::Response, AppError
 
     // 2. Fetch fresh registry from upstream using official TadpoleOS User-Agent
     let client = reqwest::Client::builder()
-        .user_agent("TadpoleOS/1.1.58")
+        .user_agent("TadpoleOS/1.1.59")
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| AppError::InternalServerError(format!("Failed to build HTTP client: {e}")))?;

@@ -335,7 +335,7 @@ export default function Governance_View() {
                                         <Shield size={12} />
                                         <span className="text-[10px] font-bold uppercase tracking-wider">{is_safe_mode ? 'Verified' : 'Bypassed'}</span>
                                     </div>
-                                    <span className="text-[10px] text-zinc-500 font-mono">OS: v1.1.58 | Mode: {is_safe_mode ? 'Secure' : 'Unrestricted'}</span>
+                                    <span className="text-[10px] text-zinc-500 font-mono">OS: v1.1.59 | Mode: {is_safe_mode ? 'Secure' : 'Unrestricted'}</span>
                                 </div>
                             </div>
 

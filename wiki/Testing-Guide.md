@@ -49,7 +49,7 @@ cargo test --manifest-path server-rs/Cargo.toml -- routes::health_endpoint_tests
 cargo test --manifest-path server-rs/Cargo.toml -- --nocapture
 ```
 
-### Test Modules (v1.1.58)
+### Test Modules (v1.1.59)
 
 | Module | Tests | Coverage |
 |--------|-------|----------|

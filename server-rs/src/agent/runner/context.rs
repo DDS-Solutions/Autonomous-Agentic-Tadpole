@@ -143,6 +143,18 @@ impl AgentRunner {
                 "network_access": !safe_mode,
                 "fs_sandbox": true
             }),
+            execution_plane: payload.execution_plane.unwrap_or_else(|| {
+                if a.identity.department.eq_ignore_ascii_case("smb")
+                    || a.identity.department.eq_ignore_ascii_case("business")
+                    || a.identity.department.eq_ignore_ascii_case("digital-twin")
+                    || payload.department.as_deref().map(|d| d.eq_ignore_ascii_case("smb") || d.eq_ignore_ascii_case("business") || d.eq_ignore_ascii_case("digital-twin")).unwrap_or(false)
+                    || a.identity.role.contains("Twin")
+                {
+                    crate::agent::types::ExecutionPlane::SmbDigitalTwin
+                } else {
+                    crate::agent::types::ExecutionPlane::EngineMaintenance
+                }
+            }),
             active_node_id: {
                 let node_id = if mission_id != "system-internal" && !mission_id.is_empty() {
                     match crate::agent::mission::get_mission_by_id(&self.state.resources.pool, mission_id).await {

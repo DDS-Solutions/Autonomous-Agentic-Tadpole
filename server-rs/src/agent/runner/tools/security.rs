@@ -33,6 +33,44 @@ impl SecurityManager for DefaultSecurityManager {
         let mut oversight_reason = String::new();
         let normalized_name = super::normalize_tool_name(&fc.name);
 
+        // 🛡️ [FR-11 Permission Firewall] Plane 2: SMB-Digital-Twin Boundary Enforcement
+        if ctx.execution_plane == crate::agent::types::ExecutionPlane::SmbDigitalTwin {
+            // 1. Prohibit host shell execution
+            if matches!(fc.name.as_str(), "execute_shell" | "run_command" | "exec_command" | "terminal" | "shell")
+                || matches!(normalized_name.as_str(), "execute_shell" | "run_command" | "exec_command" | "terminal" | "shell") {
+                tracing::warn!("🛡️ [FR-11] Agent '{}' in Plane 2 (SMB-Digital-Twin) attempted host shell tool '{}'", ctx.agent_id, fc.name);
+                return Err(ToolExecutionError::SecurityBlocked(
+                    "FR-11 Permission Firewall: Plane 2 (SMB-Digital-Twin) agents are prohibited from executing host shells".to_string()
+                ));
+            }
+
+            // 2. Prohibit mutating engine codebase (server-rs/, src/, execution/, directives/, .agent/)
+            if matches!(fc.name.as_str(), "write_file" | "write_to_file" | "patch_file" | "replace_file_content" | "edit_file" | "create_file" | "delete_file") {
+                let path_arg = fc.args.get("path")
+                    .or_else(|| fc.args.get("file_path"))
+                    .or_else(|| fc.args.get("filename"))
+                    .or_else(|| fc.args.get("file_name"))
+                    .or_else(|| fc.args.get("file"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let norm_path = path_arg.replace('\\', "/");
+                let is_engine_codebase = norm_path.starts_with("server-rs")
+                    || norm_path.starts_with("src/")
+                    || norm_path.starts_with("src-tauri")
+                    || norm_path.starts_with("execution/")
+                    || norm_path.starts_with("directives/")
+                    || norm_path.starts_with(".agent/");
+
+                if is_engine_codebase {
+                    tracing::warn!("🛡️ [FR-11] Agent '{}' in Plane 2 (SMB-Digital-Twin) attempted mutating engine codebase path '{}'", ctx.agent_id, norm_path);
+                    return Err(ToolExecutionError::SecurityBlocked(
+                        format!("FR-11 Permission Firewall: Plane 2 (SMB-Digital-Twin) agents are prohibited from modifying engine codebase at '{}'", norm_path)
+                    ));
+                }
+            }
+        }
+
         // 1. [CBS] Skill-Based Security Allowlist
         if let Some(agent) = runner.state.registry.agents.get(&ctx.agent_id) {
             let allowed_skills = &agent.value().capabilities.skills;

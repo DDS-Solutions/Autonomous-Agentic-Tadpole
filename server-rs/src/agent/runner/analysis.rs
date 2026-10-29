@@ -184,6 +184,7 @@ pub(crate) fn spawn_post_mission_analysis(
                 context_window: None,
                 input_cost_per_m: None,
                 output_cost_per_m: None,
+                execution_plane: None,
             };
 
             // Hardcoded "99" for QA Auditor

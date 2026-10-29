@@ -106,10 +106,10 @@ def get_version():
         v_file = ROOT / "version.json"
         if v_file.exists():
             with open(v_file, "r", encoding="utf-8") as f:
-                return json.load(f).get("version", "1.1.58")
+                return json.load(f).get("version", "1.1.59")
     except Exception:
         pass
-    return "1.1.58"
+    return "1.1.59"
 
 def main():
     if not REPORTS_DIR.exists():

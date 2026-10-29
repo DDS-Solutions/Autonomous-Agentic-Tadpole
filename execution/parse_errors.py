@@ -20,6 +20,16 @@ import subprocess
 import re
 from pathlib import Path
 
+# Ensure stdout handles UTF-8 on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    else:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 ROOT = Path(__file__).resolve().parent.parent
 
 def run_cargo_check() -> str:

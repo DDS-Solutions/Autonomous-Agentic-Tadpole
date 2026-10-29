@@ -53,7 +53,7 @@ function Template_Store() {
                 setIsLoading(true);
                 let rawTemplates: Partial<Template>[] = [];
 
-                // Item #9: Attempt fetching via backend proxy cache first (TadpoleOS/1.1.58),
+                // Item #9: Attempt fetching via backend proxy cache first (TadpoleOS/1.1.59),
                 // with fallback to raw GitHub if proxy is offline/unreachable
                 try {
                     const catalog = await system_api_service.get_template_catalog();

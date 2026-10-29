@@ -96,7 +96,7 @@ Your objective is to audit the access control logic of Tadpole OS.
 
 1. **Anti-Confabulation Rule:** If `read_codebase_file` fails or reports access denied, the specialist **MUST NEVER** invent hypothetical code or speculative vulnerabilities. It must emit a Proof-of-Work failure notice.
 2. **Credential Sanitization:** `read_codebase_file` automatically blocks any path containing `.env`, `key`, `token`, `secret`, or `credential`. Never direct an agent to read configuration secrets.
-3. **Identity Enactment:** All internal and outbound agent communication must carry `User-Agent: TadpoleOS/1.1.58`.
+3. **Identity Enactment:** All internal and outbound agent communication must carry `User-Agent: TadpoleOS/1.1.59`.
 4. **Oversight Mode:** In strict governance environments, ensure `permission_policies` maps `read_codebase_file` to `allow` for automated testing.
 
 ---

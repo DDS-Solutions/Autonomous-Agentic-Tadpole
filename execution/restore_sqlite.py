@@ -113,7 +113,7 @@ def check_live_engine(port: int = 8000) -> bool:
         bind_address = "127.0.0.1"
     url = f"http://{bind_address}:{port}/health"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "TadpoleOS/1.1.58"})
+        req = urllib.request.Request(url, headers={"User-Agent": "TadpoleOS/1.1.59"})
         with urllib.request.urlopen(req, timeout=3.0) as response:
             return response.status == 200
     except urllib.error.HTTPError:

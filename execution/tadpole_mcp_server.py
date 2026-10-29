@@ -348,7 +348,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="tadpole-execution-layer",
-                server_version="1.1.58",
+                server_version="1.1.59",
                 capabilities=server.get_capabilities(
                     NotificationOptions(),
                     experimental_capabilities={},

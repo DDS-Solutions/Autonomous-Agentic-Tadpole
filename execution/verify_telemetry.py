@@ -32,7 +32,8 @@ def get_mission_context(mission_id_arg: str):
         return None, None
         
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn.execute("PRAGMA busy_timeout = 30000;")
         cursor = conn.cursor()
         if mission_id_arg.upper() == "LATEST":
             cursor.execute(
@@ -89,7 +90,8 @@ def scan_db_logs(mission_id: str) -> list:
     if not DB_PATH.exists():
         return []
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn.execute("PRAGMA busy_timeout = 30000;")
         cursor = conn.cursor()
         cursor.execute(
             "SELECT source, text, severity, timestamp FROM mission_logs WHERE mission_id = ? ORDER BY timestamp ASC",

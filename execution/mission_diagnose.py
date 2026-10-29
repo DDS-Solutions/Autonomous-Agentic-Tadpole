@@ -32,8 +32,13 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    return conn
+
 def get_latest_mission():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, title, status, agent_id, created_at FROM mission_history ORDER BY created_at DESC LIMIT 1")
     mission = cursor.fetchone()
@@ -41,7 +46,7 @@ def get_latest_mission():
     return mission
 
 def get_mission_by_id(mission_id):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, title, status, agent_id, created_at FROM mission_history WHERE id = ?", (mission_id,))
     mission = cursor.fetchone()
@@ -49,7 +54,7 @@ def get_mission_by_id(mission_id):
     return mission
 
 def get_mission_logs(mission_id):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
         SELECT source, text, severity, timestamp 

@@ -77,7 +77,7 @@ def check_live_api():
             if line.startswith("NEURAL_TOKEN="):
                 token = line.split("=", 1)[1].strip().strip('"').strip("'")
                 break
-    headers = {"User-Agent": "TadpoleOS/1.1.58"}
+    headers = {"User-Agent": "TadpoleOS/1.1.59"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request("http://localhost:8000/v1/agents", headers=headers)

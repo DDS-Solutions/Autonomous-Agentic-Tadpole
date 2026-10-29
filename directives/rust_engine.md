@@ -102,13 +102,18 @@ The `server-rs` engine hosts 16 specialized autonomous subsystems:
 - **Aletheia Verification Gate ([verification_gate.rs](../server-rs/src/agent/verification_gate.rs))**: Zero-trust Generator→Verifier triad for high-impact mutations. O(1) `HashSet` sensitive skill gating, independent Verifier blast-radius evaluation (mitigates "Honesty Problem"), and calibrated threshold (default: 15 symbols).
 - **Adaptive Context Slicer ([context_slicer.rs](../server-rs/src/agent/context_slicer.rs))**: Cognitive 3-zone prompt assembly (Pinned Anchors, `<grounded_context>` XML RAG, Sliding Active Window) with strict `tiktoken` BPE token budget enforcement and pre-allocated heap buffers via `std::fmt::Write`.
 
+**Agent Runner & Execution Safety (v1.1.59 Kernel):**
+- **Tool Observation Compactor ([turn_compactor.rs](../server-rs/src/agent/runner/turn_compactor.rs))**: Zero-cost observation overflow manager offloading payloads > 24KB to `.tmp/tool_overflow/` with SHA-256 deduplication and multibyte UTF-8 codepoint boundary protection (`safe_truncate_str`).
+- **Periodic Cyclic Doom Loop Detector ([loop_detector.rs](../server-rs/src/agent/runner/loop_detector.rs))**: 16-step sliding-window cyclic signature detector checking repetition periods 1 through 4. Injects steering advisory warnings on 2 repetitions and terminates recursion with `AppError::Runner` on 3 repetitions.
+- **FR-11 Permission Firewall ([security.rs](../server-rs/src/agent/runner/tools/security.rs))**: Zero-trust kernel sandbox that strictly enforces Dual-Plane isolation by denying Plane 2 (`SmbDigitalTwin`) agents access to host shells (`execute_shell`, `run_command`, `bash`) and blocking file writes targeting engine codebases.
+
 **Original Subsystems:**
 - **A2A Economic Governance ([a2a.rs](../server-rs/src/routes/a2a.rs))**: Handles Agent-to-Agent 2PC budget transactions (`/v1/a2a/prepare`, `/v1/a2a/commit`, `/v1/a2a/rollback`), integer micro-USDC accounting (`u64`), 24-hour rolling limit resets, and lock-aware spend projection.
 - **TrustGraph Engine ([trustgraph.rs](../server-rs/src/agent/trustgraph.rs))**: Manages directed entity-relation graph topologies (`graph_entities` & `graph_relations`) with $O(N)$ BFS traversal and node rehydration for GraphRAG multi-hop reasoning.
 - **BM25 Memory Engine ([bm25_memory.rs](../server-rs/src/services/bm25_memory.rs))**: Zero-embedding sub-millisecond lexical search engine (< 1ms) featuring single-pass disk I/O, $O(1)$ pre-calculated term frequencies, and a double-checked 5-second TTL cache (`GET /v1/memory/search/bm25`).
 - **Tokenizer Service ([tokenizer.rs](../server-rs/src/agent/tokenizer.rs))**: Sub-microsecond (`< 1.0 µs`) BPE token counter powered by `tiktoken-rs` and a bounded 4,096-entry `DashMap` LRU cache, with model-aware vocabulary multipliers (`Qwen`: 1.05x, `Llama 3`: 1.02x, `Gemma`: 0.95x).
 - **Context Manager ([context_manager.rs](../server-rs/src/agent/context_manager.rs))**: 2-Tier context compression engine featuring Tier 1 zero-cost heuristic compaction ($0 cost, 0ms$) and Tier 2 LLM semantic summarization (`summarize_history`).
-- **Autonomous Skill Watchdog ([script_skills.rs](../server-rs/src/agent/script_skills.rs))**: Background `spawn_hot_reload_loop()` watchdog providing zero-downtime atomic state reloads when agents synthesize new skills.
+- **Autonomous Skill Watchdog ([script_skills/mod.rs](../server-rs/src/agent/script_skills/mod.rs))**: Background `spawn_hot_reload_loop()` watchdog providing zero-downtime atomic state reloads when agents synthesize new skills.
 
 ---
 

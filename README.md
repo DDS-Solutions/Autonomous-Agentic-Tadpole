@@ -485,7 +485,23 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 | [💻 Development Guide](wiki/Development-Guide.md) | Local dev setup, conventions, adding endpoints, migrations |
 | [🔧 Troubleshooting](wiki/Troubleshooting.md) | 12 common issues with exact step-by-step fixes |
 
-## Recent Upgrades (v1.1.58) — Next-Gen Orchestration Engine
+## Recent Upgrades (v1.1.59) — Dual-Plane Sovereign Hierarchy & Autonomous Sentinel Hardening
+
+### 🏛️ Sovereign Dual-Plane Architecture & FR-11 Firewall
+- **Dual-Plane Sovereign Hierarchy** (`directives/IDENTITY.md`): Strictly partitions operational authority into **Plane 1** (Sovereign Codebase Lifecycle Engine — recursively operates, diagnoses, fixes, and maintains the codebase) and **Plane 2** (Company-Agnostic SMB AI Digital Twin — provides brand voice, customer workflows, and messy data ingestion without tenant PII leakage into engine source code).
+- **FR-11 Permission Firewall** (`server-rs/src/agent/runner/tools/security.rs`, `server-rs/src/agent/types.rs`): Enforces zero-trust execution boundaries. Agents operating under Plane 2 (`SmbDigitalTwin`) are strictly prohibited from host shell tool execution (`execute_shell`, `run_command`, `terminal`) and prohibited from mutating engine codebase paths (`server-rs/`, `src/`, `execution/`, `directives/`, `.agent/`).
+
+### 🛡️ Swarm Execution & Token Safeguards
+- **24KB Tool Observation Compactor** (`server-rs/src/agent/runner/turn_compactor.rs`, `server-rs/src/agent/runner/intelligence.rs`): Automatically bounds inline tool observations. Outputs exceeding 24KB (24,000 characters) are flushed to `.tmp/tool_overflow/` with safe UTF-8 codepoint boundary slicing, preserving a 300-character preview and exact file reference pointer to eliminate context window overflow crashes.
+- **Sliding-Window Cyclic Loop Detector** (`server-rs/src/agent/runner/loop_detector.rs`): `DoomLoopDetector` tracks a 16-signature history of SHA-256 normalized tool calls across periods 1 to 4. Features a 2-stage defensive circuit breaker: `LoopCheckResult::Warning` injects steering advisories, and `LoopCheckResult::Terminal` immediately halts repetitive execution loops to prevent runaway token exhaustion.
+- **Pre-Commit UI Quality Guard** (`execution/ui_quality_guard.py`): Static zero-dependency pre-commit scanner auditing all 134 frontend TSX components against `DESIGN.md` contracts (pure black avoidance, untinted grays, low-contrast badge text, missing button/SVG `aria-label` accessibility, and card inception).
+
+### 🔍 Error Reporting & Telemetry Resilience
+- **Persistent Telemetry Event Bridging** (`server-rs/src/telemetry/mod.rs`, `server-rs/src/telemetry/bridge.rs`): `TelemetryLayer::on_event` broadcasts structured `trace:event` signals to `TELEMETRY_TX`, which persists error events to SQLite `mission_logs`.
+- **Trace Status Immutability** (`src/stores/trace_store.ts`): Hardened span lifecycle handling to ensure error spans remain marked as `status: 'error'` when closed.
+- **WAL Concurrency Lock Timeout** (`execution/mission_diagnose.py`, `execution/verify_telemetry.py`): Added 30.0-second SQLite timeout and `PRAGMA busy_timeout = 30000;` preventing lock contention with active server writers during diagnostic scans.
+
+## Previous Upgrades (v1.1.58) — Next-Gen Orchestration Engine
 
 ### ⚡ Kernel Foundation (Phases 1–3)
 - **OTP Actor Supervision Tree** (`server-rs/src/system/actors/supervisor.rs`): Erlang/OTP-style supervision engine supporting `OneForOne` (restart individual) and `OneForAll` (cascade restart all siblings) strategies, `AbortHandle` deterministic hard shutdown, stability-based exponential backoff with auto-reset, and lockless `DashMap` child registry.

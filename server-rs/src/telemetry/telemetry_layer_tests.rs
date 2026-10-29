@@ -114,6 +114,34 @@ async fn test_telemetry_span_update_on_close() {
     assert_eq!(update_event["update"]["status"], "success");
 }
 
+#[tokio::test]
+async fn test_telemetry_layer_broadcasts_events() {
+    let layer = TelemetryLayer::new();
+    let subscriber = tracing_subscriber::registry().with(layer);
+    let mut rx = TELEMETRY_TX.subscribe();
+
+    tracing::subscriber::with_default(subscriber, || {
+        let span = span!(tracing::Level::INFO, "TestSpanWithEvent", trace_id = "trace-event-test");
+        let _enter = span.enter();
+
+        tracing::error!(message = "Simulated fault occurred", error_code = "FAULT_01");
+    });
+
+    let mut found_event = None;
+    while let Ok(e) = rx.recv().await {
+        if e["type"] == "trace:event" && e["attributes"]["error_code"] == "FAULT_01" {
+            found_event = Some(e);
+            break;
+        }
+    }
+
+    let event = found_event.expect("Expected trace:event to be broadcast to TELEMETRY_TX");
+    assert_eq!(event["level"], "ERROR");
+    assert_eq!(event["attributes"]["message"], "Simulated fault occurred");
+    assert!(event.get("span_id").is_some());
+    assert_eq!(event["trace_id"], "trace-event-test");
+}
+
 
 
 // Metadata: [telemetry_layer_tests]

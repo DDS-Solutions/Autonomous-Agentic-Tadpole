@@ -43,7 +43,22 @@ impl SharedBlackboard {
         }
     }
 
+    /// Parses a composite key into a base key and an optional facet.
+    /// Format: `base_key#facet` (e.g., `code_review#ast` -> (`code_review`, Some(`ast`))).
+    pub fn parse_facet_key(key: &str) -> (&str, Option<&str>) {
+        if let Some(pos) = key.find('#') {
+            let base = &key[..pos];
+            let facet = &key[pos + 1..];
+            if !facet.is_empty() {
+                return (base, Some(facet));
+            }
+        }
+        (key, None)
+    }
+
     /// Sets or updates a key-value entry on the mission blackboard with flexible tag collection.
+    /// If `key` includes a facet delimiter (e.g. `base#facet`), it updates only that specific
+    /// facet within the root JSON object, preserving peer facets and bumping the version.
     pub fn set<T, S>(
         &self,
         mission_id: &str,
@@ -64,14 +79,27 @@ impl SharedBlackboard {
 
         let tags_vec: Vec<String> = tags.into_iter().map(Into::into).collect();
         let now = Utc::now();
+        let (base_key, facet_opt) = Self::parse_facet_key(key);
 
-        let mut map_entry = mission_map.entry(key.to_string());
+        let mut map_entry = mission_map.entry(base_key.to_string());
         let entry = match map_entry {
             dashmap::mapref::entry::Entry::Occupied(ref mut occ) => {
                 let next_version = occ.get().version + 1;
+                let final_value = match facet_opt {
+                    Some(facet) => {
+                        let mut map = match &occ.get().value {
+                            serde_json::Value::Object(existing) => existing.clone(),
+                            _ => serde_json::Map::new(),
+                        };
+                        map.insert(facet.to_string(), value);
+                        serde_json::Value::Object(map)
+                    }
+                    None => value,
+                };
+
                 let new_entry = Arc::new(BlackboardEntry {
-                    key: key.to_string(),
-                    value,
+                    key: base_key.to_string(),
+                    value: final_value,
                     author_agent_id: author_agent_id.to_string(),
                     tags: tags_vec,
                     version: next_version,
@@ -81,9 +109,18 @@ impl SharedBlackboard {
                 new_entry
             }
             dashmap::mapref::entry::Entry::Vacant(vac) => {
+                let final_value = match facet_opt {
+                    Some(facet) => {
+                        let mut map = serde_json::Map::new();
+                        map.insert(facet.to_string(), value);
+                        serde_json::Value::Object(map)
+                    }
+                    None => value,
+                };
+
                 let new_entry = Arc::new(BlackboardEntry {
-                    key: key.to_string(),
-                    value,
+                    key: base_key.to_string(),
+                    value: final_value,
                     author_agent_id: author_agent_id.to_string(),
                     tags: tags_vec,
                     version: 1,
@@ -102,9 +139,61 @@ impl SharedBlackboard {
     }
 
     /// Retrieves an entry by key from a mission blackboard (O(1) Arc pointer clone).
+    /// If `key` addresses a facet (e.g. `base#facet`), projects that specific sub-field
+    /// from the root JSON object into a virtual BlackboardEntry.
     pub fn get(&self, mission_id: &str, key: &str) -> Option<Arc<BlackboardEntry>> {
         let mission_map = self.missions.get(mission_id)?;
-        mission_map.get(key).map(|v| v.clone())
+        let (base_key, facet_opt) = Self::parse_facet_key(key);
+        let entry = mission_map.get(base_key)?.clone();
+
+        match facet_opt {
+            Some(facet) => match &entry.value {
+                serde_json::Value::Object(map) => {
+                    let facet_value = map.get(facet)?.clone();
+                    Some(Arc::new(BlackboardEntry {
+                        key: key.to_string(),
+                        value: facet_value,
+                        author_agent_id: entry.author_agent_id.clone(),
+                        tags: entry.tags.clone(),
+                        version: entry.version,
+                        updated_at: entry.updated_at,
+                    }))
+                }
+                _ => None,
+            },
+            None => Some(entry),
+        }
+    }
+
+    /// Sets a specific facet within a base key on the blackboard.
+    pub fn set_facet<T, S>(
+        &self,
+        mission_id: &str,
+        base_key: &str,
+        facet: &str,
+        value: serde_json::Value,
+        author_agent_id: &str,
+        tags: T,
+    ) -> Arc<BlackboardEntry>
+    where
+        T: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let composite_key = format!("{}#{}", base_key, facet);
+        self.set(mission_id, &composite_key, value, author_agent_id, tags)
+    }
+
+    /// Retrieves a specific facet's JSON value directly.
+    pub fn get_facet(&self, mission_id: &str, base_key: &str, facet: &str) -> Option<serde_json::Value> {
+        let composite_key = format!("{}#{}", base_key, facet);
+        self.get(mission_id, &composite_key).map(|e| e.value.clone())
+    }
+
+    /// Computes a deterministic SHA-256 fingerprint for a specific facet.
+    /// Returns `None` if the mission, base key, or facet is not found.
+    pub fn facet_fingerprint(&self, mission_id: &str, base_key: &str, facet: &str) -> Option<String> {
+        let val = self.get_facet(mission_id, base_key, facet)?;
+        Some(crate::agent::durable::hash_payload(&val))
     }
 
     /// Lists all entries matching an optional tag filter.
@@ -306,6 +395,109 @@ mod tests {
 
         let entry = bb.get(m_id, key).expect("Entry must exist");
         assert_eq!(entry.version, 20, "Version must be exactly 20 after 20 atomic writes");
+    }
+
+    #[test]
+    fn test_blackboard_sub_key_facet_addressing() {
+        let bb = SharedBlackboard::new();
+        let m_id = "mission_facet_test";
+
+        // 1. Set individual facets under base key "analysis"
+        bb.set(
+            m_id,
+            "analysis#ast",
+            serde_json::json!({ "node_count": 42 }),
+            "agent_parser",
+            ["ast"],
+        );
+
+        bb.set(
+            m_id,
+            "analysis#summary",
+            serde_json::json!("Clean code structure with 0 lint errors"),
+            "agent_summarizer",
+            ["summary"],
+        );
+
+        // 2. Querying base key returns the combined object containing both facets
+        let base_entry = bb.get(m_id, "analysis").expect("Base entry must exist");
+        assert_eq!(base_entry.version, 2, "Version must increment with each facet update");
+        let obj = base_entry.value.as_object().expect("Value must be an object");
+        assert!(obj.contains_key("ast"), "Must contain ast facet");
+        assert!(obj.contains_key("summary"), "Must contain summary facet");
+
+        // 3. Querying specific facets directly via get() with composite key
+        let ast_facet = bb.get(m_id, "analysis#ast").expect("Facet entry must exist");
+        assert_eq!(ast_facet.key, "analysis#ast");
+        assert_eq!(ast_facet.value["node_count"], 42);
+
+        // 4. Querying via helper get_facet()
+        let summary_val = bb.get_facet(m_id, "analysis", "summary").expect("Summary facet must exist");
+        assert_eq!(summary_val, "Clean code structure with 0 lint errors");
+
+        // 5. Updating an existing facet preserves other facets
+        bb.set_facet(
+            m_id,
+            "analysis",
+            "ast",
+            serde_json::json!({ "node_count": 108 }),
+            "agent_parser_v2",
+            ["ast", "updated"],
+        );
+
+        let updated_base = bb.get(m_id, "analysis").unwrap();
+        assert_eq!(updated_base.version, 3);
+        assert_eq!(updated_base.value["ast"]["node_count"], 108);
+        assert_eq!(updated_base.value["summary"], "Clean code structure with 0 lint errors");
+    }
+
+    #[test]
+    fn test_blackboard_facet_fingerprinting() {
+        let bb = SharedBlackboard::new();
+        let m_id = "mission_fingerprint_test";
+
+        bb.set(
+            m_id,
+            "metrics#perf",
+            serde_json::json!({
+                "latency_ms": 15,
+                "timestamp": "2026-10-22T10:00:00Z"
+            }),
+            "agent_bench",
+            Vec::<String>::new(),
+        );
+
+        let fp1 = bb.facet_fingerprint(m_id, "metrics", "perf").expect("Fingerprint must be computable");
+
+        // Update with changed immaterial field only (timestamp)
+        bb.set(
+            m_id,
+            "metrics#perf",
+            serde_json::json!({
+                "latency_ms": 15,
+                "timestamp": "2026-10-22T19:00:00Z"
+            }),
+            "agent_bench",
+            Vec::<String>::new(),
+        );
+
+        let fp2 = bb.facet_fingerprint(m_id, "metrics", "perf").expect("Fingerprint must be computable");
+        assert_eq!(fp1, fp2, "Fingerprints must remain identical when only immaterial fields change");
+
+        // Update with material field change
+        bb.set(
+            m_id,
+            "metrics#perf",
+            serde_json::json!({
+                "latency_ms": 99,
+                "timestamp": "2026-10-22T19:00:00Z"
+            }),
+            "agent_bench",
+            Vec::<String>::new(),
+        );
+
+        let fp3 = bb.facet_fingerprint(m_id, "metrics", "perf").expect("Fingerprint must be computable");
+        assert_ne!(fp1, fp3, "Fingerprints must differ when material facet values change");
     }
 }
 

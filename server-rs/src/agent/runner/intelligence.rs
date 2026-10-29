@@ -687,16 +687,38 @@ impl AgentRunner {
                             };
 
                             // 🔄 [DoomLoopDetector] Detect periodic tool cycles (periods 1-4)
-                            let is_periodic_loop = loop_det.lock().check(&ctx_clone.agent_id, &fc.name, &args_str, &local_text);
-                            if is_periodic_loop {
-                                tracing::warn!("🔄 [DoomLoopDetector] Periodic tool execution loop detected for agent '{}' on tool '{}'", ctx_clone.agent_id, fc.name);
-                                local_text = format!(
-                                    "[TOOL_WARNING] Periodic cycle detected: you are repeating tool actions across turns without forward progress. Change strategy immediately or ask the user for guidance.\n{}",
-                                    local_text
-                                );
+                            let loop_check = loop_det.lock().check(&ctx_clone.agent_id, &fc.name, &args_str, &local_text);
+                            match loop_check {
+                                crate::agent::runner::loop_detector::LoopCheckResult::Terminal => {
+                                    tracing::error!(
+                                        "🚨 [DoomLoopDetector] Terminal cyclic repetition loop detected for agent '{}' on tool '{}'",
+                                        ctx_clone.agent_id, fc.name
+                                    );
+                                    let err_msg = format!(
+                                        "Doom loop detected: cyclic repetition breached threshold on tool '{}'. Halting execution to prevent token drain.",
+                                        fc.name
+                                    );
+                                    return (
+                                        fc.name,
+                                        Err(AppError::Runner(crate::agent::runner::error::RunnerError::RecursionBlocked(err_msg.clone()))),
+                                        format!("[TOOL_ERROR] RecursionBlocked: {}", err_msg),
+                                        None,
+                                    );
+                                }
+                                crate::agent::runner::loop_detector::LoopCheckResult::Warning => {
+                                    tracing::warn!(
+                                        "🔄 [DoomLoopDetector] Periodic tool execution warning for agent '{}' on tool '{}'",
+                                        ctx_clone.agent_id, fc.name
+                                    );
+                                    local_text = format!(
+                                        "[TOOL_WARNING] Periodic cycle detected: you are repeating tool actions across turns without forward progress. Change strategy immediately or ask the user for guidance.\n{}",
+                                        local_text
+                                    );
+                                }
+                                crate::agent::runner::loop_detector::LoopCheckResult::Ok => {}
                             }
 
-                            if !warning_prefix.is_empty() && !is_periodic_loop {
+                            if !warning_prefix.is_empty() && !loop_check.is_warning() {
                                 local_text = format!("{}{}", warning_prefix, local_text);
                             }
 

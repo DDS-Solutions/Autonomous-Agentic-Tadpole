@@ -93,12 +93,18 @@ export const use_trace_store = create<Trace_Store_State>((set, get) => ({
         set((state) => {
             const existing = state.spans[id];
             if (!existing) return state;
+
+            // Preserve terminal 'error' state unless explicitly overwritten with 'error'
+            const final_status = (existing.status === 'error' && updates.status && updates.status !== 'error')
+                ? 'error'
+                : (updates.status ?? existing.status);
             return {
                 spans: {
                     ...state.spans,
                     [id]: { 
                         ...existing, 
                         ...updates,
+                        status: final_status,
                         trace_id: updates.trace_id || existing.trace_id 
                     }
                 }

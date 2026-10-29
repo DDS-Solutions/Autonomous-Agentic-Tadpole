@@ -108,6 +108,7 @@ describe('INV-007: Release Gate Coverage & Execution Governance Invariant', () =
             'test_restoration.py',
             'tool_loop_guard.py',
             'ui_integrity_audit.py',
+            'ui_quality_guard.py',
             'verification_contract.py',
             'verify_all.py',
             'verify_browser_sentinel.py',

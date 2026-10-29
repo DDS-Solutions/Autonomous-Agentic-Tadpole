@@ -42,7 +42,7 @@ def get_neural_token() -> str:
 def configure_agents():
     token = get_neural_token()
     headers = {
-        "User-Agent": "TadpoleOS/1.1.58",
+        "User-Agent": "TadpoleOS/1.1.59",
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }

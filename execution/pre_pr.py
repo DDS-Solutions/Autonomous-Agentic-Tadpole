@@ -132,8 +132,34 @@ def main():
         log_fail("Parity Guard failed. Details:")
         print(stdout[:500])
 
+    # 6. Python Static Analysis (Ruff — syntax errors and logic bugs)
+    log_info("Running Ruff Python Linter (execution/)...")
+    ruff_ok, stdout, stderr = run_command("python -m ruff check execution/ --select E9,F63,F7,F82,F --ignore F401,F541,F841")
+    report["checks"]["ruff_python"] = {
+        "passed": ruff_ok,
+        "error": (stdout or stderr)[:500] if not ruff_ok else ""
+    }
+    if ruff_ok:
+        log_ok("Ruff Python check passed.")
+    else:
+        log_fail("Ruff Python check failed. Details:")
+        print((stdout or stderr)[:500])
+
+    # 7. UI Quality Guard (static design tokens, contrast & accessibility)
+    log_info("Running UI Quality Guard (execution/ui_quality_guard.py)...")
+    ui_ok, stdout, stderr = run_command("python execution/ui_quality_guard.py")
+    report["checks"]["ui_quality_guard"] = {
+        "passed": ui_ok,
+        "error": (stdout or stderr)[:500] if not ui_ok else ""
+    }
+    if ui_ok:
+        log_ok("UI Quality Guard passed.")
+    else:
+        log_fail("UI Quality Guard failed. Details:")
+        print((stdout or stderr)[:500])
+
     # Final Summary
-    all_passed = cargo_ok and clippy_ok and lint_ok and test_ok and parity_ok
+    all_passed = cargo_ok and clippy_ok and lint_ok and test_ok and parity_ok and ruff_ok and ui_ok
     report["verdict"] = "PASSED" if all_passed else "FAILED"
     
     # Ensure reports dir exists
@@ -152,6 +178,7 @@ def main():
     else:
         log_fail("🚨 PRE-PR GATE FAILED - Fix warning/compile errors before committing. 🚨")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
