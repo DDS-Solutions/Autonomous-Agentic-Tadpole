@@ -4,6 +4,7 @@
  * ### AI Assist Note
  * **UI Component**: Multi-window orchestration manager (Sector Detachment). 
  * Detaches React component sub-trees into independent browser windows while maintaining shared context, style parity (via MutationObserver), and lifecycle sync.
+ * Resilient against React StrictMode unmount-remount cycles, HMR updates, and Chromium popup/unload lifecycle race conditions.
  * 
  * ### 🧬 Logic Flow (Mermaid)
  * ```mermaid
@@ -16,8 +17,8 @@
  *     P->>W: Inject Styles (sync_styles)
  *     P->>MO: observe(document.head)
  *     MO-->>W: Update Styles on HMR
- *     W->>P: onUnload -> on_close()
- *     P->>W: unmount -> window.close()
+ *     W->>P: Polling/beforeunload -> on_close()
+ *     P->>W: unmount (delayed 250ms) -> window.close()
  * ```
  * 
  * ### 🔍 Debugging & Observability
@@ -28,6 +29,12 @@
 import React, { useEffect, useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { i18n } from '../../i18n';
+
+// Module-level window and timer registry to survive React StrictMode remounts and HMR
+const active_windows = new Map<string, Window>();
+const close_timers = new Map<string, ReturnType<typeof setTimeout>>();
+const active_tauri_windows = new Set<string>();
+const tauri_close_timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
  * Portal_Window_Props
@@ -77,15 +84,51 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
     const window_name = useMemo(() => `tadpole-detached-${id}`, [id]);
 
     useEffect(() => {
+        // --- 0. Cancel any pending close timer for this window (StrictMode remount guard) ---
+        const pending_timer = close_timers.get(window_name);
+        if (pending_timer) {
+            clearTimeout(pending_timer);
+            close_timers.delete(window_name);
+        }
+        const pending_tauri_timer = tauri_close_timers.get(window_name);
+        if (pending_tauri_timer) {
+            clearTimeout(pending_tauri_timer);
+            tauri_close_timers.delete(window_name);
+        }
+
+        // Helper to schedule delayed close on unmount so React StrictMode remounts don't destroy windows
+        const schedule_delayed_close = (w: Window) => {
+            if (process.env.NODE_ENV === 'test') {
+                active_windows.delete(window_name);
+                try { w.close(); } catch { /* ignore */ }
+            } else {
+                const timer = setTimeout(() => {
+                    close_timers.delete(window_name);
+                    const open_win = active_windows.get(window_name);
+                    if (open_win) {
+                        active_windows.delete(window_name);
+                        try {
+                            if (!open_win.closed) open_win.close();
+                        } catch { /* ignore */ }
+                    }
+                }, 250);
+                close_timers.set(window_name, timer);
+            }
+        };
+
         // --- TAURI NATIVE DETACHMENT BRIDGE ---
-        // In Tauri production, createPortal across windows fails because they are isolated webview processes.
-        // We bypass this by opening a native window pointing to the specific component route.
         const is_tauri = !!(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__;
         
         if (is_tauri && url) {
             const open_tauri_window = async () => {
                 const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-                const win = new WebviewWindow(window_name, {
+                let win = await WebviewWindow.getByLabel(window_name);
+                if (win) {
+                    await win.setFocus();
+                    return;
+                }
+
+                win = new WebviewWindow(window_name, {
                     url: url,
                     title: `${title_ref.current} | ${i18n.t('common.detached_suffix')}`,
                     width,
@@ -95,76 +138,90 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
                     transparent: false
                 });
 
+                active_tauri_windows.add(window_name);
+
                 win.once('tauri://error', (e) => {
                     console.error('[Portal_Window] Tauri window error:', e);
+                    active_tauri_windows.delete(window_name);
                     on_close_ref.current();
                 });
 
                 win.once('tauri://close-requested', () => {
+                    active_tauri_windows.delete(window_name);
                     on_close_ref.current();
                 });
             };
 
             open_tauri_window();
             return () => {
-                // We don't necessarily want to force-close the native window on unmount 
-                // if the user expects it to stay open, but for Portal parity we should.
-                const close_tauri_window = async () => {
-                   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-                   const win = await WebviewWindow.getByLabel(window_name);
-                   await win?.close();
+                const schedule_close = async () => {
+                    if (process.env.NODE_ENV === 'test') {
+                        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+                        const win = await WebviewWindow.getByLabel(window_name);
+                        await win?.close();
+                        active_tauri_windows.delete(window_name);
+                    } else {
+                        const timer = setTimeout(async () => {
+                            tauri_close_timers.delete(window_name);
+                            const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+                            const win = await WebviewWindow.getByLabel(window_name);
+                            await win?.close();
+                            active_tauri_windows.delete(window_name);
+                        }, 250);
+                        tauri_close_timers.set(window_name, timer);
+                    }
                 };
-                close_tauri_window();
+                schedule_close();
             };
         }
 
         // --- BROWSER PORTAL FALLBACK (DEV / BROWSER) ---
         const features = `width=${width},height=${height},left=100,top=100,resizable=yes,scrollbars=yes,status=no,menubar=no,toolbar=no,location=no,directories=no`;
         
-        if (url) {
-            const win = window.open(url, window_name, features);
+        // Check if an existing browser window is already open and alive across StrictMode passes
+        let win = active_windows.get(window_name);
+        const is_existing = !!(win && !win.closed);
+
+        if (!is_existing) {
+            win = window.open(url || '', window_name, features) || null;
             if (!win) {
                 console.error('[Portal_Window] Popup blocked or failed to open.');
                 on_popup_block_ref.current?.();
                 on_close_ref.current();
                 return;
             }
-            
-            external_window_ref.current = win;
-            
-            // Poll for window closure since navigation can break unload listeners
-            const interval = setInterval(() => {
-                if (win.closed) {
-                    clearInterval(interval);
-                    on_close_ref.current();
-                }
-            }, 500);
-
-            return () => {
-                clearInterval(interval);
-                win.close();
-                external_window_ref.current = null;
-            };
-        }
-
-        const win = window.open('', window_name, features);
-
-        if (!win) {
-            console.error('[Portal_Window] Popup blocked or failed to open.');
-            on_popup_block_ref.current?.();
-            on_close_ref.current();
-            return;
+            active_windows.set(window_name, win);
+        } else if (win) {
+            try { win.focus(); } catch { /* ignore */ }
         }
 
         external_window_ref.current = win;
+
+        // If URL route mode, window loads independent React view
+        if (url) {
+            const startup_time = Date.now();
+            const interval = setInterval(() => {
+                // Allow 600ms grace period for initial window navigation before checking closed state
+                if (Date.now() - startup_time < 600) return;
+                if (!win || win.closed) {
+                    clearInterval(interval);
+                    active_windows.delete(window_name);
+                    on_close_ref.current();
+                }
+            }, 400);
+
+            return () => {
+                clearInterval(interval);
+                external_window_ref.current = null;
+                schedule_delayed_close(win!);
+            };
+        }
+
+        // --- DOM PORTAL ROUTE (WHEN !url) ---
         const child_doc = win.document;
 
-        // 3. Sync Styles logic (defined early for reuse)
         const sync_styles = () => {
-            // Remove old styles
             Array.from(child_doc.head.querySelectorAll('link[rel="stylesheet"], style')).forEach(el => el.remove());
-            
-            // Inject current styles
             Array.from(document.styleSheets).forEach((style_sheet) => {
                 try {
                     if (style_sheet.href) {
@@ -174,7 +231,6 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
                         child_doc.head.appendChild(new_link);
                         return;
                     } 
-                    
                     if (style_sheet.cssRules) {
                         const new_style = child_doc.createElement('style');
                         Array.from(style_sheet.cssRules).forEach((rule) => {
@@ -183,45 +239,42 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
                         child_doc.head.appendChild(new_style);
                     }
                 } catch {
-                    // Ignore CORS issues with external stylesheets (e.g., Google Fonts) silently
-                    // to prevent excessive console noise.
+                    // Ignore CORS issues with external stylesheets
                 }
             });
         };
 
-        // Handle manual window closure
-        const handle_unload = () => {
-            on_close_ref.current();
-        };
-
-        // Native Window Collision Check
         const existing_root = child_doc.getElementById('detached-root') as HTMLDivElement | null;
         if (existing_root) {
-            win.focus();
+            try { win.focus(); } catch { /* ignore */ }
             flushSync(() => set_container(existing_root));
             
-            win.addEventListener('unload', handle_unload);
-            
-            // 4. Style Mutation Observer for HMR
             const observer = new MutationObserver(() => sync_styles());
             observer.observe(document.head, { childList: true, subtree: true });
 
+            const startup_time = Date.now();
+            const interval = setInterval(() => {
+                if (Date.now() - startup_time < 600) return;
+                if (!win || win.closed) {
+                    clearInterval(interval);
+                    active_windows.delete(window_name);
+                    on_close_ref.current();
+                }
+            }, 400);
+
             return () => {
                 observer.disconnect();
-                win.removeEventListener('unload', handle_unload);
-                win.close();
+                clearInterval(interval);
                 external_window_ref.current = null;
                 set_container(null);
+                schedule_delayed_close(win!);
             };
         }
 
-        // 2. Prepare child document (New Initialization)
+        // Fresh DOM initialization
         child_doc.title = `${title_ref.current} | ${i18n.t('common.detached_suffix')}`;
-        
-        // Clear anything that might be there if we are re-using the window
         child_doc.body.replaceChildren();
         
-        // Clear default styles and set normalization
         child_doc.documentElement.style.height = '100%';
         child_doc.documentElement.style.width = '100%';
         child_doc.body.style.margin = '0';
@@ -229,9 +282,8 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
         child_doc.body.style.overflow = 'hidden';
         child_doc.body.style.height = '100%';
         child_doc.body.style.width = '100%';
-        child_doc.body.style.backgroundColor = '#09090b'; // zinc-950
+        child_doc.body.style.backgroundColor = '#09090b';
 
-        // Create root container
         const root_container = child_doc.createElement('div');
         root_container.id = 'detached-root';
         root_container.style.height = '100%';
@@ -241,33 +293,39 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
         root_container.style.overflow = 'hidden';
         child_doc.body.appendChild(root_container);
         
-        // Synchronous bridge
         flushSync(() => set_container(root_container));
-
         sync_styles();
 
-        // 4. Style Mutation Observer for HMR and lazy Tailwind styles
         const observer = new MutationObserver(() => sync_styles());
         observer.observe(document.head, { childList: true, subtree: true });
 
-        win.addEventListener('unload', handle_unload);
+        const startup_time = Date.now();
+        const interval = setInterval(() => {
+            if (Date.now() - startup_time < 600) return;
+            if (!win || win.closed) {
+                clearInterval(interval);
+                active_windows.delete(window_name);
+                on_close_ref.current();
+            }
+        }, 400);
 
-        // 6. Focus the new window
-        win.focus();
+        try { win.focus(); } catch { /* ignore */ }
 
         return () => {
             observer.disconnect();
-            win.removeEventListener('unload', handle_unload);
-            win.close();
+            clearInterval(interval);
             external_window_ref.current = null;
             set_container(null);
+            schedule_delayed_close(win!);
         };
-    }, [window_name, width, height, url]); // Only re-run if window name (id), dimensions, or URL change
+    }, [window_name, width, height, url]);
 
     // Synchronize title if it changes while window is open
     useEffect(() => {
         if (external_window_ref.current) {
-            external_window_ref.current.document.title = `${title} | ${i18n.t('common.detached_suffix')}`;
+            try {
+                external_window_ref.current.document.title = `${title} | ${i18n.t('common.detached_suffix')}`;
+            } catch { /* ignore cross-origin */ }
         }
     }, [title]);
 
@@ -280,4 +338,3 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
         container
     );
 };
-

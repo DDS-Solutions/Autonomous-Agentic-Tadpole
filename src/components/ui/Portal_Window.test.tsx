@@ -110,6 +110,25 @@ describe('Portal_Window', () => {
 
         expect(mockWindow.close).toHaveBeenCalledTimes(1);
     });
+
+    it('opens external URL window with dedicated route', () => {
+        render(
+            <Portal_Window 
+                id="url-tab" 
+                title="URL Tab" 
+                url="/detached-view?type=tab&path=%2Fdashboard" 
+                on_close={mockOnClose}
+            >
+                <div />
+            </Portal_Window>
+        );
+
+        expect(window.open).toHaveBeenCalledWith(
+            '/detached-view?type=tab&path=%2Fdashboard',
+            'tadpole-detached-url-tab',
+            expect.any(String)
+        );
+    });
 });
 
 
