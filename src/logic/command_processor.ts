@@ -250,6 +250,161 @@ export function resolve_agent_unique(
     };
 }
 
+type Agent_Lookup = (name_or_id: string | undefined) => Agent | null;
+
+/**
+ * Resolves the primary Architect or Lead Coordinator agent from the active roster.
+ *
+ * @param safe_agents - Validated array of active agents.
+ * @param prefer_architect_role - When true (tactical escalation), prioritizes role/name matching 'architect' before 'CEO'.
+ */
+export function resolve_lead_coordinator(safe_agents: Agent[], prefer_architect_role = false): Agent | undefined {
+    if (prefer_architect_role) {
+        return (
+            safe_agents.find(
+                a =>
+                    a.role?.toLowerCase() === 'architect' ||
+                    a.name.toLowerCase().includes('architect') ||
+                    a.name === 'Tadpole_Alpha'
+            ) ||
+            safe_agents.find(a => a.name === 'CEO') ||
+            safe_agents[0]
+        );
+    }
+
+    return (
+        safe_agents.find(
+            a =>
+                a.name === 'Tadpole_Alpha' ||
+                a.name === 'CEO' ||
+                a.role?.toLowerCase() === 'architect'
+        ) || safe_agents[0]
+    );
+}
+
+/**
+ * Sanitizes a raw directive string and validates that it is non-empty and within length bounds.
+ * Emits the appropriate error log to `event_bus` when validation fails.
+ */
+function prepare_validated_directive(raw_text: string, usage_hint: string): string | null {
+    const message = sanitize_directive(raw_text);
+    if (!message) {
+        event_bus.emit_log({
+            source: 'System',
+            text: usage_hint,
+            severity: 'error'
+        });
+        return null;
+    }
+
+    const len_check = validate_directive_length(message);
+    if (!len_check.valid) {
+        event_bus.emit_log({
+            source: 'System',
+            text: len_check.error!,
+            severity: 'error'
+        });
+        return null;
+    }
+
+    return message;
+}
+
+/**
+ * Executes Sentinel-tier tactical UI interception via the local Browser Specialist,
+ * escalating to the Computer Architect if the tactical threshold is exceeded.
+ */
+async function handle_tactical_interception(
+    command_text: string,
+    safe_agents: Agent[],
+    is_safe_mode?: boolean
+): Promise<Command_Result> {
+    console.debug('[CommandProcessor] [TieredRouting] Tactical intent detected. Routing to Browser Specialist.');
+    event_bus.emit_log({ source: 'System', text: '🧠 Browser Specialist analyzing tactical intent...', severity: 'info' });
+
+    const specialist_store = use_browser_specialist_store.getState();
+    const trace_store = use_trace_store.getState();
+
+    const span_id = uuidv4().substring(0, 16);
+    const trace_id = trace_store.active_trace_id || uuidv4().replace(/-/g, '');
+    const start_time = performance.now();
+
+    trace_store.add_span({
+        id: span_id,
+        trace_id,
+        name: 'tactical_ui_analysis',
+        agent_id: 'Browser Specialist',
+        mission_id: 'active_session',
+        start_time: Date.now(),
+        status: 'running',
+        attributes: { intent: command_text }
+    });
+
+    try {
+        const analysis = await specialist_store.analyze_dom(command_text);
+        const duration = performance.now() - start_time;
+        const should_escalate = use_browser_specialist_store.getState().last_escalate || analysis.includes('ESCALATE_TO_ARCHITECT');
+
+        trace_store.update_span(span_id, {
+            status: 'success',
+            end_time: Date.now(),
+            attributes: {
+                intent: command_text,
+                latency_ms: duration,
+                is_escalated: should_escalate
+            }
+        });
+
+        event_bus.emit_log({
+            source: 'Agent',
+            agent_id: 'Browser Specialist',
+            text: analysis,
+            severity: 'success'
+        });
+
+        if (should_escalate) {
+            event_bus.emit_log({
+                source: 'System',
+                text: '⚠️ Tactical threshold exceeded. Escalating to Computer Architect...',
+                severity: 'warning'
+            });
+
+            const architect = resolve_lead_coordinator(safe_agents, true);
+            if (architect) {
+                const escalated_raw = `[ESCALATED_TACTICAL]: ${command_text}`;
+                const escalated_msg = escalated_raw.length > MAX_DIRECTIVE_LENGTH
+                    ? escalated_raw.substring(0, MAX_DIRECTIVE_LENGTH - 3) + '...'
+                    : escalated_raw;
+
+                await dispatch_directive(
+                    architect,
+                    escalated_msg,
+                    !!is_safe_mode,
+                    'agent',
+                    undefined,
+                    undefined,
+                    `@${architect.name}`
+                );
+            }
+        }
+
+        return { should_clear_logs: false };
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        trace_store.update_span(span_id, {
+            status: 'error',
+            end_time: Date.now(),
+            attributes: { error: msg }
+        });
+        event_bus.emit_log({
+            source: 'System',
+            text: `Tactical UI analysis error: ${msg}`,
+            severity: 'error'
+        });
+        return { should_clear_logs: false };
+    }
+}
+
 /**
  * process_command
  * Processes a single slash-command string from the user.
@@ -289,103 +444,12 @@ export async function process_command(
 
     // 1.1 Tactical Interception (Sentinel Tier)
     if (settings.sentinel_mode && !cmd.startsWith('/') && !cmd.startsWith('@') && !cmd.startsWith('#')) {
-        const is_tactical = check_if_tactical(command_text);
-        if (is_tactical) {
-            console.debug(`${telemetry_source} [TieredRouting] Tactical intent detected. Routing to Browser Specialist.`);
-            event_bus.emit_log({ source: 'System', text: '🧠 Browser Specialist analyzing tactical intent...', severity: 'info' });
-
-            const specialist_store = use_browser_specialist_store.getState();
-            const trace_store = use_trace_store.getState();
-
-            const span_id = uuidv4().substring(0, 16);
-            const trace_id = trace_store.active_trace_id || uuidv4().replace(/-/g, '');
-            const start_time = performance.now();
-
-            trace_store.add_span({
-                id: span_id,
-                trace_id,
-                name: 'tactical_ui_analysis',
-                agent_id: 'Browser Specialist',
-                mission_id: 'active_session',
-                start_time: Date.now(),
-                status: 'running',
-                attributes: { intent: command_text }
-            });
-
-            try {
-                const analysis = await specialist_store.analyze_dom(command_text);
-                const duration = performance.now() - start_time;
-                const should_escalate = use_browser_specialist_store.getState().last_escalate || analysis.includes('ESCALATE_TO_ARCHITECT');
-
-                trace_store.update_span(span_id, {
-                    status: 'success',
-                    end_time: Date.now(),
-                    attributes: { 
-                        intent: command_text, 
-                        latency_ms: duration,
-                        is_escalated: should_escalate
-                    }
-                });
-
-                event_bus.emit_log({ 
-                    source: 'Agent', 
-                    agent_id: 'Browser Specialist', 
-                    text: analysis, 
-                    severity: 'success' 
-                });
-
-                if (should_escalate) {
-                    event_bus.emit_log({
-                        source: 'System',
-                        text: '⚠️ Tactical threshold exceeded. Escalating to Computer Architect...',
-                        severity: 'warning'
-                    });
-
-                    // Route escalation directly to Architect agent
-                    const architect = safe_agents.find(a => 
-                        a.role?.toLowerCase() === 'architect' || 
-                        a.name.toLowerCase().includes('architect') || 
-                        a.name === 'Tadpole_Alpha'
-                    ) || safe_agents.find(a => a.name === 'CEO') || safe_agents[0];
-
-                    if (architect) {
-                        const escalated_raw = `[ESCALATED_TACTICAL]: ${command_text}`;
-                        const escalated_msg = escalated_raw.length > MAX_DIRECTIVE_LENGTH
-                            ? escalated_raw.substring(0, MAX_DIRECTIVE_LENGTH - 3) + '...'
-                            : escalated_raw;
-
-                        await dispatch_directive(
-                            architect, 
-                            escalated_msg, 
-                            !!is_safe_mode, 
-                            'agent', 
-                            undefined, 
-                            undefined, 
-                            `@${architect.name}`
-                        );
-                    }
-                    return { should_clear_logs: false };
-                }
-
-                return { should_clear_logs: false };
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                trace_store.update_span(span_id, {
-                    status: 'error',
-                    end_time: Date.now(),
-                    attributes: { error: msg }
-                });
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `Tactical UI analysis error: ${msg}`,
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
+        if (check_if_tactical(command_text)) {
+            return handle_tactical_interception(command_text, safe_agents, is_safe_mode);
         }
     }
 
-    const find_agent = (name_or_id: string | undefined): Agent | null => {
+    const find_agent: Agent_Lookup = (name_or_id: string | undefined): Agent | null => {
         const { agent, error } = resolve_agent_unique(name_or_id, safe_agents);
         if (error) {
             event_bus.emit_log({ source: 'System', text: error, severity: 'error' });
@@ -542,17 +606,319 @@ async function dispatch_directive(
 }
 
 /**
- * Handles all standard slash commands.
+ * Summarizes swarm operational telemetry for `/status`.
+ */
+function handle_status_command(safe_agents: Agent[]): Command_Result {
+    const active = safe_agents.filter(a => a.status === 'active' || a.status === 'thinking' || a.status === 'coding').length;
+    const idle = safe_agents.filter(a => a.status === 'idle').length;
+    const offline = safe_agents.filter(a => a.status === 'offline').length;
+    const total_tokens = safe_agents.reduce((sum, a) => sum + (a.tokens_used || 0), 0);
+
+    event_bus.emit_log({
+        source: 'System',
+        text: `Swarm Status: ${active} active · ${idle} idle · ${offline} offline | Total tokens: ${(total_tokens / 1000).toFixed(1)}k`,
+        severity: 'success'
+    });
+    return { should_clear_logs: false };
+}
+
+/**
+ * Stateful 2-step confirmation flow for `/deploy`.
+ */
+async function handle_deploy_command(args: string[]): Promise<Command_Result> {
+    const is_confirm = args[0]?.toLowerCase() === 'confirm';
+
+    if (!is_confirm) {
+        pending_deploy_confirmation = true;
+        if (deploy_confirm_timeout) clearTimeout(deploy_confirm_timeout);
+        deploy_confirm_timeout = setTimeout(() => {
+            pending_deploy_confirmation = false;
+            deploy_confirm_timeout = null;
+        }, 30000); // 30 second expiration window
+
+        event_bus.emit_log({
+            source: 'System',
+            text: '⚠️ Production deployment requested. Type "/deploy confirm" within 30 seconds to execute.',
+            severity: 'warning'
+        });
+        return { should_clear_logs: false };
+    }
+
+    if (!pending_deploy_confirmation) {
+        event_bus.emit_log({
+            source: 'System',
+            text: '❌ No pending deployment request. Type "/deploy" first to initiate the confirmation challenge.',
+            severity: 'error'
+        });
+        return { should_clear_logs: false };
+    }
+
+    pending_deploy_confirmation = false;
+    if (deploy_confirm_timeout) {
+        clearTimeout(deploy_confirm_timeout);
+        deploy_confirm_timeout = null;
+    }
+
+    event_bus.emit_log({
+        source: 'System',
+        text: '🚀 Triggering deployment to Swarm Bunker via /engine/deploy...',
+        severity: 'warning'
+    });
+
+    try {
+        const data = await system_api_service.deploy_engine();
+        event_bus.emit_log({
+            source: 'System',
+            text: `✅ Deployment successful. Output: ${(data.output || '').slice(-300)}`,
+            severity: 'success'
+        });
+    } catch (e: unknown) {
+        const error_msg = e instanceof Error ? e.message : String(e);
+        event_bus.emit_log({
+            source: 'System',
+            text: `❌ Deployment error: ${error_msg}`,
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Triggers the Pre-PR Quality Gate via `/pre-pr`.
+ */
+async function handle_pre_pr_command(): Promise<Command_Result> {
+    event_bus.emit_log({
+        source: 'System',
+        text: '🔍 Starting Pre-PR Quality Gate verification...',
+        severity: 'info'
+    });
+
+    try {
+        const data = await system_api_service.pre_pr_engine();
+        if (data.status === 'success') {
+            event_bus.emit_log({
+                source: 'System',
+                text: `✅ Pre-PR Gate succeeded!\n\n${data.output || ''}`,
+                severity: 'success'
+            });
+        } else {
+            event_bus.emit_log({
+                source: 'System',
+                text: `❌ Pre-PR Gate failed!\n\nOutput:\n${data.output || ''}\n\nError details:\n${data.error || ''}`,
+                severity: 'error'
+            });
+        }
+    } catch (e: unknown) {
+        const error_msg = e instanceof Error ? e.message : String(e);
+        event_bus.emit_log({
+            source: 'System',
+            text: `❌ Pre-PR Gate fault: ${error_msg}`,
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Displays agent configuration details for `/config <agent-name>`.
+ */
+function handle_config_command(args: string[], find_agent: Agent_Lookup): Command_Result {
+    if (!args[0]) {
+        event_bus.emit_log({
+            source: 'System',
+            text: 'Usage: /config <agent-name>',
+            severity: 'error'
+        });
+        return { should_clear_logs: false };
+    }
+
+    const agent = find_agent(args[0]);
+    if (!agent) return { should_clear_logs: false };
+
+    const raw_cfg = agent.model_config as Record<string, unknown> | undefined;
+    const prompt_preview = raw_cfg?.systemPrompt || raw_cfg?.system_prompt;
+    const prompt_str = typeof prompt_preview === 'string' ? prompt_preview.substring(0, 80) + '...' : '(none)';
+
+    event_bus.emit_log({
+        source: 'System',
+        text: [
+            `⚙️ Config for ${agent.name}:`,
+            `  Model: ${agent.model}`,
+            `  Temperature: ${raw_cfg?.temperature ?? 'default'}`,
+            `  Status: ${agent.status}`,
+            `  Prompt: ${prompt_str}`,
+        ].join('\n'),
+        severity: 'info'
+    });
+    return { should_clear_logs: false };
+}
+
+/**
+ * Unified lifecycle handler for `/pause <agent-name>` and `/resume <agent-name>`.
+ */
+async function handle_agent_lifecycle_command(
+    action: 'pause' | 'resume',
+    args: string[],
+    find_agent: Agent_Lookup
+): Promise<Command_Result> {
+    const agent = find_agent(args[0]);
+    if (!agent) return { should_clear_logs: false };
+
+    const is_pause = action === 'pause';
+    const icon = is_pause ? '⏸️' : '▶️';
+    const past_tense = is_pause ? 'paused' : 'resumed';
+    const severity = is_pause ? 'warning' : 'success';
+
+    try {
+        const success = is_pause
+            ? await agent_api_service.pause_agent(agent.id)
+            : await agent_api_service.resume_agent(agent.id);
+
+        event_bus.emit_log({
+            source: 'System',
+            text: success
+                ? `${icon} Agent ${agent.name} ${past_tense} via TadpoleOS.`
+                : `${icon} Agent ${agent.name} ${past_tense} locally (TadpoleOS offline).`,
+            severity
+        });
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        event_bus.emit_log({
+            source: 'System',
+            text: `Failed to ${action} agent ${agent.name}: ${msg}`,
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles `/send <agent-name> <message>`.
+ */
+async function handle_send_command(
+    args: string[],
+    find_agent: Agent_Lookup,
+    is_safe_mode?: boolean
+): Promise<Command_Result> {
+    if (!args[0]) {
+        event_bus.emit_log({
+            source: 'System',
+            text: 'Usage: /send <agent-name> <message>',
+            severity: 'error'
+        });
+        return { should_clear_logs: false };
+    }
+
+    const agent = find_agent(args[0]);
+    if (!agent) return { should_clear_logs: false };
+
+    const message = prepare_validated_directive(args.slice(1).join(' '), 'Usage: /send <agent-name> <message>');
+    if (!message) return { should_clear_logs: false };
+
+    await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, agent.name);
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles `/swarm <status|optimize>`.
+ */
+function handle_swarm_command(args: string[], safe_agents: Agent[]): Command_Result {
+    const workspace_store = use_workspace_store.getState();
+    const sub_cmd = args[0]?.toLowerCase();
+
+    if (sub_cmd === 'status') {
+        const cluster_info = workspace_store.clusters.map(c =>
+            `🔹 ${c.name} [${c.theme.toUpperCase()}]\n` +
+            `  Alpha: ${safe_agents.find(a => a.id === c.alpha_id)?.name || 'NONE'}\n` +
+            `  Objective: ${c.objective || 'No objective set'}\n` +
+            `  Collaborators: ${c.collaborators.length}`
+        ).join('\n\n');
+
+        event_bus.emit_log({
+            source: 'System',
+            text: `🌐 Mission Cluster Inventory:\n\n${cluster_info}`,
+            severity: 'info'
+        });
+    } else if (sub_cmd === 'optimize') {
+        event_bus.emit_log({
+            source: 'System',
+            text: '⚡ Initiating global swarm optimization...',
+            severity: 'warning'
+        });
+
+        workspace_store.clusters.forEach(cluster => {
+            workspace_store.generate_proposal(cluster.id);
+            const proposal = use_workspace_store.getState().active_proposals[cluster.id];
+
+            if (proposal) {
+                setTimeout(() => {
+                    event_bus.emit_log({
+                        source: 'Agent',
+                        agent_id: safe_agents.find(a => a.id === cluster.alpha_id)?.name || 'Alpha Node',
+                        text: proposal.reasoning,
+                        severity: 'info'
+                    });
+                }, 500 + Math.random() * 1000);
+            }
+        });
+    } else {
+        event_bus.emit_log({
+            source: 'System',
+            text: 'Usage: /swarm <status|optimize>',
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles `/switch <agent-name> <1|2|3>`.
+ */
+async function handle_switch_command(args: string[], find_agent: Agent_Lookup): Promise<Command_Result> {
+    if (!args[0] || !args[1]) {
+        event_bus.emit_log({ source: 'System', text: 'Usage: /switch <agent-name> <1|2|3>', severity: 'error' });
+        return { should_clear_logs: false };
+    }
+
+    const agent = find_agent(args[0]);
+    if (!agent) return { should_clear_logs: false };
+
+    const slot_val = parseInt(args[1], 10);
+    if (isNaN(slot_val) || slot_val < 1 || slot_val > 3) {
+        event_bus.emit_log({ source: 'System', text: 'Invalid slot. Use 1, 2, or 3.', severity: 'error' });
+        return { should_clear_logs: false };
+    }
+
+    const slot = slot_val as 1 | 2 | 3;
+    try {
+        await agent_api_service.update_agent(agent.id, { active_model_slot: slot });
+        event_bus.emit_log({
+            source: 'System',
+            text: `Agent ${agent.name} switched to Neural Slot ${slot}.`,
+            severity: 'success'
+        });
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        event_bus.emit_log({
+            source: 'System',
+            text: `Failed to switch slot for ${agent.name}: ${msg}`,
+            severity: 'error'
+        });
+    }
+    return { should_clear_logs: false };
+}
+
+/**
+ * Handles all standard slash commands by routing to dedicated sub-handlers.
  */
 async function handle_slash_command(
     cmd: string,
     args: string[],
     safe_agents: Agent[],
-    find_agent: (name_or_id: string | undefined) => Agent | null,
+    find_agent: Agent_Lookup,
     is_safe_mode?: boolean
 ): Promise<Command_Result> {
     switch (cmd) {
-        // ────────────── HELP ──────────────
         case '/help': {
             event_bus.emit_log({
                 source: 'System',
@@ -577,328 +943,28 @@ async function handle_slash_command(
             });
             return { should_clear_logs: false };
         }
-
-        // ────────────── CLEAR ──────────────
         case '/clear': {
             event_bus.clear_history();
             return { should_clear_logs: true };
         }
-
-        // ────────────── STATUS ──────────────
-        case '/status': {
-            const active = safe_agents.filter(a => a.status === 'active' || a.status === 'thinking' || a.status === 'coding').length;
-            const idle = safe_agents.filter(a => a.status === 'idle').length;
-            const offline = safe_agents.filter(a => a.status === 'offline').length;
-            const total_tokens = safe_agents.reduce((sum, a) => sum + (a.tokens_used || 0), 0);
-
-            event_bus.emit_log({
-                source: 'System',
-                text: `Swarm Status: ${active} active · ${idle} idle · ${offline} offline | Total tokens: ${(total_tokens / 1000).toFixed(1)}k`,
-                severity: 'success'
-            });
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── DEPLOY (Stateful 2-Step Confirmation Flow) ──────────────
-        case '/deploy': {
-            const is_confirm = args[0]?.toLowerCase() === 'confirm';
-
-            if (!is_confirm) {
-                pending_deploy_confirmation = true;
-                if (deploy_confirm_timeout) clearTimeout(deploy_confirm_timeout);
-                deploy_confirm_timeout = setTimeout(() => {
-                    pending_deploy_confirmation = false;
-                    deploy_confirm_timeout = null;
-                }, 30000); // 30 second expiration window
-
-                event_bus.emit_log({
-                    source: 'System',
-                    text: '⚠️ Production deployment requested. Type "/deploy confirm" within 30 seconds to execute.',
-                    severity: 'warning'
-                });
-                return { should_clear_logs: false };
-            }
-
-            // User typed "/deploy confirm"
-            if (!pending_deploy_confirmation) {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: '❌ No pending deployment request. Type "/deploy" first to initiate the confirmation challenge.',
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
-
-            // Validated challenge
-            pending_deploy_confirmation = false;
-            if (deploy_confirm_timeout) {
-                clearTimeout(deploy_confirm_timeout);
-                deploy_confirm_timeout = null;
-            }
-
-            event_bus.emit_log({
-                source: 'System',
-                text: '🚀 Triggering deployment to Swarm Bunker via /engine/deploy...',
-                severity: 'warning'
-            });
-
-            try {
-                const data = await system_api_service.deploy_engine();
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `✅ Deployment successful. Output: ${(data.output || '').slice(-300)}`,
-                    severity: 'success'
-                });
-            } catch (e: unknown) {
-                const error_msg = e instanceof Error ? e.message : String(e);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `❌ Deployment error: ${error_msg}`,
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── PRE-PR (Quality Gate) ──────────────
-        case '/pre-pr': {
-            event_bus.emit_log({
-                source: 'System',
-                text: '🔍 Starting Pre-PR Quality Gate verification...',
-                severity: 'info'
-            });
-
-            try {
-                const data = await system_api_service.pre_pr_engine();
-                if (data.status === 'success') {
-                    event_bus.emit_log({
-                        source: 'System',
-                        text: `✅ Pre-PR Gate succeeded!\n\n${data.output || ''}`,
-                        severity: 'success'
-                    });
-                } else {
-                    event_bus.emit_log({
-                        source: 'System',
-                        text: `❌ Pre-PR Gate failed!\n\nOutput:\n${data.output || ''}\n\nError details:\n${data.error || ''}`,
-                        severity: 'error'
-                    });
-                }
-            } catch (e: unknown) {
-                const error_msg = e instanceof Error ? e.message : String(e);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `❌ Pre-PR Gate fault: ${error_msg}`,
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── CONFIG ──────────────
-        case '/config': {
-            if (!args[0]) {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: 'Usage: /config <agent-name>',
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
-
-            const agent = find_agent(args[0]);
-            if (!agent) return { should_clear_logs: false };
-
-            const raw_cfg = agent.model_config as Record<string, unknown> | undefined;
-            const prompt_preview = raw_cfg?.systemPrompt || raw_cfg?.system_prompt;
-            const prompt_str = typeof prompt_preview === 'string' ? prompt_preview.substring(0, 80) + '...' : '(none)';
-
-            event_bus.emit_log({
-                source: 'System',
-                text: [
-                    `⚙️ Config for ${agent.name}:`,
-                    `  Model: ${agent.model}`,
-                    `  Temperature: ${raw_cfg?.temperature ?? 'default'}`,
-                    `  Status: ${agent.status}`,
-                    `  Prompt: ${prompt_str}`,
-                ].join('\n'),
-                severity: 'info'
-            });
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── PAUSE ──────────────
-        case '/pause': {
-            const agent = find_agent(args[0]);
-            if (!agent) return { should_clear_logs: false };
-
-            try {
-                const success = await agent_api_service.pause_agent(agent.id);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: success
-                        ? `⏸️ Agent ${agent.name} paused via TadpoleOS.`
-                        : `⏸️ Agent ${agent.name} paused locally (TadpoleOS offline).`,
-                    severity: 'warning'
-                });
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `Failed to pause agent ${agent.name}: ${msg}`,
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── RESUME ──────────────
-        case '/resume': {
-            const agent = find_agent(args[0]);
-            if (!agent) return { should_clear_logs: false };
-
-            try {
-                const success = await agent_api_service.resume_agent(agent.id);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: success
-                        ? `▶️ Agent ${agent.name} resumed via TadpoleOS.`
-                        : `▶️ Agent ${agent.name} resumed locally (TadpoleOS offline).`,
-                    severity: 'success'
-                });
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `Failed to resume agent ${agent.name}: ${msg}`,
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── SEND ──────────────
-        case '/send': {
-            if (!args[0]) {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: 'Usage: /send <agent-name> <message>',
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
-
-            const agent = find_agent(args[0]);
-            if (!agent) return { should_clear_logs: false };
-
-            const message = sanitize_directive(args.slice(1).join(' '));
-            if (!message) {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: 'Usage: /send <agent-name> <message>',
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
-
-            const len_check = validate_directive_length(message);
-            if (!len_check.valid) {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: len_check.error!,
-                    severity: 'error'
-                });
-                return { should_clear_logs: false };
-            }
-
-            await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, agent.name);
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── SWARM ──────────────
-        case '/swarm': {
-            const workspace_store = use_workspace_store.getState();
-            const sub_cmd = args[0]?.toLowerCase();
-
-            if (sub_cmd === 'status') {
-                const cluster_info = workspace_store.clusters.map(c =>
-                    `🔹 ${c.name} [${c.theme.toUpperCase()}]\n` +
-                    `  Alpha: ${safe_agents.find(a => a.id === c.alpha_id)?.name || 'NONE'}\n` +
-                    `  Objective: ${c.objective || 'No objective set'}\n` +
-                    `  Collaborators: ${c.collaborators.length}`
-                ).join('\n\n');
-
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `🌐 Mission Cluster Inventory:\n\n${cluster_info}`,
-                    severity: 'info'
-                });
-            } else if (sub_cmd === 'optimize') {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: '⚡ Initiating global swarm optimization...',
-                    severity: 'warning'
-                });
-
-                workspace_store.clusters.forEach(cluster => {
-                    workspace_store.generate_proposal(cluster.id);
-                    const proposal = use_workspace_store.getState().active_proposals[cluster.id];
-
-                    if (proposal) {
-                        setTimeout(() => {
-                            event_bus.emit_log({
-                                source: 'Agent',
-                                agent_id: safe_agents.find(a => a.id === cluster.alpha_id)?.name || 'Alpha Node',
-                                text: proposal.reasoning,
-                                severity: 'info'
-                            });
-                        }, 500 + Math.random() * 1000);
-                    }
-                });
-            } else {
-                event_bus.emit_log({
-                    source: 'System',
-                    text: 'Usage: /swarm <status|optimize>',
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
-        // ────────────── SWITCH ──────────────
-        case '/switch': {
-            if (!args[0] || !args[1]) {
-                event_bus.emit_log({ source: 'System', text: 'Usage: /switch <agent-name> <1|2|3>', severity: 'error' });
-                return { should_clear_logs: false };
-            }
-
-            const agent = find_agent(args[0]);
-            if (!agent) return { should_clear_logs: false };
-
-            const slot_val = parseInt(args[1], 10);
-            if (isNaN(slot_val) || slot_val < 1 || slot_val > 3) {
-                event_bus.emit_log({ source: 'System', text: 'Invalid slot. Use 1, 2, or 3.', severity: 'error' });
-                return { should_clear_logs: false };
-            }
-
-            const slot = slot_val as 1 | 2 | 3;
-            try {
-                await agent_api_service.update_agent(agent.id, { active_model_slot: slot });
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `Agent ${agent.name} switched to Neural Slot ${slot}.`,
-                    severity: 'success'
-                });
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                event_bus.emit_log({
-                    source: 'System',
-                    text: `Failed to switch slot for ${agent.name}: ${msg}`,
-                    severity: 'error'
-                });
-            }
-            return { should_clear_logs: false };
-        }
-
+        case '/status':
+            return handle_status_command(safe_agents);
+        case '/deploy':
+            return handle_deploy_command(args);
+        case '/pre-pr':
+            return handle_pre_pr_command();
+        case '/config':
+            return handle_config_command(args, find_agent);
+        case '/pause':
+            return handle_agent_lifecycle_command('pause', args, find_agent);
+        case '/resume':
+            return handle_agent_lifecycle_command('resume', args, find_agent);
+        case '/send':
+            return handle_send_command(args, find_agent, is_safe_mode);
+        case '/swarm':
+            return handle_swarm_command(args, safe_agents);
+        case '/switch':
+            return handle_switch_command(args, find_agent);
         default: {
             event_bus.emit_log({
                 source: 'System',
@@ -916,7 +982,7 @@ async function handle_slash_command(
 async function handle_agent_mention(
     cmd: string,
     args: string[],
-    find_agent: (name_or_id: string | undefined) => Agent | null,
+    find_agent: Agent_Lookup,
     is_safe_mode?: boolean
 ): Promise<Command_Result> {
     const target_name = cmd.substring(1).replace(/:$/, '');
@@ -931,25 +997,9 @@ async function handle_agent_mention(
 
     const agent = find_agent(target_name);
     if (agent) {
-        const raw_message = args.join(' ');
-        const message = sanitize_directive(raw_message);
-        if (!message) {
-            event_bus.emit_log({
-                source: 'System',
-                text: `Usage: @${agent.name} <message>`,
-                severity: 'error'
-            });
-            return { should_clear_logs: false };
-        }
-        const len_check = validate_directive_length(message);
-        if (!len_check.valid) {
-            event_bus.emit_log({
-                source: 'System',
-                text: len_check.error!,
-                severity: 'error'
-            });
-            return { should_clear_logs: false };
-        }
+        const message = prepare_validated_directive(args.join(' '), `Usage: @${agent.name} <message>`);
+        if (!message) return { should_clear_logs: false };
+
         await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, `@${agent.name}`);
     }
     return { should_clear_logs: false };
@@ -1005,25 +1055,8 @@ async function handle_cluster_mention(
         return { should_clear_logs: false };
     }
 
-    const raw_message = args.join(' ');
-    const message = sanitize_directive(raw_message);
-    if (!message) {
-        event_bus.emit_log({
-            source: 'System',
-            text: `Usage: #${cluster.name} <message>`,
-            severity: 'error'
-        });
-        return { should_clear_logs: false };
-    }
-    const len_check = validate_directive_length(message);
-    if (!len_check.valid) {
-        event_bus.emit_log({
-            source: 'System',
-            text: len_check.error!,
-            severity: 'error'
-        });
-        return { should_clear_logs: false };
-    }
+    const message = prepare_validated_directive(args.join(' '), `Usage: #${cluster.name} <message>`);
+    if (!message) return { should_clear_logs: false };
 
     await dispatch_directive(alpha_agent, message, !!is_safe_mode, 'cluster', cluster.id, cluster.department, `#${cluster.name}`);
     return { should_clear_logs: false };
@@ -1067,12 +1100,7 @@ async function handle_swarm_broadcast(
     });
 
     // Find coordinator node to receive the swarm broadcast
-    const lead_agent = safe_agents.find(a => 
-        a.name === 'Tadpole_Alpha' || 
-        a.name === 'CEO' || 
-        a.role?.toLowerCase() === 'architect'
-    ) || safe_agents[0];
-
+    const lead_agent = resolve_lead_coordinator(safe_agents, false);
     if (lead_agent) {
         await dispatch_directive(lead_agent, message, !!is_safe_mode, 'agent', undefined, undefined, 'Swarm Broadcast');
     }

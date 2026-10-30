@@ -113,7 +113,10 @@ export const Mission_History_View: React.FC = () => {
     }, [page, status_filter, search_query]);
 
     useEffect(() => {
-        void load_catalog();
+        void (async () => {
+            await Promise.resolve();
+            await load_catalog();
+        })();
     }, [load_catalog]);
 
     // 2. Fetch specific dossier when selected_mission_id changes with request ordering protection (S-07)
@@ -137,14 +140,17 @@ export const Mission_History_View: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (selected_mission_id) {
-            void load_dossier(selected_mission_id);
-        } else {
-            latest_dossier_req_id.current++;
-            set_dossier(null);
-            set_is_dossier_loading(false);
-            set_dossier_error(null);
-        }
+        void (async () => {
+            await Promise.resolve();
+            if (selected_mission_id) {
+                await load_dossier(selected_mission_id);
+            } else {
+                latest_dossier_req_id.current++;
+                set_dossier(null);
+                set_is_dossier_loading(false);
+                set_dossier_error(null);
+            }
+        })();
     }, [selected_mission_id, load_dossier]);
 
     // 3. Hybrid Streaming: Subscribe to native `event_bus` logs with 800ms debounce (S-08)

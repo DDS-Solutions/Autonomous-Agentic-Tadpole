@@ -15,7 +15,6 @@
  * - **Telemetry Link**: Search for `[socket]` or `bearer.tadpole` in browser/proxy logs.
  */
 
-
 import { event_bus } from './event_bus';
 import { get_settings, use_settings_store } from '../stores/settings_store';
 import type { Message_Part, Swarm_Pulse } from '../types';
@@ -99,6 +98,33 @@ type Store_Bindings = {
 };
 
 /**
+ * Normalizes raw MessagePack swarm pulse data (tuple array or keyed object) into a typed `Swarm_Pulse`.
+ */
+export function normalize_swarm_pulse(data: Record<string, unknown>): Swarm_Pulse {
+    const is_tuple = Array.isArray(data);
+    const nodes_raw = is_tuple ? (data as unknown[])[1] : data.nodes;
+    const edges_raw = is_tuple ? (data as unknown[])[2] : data.edges;
+
+    return {
+        timestamp: Number(is_tuple ? (data as unknown[])[0] : data.timestamp) || 0,
+        nodes: ((nodes_raw || []) as unknown[]).map((n) => Array.isArray(n)
+            ? {
+                id: String((n as unknown[])[0]),
+                x: Number((n as unknown[])[1]),
+                y: Number((n as unknown[])[2]),
+                status: Number((n as unknown[])[3]),
+                battery: Number((n as unknown[])[4]),
+                signal: Number((n as unknown[])[5]),
+                progress: Number((n as unknown[])[6])
+            }
+            : n as Swarm_Pulse['nodes'][0]),
+        edges: ((edges_raw || []) as unknown[]).map((e) => Array.isArray(e)
+            ? { source: String((e as unknown[])[0]), target: String((e as unknown[])[1]) }
+            : e as Swarm_Pulse['edges'][0])
+    };
+}
+
+/**
  * Tadpole_OS_Socket_Client
  * WebSocket client for streaming real-time logs from TadpoleOS.
  * Reads the connection URL from the centralized settings store.
@@ -121,18 +147,40 @@ class Tadpole_OS_Socket_Client {
     private state: Connection_State = 'disconnected';
     private state_listeners: State_Listener[] = [];
 
+    // Topic Listener Registries (arrays preserved for test suite state reset compatibility)
+    private agent_update_listeners: ((update: Agent_Update_Event) => void)[] = [];
+    private health_listeners: ((health: Engine_Health_Event) => void)[] = [];
+    private handoff_listeners: ((handoff: Handoff_Event) => void)[] = [];
+    private mcp_pulse_listeners: ((pulse: Mcp_Pulse_Event) => void)[] = [];
+    private audio_stream_listeners: ((chunk: ArrayBuffer) => void)[] = [];
+    private pulse_listeners: ((pulse: Swarm_Pulse) => void)[] = [];
+    private custom_event_listeners: ((event: Record<string, unknown>) => void)[] = [];
+
+    /**
+     * Registers a listener in the target array and returns an idempotent unsubscribe callback.
+     */
+    private register_listener<T>(
+        list: ((payload: T) => void)[],
+        listener: (payload: T) => void
+    ): () => void {
+        list.push(listener);
+        return () => {
+            const idx = list.indexOf(listener);
+            if (idx !== -1) {
+                list.splice(idx, 1);
+            }
+        };
+    }
+
     /** Subscribe to connection state changes. */
     subscribe_status(listener: State_Listener): () => void {
-        this.state_listeners.push(listener);
+        const unsubscribe = this.register_listener(this.state_listeners, listener);
         listener(this.state); // Immediate update
-        return () => {
-            this.state_listeners = this.state_listeners.filter(l => l !== listener);
-        };
+        return unsubscribe;
     }
 
     constructor() {
         // REACTIVE RECONNECTION: Watch for infrastructure changes
-        // Initialize trackers
         const initial = get_settings();
         this.last_url = initial.tadpole_os_url;
         this.last_key = initial.tadpole_os_api_key;
@@ -162,72 +210,32 @@ class Tadpole_OS_Socket_Client {
         }
     }
 
-    // Agent Update Management
-    private agent_update_listeners: ((update: Agent_Update_Event) => void)[] = [];
-
     subscribe_agent_updates(listener: (update: Agent_Update_Event) => void): () => void {
-        this.agent_update_listeners.push(listener);
-        return () => {
-            this.agent_update_listeners = this.agent_update_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.agent_update_listeners, listener);
     }
-
-    // Health Management
-    private health_listeners: ((health: Engine_Health_Event) => void)[] = [];
 
     subscribe_health(listener: (health: Engine_Health_Event) => void): () => void {
-        this.health_listeners.push(listener);
-        return () => {
-            this.health_listeners = this.health_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.health_listeners, listener);
     }
-
-    // Handoff Management
-    private handoff_listeners: ((handoff: Handoff_Event) => void)[] = [];
 
     subscribe_handoff(listener: (handoff: Handoff_Event) => void): () => void {
-        this.handoff_listeners.push(listener);
-        return () => {
-            this.handoff_listeners = this.handoff_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.handoff_listeners, listener);
     }
-
-    // MCP Pulse Management
-    private mcp_pulse_listeners: ((pulse: Mcp_Pulse_Event) => void)[] = [];
 
     subscribe_pulse(listener: (pulse: Mcp_Pulse_Event) => void): () => void {
-        this.mcp_pulse_listeners.push(listener);
-        return () => {
-            this.mcp_pulse_listeners = this.mcp_pulse_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.mcp_pulse_listeners, listener);
     }
-
-    // Audio Stream Management
-    private audio_stream_listeners: ((chunk: ArrayBuffer) => void)[] = [];
 
     subscribe_audio_stream(listener: (chunk: ArrayBuffer) => void): () => void {
-        this.audio_stream_listeners.push(listener);
-        return () => {
-            this.audio_stream_listeners = this.audio_stream_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.audio_stream_listeners, listener);
     }
-
-    // Swarm Pulse Management
-    private pulse_listeners: ((pulse: Swarm_Pulse) => void)[] = [];
 
     subscribe_swarm_pulse(listener: (pulse: Swarm_Pulse) => void): () => void {
-        this.pulse_listeners.push(listener);
-        return () => {
-            this.pulse_listeners = this.pulse_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.pulse_listeners, listener);
     }
 
-    private custom_event_listeners: ((event: Record<string, unknown>) => void)[] = [];
     subscribe_custom_event(listener: (event: Record<string, unknown>) => void): () => void {
-        this.custom_event_listeners.push(listener);
-        return () => {
-            this.custom_event_listeners = this.custom_event_listeners.filter(l => l !== listener);
-        };
+        return this.register_listener(this.custom_event_listeners, listener);
     }
 
     send_event(event: Record<string, unknown>): void {
@@ -253,6 +261,58 @@ class Tadpole_OS_Socket_Client {
             }));
         }
         return this.store_bindings_promise;
+    }
+
+    /**
+     * Probes `/v1/engine/health` on abnormal WebSocket closure (1006) to halt reconnection
+     * loops if the backend explicitly rejects the current Bearer token (401/403).
+     */
+    private probe_auth_on_abnormal_close(raw_http_url: string, token: string): void {
+        const health_url = `${raw_http_url || 'http://localhost:8000'}`.trim().replace(/\/$/, '') + '/v1/engine/health';
+        fetch(health_url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).then(res => {
+            if (res.status === 401 || res.status === 403) {
+                console.warn('[Tadpole_OS] Engine returned 401/403. Halting WebSocket reconnect loop.');
+                event_bus.emit_log({
+                    source: 'System',
+                    text: 'WebSocket authentication failed. Please update NEURAL_TOKEN in Settings.',
+                    severity: 'error'
+                });
+                return;
+            }
+            if (!this.is_explicitly_closed) {
+                this.schedule_reconnect();
+            }
+        }).catch(() => {
+            if (!this.is_explicitly_closed) {
+                this.schedule_reconnect();
+            }
+        });
+    }
+
+    /**
+     * Dispatches binary WebSocket frames by inspecting the 1-byte `Telemetry_Packet_Header`.
+     */
+    private handle_binary_frame(buffer: ArrayBuffer): void {
+        if (buffer.byteLength === 0) return;
+
+        const view = new Uint8Array(buffer);
+        const header = view[0] as Telemetry_Packet_Header;
+        const payload = buffer.slice(1);
+
+        switch (header) {
+            case Telemetry_Packet_Header.AUDIO_STREAM:
+                this.audio_stream_listeners.forEach(l => l(payload));
+                break;
+
+            case Telemetry_Packet_Header.SWARM_PULSE:
+                this.handle_swarm_pulse(payload);
+                break;
+
+            default:
+                console.warn(`[Tadpole_OS] Received unknown telemetry header: 0x${header.toString(16)}`);
+        }
     }
 
     /** Opens the WebSocket connection and begins listening for events. */
@@ -301,22 +361,7 @@ class Tadpole_OS_Socket_Client {
 
             this.socket.onmessage = (event) => {
                 if (event.data instanceof ArrayBuffer) {
-                    const view = new Uint8Array(event.data);
-                    const header = view[0] as Telemetry_Packet_Header;
-                    const payload = event.data.slice(1);
-
-                    switch (header) {
-                        case Telemetry_Packet_Header.AUDIO_STREAM:
-                            this.audio_stream_listeners.forEach(l => l(payload));
-                            break;
-
-                        case Telemetry_Packet_Header.SWARM_PULSE:
-                            this.handle_swarm_pulse(payload);
-                            break;
-
-                        default:
-                            console.warn(`[Tadpole_OS] Received unknown telemetry header: 0x${header.toString(16)}`);
-                    }
+                    this.handle_binary_frame(event.data);
                     return;
                 }
 
@@ -346,27 +391,7 @@ class Tadpole_OS_Socket_Client {
 
                     // On abnormal closure (code 1006), verify if backend rejected auth before scheduling reconnect
                     if (event?.code === 1006 && typeof fetch !== 'undefined') {
-                        const health_url = `${tadpole_os_url || 'http://localhost:8000'}`.trim().replace(/\/$/, '') + '/v1/engine/health';
-                        fetch(health_url, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        }).then(res => {
-                            if (res.status === 401 || res.status === 403) {
-                                console.warn('[Tadpole_OS] Engine returned 401/403. Halting WebSocket reconnect loop.');
-                                event_bus.emit_log({
-                                    source: 'System',
-                                    text: 'WebSocket authentication failed. Please update NEURAL_TOKEN in Settings.',
-                                    severity: 'error'
-                                });
-                                return;
-                            }
-                            if (!this.is_explicitly_closed) {
-                                this.schedule_reconnect();
-                            }
-                        }).catch(() => {
-                            if (!this.is_explicitly_closed) {
-                                this.schedule_reconnect();
-                            }
-                        });
+                        this.probe_auth_on_abnormal_close(tadpole_os_url, token);
                         return;
                     }
 
@@ -393,27 +418,73 @@ class Tadpole_OS_Socket_Client {
     private handle_swarm_pulse(payload: ArrayBuffer): void {
         try {
             const raw = decode(payload) as Record<string, unknown>;
-            
-            // Fully recursive normalization function to ensure fields match TS interfaces 
-            const normalize_pulse = (data: Record<string, unknown>): Swarm_Pulse => {
-                const nodes_raw = Array.isArray(data) ? (data as unknown[])[1] : data.nodes;
-                const edges_raw = Array.isArray(data) ? (data as unknown[])[2] : data.edges;
-
-                return {
-                    timestamp: Number(Array.isArray(data) ? (data as unknown[])[0] : data.timestamp) || 0,
-                    nodes: ((nodes_raw || []) as unknown[]).map((n) => Array.isArray(n) 
-                        ? { id: String((n as unknown[])[0]), x: Number((n as unknown[])[1]), y: Number((n as unknown[])[2]), status: Number((n as unknown[])[3]), battery: Number((n as unknown[])[4]), signal: Number((n as unknown[])[5]), progress: Number((n as unknown[])[6]) } 
-                        : n as Swarm_Pulse['nodes'][0]),
-                    edges: ((edges_raw || []) as unknown[]).map((e) => Array.isArray(e) 
-                        ? { source: String((e as unknown[])[0]), target: String((e as unknown[])[1]) } 
-                        : e as Swarm_Pulse['edges'][0])
-                };
-            };
-
-            const pulse = normalize_pulse(raw);
+            const pulse = normalize_swarm_pulse(raw);
             this.pulse_listeners.forEach(l => l(pulse));
         } catch (e) {
             console.error('[Tadpole_OS] Failed to decode swarm pulse:', e);
+        }
+    }
+
+    /**
+     * Lazily refreshes the internal `agent_name_cache` when marked stale.
+     */
+    private refresh_agent_name_cache_if_stale(
+        use_agent_registry_store: Store_Bindings['use_agent_registry_store']
+    ): void {
+        if (!this.cache_stale) return;
+
+        const raw_agents = use_agent_registry_store.getState().agents;
+        const agents = Array.isArray(raw_agents) ? raw_agents : [];
+        this.agent_name_cache.clear();
+        for (const a of agents) {
+            if (a && a.id && a.name) {
+                this.agent_name_cache.set(a.id, a.name);
+            }
+        }
+        this.cache_stale = false;
+    }
+
+    /**
+     * Resolves or generates a correlation ID for a SovereignChat message.
+     */
+    private resolve_message_id(data: Record<string, unknown>, prefer_id_over_request = false): string {
+        const candidate = prefer_id_over_request
+            ? (data.message_id || data.messageId || data.id)
+            : (data.message_id || data.messageId || data.request_id || data.requestId);
+
+        if (candidate) return String(candidate);
+        return (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : Date.now().toString();
+    }
+
+    /**
+     * Appends a message part to an existing SovereignChat message or creates a new entry.
+     */
+    private bridge_to_sovereign_chat(
+        sovereign_store: ReturnType<Store_Bindings['use_sovereign_store']['getState']>,
+        params: {
+            message_id: string;
+            sender_id: string;
+            sender_name: string;
+            agent_id: string;
+            target_node?: string;
+            text: string;
+            part: Message_Part;
+        }
+    ): void {
+        const did_update = sovereign_store.append_message_part(params.message_id, params.part);
+        if (!did_update) {
+            sovereign_store.add_message({
+                id: params.message_id,
+                sender_id: params.sender_id,
+                sender_name: params.sender_name,
+                agent_id: params.agent_id,
+                ...(params.target_node ? { target_node: params.target_node } : {}),
+                text: params.text,
+                parts: [params.part],
+                scope: sovereign_store.active_scope
+            });
         }
     }
 
@@ -423,26 +494,16 @@ class Tadpole_OS_Socket_Client {
         const { use_agent_registry_store, use_sovereign_store, use_trace_store } = await this.get_store_bindings();
         const sovereign_store = use_sovereign_store.getState();
 
-        // Refresh agent name cache lazily (only when stale)
-        if (this.cache_stale) {
-            const raw_agents = use_agent_registry_store.getState().agents;
-            const agents = Array.isArray(raw_agents) ? raw_agents : [];
-            this.agent_name_cache.clear();
-            for (const a of agents) {
-                if (a && a.id && a.name) {
-                    this.agent_name_cache.set(a.id, a.name);
-                }
-            }
-            this.cache_stale = false;
-        }
+        this.refresh_agent_name_cache_if_stale(use_agent_registry_store);
 
         if (data.type === 'log' || data.type === 'thought') {
-            const agent_name = this.agent_name_cache.get(data.agent_id as string) || (data.agent_name as string);
+            const agent_id = data.agent_id as string;
+            const agent_name = this.agent_name_cache.get(agent_id) || (data.agent_name as string);
 
             event_bus.emit_log({
-                id: (data.id || data.request_id || data.requestId) as string, 
-                source: data.agent_id ? 'Agent' : 'System',
-                agent_id: data.agent_id as string,
+                id: (data.id || data.request_id || data.requestId) as string,
+                source: agent_id ? 'Agent' : 'System',
+                agent_id,
                 agent_name,
                 text: (data.text || data.message || JSON.stringify(data)) as string,
                 severity: (data.level === 'error' ? 'error' : 'info'),
@@ -450,59 +511,52 @@ class Tadpole_OS_Socket_Client {
             });
 
             // Bridge agent logs/thoughts to SovereignChat
-            if (data.agent_id && (data.type === 'thought' || (data.type === 'log' && data.level !== 'debug'))) {
-                const resolved_name = this.agent_name_cache.get(data.agent_id as string) || (data.agent_name as string) || (data.agent_id as string);
-
-                const message_id = (data.message_id || data.messageId || data.request_id || data.requestId || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString())) as string;
+            if (agent_id && (data.type === 'thought' || (data.type === 'log' && data.level !== 'debug'))) {
+                const resolved_name = agent_name || agent_id;
+                const message_id = this.resolve_message_id(data, false);
+                const content = (data.message || data.text || '') as string;
 
                 const new_part: Message_Part = data.type === 'thought'
-                    ? { type: 'thought', content: (data.message || data.text || '') as string, status: 'done' }
-                    : { type: 'text', content: (data.message || data.text || '') as string };
+                    ? { type: 'thought', content, status: 'done' }
+                    : { type: 'text', content };
 
-                const did_update = sovereign_store.append_message_part(message_id, new_part);
-                if (!did_update) {
-                    sovereign_store.add_message({
-                        id: message_id,
-                        sender_id: data.agent_id as string,
-                        sender_name: resolved_name,
-                        agent_id: data.agent_id as string,
-                        text: (data.message || data.text || '') as string,
-                        parts: [new_part],
-                        scope: sovereign_store.active_scope
-                    });
-                }
+                this.bridge_to_sovereign_chat(sovereign_store, {
+                    message_id,
+                    sender_id: agent_id,
+                    sender_name: resolved_name,
+                    agent_id,
+                    text: content,
+                    part: new_part
+                });
             }
         } else if (data.type === 'agent:message') {
-            const agent_name = this.agent_name_cache.get(data.agent_id as string) || (data.agent_name as string);
+            const agent_id = data.agent_id as string;
+            const agent_name = this.agent_name_cache.get(agent_id) || (data.agent_name as string);
 
             event_bus.emit_log({
-                id: (data.id || data.message_id || data.messageId) as string, 
+                id: (data.id || data.message_id || data.messageId) as string,
                 source: 'Agent',
-                agent_id: data.agent_id as string,
+                agent_id,
                 agent_name,
                 text: (data.text || 'Mission action complete.') as string,
                 severity: 'info',
                 metadata: data as Record<string, unknown>
             });
-            // Bridge to SovereignChat
-            const resolved_name = this.agent_name_cache.get(data.agent_id as string) || (data.agent_name as string) || (data.agent_id as string) || 'Agent';
-            const message_id = (data.message_id || data.messageId || data.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString())) as string;
 
-            const new_part: Message_Part = { type: 'text' as const, content: (data.text || data.message || 'Mission action complete.') as string };
+            const resolved_name = agent_name || agent_id || 'Agent';
+            const message_id = this.resolve_message_id(data, true);
+            const content = (data.text || data.message || 'Mission action complete.') as string;
+            const new_part: Message_Part = { type: 'text' as const, content };
 
-            const did_update = sovereign_store.append_message_part(message_id, new_part);
-            if (!did_update) {
-                sovereign_store.add_message({
-                    id: message_id,
-                    sender_id: (data.agent_id as string) || 'system',
-                    sender_name: resolved_name,
-                    agent_id: data.agent_id as string, 
-                    target_node: resolved_name,
-                    text: (data.text || data.message || 'Mission action complete.') as string,
-                    parts: [new_part],
-                    scope: sovereign_store.active_scope
-                });
-            }
+            this.bridge_to_sovereign_chat(sovereign_store, {
+                message_id,
+                sender_id: agent_id || 'system',
+                sender_name: resolved_name,
+                agent_id,
+                target_node: resolved_name,
+                text: content,
+                part: new_part
+            });
         } else if (data.type === 'agent:create' || data.type === 'agent:update' || data.type === 'agent:status' || data.type === 'engine:ui_invalidate') {
             const normalized_agent_id = (data.agent_id ?? data.agentId ?? data.id) as string;
             const normalized_data = data.type === 'agent:status'
@@ -578,8 +632,13 @@ class Tadpole_OS_Socket_Client {
         this.is_explicitly_closed = true;
         this.retry_count = 0;
         this.set_state('disconnected');
-        if (this.reconnect_timer) clearTimeout(this.reconnect_timer);
-        this.socket?.close();
+        if (this.reconnect_timer) {
+            clearTimeout(this.reconnect_timer);
+            this.reconnect_timer = null;
+        }
+        const active_socket = this.socket;
+        this.socket = null;
+        active_socket?.close();
     }
 }
 
@@ -614,8 +673,5 @@ export const tadpole_os_socket = new Proxy({} as Tadpole_OS_Socket_Client, {
         return true;
     }
 });
-
-
-
 
 // Metadata: [socket]

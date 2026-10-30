@@ -42,7 +42,34 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
+
 pub const MAX_MCP_REPLY_BYTES: usize = 2 * 1024 * 1024;
+
+/// Finds the largest valid UTF-8 character boundary `<= max_bytes`.
+/// Prevents panics when truncating strings containing multi-byte UTF-8 sequences.
+pub fn floor_utf8_char_boundary(s: &str, max_bytes: usize) -> usize {
+    if max_bytes >= s.len() {
+        return s.len();
+    }
+    let mut idx = max_bytes;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+/// Safely truncates an MCP/skill reply string at a valid UTF-8 character boundary.
+pub fn truncate_mcp_reply(raw: &str, max_bytes: usize, label: &str) -> String {
+    if raw.len() <= max_bytes {
+        return raw.to_string();
+    }
+    let safe_end = floor_utf8_char_boundary(raw, max_bytes);
+    format!(
+        "{}\n\n[TRUNCATED: {} exceeded 2MB limit]",
+        &raw[..safe_end],
+        label
+    )
+}
 
 /// Operational statistics for a specific tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
@@ -276,6 +303,55 @@ impl McpHost {
         tools
     }
 
+    /// Resolves a prefixed external MCP tool name (`server::tool`, `server:tool`, or `mcp_server_tool`)
+    /// purely against the configured server names without spawning subprocesses.
+    pub(crate) fn match_prefixed_external_tool(
+        tool_name: &str,
+        config: &McpConfig,
+    ) -> Option<(String, String)> {
+        if let Some((srv, tool)) = tool_name
+            .split_once("::")
+            .or_else(|| tool_name.split_once(':'))
+        {
+            if config.mcp_servers.contains_key(srv) && !tool.is_empty() {
+                return Some((srv.to_string(), tool.to_string()));
+            }
+        } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
+            for srv in config.mcp_servers.keys() {
+                let prefix = format!("{}_", srv);
+                if let Some(actual) = rest.strip_prefix(&prefix) {
+                    if !actual.is_empty() {
+                        return Some((srv.clone(), actual.to_string()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Resolves a tool name to `(server_name, actual_tool_name)` across configured MCP servers.
+    async fn resolve_external_mcp_tool(&self, tool_name: &str) -> Option<(String, String)> {
+        let config = self.get_config().await.ok()?;
+        if let Some(matched) = Self::match_prefixed_external_tool(tool_name, &config) {
+            return Some(matched);
+        }
+
+        for srv in config.mcp_servers.keys() {
+            if let Ok(client) = self.get_or_spawn_client(srv).await {
+                let mut client_lock = client.lock().await;
+                if let Ok(tools) = client_lock.list_tools().await {
+                    if tools
+                        .iter()
+                        .any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name))
+                    {
+                        return Some((srv.clone(), tool_name.to_string()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     async fn tool_exists(
         &self,
         tool_name: &str,
@@ -287,32 +363,72 @@ impl McpHost {
         if all_skills.contains_key(tool_name) {
             return true;
         }
-        if let Ok(config) = self.get_config().await {
-            if let Some((srv, _)) = tool_name.split_once("::").or_else(|| tool_name.split_once(':')) {
-                if config.mcp_servers.contains_key(srv) {
-                    return true;
-                }
-            } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
-                for srv in config.mcp_servers.keys() {
-                    let prefix = format!("{}_", srv);
-                    if rest.starts_with(&prefix) {
-                        return true;
+        self.resolve_external_mcp_tool(tool_name).await.is_some()
+    }
+
+    /// Evaluates the sovereign `PermissionPolicy` gate for a tool invocation.
+    async fn check_permission_gate(
+        &self,
+        clean_name: &str,
+        arguments: &serde_json::Value,
+        ctx: &crate::agent::types::ToolContext,
+    ) -> Result<(), AppError> {
+        let mode = self.policy.get_mode(clean_name, &ctx.agent_id).await;
+        match mode {
+            PermissionMode::Deny => Err(AppError::Forbidden(format!(
+                "Permission denied: Tool {} is explicitly blocked for agent {} by policy.",
+                clean_name, ctx.agent_id
+            ))),
+            PermissionMode::Prompt => {
+                let prompter_guard = self.prompter.read();
+                if let Some(prompter) = prompter_guard.as_ref() {
+                    let decision = prompter
+                        .prompt_user(clean_name, &arguments.to_string())
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    if decision != PermissionMode::Allow {
+                        return Err(AppError::Forbidden(
+                            "User rejected tool execution".to_string(),
+                        ));
                     }
-                }
-            } else {
-                for srv in config.mcp_servers.keys() {
-                    if let Ok(client) = self.get_or_spawn_client(srv).await {
-                        let mut client_lock = client.lock().await;
-                        if let Ok(tools) = client_lock.list_tools().await {
-                            if tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
-                                return true;
-                            }
-                        }
-                    }
+                    Ok(())
+                } else if ctx.execution_plane
+                    == crate::agent::types::ExecutionPlane::EngineMaintenance
+                    && matches!(
+                        clean_name,
+                        "parity_guard"
+                            | "security_scan"
+                            | "verify_ai_context"
+                            | "verify_telemetry"
+                            | "resource_check"
+                            | "parse_errors"
+                            | "mission_diagnose"
+                            | "tool_loop_guard"
+                            | "system_telemetry"
+                            | "greeting_skill"
+                            | "research_orchestrator"
+                    )
+                {
+                    // 🛡️ [Headless Auto-Approval] Diagnostic & parity guard tools under Plane 1 (EngineMaintenance)
+                    // represent safe read/audit operations allowed when running headlessly without an interactive UI prompter.
+                    tracing::info!(
+                        tool = %clean_name,
+                        agent_id = %ctx.agent_id,
+                        "🛡️ [MCP Headless] Auto-approving diagnostic tool under Plane 1 (EngineMaintenance)"
+                    );
+                    Ok(())
+                } else {
+                    tracing::error!(
+                        tool = %clean_name,
+                        "PermissionMode::Prompt configured but no prompter is registered"
+                    );
+                    Err(AppError::Forbidden(format!(
+                        "Tool '{}' requires interactive approval, but no prompter is configured.",
+                        clean_name
+                    )))
                 }
             }
+            PermissionMode::Allow => Ok(()),
         }
-        false
     }
 
     pub async fn call_tool(
@@ -336,56 +452,7 @@ impl McpHost {
         }
 
         // 3. Permission policy gate (fail closed)
-        let mode = self.policy.get_mode(clean_name, &ctx.agent_id).await;
-        match mode {
-            PermissionMode::Deny => {
-                return Err(AppError::Forbidden(format!(
-                    "Permission denied: Tool {} is explicitly blocked for agent {} by policy.",
-                    clean_name,
-                    ctx.agent_id
-                )));
-            }
-            PermissionMode::Prompt => {
-                let prompter_guard = self.prompter.read();
-                if let Some(prompter) = prompter_guard.as_ref() {
-                    let decision = prompter.prompt_user(clean_name, &arguments.to_string())
-                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-                    if decision != PermissionMode::Allow {
-                        return Err(AppError::Forbidden("User rejected tool execution".to_string()));
-                    }
-                } else if ctx.execution_plane == crate::agent::types::ExecutionPlane::EngineMaintenance
-                    && matches!(
-                        clean_name,
-                        "parity_guard"
-                            | "security_scan"
-                            | "verify_ai_context"
-                            | "verify_telemetry"
-                            | "resource_check"
-                            | "parse_errors"
-                            | "mission_diagnose"
-                            | "tool_loop_guard"
-                            | "system_telemetry"
-                            | "greeting_skill"
-                            | "research_orchestrator"
-                    )
-                {
-                    // 🛡️ [Headless Auto-Approval] Diagnostic & parity guard tools under Plane 1 (EngineMaintenance)
-                    // represent safe read/audit operations allowed when running headlessly without an interactive UI prompter.
-                    tracing::info!(
-                        tool = %clean_name,
-                        agent_id = %ctx.agent_id,
-                        "🛡️ [MCP Headless] Auto-approving diagnostic tool under Plane 1 (EngineMaintenance)"
-                    );
-                } else {
-                    tracing::error!(tool = %clean_name, "PermissionMode::Prompt configured but no prompter is registered");
-                    return Err(AppError::Forbidden(format!(
-                        "Tool '{}' requires interactive approval, but no prompter is configured.",
-                        clean_name
-                    )));
-                }
-            }
-            PermissionMode::Allow => {}
-        }
+        self.check_permission_gate(clean_name, &arguments, ctx).await?;
 
         let result = self
             .execute_tool_internal(clean_name, arguments, ctx, all_skills)
@@ -395,14 +462,10 @@ impl McpHost {
         self.update_stats(clean_name, result.is_ok(), latency);
         self.emit_pulse(clean_name, result.is_ok(), latency);
 
-        // SEC-04: Enforce maximum payload cap (2MB) and secret redaction at the boundary
+        // SEC-04: Enforce maximum payload cap (2MB) with UTF-8 boundary safety and secret redaction
         match result {
             Ok(McpResult::Raw(ref raw)) => {
-                let bounded_raw = if raw.len() > MAX_MCP_REPLY_BYTES {
-                    format!("{}\n\n[TRUNCATED: Tool response exceeded 2MB limit]", &raw[..MAX_MCP_REPLY_BYTES])
-                } else {
-                    raw.clone()
-                };
+                let bounded_raw = truncate_mcp_reply(raw, MAX_MCP_REPLY_BYTES, "Tool response");
                 Ok(McpResult::Raw(self.redactor.scrub(&bounded_raw)))
             }
             Ok(McpResult::SystemDelegate(k, mut v)) => {
@@ -437,6 +500,62 @@ impl McpHost {
         }
     }
 
+    /// Checks whether the calling agent's capability allow-list grants access to an external MCP tool.
+    fn is_agent_authorized_for_external_tool(
+        ctx: &crate::agent::types::ToolContext,
+        tool_name: &str,
+        server_name: &str,
+        actual_tool_name: &str,
+    ) -> bool {
+        if ctx.agent_id == "system" || ctx.agent_id == "admin" {
+            return true;
+        }
+        let Some(agent_entry) = ctx.state.registry.agents.get(&ctx.agent_id) else {
+            return true;
+        };
+        let granted = &agent_entry.capabilities.skills;
+        let namespaced_colon = format!("{}:{}", server_name, actual_tool_name);
+        let namespaced_double_colon = format!("{}::{}", server_name, actual_tool_name);
+        let legacy_mcp = format!("mcp_{}_{}", server_name, actual_tool_name);
+
+        granted.iter().any(|s| {
+            s == tool_name
+                || s == actual_tool_name
+                || s == &namespaced_colon
+                || s == &namespaced_double_colon
+                || s == &legacy_mcp
+        })
+    }
+
+    /// Formats a raw JSON-RPC MCP tool result into a bounded `McpResult::Raw` payload.
+    fn format_external_mcp_result(result: &serde_json::Value) -> Result<McpResult, AppError> {
+        if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+            let mut output = String::new();
+            for item in content {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    if output.len().saturating_add(text.len()) > MAX_MCP_REPLY_BYTES {
+                        let remaining = MAX_MCP_REPLY_BYTES.saturating_sub(output.len());
+                        let safe_end = floor_utf8_char_boundary(text, remaining);
+                        output.push_str(&text[..safe_end]);
+                        output.push_str("\n\n[TRUNCATED: MCP response exceeded 2MB limit]");
+                        break;
+                    } else {
+                        output.push_str(text);
+                    }
+                }
+            }
+            return Ok(McpResult::Raw(output));
+        }
+
+        let serialized = serde_json::to_string_pretty(result)
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        Ok(McpResult::Raw(truncate_mcp_reply(
+            &serialized,
+            MAX_MCP_REPLY_BYTES,
+            "MCP response",
+        )))
+    }
+
     async fn execute_tool_internal(
         &self,
         tool_name: &str,
@@ -454,127 +573,62 @@ impl McpHost {
             return h.execute(arguments, ctx).await;
         }
 
-        // 2. Check skill registry
-        if let Some(skill) = all_skills.get(tool_name) {
+        // 2. Check skill registry (clone out of DashMap before .await)
+        let skill_opt = all_skills.get(tool_name).map(|s| s.value().clone());
+        if let Some(skill) = skill_opt {
             let output = self
-                .execute_legacy_skill(skill.value(), arguments, ctx.workspace_root.clone())
+                .execute_legacy_skill(&skill, arguments, ctx.workspace_root.clone())
                 .await?;
             return Ok(McpResult::Raw(output));
         }
 
         // 3. Resolve External MCP Server tool
-        if let Ok(config) = self.get_config().await {
-            let mut candidate: Option<(String, String)> = None;
-
-            if let Some((srv, tool)) = tool_name.split_once("::").or_else(|| tool_name.split_once(':')) {
-                if config.mcp_servers.contains_key(srv) {
-                    candidate = Some((srv.to_string(), tool.to_string()));
-                }
-            } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
-                for srv in config.mcp_servers.keys() {
-                    let prefix = format!("{}_", srv);
-                    if rest.starts_with(&prefix) {
-                        let actual = rest[prefix.len()..].to_string();
-                        candidate = Some((srv.clone(), actual));
-                        break;
-                    }
-                }
-            } else {
-                for srv in config.mcp_servers.keys() {
-                    if let Ok(client) = self.get_or_spawn_client(srv).await {
-                        let mut client_lock = client.lock().await;
-                        if let Ok(tools) = client_lock.list_tools().await {
-                            if tools.iter().any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name)) {
-                                candidate = Some((srv.clone(), tool_name.to_string()));
-                                break;
-                            }
-                        }
-                    }
-                }
+        if let Some((server_name, actual_tool_name)) = self.resolve_external_mcp_tool(tool_name).await {
+            if !actual_tool_name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            {
+                return Err(AppError::BadRequest(format!(
+                    "Invalid external tool identifier '{}'",
+                    actual_tool_name
+                )));
             }
 
-            if let Some((server_name, actual_tool_name)) = candidate {
-                if !actual_tool_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-                    return Err(AppError::BadRequest(format!(
-                        "Invalid external tool identifier '{}'",
-                        actual_tool_name
-                    )));
-                }
-
-                // SEC: Enforce allow-list against agent's granted skills
-                let is_authorized = if ctx.agent_id == "system" || ctx.agent_id == "admin" {
-                    true
-                } else if let Some(agent_entry) = ctx.state.registry.agents.get(&ctx.agent_id) {
-                    let granted = &agent_entry.capabilities.skills;
-                    let namespaced_colon = format!("{}:{}", server_name, actual_tool_name);
-                    let namespaced_double_colon = format!("{}::{}", server_name, actual_tool_name);
-                    let legacy_mcp = format!("mcp_{}_{}", server_name, actual_tool_name);
-
-                    granted.iter().any(|s| {
-                        s == tool_name
-                            || s == &actual_tool_name
-                            || s == &namespaced_colon
-                            || s == &namespaced_double_colon
-                            || s == &legacy_mcp
-                    })
-                } else {
-                    true
-                };
-
-                if !is_authorized {
-                    tracing::warn!(
-                        "🚫 [McpHost] Access denied: tool '{}:{}' is not in granted skills for agent '{}'",
-                        server_name, actual_tool_name, ctx.agent_id
-                    );
-                    return Err(AppError::Forbidden(format!(
-                        "External tool '{}:{}' is not granted to agent '{}'",
-                        server_name, actual_tool_name, ctx.agent_id
-                    )));
-                }
-
-                let client = self.get_or_spawn_client(&server_name).await?;
-                let mut client_lock = client.lock().await;
-
-                let call_result = client_lock.call_tool(&actual_tool_name, arguments).await;
-                let result = match call_result {
-                    Ok(r) => r,
-                    Err(e) => {
-                        // Transport or process failure: evict from cache so subsequent calls can recover
-                        self.clients.lock().await.remove(&server_name);
-                        return Err(AppError::InfrastructureError {
-                            provider_id: format!("mcp:{}", server_name),
-                            detail: format!("Failed to execute external tool: {}", e),
-                            help_link: None,
-                        });
-                    }
-                };
-
-                if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-                    let mut output = String::new();
-                    for item in content {
-                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                            if output.len() + text.len() > MAX_MCP_REPLY_BYTES {
-                                let remaining = MAX_MCP_REPLY_BYTES.saturating_sub(output.len());
-                                output.push_str(&text[..remaining.min(text.len())]);
-                                output.push_str("\n\n[TRUNCATED: MCP response exceeded 2MB limit]");
-                                break;
-                            } else {
-                                output.push_str(text);
-                            }
-                        }
-                    }
-                    return Ok(McpResult::Raw(output));
-                }
-
-                let serialized = serde_json::to_string_pretty(&result)
-                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-                let output = if serialized.len() > MAX_MCP_REPLY_BYTES {
-                    format!("{}\n\n[TRUNCATED: MCP response exceeded 2MB limit]", &serialized[..MAX_MCP_REPLY_BYTES])
-                } else {
-                    serialized
-                };
-                return Ok(McpResult::Raw(output));
+            // SEC: Enforce allow-list against agent's granted skills
+            if !Self::is_agent_authorized_for_external_tool(
+                ctx,
+                tool_name,
+                &server_name,
+                &actual_tool_name,
+            ) {
+                tracing::warn!(
+                    "🚫 [McpHost] Access denied: tool '{}:{}' is not in granted skills for agent '{}'",
+                    server_name, actual_tool_name, ctx.agent_id
+                );
+                return Err(AppError::Forbidden(format!(
+                    "External tool '{}:{}' is not granted to agent '{}'",
+                    server_name, actual_tool_name, ctx.agent_id
+                )));
             }
+
+            let client = self.get_or_spawn_client(&server_name).await?;
+            let mut client_lock = client.lock().await;
+
+            let call_result = client_lock.call_tool(&actual_tool_name, arguments).await;
+            let result = match call_result {
+                Ok(r) => r,
+                Err(e) => {
+                    // Transport or process failure: evict from cache so subsequent calls can recover
+                    self.clients.lock().await.remove(&server_name);
+                    return Err(AppError::InfrastructureError {
+                        provider_id: format!("mcp:{}", server_name),
+                        detail: format!("Failed to execute external tool: {}", e),
+                        help_link: None,
+                    });
+                }
+            };
+
+            return Self::format_external_mcp_result(&result);
         }
 
         Err(AppError::NotFound(format!("Tool '{}' not found", tool_name)))
@@ -671,12 +725,8 @@ impl McpHost {
         )
         .await?;
 
-        // SEC-04: Cap response payload and proactively scrub stdout
-        let bounded_output = if raw_output.len() > MAX_MCP_REPLY_BYTES {
-            format!("{}\n\n[TRUNCATED: Skill reply exceeded 2MB limit]", &raw_output[..MAX_MCP_REPLY_BYTES])
-        } else {
-            raw_output
-        };
+        // SEC-04: Cap response payload with UTF-8 boundary safety and proactively scrub stdout
+        let bounded_output = truncate_mcp_reply(&raw_output, MAX_MCP_REPLY_BYTES, "Skill reply");
         let scrubbed_stdout = self.redactor.scrub(&bounded_output);
         Ok(scrubbed_stdout)
     }
@@ -878,11 +928,15 @@ pub async fn get_blast_radius(
     Ok(McpResult::Raw(serialized))
 }
 
-
-
-/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values.
-/// Returns an explicit configuration error if a required placeholder (without a default) is not set in the environment.
-pub fn resolve_mcp_env(env: &std::collections::HashMap<String, String>) -> Result<std::collections::HashMap<String, String>, AppError> {
+/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values
+/// using a caller-supplied lookup function (enabling race-free deterministic unit testing).
+pub fn resolve_mcp_env_with<F>(
+    env: &std::collections::HashMap<String, String>,
+    mut lookup: F,
+) -> Result<std::collections::HashMap<String, String>, AppError>
+where
+    F: FnMut(&str) -> Option<String>,
+{
     let mut resolved_map = std::collections::HashMap::new();
 
     for (key, value) in env {
@@ -912,10 +966,14 @@ pub fn resolve_mcp_env(env: &std::collections::HashMap<String, String>) -> Resul
                 (inner, None)
             };
 
-            if !var_name.is_empty() && var_name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-                match std::env::var(var_name) {
-                    Ok(val) => resolved.push_str(&val),
-                    Err(_) => {
+            if !var_name.is_empty()
+                && var_name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                match lookup(var_name) {
+                    Some(val) => resolved.push_str(&val),
+                    None => {
                         if let Some(def) = default_val {
                             resolved.push_str(def);
                         } else {
@@ -940,19 +998,33 @@ pub fn resolve_mcp_env(env: &std::collections::HashMap<String, String>) -> Resul
     Ok(resolved_map)
 }
 
+/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values.
+/// Returns an explicit configuration error if a required placeholder (without a default) is not set in the environment.
+pub fn resolve_mcp_env(
+    env: &std::collections::HashMap<String, String>,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    resolve_mcp_env_with(env, |var_name| std::env::var(var_name).ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_resolve_mcp_env_success_and_fallback() {
-        std::env::set_var("TADPOLE_TEST_MCP_KEY", "secret-token-value");
         let mut env = std::collections::HashMap::new();
         env.insert("AUTH_HEADER".to_string(), "Bearer ${TADPOLE_TEST_MCP_KEY}".to_string());
         env.insert("FALLBACK_VAR".to_string(), "${UNSET_VAR_12345:-http://localhost:8000}".to_string());
         env.insert("STATIC_VAR".to_string(), "plain_value".to_string());
 
-        let resolved = resolve_mcp_env(&env).expect("env resolution should succeed");
+        let resolved = resolve_mcp_env_with(&env, |k| {
+            if k == "TADPOLE_TEST_MCP_KEY" {
+                Some("secret-token-value".to_string())
+            } else {
+                None
+            }
+        })
+        .expect("env resolution should succeed");
         assert_eq!(resolved.get("AUTH_HEADER").unwrap(), "Bearer secret-token-value");
         assert_eq!(resolved.get("FALLBACK_VAR").unwrap(), "http://localhost:8000");
         assert_eq!(resolved.get("STATIC_VAR").unwrap(), "plain_value");
@@ -960,17 +1032,70 @@ mod tests {
 
     #[test]
     fn test_resolve_mcp_env_missing_required_variable_errors() {
-        std::env::remove_var("COMPLETELY_UNSET_REQUIRED_VAR");
         let mut env = std::collections::HashMap::new();
         env.insert("API_TOKEN".to_string(), "${COMPLETELY_UNSET_REQUIRED_VAR}".to_string());
 
-        let result = resolve_mcp_env(&env);
+        let result = resolve_mcp_env_with(&env, |_| None);
         assert!(result.is_err(), "Expected missing variable without fallback to return an error");
         if let Err(AppError::BadRequest(msg)) = result {
             assert!(msg.contains("COMPLETELY_UNSET_REQUIRED_VAR"));
         } else {
             panic!("Expected BadRequest error for missing required credential");
         }
+    }
+
+    #[test]
+    fn test_truncate_mcp_reply_and_external_matching_happy_failure_and_edge() {
+        // (a) Happy Path: Payload under limit is returned unchanged; prefixed external tools resolve cleanly
+        let short = "hello sovereign world";
+        assert_eq!(truncate_mcp_reply(short, 100, "Tool response"), short);
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "brave-search".to_string(),
+            McpServerConfig {
+                command: "npx".to_string(),
+                args: vec![],
+                env: None,
+            },
+        );
+        let cfg = McpConfig { mcp_servers: servers };
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("brave-search:web_search", &cfg),
+            Some(("brave-search".to_string(), "web_search".to_string()))
+        );
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("brave-search::local_search", &cfg),
+            Some(("brave-search".to_string(), "local_search".to_string()))
+        );
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("mcp_brave-search_web_search", &cfg),
+            Some(("brave-search".to_string(), "web_search".to_string()))
+        );
+
+        // (b) Failure Path: Unknown server prefixes or empty tool suffixes return None
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("unknown-server:web_search", &cfg),
+            None
+        );
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("brave-search:", &cfg),
+            None
+        );
+        assert_eq!(
+            McpHost::match_prefixed_external_tool("mcp_brave-search_", &cfg),
+            None
+        );
+
+        // (c) Edge Case Path: Multi-byte UTF-8 boundary (4-byte emoji '🦀' at bytes 3..7) never panics
+        let multibyte = "abc🦀def";
+        // Byte 4, 5, and 6 fall inside '🦀' (bytes 3..7); floor_utf8_char_boundary must step back to 3
+        assert_eq!(floor_utf8_char_boundary(multibyte, 4), 3);
+        assert_eq!(floor_utf8_char_boundary(multibyte, 5), 3);
+        assert_eq!(floor_utf8_char_boundary(multibyte, 6), 3);
+        assert_eq!(floor_utf8_char_boundary(multibyte, 7), 7);
+        let truncated = truncate_mcp_reply(multibyte, 5, "Tool response");
+        assert!(truncated.starts_with("abc\n\n[TRUNCATED: Tool response exceeded 2MB limit]"));
     }
 
     #[tokio::test]

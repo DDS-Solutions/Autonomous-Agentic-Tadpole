@@ -30,7 +30,6 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, OnceCell};
 use crate::services::parser::SymbolParser;
 use crate::system::actors::{ActorRegistry, SecurityAction};
-// tracing imports removed (using tracing:: macro paths directly)
 
 pub mod hubs;
 
@@ -40,9 +39,18 @@ use hubs::reg::RegistryHub;
 use hubs::res::ResourceHub;
 use hubs::sec::SecurityHub;
 
-use crate::agent::types::EngineAgent;
+use crate::agent::types::{EngineAgent, ModelEntry, ProviderConfig};
 use crate::error::AppError;
 use crate::types::SubsystemStatus;
+
+/// Validated neural authentication token bundle loaded at boot.
+struct BootAuthTokens {
+    deploy_token: String,
+    deploy_token_old: Option<String>,
+    deploy_token_new: Option<String>,
+    token_rotated_at: Option<u64>,
+    token_grace_secs: Option<u64>,
+}
 
 /// The global application state shared across all routes via Axum State.
 /// Decomposed into logical hubs for modularity.
@@ -84,7 +92,6 @@ impl AppState {
         Self::new_mock_ext(true).await
     }
 
-
     /// Creates an AppState using a provided pool. Useful for testing.
     #[allow(dead_code)]
     pub async fn with_pool(pool: SqlitePool) -> Self {
@@ -94,6 +101,8 @@ impl AppState {
         let (telemetry_tx, _) = tokio::sync::broadcast::channel(5000);
         let (pulse_tx, _) = tokio::sync::broadcast::channel(5000);
 
+        // SEC: Use unique temporary directories for test base_dir to avoid shared-state
+        // race conditions in parallel unit tests (INFRA-01).
         let base_dir = std::env::temp_dir().join(format!("tadpole-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base_dir).ok();
 
@@ -112,17 +121,17 @@ impl AppState {
         });
 
         let governance = Arc::new(GovernanceHub {
-            auto_approve_safe_skills: std::sync::atomic::AtomicBool::new(true),
-            max_agents: std::sync::atomic::AtomicU32::new(10),
-            max_clusters: std::sync::atomic::AtomicU32::new(5),
-            max_swarm_depth: std::sync::atomic::AtomicU32::new(3),
-            max_task_length: std::sync::atomic::AtomicUsize::new(4096),
-            default_budget_usd: parking_lot::RwLock::new(0.50),
-            active_agents: std::sync::atomic::AtomicU32::new(0),
-            recruit_count: std::sync::atomic::AtomicU32::new(0),
-            tpm_accumulator: std::sync::atomic::AtomicUsize::new(0),
-            privacy_mode: std::sync::atomic::AtomicBool::new(false),
-            observed_max_depth: std::sync::atomic::AtomicU32::new(0),
+            auto_approve_safe_skills: AtomicBool::new(true),
+            max_agents: AtomicU32::new(10),
+            max_clusters: AtomicU32::new(5),
+            max_swarm_depth: AtomicU32::new(3),
+            max_task_length: AtomicUsize::new(4096),
+            default_budget_usd: RwLock::new(0.50),
+            active_agents: AtomicU32::new(0),
+            recruit_count: AtomicU32::new(0),
+            tpm_accumulator: AtomicUsize::new(0),
+            privacy_mode: AtomicBool::new(false),
+            observed_max_depth: AtomicU32::new(0),
         });
 
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(
@@ -139,7 +148,9 @@ impl AppState {
             provider_failures: DashMap::new(),
             models: DashMap::new(),
             nodes: DashMap::new(),
-            skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(base_dir.clone())),
+            skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(
+                base_dir.clone(),
+            )),
             skill_registry: Arc::new(crate::agent::skill_manifest::SkillRegistry::new()),
             mcp_host: Arc::new(crate::agent::mcp::McpHost::new(
                 telemetry_tx,
@@ -148,7 +159,9 @@ impl AppState {
                 secret_redactor.clone(),
             )),
             hooks: Arc::new(crate::agent::hooks::HooksManager::new(&base_dir)),
-            tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
+            tool_registry: Arc::new(
+                crate::agent::runner::tools::dispatcher::Dispatcher::new().registry,
+            ),
         });
 
         let security = Arc::new(SecurityHub {
@@ -156,9 +169,12 @@ impl AppState {
             budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
             secret_redactor,
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
+            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new())
+                as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
-            verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
+            verification_gate: Arc::new(
+                crate::agent::verification_gate::VerificationGate::default(),
+            ),
             deploy_token: "test-token".to_string(),
             deploy_token_old: None,
             deploy_token_new: None,
@@ -166,6 +182,18 @@ impl AppState {
             token_grace_secs: None,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
+
+        let inference_permits = if std::env::var("PRIVACY_MODE")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false)
+        {
+            1
+        } else {
+            std::env::var("INFERENCE_CONCURRENCY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(4)
+        };
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
 
@@ -177,18 +205,18 @@ impl AppState {
             resources: Arc::new(ResourceHub {
                 pool,
                 http_client: Arc::new(reqwest::Client::new()),
-                audio_engine: tokio::sync::OnceCell::new(),
+                audio_engine: OnceCell::new(),
                 audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
-                code_graph: tokio::sync::OnceCell::new(),
-                symbol_graph: tokio::sync::OnceCell::new(),
-                tokenizer_bpe: tokio::sync::OnceCell::new(),
-                identity_context: tokio::sync::OnceCell::new(),
-                memory_context: tokio::sync::OnceCell::new(),
-                knowledge_store: tokio::sync::OnceCell::new(),
+                code_graph: OnceCell::new(),
+                symbol_graph: OnceCell::new(),
+                tokenizer_bpe: OnceCell::new(),
+                identity_context: OnceCell::new(),
+                memory_context: OnceCell::new(),
+                knowledge_store: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
-                vector_memory: tokio::sync::OnceCell::new(),
+                vector_memory: OnceCell::new(),
                 #[cfg(feature = "vector-memory")]
-                swarm_vault: tokio::sync::OnceCell::new(),
+                swarm_vault: OnceCell::new(),
                 rate_limiters: DashMap::new(),
                 initialization_registry: DashMap::new(),
                 hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
@@ -196,22 +224,19 @@ impl AppState {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
-                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
-                    crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
-                ))),
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(
+                    Arc::new(crate::agent::continuity::SSDManager::new(
+                        base_dir.join("data").join("cache").join("context"),
+                    )),
+                )),
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
-                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
-                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
-                inference_semaphore: {
-                    let permits = if std::env::var("PRIVACY_MODE").map(|v| v == "true" || v == "1").unwrap_or(false) {
-                        1
-                    } else {
-                        std::env::var("INFERENCE_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(4)
-                    };
-                    Arc::new(tokio::sync::Semaphore::new(permits))
-                },
+                is_rebuilding_symbol_graph: AtomicBool::new(false),
+                tool_cache: Arc::new(parking_lot::Mutex::new(
+                    crate::agent::runner::tools::cache::SharedToolCache::new(),
+                )),
+                inference_semaphore: Arc::new(tokio::sync::Semaphore::new(inference_permits)),
             }),
             base_dir,
             actors: OnceCell::new(),
@@ -222,26 +247,15 @@ impl AppState {
     }
 
     async fn new_mock_ext(minimal: bool) -> Self {
-        let (tx, _) = tokio::sync::broadcast::channel(5000);
-        let (event_tx, _) = tokio::sync::broadcast::channel(5000);
-        let (audio_stream_tx, _) = tokio::sync::broadcast::channel(5000);
-        let (telemetry_tx, _) = tokio::sync::broadcast::channel(5000);
-        let (pulse_tx, _) = tokio::sync::broadcast::channel(5000);
-
-        // SEC: Use unique temporary directories for test base_dir to avoid shared-state 
-        // race conditions in parallel unit tests (INFRA-01).
-        let test_id = uuid::Uuid::new_v4().to_string();
-        let base_dir = std::env::temp_dir().join(format!("tadpole-test-{}", test_id));
-        std::fs::create_dir_all(&base_dir).ok();
-
-        if minimal {
-            std::env::set_var("SKIP_DB_SEED", "true");
+        // Use thread-safe URL query parameter `skip_seed=true` supported by `crate::db::init_db`
+        // rather than mutating process-wide environment variables across parallel tests.
+        let database_url = if minimal {
+            "sqlite::memory:?skip_seed=true"
         } else {
-            std::env::remove_var("SKIP_DB_SEED");
-        }
+            "sqlite::memory:"
+        };
 
-        let database_url = "sqlite::memory:".to_string();
-        let pool = crate::db::init_db(&database_url)
+        let pool = crate::db::init_db(database_url)
             .await
             .map_err(|e| {
                 eprintln!("🚨 CRITICAL: Failed to init test DB: {:?}", e);
@@ -249,123 +263,7 @@ impl AppState {
             })
             .unwrap_or_else(|_| panic!("Failed to initialize in-memory test database"));
 
-        let comms = Arc::new(CommunicationHub {
-            tx,
-            event_tx,
-            telemetry_tx: telemetry_tx.clone(),
-            audio_stream_tx,
-            pulse_tx,
-            oversight_queue: DashMap::new(),
-            oversight_resolvers: DashMap::new(),
-            oversight_answers: DashMap::new(),
-            active_runners: DashMap::new(),
-            mission_contexts: DashMap::new(),
-            event_sequence: std::sync::atomic::AtomicU64::new(0),
-        });
-
-        let governance = Arc::new(GovernanceHub {
-            auto_approve_safe_skills: std::sync::atomic::AtomicBool::new(true),
-            max_agents: std::sync::atomic::AtomicU32::new(10),
-            max_clusters: std::sync::atomic::AtomicU32::new(5),
-            max_swarm_depth: std::sync::atomic::AtomicU32::new(3),
-            max_task_length: std::sync::atomic::AtomicUsize::new(4096),
-            default_budget_usd: parking_lot::RwLock::new(0.50),
-            active_agents: std::sync::atomic::AtomicU32::new(0),
-            recruit_count: std::sync::atomic::AtomicU32::new(0),
-            tpm_accumulator: std::sync::atomic::AtomicUsize::new(0),
-            privacy_mode: std::sync::atomic::AtomicBool::new(false),
-            observed_max_depth: std::sync::atomic::AtomicU32::new(0),
-        });
-
-        let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(
-            pool.clone(),
-        ));
-
-        let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::noop());
-
-        let registry = Arc::new(RegistryHub {
-            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
-            agents: DashMap::new(),
-            providers: DashMap::new(),
-            provider_health: DashMap::new(),
-            provider_failures: DashMap::new(),
-            models: DashMap::new(),
-            nodes: DashMap::new(),
-            skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(base_dir.clone())),
-            skill_registry: Arc::new(crate::agent::skill_manifest::SkillRegistry::new()),
-            mcp_host: Arc::new(crate::agent::mcp::McpHost::new(
-                telemetry_tx,
-                None,
-                permission_policy.clone(),
-                secret_redactor.clone(),
-            )),
-            hooks: Arc::new(crate::agent::hooks::HooksManager::new(
-                &base_dir,
-            )),
-            tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
-        });
-
-        let security = Arc::new(SecurityHub {
-            audit_trail: Arc::new(crate::security::audit::MerkleAuditTrail::mock_async().await),
-            budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
-            shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
-            secret_redactor,
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
-            permission_policy,
-            verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
-            deploy_token: "test-token".to_string(),
-            deploy_token_old: None,
-            deploy_token_new: None,
-            token_rotated_at: None,
-            token_grace_secs: None,
-            conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
-        });
-
-        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
-
-        let state = Self {
-            comms,
-            governance,
-            registry,
-            security,
-            resources: Arc::new(ResourceHub {
-                pool,
-                http_client: Arc::new(reqwest::Client::new()),
-                audio_engine: tokio::sync::OnceCell::new(),
-                audio_cache: Arc::new(crate::agent::audio_cache::BunkerCache::mock()),
-                code_graph: tokio::sync::OnceCell::new(),
-                symbol_graph: tokio::sync::OnceCell::new(),
-                tokenizer_bpe: tokio::sync::OnceCell::new(),
-                identity_context: tokio::sync::OnceCell::new(),
-                memory_context: tokio::sync::OnceCell::new(),
-                knowledge_store: tokio::sync::OnceCell::new(),
-                #[cfg(feature = "vector-memory")]
-                vector_memory: tokio::sync::OnceCell::new(),
-                #[cfg(feature = "vector-memory")]
-                swarm_vault: tokio::sync::OnceCell::new(),
-                rate_limiters: DashMap::new(),
-                initialization_registry: DashMap::new(),
-                hardware_profiler: Arc::new(crate::system::profiler::HardwareProfiler::new()),
-                acl: Arc::new(crate::services::acl_service::AclService),
-                renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
-                base_dir: base_dir.clone(),
-                arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
-                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
-                    crate::agent::continuity::SSDManager::new(base_dir.join("data").join("cache").join("context")),
-                ))),
-                parser: Arc::new(SymbolParser::new()),
-                obfuscation_salt: uuid::Uuid::new_v4().to_string(),
-                git_path: which::which("git").ok(),
-                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
-                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
-                inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
-            }),
-            base_dir,
-            actors: OnceCell::new(),
-            boot_gate: (boot_tx, boot_rx),
-            event_bus: Arc::new(crate::system::event_bus::SystemEventBus::new()),
-            start_time: chrono::Utc::now(),
-        };
+        let state = Self::with_pool(pool).await;
         state
             .resources
             .set_subsystem_status("Database", SubsystemStatus::Ready);
@@ -378,69 +276,33 @@ impl AppState {
         state
     }
 
-fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
-    if cfg!(test) {
-        return Ok(());
+    fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
+        if cfg!(test) {
+            return Ok(());
+        }
+        let lower = token.to_lowercase();
+        if lower.contains("your-")
+            || lower.contains("secret-token")
+            || lower.contains("placeholder")
+            || lower.contains("previous-token")
+            || lower.contains("pending-token")
+        {
+            return Err(AppError::Unauthorized(format!(
+                "🚨 FATAL: {} contains insecure placeholder value. Set a cryptographically secure token (openssl rand -hex 32).",
+                var_name
+            )));
+        }
+        if token.len() < 32 {
+            return Err(AppError::Unauthorized(format!(
+                "🚨 FATAL: {} is too short ({} chars). Cryptographic tokens must be at least 32 characters.",
+                var_name,
+                token.len()
+            )));
+        }
+        Ok(())
     }
-    let lower = token.to_lowercase();
-    if lower.contains("your-")
-        || lower.contains("secret-token")
-        || lower.contains("placeholder")
-        || lower.contains("previous-token")
-        || lower.contains("pending-token")
-    {
-        return Err(AppError::Unauthorized(format!(
-            "🚨 FATAL: {} contains insecure placeholder value. Set a cryptographically secure token (openssl rand -hex 32).",
-            var_name
-        )));
-    }
-    if token.len() < 32 {
-        return Err(AppError::Unauthorized(format!(
-            "🚨 FATAL: {} is too short ({} chars). Cryptographic tokens must be at least 32 characters.",
-            var_name,
-            token.len()
-        )));
-    }
-    Ok(())
-}
 
-    /// ### 🏁 Boot Sequence: Engine Initialization (new)
-    /// Performs the synchronous and asynchronous orchestration required to bring 
-    /// the Tadpole OS engine online.
-    /// 
-    /// ### 🧬 Initialization Stages
-    /// 1. **Secret Loading**: Verifies the existence of `NEURAL_TOKEN`.
-    /// 2. **Database Link**: Establishes the persistent SQLite connection pool.
-    /// 3. **Hydration**: Rapidly loads providers, models, and agents from SQLite 
-    ///    into highly-concurrent `DashMap` registries.
-    /// 4. **Capability Discovery**: Scans for dynamic Python/JS skills and 
-    ///    markdown workflows.
-    /// 5. **Subsystem Assembly**: Initializes the `McpHost`, `BunkerCache`, 
-    ///    and `SecretRedactor`.
-    pub async fn new() -> Result<Self, AppError> {
-        dotenvy::dotenv().ok();
-        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
-
-        let (tx, _) = broadcast::channel(5000);
-        let (event_tx, _) = broadcast::channel(5000);
-        let (audio_stream_tx, _) = broadcast::channel(5000);
-        let (pulse_tx, _) = broadcast::channel(5000);
-        let telemetry_tx = crate::telemetry::TELEMETRY_TX.clone();
-
-        let base_dir = std::env::var("WORKSPACE_ROOT")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
-                let current = std::env::current_dir().unwrap_or_default();
-                if current.ends_with("server-rs") {
-                    current.parent().unwrap_or(&current).to_path_buf()
-                } else {
-                    current
-                }
-            });
-
-        tracing::info!("🏁 [Engine] Starting AppState initialization...");
-
-        // Security: Load Neural Token (Mandatory, but relaxed for tests)
+    fn load_auth_tokens_from_env() -> Result<BootAuthTokens, AppError> {
         tracing::info!("🔑 [Auth] Loading Neural Token...");
         let deploy_token = match std::env::var("NEURAL_ENGINE_ACCESS_TOKEN")
             .or_else(|_| std::env::var("NEURAL_TOKEN"))
@@ -451,25 +313,35 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 trimmed
             }
             Err(_) if cfg!(test) => "ci-test-token-placeholder".to_string(),
-            Err(_) => return Err(AppError::Unauthorized(
-                "🚨 FATAL: NEURAL_TOKEN or NEURAL_ENGINE_ACCESS_TOKEN environment variable MUST be set for the engine to start.".to_string()
-            )),
+            Err(_) => {
+                return Err(AppError::Unauthorized(
+                    "🚨 FATAL: NEURAL_TOKEN or NEURAL_ENGINE_ACCESS_TOKEN environment variable MUST be set for the engine to start.".to_string(),
+                ))
+            }
         };
 
-        let deploy_token_old = match std::env::var("NEURAL_TOKEN_OLD").ok().map(|s| s.trim().to_string()) {
+        let deploy_token_old = match std::env::var("NEURAL_TOKEN_OLD")
+            .ok()
+            .map(|s| s.trim().to_string())
+        {
             Some(t) if !t.is_empty() => {
                 Self::validate_boot_token(&t, "NEURAL_TOKEN_OLD")?;
                 Some(t)
             }
             _ => None,
         };
-        let deploy_token_new = match std::env::var("NEURAL_TOKEN_NEW").ok().map(|s| s.trim().to_string()) {
+
+        let deploy_token_new = match std::env::var("NEURAL_TOKEN_NEW")
+            .ok()
+            .map(|s| s.trim().to_string())
+        {
             Some(t) if !t.is_empty() => {
                 Self::validate_boot_token(&t, "NEURAL_TOKEN_NEW")?;
                 Some(t)
             }
             _ => None,
         };
+
         let token_rotated_at = std::env::var("NEURAL_TOKEN_ROTATED_AT")
             .ok()
             .and_then(|s| s.trim().parse::<u64>().ok());
@@ -477,105 +349,17 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             .ok()
             .and_then(|s| s.trim().parse::<u64>().ok());
 
-        // Initialize DB
-        let database_url = if cfg!(test) {
-            "sqlite::memory:".to_string()
-        } else {
-            std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-                let db_path = base_dir.join("data").join("tadpole.db");
-                format!("sqlite:{}", db_path.display())
-            })
-        };
+        Ok(BootAuthTokens {
+            deploy_token,
+            deploy_token_old,
+            deploy_token_new,
+            token_rotated_at,
+            token_grace_secs,
+        })
+    }
 
-        tracing::info!("🗄️ [Database] Connecting to: {}", database_url);
-        let pool = match crate::db::init_db(&database_url).await {
-            Ok(p) => {
-                tracing::info!("✅ [Database] Pool established successfully.");
-                p
-            }
-            Err(e) => {
-                tracing::error!(
-                    "🚨 [Database] FATAL: Failed to initialize database pool at {}: {:?}",
-                    database_url,
-                    e
-                );
-                return Err(AppError::from(e));
-            }
-        };
-
-        // Load Registries
-        tracing::info!("📂 [Registries] Loading Providers and Models...");
-        let providers_list = crate::agent::persistence::load_providers(&base_dir).await;
-        let providers = DashMap::new();
-        for p in providers_list {
-            providers.insert(p.id.clone(), p);
-        }
-
-        let models_list = crate::agent::persistence::load_models(&base_dir).await;
-        let models = DashMap::new();
-        for m in models_list {
-            models.insert(m.id.clone(), m);
-        }
-
-        tracing::info!("📂 [Registries] Loading Agents...");
-        let agents_list = crate::agent::persistence::load_agents_db(&pool)
-            .await
-            .unwrap_or_default();
- 
-        let agents = DashMap::new();
-        for a in agents_list {
-            agents.insert(a.identity.id.clone(), a);
-        }
-        tracing::info!("✅ [Registries] Agents loaded (count: {}).", agents.len());
-
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .user_agent("TadpoleOS/1.1.59")
-                .pool_max_idle_per_host(10)
-                .pool_idle_timeout(std::time::Duration::from_secs(60))
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .timeout(std::time::Duration::from_secs(600))
-                .tcp_nodelay(true)
-                .build()
-                .context("Failed to build HTTP client")?,
-        );
-        let audio_cache_path = base_dir.join("data").join("audio_cache.db");
-        tracing::info!(
-            "🚀 [Engines] Initializing Audio Cache at {}...",
-            audio_cache_path.display()
-        );
-        let audio_cache = match crate::agent::audio_cache::BunkerCache::new(
-            audio_cache_path.clone(),
-        )
-        .await
-        {
-            Ok(cache) => Arc::new(cache),
-            Err(e) => {
-                tracing::warn!("⚠️ [Engines] Audio Cache failed to initialize at {}: {:?}. Falling back to no-op mode.", audio_cache_path.display(), e);
-                Arc::new(crate::agent::audio_cache::BunkerCache::new_noop().await)
-            }
-        };
-
-        let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::from_env());
-
-        // Assemble Hubs
-        tracing::info!("💠 [Hubs] Assembling Communication Hub...");
-        let comms = Arc::new(CommunicationHub {
-            tx: tx.clone(),
-            event_tx: event_tx.clone(),
-            telemetry_tx,
-            audio_stream_tx,
-            pulse_tx,
-            oversight_queue: DashMap::new(),
-            oversight_resolvers: DashMap::new(),
-            oversight_answers: DashMap::new(),
-            active_runners: DashMap::new(),
-            mission_contexts: DashMap::new(),
-            event_sequence: std::sync::atomic::AtomicU64::new(0),
-        });
-
-        tracing::info!("💠 [Hubs] Assembling Governance Hub...");
-        let governance = Arc::new(GovernanceHub {
+    fn build_governance_from_env() -> Arc<GovernanceHub> {
+        Arc::new(GovernanceHub {
             auto_approve_safe_skills: AtomicBool::new(
                 std::env::var("AUTO_APPROVE_SAFE_SKILLS")
                     .map(|s| s == "true")
@@ -615,7 +399,162 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                     .unwrap_or(false),
             ),
             observed_max_depth: AtomicU32::new(0),
+        })
+    }
+
+    async fn hydrate_registries(
+        base_dir: &std::path::Path,
+        pool: &SqlitePool,
+    ) -> (
+        DashMap<String, ProviderConfig>,
+        DashMap<String, ModelEntry>,
+        DashMap<String, EngineAgent>,
+    ) {
+        tracing::info!("📂 [Registries] Loading Providers and Models...");
+        let providers_list = crate::agent::persistence::load_providers(base_dir).await;
+        let providers = DashMap::new();
+        for p in providers_list {
+            providers.insert(p.id.clone(), p);
+        }
+
+        let models_list = crate::agent::persistence::load_models(base_dir).await;
+        let models = DashMap::new();
+        for m in models_list {
+            models.insert(m.id.clone(), m);
+        }
+
+        tracing::info!("📂 [Registries] Loading Agents...");
+        let agents_list = crate::agent::persistence::load_agents_db(pool)
+            .await
+            .unwrap_or_default();
+
+        let agents = DashMap::new();
+        for a in agents_list {
+            agents.insert(a.identity.id.clone(), a);
+        }
+        tracing::info!("✅ [Registries] Agents loaded (count: {}).", agents.len());
+
+        (providers, models, agents)
+    }
+
+    /// ### 🏁 Boot Sequence: Engine Initialization (new)
+    /// Performs the synchronous and asynchronous orchestration required to bring 
+    /// the Tadpole OS engine online.
+    /// 
+    /// ### 🧬 Initialization Stages
+    /// 1. **Secret Loading**: Verifies the existence of `NEURAL_TOKEN`.
+    /// 2. **Database Link**: Establishes the persistent SQLite connection pool.
+    /// 3. **Hydration**: Rapidly loads providers, models, and agents from SQLite 
+    ///    into highly-concurrent `DashMap` registries.
+    /// 4. **Capability Discovery**: Scans for dynamic Python/JS skills and 
+    ///    markdown workflows.
+    /// 5. **Subsystem Assembly**: Initializes the `McpHost`, `BunkerCache`, 
+    ///    and `SecretRedactor`.
+    pub async fn new() -> Result<Self, AppError> {
+        dotenvy::dotenv().ok();
+        let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);
+
+        let (tx, _) = broadcast::channel(5000);
+        let (event_tx, _) = broadcast::channel(5000);
+        let (audio_stream_tx, _) = broadcast::channel(5000);
+        let (pulse_tx, _) = broadcast::channel(5000);
+        let telemetry_tx = crate::telemetry::TELEMETRY_TX.clone();
+
+        let base_dir = std::env::var("WORKSPACE_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                let current = std::env::current_dir().unwrap_or_default();
+                if current.ends_with("server-rs") {
+                    current.parent().unwrap_or(&current).to_path_buf()
+                } else {
+                    current
+                }
+            });
+
+        tracing::info!("🏁 [Engine] Starting AppState initialization...");
+
+        // 1. Security: Load Neural Token (Mandatory, but relaxed for tests)
+        let auth_tokens = Self::load_auth_tokens_from_env()?;
+
+        // 2. Initialize DB
+        let database_url = if cfg!(test) {
+            "sqlite::memory:".to_string()
+        } else {
+            std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                let db_path = base_dir.join("data").join("tadpole.db");
+                format!("sqlite:{}", db_path.display())
+            })
+        };
+
+        tracing::info!("🗄️ [Database] Connecting to: {}", database_url);
+        let pool = match crate::db::init_db(&database_url).await {
+            Ok(p) => {
+                tracing::info!("✅ [Database] Pool established successfully.");
+                p
+            }
+            Err(e) => {
+                tracing::error!(
+                    "🚨 [Database] FATAL: Failed to initialize database pool at {}: {:?}",
+                    database_url,
+                    e
+                );
+                return Err(AppError::from(e));
+            }
+        };
+
+        // 3. Load Registries
+        let (providers, models, agents) = Self::hydrate_registries(&base_dir, &pool).await;
+
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .user_agent("TadpoleOS/1.1.59")
+                .pool_max_idle_per_host(10)
+                .pool_idle_timeout(std::time::Duration::from_secs(60))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(600))
+                .tcp_nodelay(true)
+                .build()
+                .context("Failed to build HTTP client")?,
+        );
+
+        let audio_cache_path = base_dir.join("data").join("audio_cache.db");
+        tracing::info!(
+            "🚀 [Engines] Initializing Audio Cache at {}...",
+            audio_cache_path.display()
+        );
+        let audio_cache =
+            match crate::agent::audio_cache::BunkerCache::new(audio_cache_path.clone()).await {
+                Ok(cache) => Arc::new(cache),
+                Err(e) => {
+                    tracing::warn!(
+                        "⚠️ [Engines] Audio Cache failed to initialize at {}: {:?}. Falling back to no-op mode.",
+                        audio_cache_path.display(),
+                        e
+                    );
+                    Arc::new(crate::agent::audio_cache::BunkerCache::new_noop().await)
+                }
+            };
+
+        let secret_redactor = Arc::new(crate::secret_redactor::SecretRedactor::from_env());
+
+        // 4. Assemble Hubs
+        tracing::info!("💠 [Hubs] Assembling Communication Hub...");
+        let comms = Arc::new(CommunicationHub {
+            tx: tx.clone(),
+            event_tx: event_tx.clone(),
+            telemetry_tx,
+            audio_stream_tx,
+            pulse_tx,
+            oversight_queue: DashMap::new(),
+            oversight_resolvers: DashMap::new(),
+            oversight_answers: DashMap::new(),
+            active_runners: DashMap::new(),
+            mission_contexts: DashMap::new(),
+            event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
+
+        tracing::info!("💠 [Hubs] Assembling Governance Hub...");
+        let governance = Self::build_governance_from_env();
 
         let mcp_config_path = base_dir.join(".agent").join("mcp_config.json");
         let mcp_config_opt = if mcp_config_path.exists() {
@@ -628,7 +567,12 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         let script_skills = Arc::new(
             crate::agent::script_skills::ScriptSkillsRegistry::new()
                 .await
-                .map_err(|e| AppError::InternalServerError(format!("Failed to initialize script skills registry: {}", e)))?,
+                .map_err(|e| {
+                    AppError::InternalServerError(format!(
+                        "Failed to initialize script skills registry: {}",
+                        e
+                    ))
+                })?,
         );
 
         tracing::info!("🛰️ [Registry] Loading Skill Manifests...");
@@ -660,7 +604,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
 
         let registry = Arc::new(RegistryHub {
             lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
-            agents: agents.clone(),
+            agents,
             providers,
             provider_health: DashMap::new(),
             provider_failures: DashMap::new(),
@@ -672,7 +616,7 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             hooks,
             tool_registry,
         });
- 
+
         // 🧬 [Reconciliation] Fix configuration drift before subsystems start
         registry.reconcile_agents();
 
@@ -683,16 +627,23 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 secret_redactor.clone(),
             )),
             secret_redactor,
-            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()) as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
+            system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new())
+                as Arc<dyn crate::agent::runner::service_traits::SystemMonitorTrait>,
             permission_policy,
-            verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
-            deploy_token,
-            deploy_token_old,
-            deploy_token_new,
-            token_rotated_at,
-            token_grace_secs,
+            verification_gate: Arc::new(
+                crate::agent::verification_gate::VerificationGate::default(),
+            ),
+            deploy_token: auth_tokens.deploy_token,
+            deploy_token_old: auth_tokens.deploy_token_old,
+            deploy_token_new: auth_tokens.deploy_token_new,
+            token_rotated_at: auth_tokens.token_rotated_at,
+            token_grace_secs: auth_tokens.token_grace_secs,
             conflict: Arc::new(crate::security::conflict::ConflictManager::new()),
         });
+
+        let cache_dir = std::env::var("TADPOLE_CACHE_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| base_dir.join("data").join("cache").join("context"));
 
         let state = Self {
             comms,
@@ -721,19 +672,16 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(16)),
-                continuity_arbiter: {
-                    let cache_dir = std::env::var("TADPOLE_CACHE_DIR")
-                        .map(std::path::PathBuf::from)
-                        .unwrap_or_else(|_| base_dir.join("data").join("cache").join("context"));
-                    Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
-                        crate::agent::continuity::SSDManager::new(cache_dir),
-                    )))
-                },
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(
+                    Arc::new(crate::agent::continuity::SSDManager::new(cache_dir)),
+                )),
                 parser: Arc::new(SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
-                is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
-                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                is_rebuilding_symbol_graph: AtomicBool::new(false),
+                tool_cache: Arc::new(parking_lot::Mutex::new(
+                    crate::agent::runner::tools::cache::SharedToolCache::new(),
+                )),
                 inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             }),
             base_dir,
@@ -805,13 +753,19 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
 
             if let Err(e) = actors.audit.send(msg).await {
                 tracing::error!("🚨 [Kernel] Failed to dispatch audit message: {:?}", e);
-                return Err(AppError::InternalServerError("Audit dispatcher failure".to_string()));
+                return Err(AppError::InternalServerError(
+                    "Audit dispatcher failure".to_string(),
+                ));
             }
 
-            rx.await.map_err(|_| AppError::InternalServerError("Audit response timed out".to_string()))?
+            rx.await
+                .map_err(|_| AppError::InternalServerError("Audit response timed out".to_string()))?
         } else {
             // Fallback to direct synchronous/shared-state recording (Legacy/Boot)
-            self.security.audit_trail.record(agent_id, mission_id, user_id, action, params).await
+            self.security
+                .audit_trail
+                .record(agent_id, mission_id, user_id, action, params)
+                .await
                 .map_err(|e| AppError::InternalServerError(e.to_string()))
         }
     }
@@ -832,14 +786,13 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 "mission_id": mission_id,
                 "vector": vector
             });
-            let msg = crate::system::actors::SystemMessage::MemorySave {
-                content,
-                resp: tx,
-            };
+            let msg = crate::system::actors::SystemMessage::MemorySave { content, resp: tx };
 
             crate::system::actors::dispatch(&actors.memory, msg, rx).await
         } else {
-            Err(AppError::InternalServerError("MemoryActor not initialized; memory was not saved".to_string()))
+            Err(AppError::InternalServerError(
+                "MemoryActor not initialized; memory was not saved".to_string(),
+            ))
         }
     }
 
@@ -861,7 +814,9 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
 
             crate::system::actors::dispatch(&actors.memory, msg, rx).await
         } else {
-            Err(AppError::InternalServerError("MemoryActor not initialized".to_string()))
+            Err(AppError::InternalServerError(
+                "MemoryActor not initialized".to_string(),
+            ))
         }
     }
 
@@ -877,23 +832,42 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         let action = match action_type {
             "spend" => {
                 let amount = payload.get("amount").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    AppError::BadRequest("Missing or invalid 'amount' in spend security check".to_string())
+                    AppError::BadRequest(
+                        "Missing or invalid 'amount' in spend security check".to_string(),
+                    )
                 })?;
                 SecurityAction::Spend { amount }
             }
             "shell" => {
-                let command = payload.get("command").and_then(|v| v.as_str()).ok_or_else(|| {
-                    AppError::BadRequest("Missing or invalid 'command' in shell security check".to_string())
-                })?.to_string();
+                let command = payload
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        AppError::BadRequest(
+                            "Missing or invalid 'command' in shell security check".to_string(),
+                        )
+                    })?
+                    .to_string();
                 SecurityAction::Shell { command }
             }
             "pii" => {
-                let text = payload.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
-                    AppError::BadRequest("Missing or invalid 'text' in PII security check".to_string())
-                })?.to_string();
+                let text = payload
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        AppError::BadRequest(
+                            "Missing or invalid 'text' in PII security check".to_string(),
+                        )
+                    })?
+                    .to_string();
                 SecurityAction::PiiCheck { text }
             }
-            _ => return Err(AppError::BadRequest(format!("Unknown security action: {}", action_type))),
+            _ => {
+                return Err(AppError::BadRequest(format!(
+                    "Unknown security action: {}",
+                    action_type
+                )))
+            }
         };
 
         if let Some(actors) = self.actors.get() {
@@ -907,28 +881,34 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             // Use async send to handle backpressure on the bounded security channel
             if let Err(e) = actors.security.send(msg).await {
                 tracing::error!("🚨 [Kernel] Failed to dispatch security check: {:?}", e);
-                return Err(AppError::InternalServerError("Security dispatcher failure".to_string()));
+                return Err(AppError::InternalServerError(
+                    "Security dispatcher failure".to_string(),
+                ));
             }
 
-            rx.await.map_err(|_| AppError::InternalServerError("Security check timed out".to_string()))?
+            rx.await
+                .map_err(|_| AppError::InternalServerError("Security check timed out".to_string()))?
         } else {
             // Fallback to direct synchronous/shared-state check (Legacy/Boot)
             match action {
-                SecurityAction::Spend { amount } => {
-                    self.security.budget_guard.record_usage(agent_id, amount).await
-                        .map(|_| true)
-                        .map_err(|e| AppError::InternalServerError(e.to_string()))
-                },
+                SecurityAction::Spend { amount } => self
+                    .security
+                    .budget_guard
+                    .record_usage(agent_id, amount)
+                    .await
+                    .map(|_| true)
+                    .map_err(|e| AppError::InternalServerError(e.to_string())),
                 SecurityAction::Shell { command } => {
                     match self.security.shell_scanner.scan(&command) {
                         crate::security::scanner::ScannerResult::Safe => Ok(true),
                         crate::security::scanner::ScannerResult::Risky(_) => Ok(false),
                     }
-                },
+                }
                 SecurityAction::PiiCheck { .. } => Ok(true), // PII scanner not initialized in fallback
             }
         }
     }
+
     /// ### 📡 Observability: System Broadcast (broadcast_sys)
     /// Publishes a high-priority system event to all connected telemetry 
     /// consumers (WebSockets, OTel exporters).
@@ -962,12 +942,15 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
     /// Helper to broadcast an arbitrary Engine event.
     pub fn emit_event(&self, event: serde_json::Value) {
         let mut full_event = event;
-        let seq = self.comms.event_sequence.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        
+        let seq = self
+            .comms
+            .event_sequence
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
         if let Some(obj) = full_event.as_object_mut() {
             obj.insert("_seq".to_string(), serde_json::json!(seq));
         }
-        
+
         let _ = self.comms.event_tx.send(full_event);
     }
 
@@ -1009,8 +992,12 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         for lock in &self.registry.lifecycle_locks {
             guards.push(lock.lock().await);
         }
-        let agents: Vec<EngineAgent> = self.registry.agents.iter()
-            .map(|entry| entry.value().clone()).collect();
+        let agents: Vec<EngineAgent> = self
+            .registry
+            .agents
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect();
         let mut tx = self.resources.pool.begin_with("BEGIN IMMEDIATE").await?;
         let mut versions = Vec::with_capacity(agents.len());
         for agent in &agents {
@@ -1035,7 +1022,9 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             .iter()
             .map(|kv| kv.value().clone())
             .collect();
-        if let Err(e) = crate::agent::persistence::save_providers(&self.base_dir, providers_vec).await {
+        if let Err(e) =
+            crate::agent::persistence::save_providers(&self.base_dir, providers_vec).await
+        {
             tracing::error!("❌ [State] Failed to persist providers to disk: {:?}", e);
         }
     }
@@ -1099,16 +1088,22 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
     /// Triggers a recursive scan of the workspace for autonomously generated 
     /// Python/JS skills.
     pub async fn scan_workspace_skills_sovereign(&self) -> Result<usize, AppError> {
-        self.registry.skills.reload_all().await
+        self.registry
+            .skills
+            .reload_all()
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Failed to scan skills: {}", e)))?;
-        
+
         let snapshot = self.registry.skills.snapshot();
         Ok(snapshot.skills.len() + snapshot.workflows.len() + snapshot.hooks.len())
     }
 
     /// ### 🧠 State: Traverse Session History (traverse_session_history_sovereign)
     /// Reconstructs the linear history for a specific branch tip.
-    pub async fn traverse_session_history_sovereign(&self, leaf_id: &str) -> Result<Vec<serde_json::Value>, AppError> {
+    pub async fn traverse_session_history_sovereign(
+        &self,
+        leaf_id: &str,
+    ) -> Result<Vec<serde_json::Value>, AppError> {
         let history = sqlx::query(
             r#"
             WITH RECURSIVE branch AS (
@@ -1121,29 +1116,35 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
                 JOIN branch b ON m.id = b.parent_id
             )
             SELECT * FROM branch ORDER BY created_at ASC
-            "#
+            "#,
         )
         .bind(leaf_id)
         .fetch_all(&self.resources.pool)
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Failed to traverse session history: {}", e)))?;
+        .map_err(|e| {
+            AppError::InternalServerError(format!("Failed to traverse session history: {}", e))
+        })?;
 
-        let result: Vec<_> = history.into_iter().map(|row| {
-            use sqlx::Row;
-            serde_json::json!({
-                "id": row.try_get::<String, _>("id").unwrap_or_default(),
-                "role": row.try_get::<String, _>("role").unwrap_or_default(),
-                "content": row.try_get::<String, _>("content").unwrap_or_default(),
-                "metadata": row.try_get::<Option<String>, _>("metadata").ok().flatten().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
-                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").ok()
+        let result: Vec<_> = history
+            .into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                serde_json::json!({
+                    "id": row.try_get::<String, _>("id").unwrap_or_default(),
+                    "role": row.try_get::<String, _>("role").unwrap_or_default(),
+                    "content": row.try_get::<String, _>("content").unwrap_or_default(),
+                    "metadata": row.try_get::<Option<String>, _>("metadata").ok().flatten().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
+                    "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").ok()
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(result)
     }
 
     /// ### 🧠 State: Append Session Node (append_session_node_sovereign)
-    /// Appends a new node to the session tree.
+    /// Appends a new node to the session tree and atomically updates `mission_history.active_node_id`
+    /// within a single SQLite transaction.
     pub async fn append_session_node_sovereign(
         &self,
         mission_id: &str,
@@ -1155,11 +1156,13 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         let node_id = uuid::Uuid::new_v4().to_string();
         let metadata_str = metadata.map(|m| m.to_string());
 
+        let mut tx = self.resources.pool.begin().await?;
+
         sqlx::query(
             r#"
             INSERT INTO mission_nodes (id, mission_id, parent_id, role, content, metadata)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            "#
+            "#,
         )
         .bind(&node_id)
         .bind(mission_id)
@@ -1167,17 +1170,26 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
         .bind(role)
         .bind(content)
         .bind(metadata_str)
-        .execute(&self.resources.pool)
+        .execute(&mut *tx)
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Failed to append session node: {}", e)))?;
+        .map_err(|e| {
+            AppError::InternalServerError(format!("Failed to append session node: {}", e))
+        })?;
 
-        // Update active leaf in mission_history
+        // Update active leaf in mission_history within the same transaction
         sqlx::query("UPDATE mission_history SET active_node_id = ?1 WHERE id = ?2")
             .bind(&node_id)
             .bind(mission_id)
-            .execute(&self.resources.pool)
+            .execute(&mut *tx)
             .await
-            .ok(); // Non-fatal if update fails
+            .map_err(|e| {
+                AppError::InternalServerError(format!(
+                    "Failed to update mission active_node_id: {}",
+                    e
+                ))
+            })?;
+
+        tx.commit().await?;
 
         Ok(node_id)
     }
@@ -1198,7 +1210,9 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             .map_err(|e| AppError::InternalServerError(format!("Validation failed: {}", e)))?;
 
         if exists.is_none() {
-            return Err(AppError::BadRequest("Target node does not exist in this mission context".to_string()));
+            return Err(AppError::BadRequest(
+                "Target node does not exist in this mission context".to_string(),
+            ));
         }
 
         sqlx::query("UPDATE mission_history SET active_node_id = ?1 WHERE id = ?2")
@@ -1208,13 +1222,17 @@ fn validate_boot_token(token: &str, var_name: &str) -> Result<(), AppError> {
             .await
             .map_err(|e| AppError::InternalServerError(format!("Reversion failed: {}", e)))?;
 
-        tracing::info!("⏳ [TimeTravel] Mission {} reverted to node {}", mission_id, node_id);
+        tracing::info!(
+            "⏳ [TimeTravel] Mission {} reverted to node {}",
+            mission_id,
+            node_id
+        );
         Ok(())
     }
 }
 
 impl Default for AppState {
-    /// Creates a mock version of the application state for testing purposes.
+    /// Creates a mock version of the application state for synchronous default contexts.
     fn default() -> Self {
         let (tx, _) = broadcast::channel(1);
         let (event_tx, _) = broadcast::channel(1);
@@ -1266,9 +1284,13 @@ impl Default for AppState {
             provider_failures: DashMap::new(),
             models: DashMap::new(),
             nodes: DashMap::new(),
-            skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(std::path::PathBuf::from("tmp"))),
+            skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(
+                std::path::PathBuf::from("tmp"),
+            )),
             skill_registry: Arc::new(crate::agent::skill_manifest::SkillRegistry::new()),
-            tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
+            tool_registry: Arc::new(
+                crate::agent::runner::tools::dispatcher::Dispatcher::new().registry,
+            ),
             mcp_host: Arc::new(crate::agent::mcp::McpHost::new(
                 broadcast::channel(1).0,
                 None,
@@ -1287,7 +1309,9 @@ impl Default for AppState {
             secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
             permission_policy,
-            verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
+            verification_gate: Arc::new(
+                crate::agent::verification_gate::VerificationGate::default(),
+            ),
             deploy_token: "test".into(),
             deploy_token_old: None,
             deploy_token_new: None,
@@ -1319,13 +1343,17 @@ impl Default for AppState {
             base_dir: std::path::PathBuf::from("data"),
             arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
             continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
-                crate::agent::continuity::SSDManager::new(std::path::PathBuf::from("data").join("cache").join("context")),
+                crate::agent::continuity::SSDManager::new(
+                    std::path::PathBuf::from("data").join("cache").join("context"),
+                ),
             ))),
             parser: Arc::new(SymbolParser::new()),
             obfuscation_salt: uuid::Uuid::new_v4().to_string(),
             git_path: which::which("git").ok(),
-            is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
-            tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+            is_rebuilding_symbol_graph: AtomicBool::new(false),
+            tool_cache: Arc::new(parking_lot::Mutex::new(
+                crate::agent::runner::tools::cache::SharedToolCache::new(),
+            )),
             inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
         });
 
@@ -1346,9 +1374,6 @@ impl Default for AppState {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1357,65 +1382,91 @@ mod tests {
     async fn test_revert_to_node_sovereign() {
         let state = AppState::new_minimal_mock().await;
         let pool = &state.resources.pool;
+
         // 0. Setup an agent
-        sqlx::query("INSERT INTO agents (id, name, role, department, description, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind("test-agent")
-            .bind("Test Agent")
-            .bind("Specialist")
-            .bind("IT")
-            .bind("Test agent for sovereign revert flow")
-            .bind("idle")
-            .bind("{}")
-            .execute(pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO agents (id, name, role, department, description, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind("test-agent")
+        .bind("Test Agent")
+        .bind("Specialist")
+        .bind("IT")
+        .bind("Test agent for sovereign revert flow")
+        .bind("idle")
+        .bind("{}")
+        .execute(pool)
+        .await
+        .unwrap();
 
         // 1. Setup a mission
         let mission_id = "test-mission";
-        sqlx::query("INSERT INTO mission_history (id, title, status, agent_id) VALUES (?, ?, 'active', ?)")
-            .bind(mission_id)
-            .bind("Test Mission")
-            .bind("test-agent")
-            .execute(pool)
+        sqlx::query(
+            "INSERT INTO mission_history (id, title, status, agent_id) VALUES (?, ?, 'active', ?)",
+        )
+        .bind(mission_id)
+        .bind("Test Mission")
+        .bind("test-agent")
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // 2. (a) Happy Path: Append two nodes atomically and verify active_node_id advances
+        let node1 = state
+            .append_session_node_sovereign(mission_id, None, "user", "Hello", None)
+            .await
+            .unwrap();
+        let node2 = state
+            .append_session_node_sovereign(
+                mission_id,
+                Some(node1.clone()),
+                "assistant",
+                "Hi",
+                Some(serde_json::json!({ "tokens": 5 })),
+            )
             .await
             .unwrap();
 
-        // 2. Add two nodes
-        let node1 = "node-1";
-        let node2 = "node-2";
-        sqlx::query("INSERT INTO mission_nodes (id, mission_id, role, content) VALUES (?, ?, 'user', 'Hello')")
-            .bind(node1)
-            .bind(mission_id)
-            .execute(pool)
+        let active_after_append: String =
+            sqlx::query_scalar("SELECT active_node_id FROM mission_history WHERE id = ?")
+                .bind(mission_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(active_after_append, node2);
+
+        // Traverse linear history from leaf node2
+        let history = state
+            .traverse_session_history_sovereign(&node2)
+            .await
+            .unwrap();
+        assert_eq!(history.len(), 2);
+
+        // 3. Revert to node1
+        state
+            .revert_to_node_sovereign(mission_id, &node1)
             .await
             .unwrap();
 
-        sqlx::query("INSERT INTO mission_nodes (id, mission_id, role, content) VALUES (?, ?, 'assistant', 'Hi')")
-            .bind(node2)
-            .bind(mission_id)
-            .execute(pool)
-            .await
-            .unwrap();
-
-        // 3. Set active node to node2 initially
-        sqlx::query("UPDATE mission_history SET active_node_id = ? WHERE id = ?")
-            .bind(node2)
-            .bind(mission_id)
-            .execute(pool)
-            .await
-            .unwrap();
-
-        // 4. Revert to node1
-        state.revert_to_node_sovereign(mission_id, node1).await.unwrap();
-
-        // 5. Verify
-        let active_node: String = sqlx::query_scalar("SELECT active_node_id FROM mission_history WHERE id = ?")
-            .bind(mission_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
-        
+        let active_node: String =
+            sqlx::query_scalar("SELECT active_node_id FROM mission_history WHERE id = ?")
+                .bind(mission_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
         assert_eq!(active_node, node1);
+
+        // 4. (b) Failure Path: Reverting to a non-existent node returns BadRequest
+        let err = state
+            .revert_to_node_sovereign(mission_id, "non-existent-node")
+            .await;
+        assert!(matches!(err, Err(AppError::BadRequest(_))));
+
+        // 5. (c) Edge Case Path: Traversing an unknown leaf returns an empty history vector
+        let empty_history = state
+            .traverse_session_history_sovereign("unknown-leaf")
+            .await
+            .unwrap();
+        assert!(empty_history.is_empty());
     }
 }
 

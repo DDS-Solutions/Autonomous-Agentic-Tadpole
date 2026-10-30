@@ -33,8 +33,9 @@ use axum::{
 };
 use serde::Serialize;
 use serde_json::json;
-use std::sync::Arc;
 use specta::Type;
+use sqlx::{Row, SqlitePool};
+use std::sync::Arc;
 
 #[derive(Serialize)]
 pub struct OversightAuditEntry {
@@ -54,6 +55,143 @@ pub struct SecurityIntegrityResponse {
     pub status: String,
     pub verified_count: usize,
     pub total_count: usize,
+}
+
+/// Validates that a budget quota is a non-negative finite floating-point number.
+pub(crate) fn validate_quota_budget(budget_usd: f64) -> Result<(), AppError> {
+    if !budget_usd.is_finite() || budget_usd < 0.0 {
+        return Err(AppError::BadRequest(
+            "Budget quota must be a non-negative finite number".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Validates global governance settings prior to mutating `GovernanceHub` atomics.
+pub(crate) fn validate_oversight_settings(
+    payload: &OversightSettingsPayload,
+) -> Result<(), AppError> {
+    if let Some(budget) = payload.default_budget_usd {
+        validate_quota_budget(budget)?;
+    }
+    if payload.max_agents == Some(0) {
+        return Err(AppError::BadRequest(
+            "max_agents must be at least 1".to_string(),
+        ));
+    }
+    if payload.max_clusters == Some(0) {
+        return Err(AppError::BadRequest(
+            "max_clusters must be at least 1".to_string(),
+        ));
+    }
+    if payload.max_swarm_depth == Some(0) {
+        return Err(AppError::BadRequest(
+            "max_swarm_depth must be at least 1".to_string(),
+        ));
+    }
+    if payload.max_task_length == Some(0) {
+        return Err(AppError::BadRequest(
+            "max_task_length must be at least 1".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Validates and normalizes an operator oversight decision token (`"approved"` or `"rejected"`).
+pub(crate) fn parse_oversight_decision(raw: &str) -> Result<(&'static str, bool), AppError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "approved" => Ok(("approved", true)),
+        "rejected" => Ok(("rejected", false)),
+        _ => Err(AppError::BadRequest(format!(
+            "Invalid oversight decision '{}': expected 'approved' or 'rejected'",
+            raw
+        ))),
+    }
+}
+
+/// Maps a single SQLite row from the `oversight_log` + `audit_trail` join into the ledger JSON payload.
+fn map_oversight_ledger_row(row: sqlx::sqlite::SqliteRow) -> serde_json::Value {
+    let audit_action = row
+        .try_get::<Option<String>, _>("audit_action")
+        .ok()
+        .flatten();
+    let audit_timestamp = row
+        .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("audit_timestamp")
+        .ok()
+        .flatten();
+    let audit_params = row
+        .try_get::<Option<String>, _>("audit_params")
+        .ok()
+        .flatten();
+
+    let result_val = if let Some(action) = audit_action {
+        let success = action.starts_with("[SUCCESS]");
+        let decided_at = row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at");
+
+        let duration_ms = if let (Some(decided), Some(completed)) = (decided_at, audit_timestamp) {
+            let diff = completed.signed_duration_since(decided);
+            diff.num_milliseconds().abs().max(1)
+        } else {
+            15 // default fallback duration
+        };
+
+        let output_str =
+            audit_params.unwrap_or_else(|| "No execution output recorded".to_string());
+
+        if success {
+            serde_json::json!({
+                "success": true,
+                "output": output_str,
+                "duration_ms": duration_ms
+            })
+        } else {
+            serde_json::json!({
+                "success": false,
+                "output": output_str,
+                "error": output_str,
+                "duration_ms": duration_ms
+            })
+        }
+    } else {
+        serde_json::Value::Null
+    };
+
+    let decision_val = row.get::<Option<String>, _>("decision");
+    let decided_by_val = row.get::<Option<String>, _>("decided_by");
+    let is_auto = decided_by_val.as_deref() == Some("auto_policy")
+        || decided_by_val.as_deref() == Some("system")
+        || decision_val.as_deref() == Some("auto_approved");
+
+    let mut entry_obj = serde_json::json!({
+        "id": row.get::<String, _>("id"),
+        "mission_id": row.get::<Option<String>, _>("mission_id"),
+        "tool_call": {
+            "id": format!("tc-{}", row.get::<String, _>("id")),
+            "agent_id": row.get::<String, _>("agent_id"),
+            "skill": row.get::<Option<String>, _>("skill"),
+            "params": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("params")).unwrap_or_default(),
+            "description": row.get::<Option<String>, _>("payload")
+                .unwrap_or_else(|| "Historical action".to_string()),
+        },
+        "type": row.get::<String, _>("entry_type"),
+        "status": row.get::<String, _>("status"),
+        "decision": decision_val,
+        "decided_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at"),
+        "decided_by": decided_by_val,
+        "auto_approved": is_auto,
+        "approval_type": if is_auto { "auto" } else { "hitl" },
+        "requires_oversight": !is_auto,
+        "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("payload")).unwrap_or_default(),
+    });
+
+    if let Some(obj) = entry_obj.as_object_mut() {
+        if !result_val.is_null() {
+            obj.insert("result".to_string(), result_val);
+        }
+    }
+
+    entry_obj
 }
 
 /// GET /v1/oversight/pending
@@ -96,10 +234,11 @@ pub async fn get_ledger(
     let limit = per_page as i64;
     let offset = params.offset() as i64;
 
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM oversight_log WHERE status != 'pending'")
-        .fetch_one(&state.resources.pool)
-        .await
-        .unwrap_or(0);
+    let total: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM oversight_log WHERE status != 'pending'")
+            .fetch_one(&state.resources.pool)
+            .await
+            .unwrap_or(0);
 
     let rows = sqlx::query(
         r#"
@@ -119,7 +258,7 @@ pub async fn get_ledger(
         WHERE o.status != 'pending' 
         ORDER BY o.created_at DESC
         LIMIT ? OFFSET ?
-        "#
+        "#,
     )
     .bind(limit)
     .bind(offset)
@@ -127,81 +266,7 @@ pub async fn get_ledger(
     .await
     .map_err(AppError::Sqlx)?;
 
-    let entries: Vec<serde_json::Value> = rows.into_iter().map(|row| {
-        use sqlx::Row;
-        
-        let audit_action = row.try_get::<Option<String>, _>("audit_action").ok().flatten();
-        let audit_timestamp = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("audit_timestamp").ok().flatten();
-        let audit_params = row.try_get::<Option<String>, _>("audit_params").ok().flatten();
-
-        let result_val = if let Some(action) = audit_action {
-            let success = action.starts_with("[SUCCESS]");
-            let decided_at = row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at");
-            
-            let duration_ms = if let (Some(decided), Some(completed)) = (decided_at, audit_timestamp) {
-                let diff = completed.signed_duration_since(decided);
-                diff.num_milliseconds().abs().max(1)
-            } else {
-                15 // default fallback duration
-            };
-
-            let output_str = audit_params.unwrap_or_else(|| "No execution output recorded".to_string());
-            
-            if success {
-                serde_json::json!({
-                    "success": true,
-                    "output": output_str,
-                    "duration_ms": duration_ms
-                })
-            } else {
-                serde_json::json!({
-                    "success": false,
-                    "output": output_str,
-                    "error": output_str,
-                    "duration_ms": duration_ms
-                })
-            }
-        } else {
-            serde_json::Value::Null
-        };
-
-        let decision_val = row.get::<Option<String>, _>("decision");
-        let decided_by_val = row.get::<Option<String>, _>("decided_by");
-        let is_auto = decided_by_val.as_deref() == Some("auto_policy")
-            || decided_by_val.as_deref() == Some("system")
-            || decision_val.as_deref() == Some("auto_approved");
-
-        let mut entry_obj = serde_json::json!({
-            "id": row.get::<String, _>("id"),
-            "mission_id": row.get::<Option<String>, _>("mission_id"),
-            "tool_call": {
-                "id": format!("tc-{}", row.get::<String, _>("id")), // Synthetic toolCall ID for history
-                "agent_id": row.get::<String, _>("agent_id"),
-                "skill": row.get::<Option<String>, _>("skill"),
-                "params": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("params")).unwrap_or_default(),
-                "description": row.get::<Option<String>, _>("payload")
-                    .unwrap_or_else(|| "Historical action".to_string()),
-            },
-            "type": row.get::<String, _>("entry_type"),
-            "status": row.get::<String, _>("status"),
-            "decision": decision_val,
-            "decided_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("decided_at"),
-            "decided_by": decided_by_val,
-            "auto_approved": is_auto,
-            "approval_type": if is_auto { "auto" } else { "hitl" },
-            "requires_oversight": !is_auto,
-            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-            "payload": serde_json::from_str::<serde_json::Value>(&row.get::<String, _>("payload")).unwrap_or_default(),
-        });
-
-        if let Some(obj) = entry_obj.as_object_mut() {
-            if !result_val.is_null() {
-                obj.insert("result".to_string(), result_val);
-            }
-        }
-
-        entry_obj
-    }).collect();
+    let entries: Vec<serde_json::Value> = rows.into_iter().map(map_oversight_ledger_row).collect();
 
     Ok(Json(PaginatedResponse::from_parts(
         entries,
@@ -233,6 +298,8 @@ pub async fn update_settings(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<OversightSettingsPayload>,
 ) -> Result<impl IntoResponse, AppError> {
+    validate_oversight_settings(&payload)?;
+
     state.governance.auto_approve_safe_skills.store(
         payload.auto_approve_safe_skills,
         std::sync::atomic::Ordering::Relaxed,
@@ -243,7 +310,7 @@ pub async fn update_settings(
             .governance
             .privacy_mode
             .store(val, std::sync::atomic::Ordering::SeqCst);
-        
+
         if val {
             tracing::info!("🛡️ Privacy Shield ENABLED: Hard-blocking external API requests (OpenAI/Anthropic/Google).");
         }
@@ -256,7 +323,11 @@ pub async fn update_settings(
                 } else {
                     "OFF (Hybrid)"
                 },
-                if val { "External APIs are hard-blocked." } else { "" }
+                if val {
+                    "External APIs are hard-blocked."
+                } else {
+                    ""
+                }
             ),
             if val { "success" } else { "info" },
             None,
@@ -327,15 +398,15 @@ pub async fn decide_oversight(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<OversightDecision>,
 ) -> Result<impl IntoResponse, AppError> {
-    let approved = payload.decision == "approved";
+    let (normalized_decision, approved) = parse_oversight_decision(&payload.decision)?;
 
     tracing::info!(
         "⚖️ [Oversight] Decision received for {}: decision={}",
         entry_id,
-        payload.decision
+        normalized_decision
     );
 
-    // 1. Remove from queue
+    // 1. Remove from queue only after decision token is validated
     let removed_entry = state
         .comms
         .oversight_queue
@@ -344,10 +415,16 @@ pub async fn decide_oversight(
 
     if let Some(entry) = removed_entry {
         // 2. Update audit trail & Persistent Log (Synchronous)
-        let sanitized_answer = payload.answer.as_ref().map(|ans| crate::utils::security::redact_secrets(ans.trim()));
+        let sanitized_answer = payload
+            .answer
+            .as_ref()
+            .map(|ans| crate::utils::security::redact_secrets(ans.trim()));
         if let Some(ref ans) = sanitized_answer {
             if !ans.is_empty() {
-                state.comms.oversight_answers.insert(entry.id.clone(), ans.clone());
+                state
+                    .comms
+                    .oversight_answers
+                    .insert(entry.id.clone(), ans.clone());
             }
         }
 
@@ -357,8 +434,10 @@ pub async fn decide_oversight(
             "answer": sanitized_answer
         }))
         .unwrap_or_default();
-        
-        if let Err(e) = state.security.audit_trail
+
+        if let Err(e) = state
+            .security
+            .audit_trail
             .record(
                 "oversight",
                 entry.mission_id.as_deref(),
@@ -373,9 +452,9 @@ pub async fn decide_oversight(
 
         let now = chrono::Utc::now();
         if let Err(e) = sqlx::query(
-            "UPDATE oversight_log SET status = 'resolved', decision = ?, decided_at = ?, decided_by = 'human' WHERE id = ?"
+            "UPDATE oversight_log SET status = 'resolved', decision = ?, decided_at = ?, decided_by = 'human' WHERE id = ?",
         )
-        .bind(&payload.decision)
+        .bind(normalized_decision)
         .bind(now)
         .bind(&entry.id)
         .execute(&state.resources.pool)
@@ -410,13 +489,13 @@ pub async fn decide_oversight(
             "type": "oversight:decision",
             "data": {
                 "id": entry_id,
-                "decision": payload.decision,
+                "decision": normalized_decision,
                 "answer": sanitized_answer
             }
         }));
 
         Ok(Json(
-            json!({ "status": "ok", "decision": payload.decision, "answer": sanitized_answer }),
+            json!({ "status": "ok", "decision": normalized_decision, "answer": sanitized_answer }),
         ))
     } else {
         Err(AppError::NotFound(
@@ -442,11 +521,7 @@ pub async fn update_agent_quota(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateQuotaPayload>,
 ) -> Result<impl IntoResponse, AppError> {
-    if !payload.budget_usd.is_finite() || payload.budget_usd < 0.0 {
-        return Err(AppError::BadRequest(
-            "Budget quota must be a non-negative finite number".to_string(),
-        ));
-    }
+    validate_quota_budget(payload.budget_usd)?;
 
     state
         .security
@@ -489,14 +564,14 @@ pub async fn get_security_quotas(
         .unwrap_or_default();
 
     let system_defense = state.security.system_monitor.get_system_defense_stats();
-    
+
     let merkle_integrity = match state.security.audit_trail.verify_last_n(10, None).await {
-         Ok((v, t)) if t > 0 => (v as f64 / t as f64).min(1.0),
-         Ok(_) => 1.0,
-         Err(e) => {
-             tracing::warn!("⚠️ Merkle integrity verification error: {}", e);
-             0.0
-         }
+        Ok((v, t)) if t > 0 => (v as f64 / t as f64).min(1.0),
+        Ok(_) => 1.0,
+        Err(e) => {
+            tracing::warn!("⚠️ Merkle integrity verification error: {}", e);
+            0.0
+        }
     };
 
     tracing::debug!(
@@ -536,7 +611,6 @@ pub async fn get_mission_quotas(
     let quotas: Vec<Quota> = rows
         .into_iter()
         .map(|r| {
-            use sqlx::Row;
             let period_str: String = r.get("reset_period");
             let period = match period_str.as_str() {
                 "daily" => ResetPeriod::Daily,
@@ -569,11 +643,7 @@ pub async fn update_mission_quota(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateQuotaPayload>,
 ) -> Result<impl IntoResponse, AppError> {
-    if !payload.budget_usd.is_finite() || payload.budget_usd < 0.0 {
-        return Err(AppError::BadRequest(
-            "Budget quota must be a non-negative finite number".to_string(),
-        ));
-    }
+    validate_quota_budget(payload.budget_usd)?;
 
     state
         .security
@@ -621,17 +691,15 @@ pub async fn get_audit_trail(
 
     let response: Vec<OversightAuditEntry> = entries
         .into_iter()
-        .map(|entry| {
-            OversightAuditEntry {
-                id: entry.id,
-                agent_id: entry.agent_id,
-                skill: Some(entry.action),
-                status: "recorded".to_string(), // Merkle chain status
-                decision: None,
-                decided_at: None,
-                created_at: entry.timestamp,
-                is_verified: true, // Optimistically render pagination; Deep verify delegated to integrity sync logic
-            }
+        .map(|entry| OversightAuditEntry {
+            id: entry.id,
+            agent_id: entry.agent_id,
+            skill: Some(entry.action),
+            status: "recorded".to_string(),
+            decision: None,
+            decided_at: None,
+            created_at: entry.timestamp,
+            is_verified: true,
         })
         .collect();
 
@@ -659,9 +727,11 @@ pub async fn get_integrity_status(
         .await
         .unwrap_or((0, 50));
 
-    let is_signing_configured = std::env::var("AUDIT_PRIVATE_KEY").map(|v| !v.trim().is_empty()).unwrap_or(false);
+    let is_signing_configured = std::env::var("AUDIT_PRIVATE_KEY")
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false);
     let is_secure = verified_count == total_count && total_count > 0;
-    
+
     let status = if !is_secure && total_count > 0 {
         "TAMPERED".to_string()
     } else if is_signing_configured {
@@ -721,6 +791,7 @@ pub async fn get_agent_health(
 
     Ok(Json(serde_json::json!({ "agents": health_data })))
 }
+
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PolicyMode {
@@ -776,7 +847,6 @@ pub async fn update_policy(
     .await
     .map_err(AppError::Sqlx)?;
 
-    // Refresh cache
     state
         .security
         .permission_policy
@@ -785,8 +855,6 @@ pub async fn update_policy(
         .map_err(|e| {
             AppError::InternalServerError(format!("Failed to refresh permission cache: {}", e))
         })?;
-
-
 
     state.broadcast_sys(
         &format!(
@@ -852,27 +920,16 @@ pub struct RecentTokenBurn {
     pub updated_at: i64,
 }
 
-/// GET /v1/oversight/token-burn
-///
-/// Returns an aggregated report of token usage and costs across the swarm.
-/// Also updates the Prometheus gauges `oversight_tokens_in`, `oversight_tokens_out`, and `oversight_cost_usd`.
-///
-/// @docs API_REFERENCE:GetTokenBurn
-#[tracing::instrument(skip(state), name = "governance::get_token_burn")]
-pub async fn get_token_burn(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
-    use sqlx::Row;
-
-    // 1. Query overall consumption sums from agent_tasks
+/// Queries reconciled overall token and cost totals across `agent_tasks` and `agents`.
+async fn query_overall_token_totals(pool: &SqlitePool) -> Result<(i64, i64, f64), AppError> {
     let totals_row = sqlx::query(
         "SELECT 
             COALESCE(SUM(tokens_in), 0) as total_tokens_in,
             COALESCE(SUM(tokens_out), 0) as total_tokens_out,
             COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
-         FROM agent_tasks"
+         FROM agent_tasks",
     )
-    .fetch_one(&state.resources.pool)
+    .fetch_one(pool)
     .await
     .map_err(AppError::Sqlx)?;
 
@@ -880,35 +937,31 @@ pub async fn get_token_burn(
     let mut total_tokens_out: i64 = totals_row.get("total_tokens_out");
     let mut total_cost_usd: f64 = totals_row.get("total_cost_usd");
 
-    // Also query direct consumption sums from agents table to ensure reconciliation with active agent records
-    let agent_totals_row = sqlx::query(
-        "SELECT 
-            COALESCE(SUM(input_tokens), 0) as total_tokens_in,
-            COALESCE(SUM(output_tokens), 0) as total_tokens_out,
-            COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
-         FROM agents"
-    )
-    .fetch_one(&state.resources.pool)
-    .await
-    .map_err(AppError::Sqlx)?;
-
-    let ag_tokens_in: i64 = agent_totals_row.get("total_tokens_in");
-    let ag_tokens_out: i64 = agent_totals_row.get("total_tokens_out");
-    let ag_cost_usd: f64 = agent_totals_row.get("total_cost_usd");
-
-    // If agent_tasks has no token consumption recorded, fall back to agents table telemetry
     if total_tokens_in == 0 && total_tokens_out == 0 {
-        total_tokens_in = ag_tokens_in;
-        total_tokens_out = ag_tokens_out;
-        total_cost_usd = ag_cost_usd;
+        let agent_totals_row = sqlx::query(
+            "SELECT 
+                COALESCE(SUM(input_tokens), 0) as total_tokens_in,
+                COALESCE(SUM(output_tokens), 0) as total_tokens_out,
+                COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
+             FROM agents",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(AppError::Sqlx)?;
+
+        total_tokens_in = agent_totals_row.get("total_tokens_in");
+        total_tokens_out = agent_totals_row.get("total_tokens_out");
+        total_cost_usd = agent_totals_row.get("total_cost_usd");
     }
 
-    // Update Prometheus gauges
-    crate::telemetry::OVERSIGHT_TOKENS_IN.set(total_tokens_in as f64);
-    crate::telemetry::OVERSIGHT_TOKENS_OUT.set(total_tokens_out as f64);
-    crate::telemetry::OVERSIGHT_COST_USD.set(total_cost_usd);
+    Ok((total_tokens_in, total_tokens_out, total_cost_usd))
+}
 
-    // 2. Query provider breakdown
+/// Queries provider-grouped token burn metrics, falling back to `agents` when `agent_tasks` has no provider usage.
+async fn query_provider_token_burns(
+    pool: &SqlitePool,
+    total_tokens_in: i64,
+) -> Result<Vec<ProviderTokenBurn>, AppError> {
     let provider_rows = sqlx::query(
         "SELECT 
             COALESCE(provider_id, 'unknown') as provider_id,
@@ -916,23 +969,28 @@ pub async fn get_token_burn(
             COALESCE(SUM(tokens_out), 0) as tokens_out,
             COALESCE(SUM(cost_usd), 0.0) as cost_usd
          FROM agent_tasks
-         GROUP BY provider_id"
+         GROUP BY provider_id",
     )
-    .fetch_all(&state.resources.pool)
+    .fetch_all(pool)
     .await
     .map_err(AppError::Sqlx)?;
 
-    let mut providers: Vec<ProviderTokenBurn> = provider_rows.into_iter().map(|row| {
-        ProviderTokenBurn {
+    let mut providers: Vec<ProviderTokenBurn> = provider_rows
+        .into_iter()
+        .map(|row| ProviderTokenBurn {
             provider_id: row.get("provider_id"),
             tokens_in: row.get("tokens_in"),
             tokens_out: row.get("tokens_out"),
             cost_usd: row.get("cost_usd"),
-        }
-    }).collect();
+        })
+        .collect();
 
-    // Fall back to agents table if agent_tasks had no provider tokens recorded
-    if providers.is_empty() || (total_tokens_in > 0 && providers.iter().all(|p| p.tokens_in == 0 && p.tokens_out == 0)) {
+    if providers.is_empty()
+        || (total_tokens_in > 0
+            && providers
+                .iter()
+                .all(|p| p.tokens_in == 0 && p.tokens_out == 0))
+    {
         let agent_prov_rows = sqlx::query(
             "SELECT 
                 COALESCE(provider, 'unknown') as provider_id,
@@ -941,25 +999,30 @@ pub async fn get_token_burn(
                 COALESCE(SUM(cost_usd), 0.0) as cost_usd
              FROM agents
              WHERE input_tokens > 0 OR output_tokens > 0 OR cost_usd > 0.0
-             GROUP BY provider"
+             GROUP BY provider",
         )
-        .fetch_all(&state.resources.pool)
+        .fetch_all(pool)
         .await
         .map_err(AppError::Sqlx)?;
 
         if !agent_prov_rows.is_empty() {
-            providers = agent_prov_rows.into_iter().map(|row| {
-                ProviderTokenBurn {
+            providers = agent_prov_rows
+                .into_iter()
+                .map(|row| ProviderTokenBurn {
                     provider_id: row.get("provider_id"),
                     tokens_in: row.get("tokens_in"),
                     tokens_out: row.get("tokens_out"),
                     cost_usd: row.get("cost_usd"),
-                }
-            }).collect();
+                })
+                .collect();
         }
     }
 
-    // 3. Query agent breakdown (reconciling agent_tasks with agents table)
+    Ok(providers)
+}
+
+/// Queries per-agent token consumption reconciling `agent_tasks` and `agents`.
+async fn query_agent_token_burns(pool: &SqlitePool) -> Result<Vec<AgentTokenBurn>, AppError> {
     let agent_rows = sqlx::query(
         "SELECT 
             a.id as agent_id,
@@ -977,23 +1040,26 @@ pub async fn get_token_burn(
              FROM agent_tasks
              GROUP BY agent_id
          ) task_totals ON a.id = task_totals.agent_id
-         WHERE COALESCE(a.input_tokens, 0) > 0 OR COALESCE(a.output_tokens, 0) > 0 OR COALESCE(a.cost_usd, 0.0) > 0.0 OR COALESCE(task_totals.tokens_in, 0) > 0"
+         WHERE COALESCE(a.input_tokens, 0) > 0 OR COALESCE(a.output_tokens, 0) > 0 OR COALESCE(a.cost_usd, 0.0) > 0.0 OR COALESCE(task_totals.tokens_in, 0) > 0",
     )
-    .fetch_all(&state.resources.pool)
+    .fetch_all(pool)
     .await
     .map_err(AppError::Sqlx)?;
 
-    let agents = agent_rows.into_iter().map(|row| {
-        AgentTokenBurn {
+    Ok(agent_rows
+        .into_iter()
+        .map(|row| AgentTokenBurn {
             agent_id: row.get("agent_id"),
             agent_name: row.get("agent_name"),
             tokens_in: row.get("tokens_in"),
             tokens_out: row.get("tokens_out"),
             cost_usd: row.get("cost_usd"),
-        }
-    }).collect();
+        })
+        .collect())
+}
 
-    // 4. Query recent burns (last 20 tasks with non-zero usage)
+/// Queries the 20 most recent tasks with non-zero token or cost burn.
+async fn query_recent_token_burns(pool: &SqlitePool) -> Result<Vec<RecentTokenBurn>, AppError> {
     let recent_rows = sqlx::query(
         "SELECT 
             t.id as task_id,
@@ -1008,14 +1074,15 @@ pub async fn get_token_burn(
          LEFT JOIN agents a ON t.agent_id = a.id
          WHERE COALESCE(t.tokens_in, 0) > 0 OR COALESCE(t.tokens_out, 0) > 0 OR COALESCE(t.cost_usd, 0.0) > 0.0
          ORDER BY t.updated_at DESC
-         LIMIT 20"
+         LIMIT 20",
     )
-    .fetch_all(&state.resources.pool)
+    .fetch_all(pool)
     .await
     .map_err(AppError::Sqlx)?;
 
-    let recent_burns = recent_rows.into_iter().map(|row| {
-        RecentTokenBurn {
+    Ok(recent_rows
+        .into_iter()
+        .map(|row| RecentTokenBurn {
             task_id: row.get("task_id"),
             title: row.get("title"),
             agent_id: row.get("agent_id"),
@@ -1024,8 +1091,34 @@ pub async fn get_token_burn(
             tokens_out: row.get("tokens_out"),
             cost_usd: row.get("cost_usd"),
             updated_at: row.get("updated_at"),
-        }
-    }).collect();
+        })
+        .collect())
+}
+
+/// GET /v1/oversight/token-burn
+///
+/// Returns an aggregated report of token usage and costs across the swarm.
+/// Also updates the Prometheus gauges `oversight_tokens_in`, `oversight_tokens_out`, and `oversight_cost_usd`.
+///
+/// @docs API_REFERENCE:GetTokenBurn
+#[tracing::instrument(skip(state), name = "governance::get_token_burn")]
+pub async fn get_token_burn(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let pool = &state.resources.pool;
+    let (total_tokens_in, total_tokens_out, total_cost_usd) =
+        query_overall_token_totals(pool).await?;
+
+    // Update Prometheus gauges
+    crate::telemetry::OVERSIGHT_TOKENS_IN.set(total_tokens_in as f64);
+    crate::telemetry::OVERSIGHT_TOKENS_OUT.set(total_tokens_out as f64);
+    crate::telemetry::OVERSIGHT_COST_USD.set(total_cost_usd);
+
+    let (providers, agents, recent_burns) = tokio::try_join!(
+        query_provider_token_burns(pool, total_tokens_in),
+        query_agent_token_burns(pool),
+        query_recent_token_burns(pool),
+    )?;
 
     Ok(Json(TokenBurnReport {
         total_tokens_in,
@@ -1080,6 +1173,61 @@ mod tests {
         )
         .await;
         assert!(matches!(res_inf, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn test_oversight_decision_and_settings_validation_three_paths() {
+        // (a) Happy Path: valid decisions & governance bounds
+        assert_eq!(parse_oversight_decision("approved").unwrap(), ("approved", true));
+        assert_eq!(parse_oversight_decision("rejected").unwrap(), ("rejected", false));
+        let valid_settings = OversightSettingsPayload {
+            auto_approve_safe_skills: true,
+            privacy_mode: Some(false),
+            max_agents: Some(50),
+            max_clusters: Some(10),
+            max_swarm_depth: Some(5),
+            max_task_length: Some(4096),
+            default_budget_usd: Some(5.0),
+        };
+        assert!(validate_oversight_settings(&valid_settings).is_ok());
+
+        // (b) Failure Path: invalid decision token or negative/NaN default_budget_usd
+        assert!(matches!(
+            parse_oversight_decision("maybe"),
+            Err(AppError::BadRequest(_))
+        ));
+        let invalid_budget = OversightSettingsPayload {
+            auto_approve_safe_skills: false,
+            privacy_mode: None,
+            max_agents: None,
+            max_clusters: None,
+            max_swarm_depth: None,
+            max_task_length: None,
+            default_budget_usd: Some(f64::NAN),
+        };
+        assert!(matches!(
+            validate_oversight_settings(&invalid_budget),
+            Err(AppError::BadRequest(_))
+        ));
+
+        // (c) Edge Case Path: case/whitespace-padded decision token and zero-valued governance limits
+        assert_eq!(
+            parse_oversight_decision("  APPROVED \n").unwrap(),
+            ("approved", true)
+        );
+        let zero_depth = OversightSettingsPayload {
+            auto_approve_safe_skills: false,
+            privacy_mode: None,
+            max_agents: None,
+            max_clusters: None,
+            max_swarm_depth: Some(0),
+            max_task_length: None,
+            default_budget_usd: Some(0.0),
+        };
+        assert!(matches!(
+            validate_oversight_settings(&zero_depth),
+            Err(AppError::BadRequest(_))
+        ));
     }
 }
 

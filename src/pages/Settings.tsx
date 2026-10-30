@@ -10,15 +10,445 @@
  * - **Telemetry Link**: Search for `[Settings]` or `SETTINGS_UPDATE` in UI logs.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Save, Server, Monitor, Cpu, Shield, Store, ExternalLink, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { use_model_store } from '../stores/model_store';
-import { get_settings, save_settings } from '../stores/settings_store';
+import { get_settings, save_settings, type Tadpole_OS_Settings } from '../stores/settings_store';
 import { system_api_service } from '../services/system_api_service';
 import { Tooltip } from '../components/ui';
-
 import { i18n } from '../i18n';
+
+const SETTINGS_JSON_LD = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Tadpole OS System Settings',
+    description:
+        'Global configuration and environmental tuning hub for the Tadpole OS. Manage neural preferences, API vault synchronization, and governance caps.',
+    author: { '@type': 'Organization', name: 'Sovereign Engineering' },
+    applicationCategory: 'Configuration Tool',
+    operatingSystem: 'Tadpole OS'
+});
+
+/**
+ * Safely parses numeric input strings from `<input type="number" | "range">`,
+ * falling back to `fallback` when the input is cleared or non-finite (`NaN`).
+ */
+function parse_numeric_setting(raw_value: string, fallback: number, is_float = false): number {
+    if (typeof raw_value !== 'string' || raw_value.trim() === '') {
+        return fallback;
+    }
+    const parsed = is_float ? Number.parseFloat(raw_value) : Number.parseInt(raw_value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+interface Settings_Section_Shell_Props {
+    title: React.ReactNode;
+    icon: React.ReactNode;
+    className?: string;
+    children: React.ReactNode;
+}
+
+/**
+ * Standard Two-Column Settings Section Card with watermark icon.
+ */
+function Settings_Section_Shell({
+    title,
+    icon,
+    className = 'space-y-4',
+    children
+}: Settings_Section_Shell_Props): React.ReactElement {
+    return (
+        <div className={className}>
+            <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                {title}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                    {icon}
+                </div>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+interface Settings_Range_Slider_Props {
+    id: string;
+    label: string;
+    tooltip: string;
+    min: number;
+    max: number;
+    value: number;
+    accent_class: string;
+    on_change: (val: number) => void;
+}
+
+/**
+ * Reusable numeric range slider with Tooltip label and live badge.
+ */
+function Settings_Range_Slider({
+    id,
+    label,
+    tooltip,
+    min,
+    max,
+    value,
+    accent_class,
+    on_change
+}: Settings_Range_Slider_Props): React.ReactElement {
+    return (
+        <div className="space-y-2">
+            <div className="flex justify-between items-center">
+                <Tooltip content={tooltip} position="top">
+                    <label htmlFor={id} className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                        {label}
+                    </label>
+                </Tooltip>
+                <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">{value}</span>
+            </div>
+            <input
+                id={id}
+                type="range"
+                name={id}
+                min={min}
+                max={max}
+                value={value}
+                onChange={(e) => on_change(parse_numeric_setting(e.target.value, value, false))}
+                className={`w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer ${accent_class}`}
+            />
+        </div>
+    );
+}
+
+interface Settings_Toggle_Pill_Props {
+    label: string;
+    subtitle: string;
+    tooltip: string;
+    enabled: boolean;
+    active_bg_class: string;
+    on_toggle: () => void;
+}
+
+/**
+ * Reusable pill toggle switch used in Neural Handoff & Sentinel controls.
+ */
+function Settings_Toggle_Pill({
+    label,
+    subtitle,
+    tooltip,
+    enabled,
+    active_bg_class,
+    on_toggle
+}: Settings_Toggle_Pill_Props): React.ReactElement {
+    return (
+        <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-700/50 flex-1 group/toggle">
+            <div className="flex flex-col">
+                <Tooltip content={tooltip} position="top">
+                    <span className="text-sm font-bold text-zinc-200 cursor-help">{label}</span>
+                </Tooltip>
+                <span className="text-[10px] text-zinc-500 uppercase tracking-tighter">{subtitle}</span>
+            </div>
+            <button
+                type="button"
+                onClick={on_toggle}
+                className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? active_bg_class : 'bg-zinc-700'}`}
+            >
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${enabled ? 'left-7' : 'left-1'}`} />
+            </button>
+        </div>
+    );
+}
+
+interface Section_Props {
+    settings_state: Tadpole_OS_Settings;
+    on_change: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+}
+
+function Connection_Section({
+    settings_state,
+    on_change,
+    validation_error
+}: Section_Props & { validation_error: string | null }): React.ReactElement {
+    return (
+        <Settings_Section_Shell title={i18n.t('settings.header_connection')} icon={<Server size={80} />}>
+            <div className="space-y-3 z-10 relative">
+                <Tooltip content={i18n.t('settings.tooltip_api_url')} position="top">
+                    <label htmlFor="tadpole_os_url" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                        {i18n.t('settings.label_api_url')}
+                    </label>
+                </Tooltip>
+                <input
+                    id="tadpole_os_url"
+                    type="text"
+                    name="tadpole_os_url"
+                    value={settings_state.tadpole_os_url}
+                    onChange={on_change}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20 transition-all font-mono shadow-inner"
+                    placeholder={i18n.t('settings.placeholder_api_url')}
+                />
+                <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_api_url')}</p>
+                {validation_error && (
+                    <p className="text-xs text-red-400 font-medium mt-1">{validation_error}</p>
+                )}
+            </div>
+            <div className="space-y-3 z-10 relative">
+                <Tooltip content={i18n.t('settings.tooltip_api_token')} position="top">
+                    <label htmlFor="tadpole_os_api_key" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                        {i18n.t('settings.label_api_token')}
+                    </label>
+                </Tooltip>
+                <input
+                    id="tadpole_os_api_key"
+                    type="password"
+                    name="tadpole_os_api_key"
+                    value={settings_state.tadpole_os_api_key}
+                    onChange={on_change}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20 transition-all font-mono shadow-inner"
+                    placeholder={i18n.t('settings.placeholder_api_token')}
+                />
+                <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_api_token')}</p>
+            </div>
+        </Settings_Section_Shell>
+    );
+}
+
+function Appearance_Section({ settings_state, on_change }: Section_Props): React.ReactElement {
+    return (
+        <Settings_Section_Shell title={i18n.t('settings.header_appearance')} icon={<Monitor size={80} />}>
+            <div className="space-y-3 z-10 relative">
+                <Tooltip content={i18n.t('settings.tooltip_theme')} position="top">
+                    <label htmlFor="theme" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                        {i18n.t('settings.label_theme')}
+                    </label>
+                </Tooltip>
+                <select
+                    id="theme"
+                    name="theme"
+                    value={settings_state.theme}
+                    onChange={on_change}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
+                >
+                    <option value="zinc">{i18n.t('settings.theme_zinc')}</option>
+                    <option value="slate">{i18n.t('settings.theme_slate')}</option>
+                    <option value="neutral">{i18n.t('settings.theme_neutral')}</option>
+                </select>
+            </div>
+            <div className="space-y-3 z-10 relative">
+                <Tooltip content={i18n.t('settings.tooltip_density')} position="top">
+                    <label htmlFor="density" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                        {i18n.t('settings.label_density')}
+                    </label>
+                </Tooltip>
+                <select
+                    id="density"
+                    name="density"
+                    value={settings_state.density}
+                    onChange={on_change}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
+                >
+                    <option value="compact">{i18n.t('settings.density_compact')}</option>
+                    <option value="comfortable">{i18n.t('settings.density_comfortable')}</option>
+                </select>
+            </div>
+            <div className="space-y-3 z-10 relative">
+                <Tooltip content={i18n.t('settings.tooltip_backdrop_theme')} position="top">
+                    <label htmlFor="backdrop_theme" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                        {i18n.t('settings.label_backdrop_theme')}
+                    </label>
+                </Tooltip>
+                <select
+                    id="backdrop_theme"
+                    name="backdrop_theme"
+                    value={settings_state.backdrop_theme}
+                    onChange={on_change}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
+                >
+                    <option value="cyan">{i18n.t('settings.theme_cyan')}</option>
+                    <option value="emerald">{i18n.t('settings.theme_emerald')}</option>
+                    <option value="nebula">{i18n.t('settings.theme_nebula')}</option>
+                    <option value="slate">{i18n.t('settings.theme_slate')}</option>
+                    <option value="amber">{i18n.t('settings.theme_amber')}</option>
+                </select>
+            </div>
+        </Settings_Section_Shell>
+    );
+}
+
+function Governance_Section({ settings_state, on_change }: Section_Props): React.ReactElement {
+    return (
+        <Settings_Section_Shell title={i18n.t('settings.header_governance')} icon={<Shield size={80} />}>
+            <div className="space-y-3 z-10 relative">
+                <div className="flex items-center justify-between">
+                    <Tooltip content={i18n.t('settings.tooltip_auto_approve')} position="top">
+                        <label htmlFor="auto_approve_safe_skills" className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                            {i18n.t('settings.label_auto_approve')}
+                        </label>
+                    </Tooltip>
+                    <input
+                        id="auto_approve_safe_skills"
+                        type="checkbox"
+                        name="auto_approve_safe_skills"
+                        checked={settings_state.auto_approve_safe_skills}
+                        onChange={on_change}
+                        className="w-5 h-5 rounded border-zinc-700 bg-zinc-950 text-green-500 focus:ring-green-500/20 cursor-pointer"
+                    />
+                </div>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                    {i18n.t('settings.desc_auto_approve', { skills: 'weather, reasoning' })}
+                </p>
+            </div>
+
+            {/* Privacy Shield Logic: Enables "Air-Gap Simulation" by stripping bulky system prompts and enforcing strict data-residency policies within the agent execution loop. */}
+            <div className="space-y-3 z-10 relative p-4 bg-zinc-950/50 rounded-lg border border-zinc-800 group/shield">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className={`p-1.5 rounded ${settings_state.privacy_mode ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                            <Shield size={14} className={settings_state.privacy_mode ? 'animate-pulse' : ''} />
+                        </div>
+                        <Tooltip content={i18n.t('settings.tooltip_privacy_mode')} position="top">
+                            <label htmlFor="privacy_mode" className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                                {i18n.t('settings.label_privacy_mode')}
+                            </label>
+                        </Tooltip>
+                        {settings_state.privacy_mode && (
+                            <span className="text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                {i18n.t('settings.badge_air_gap')}
+                            </span>
+                        )}
+                    </div>
+                    <input
+                        id="privacy_mode"
+                        type="checkbox"
+                        name="privacy_mode"
+                        checked={settings_state.privacy_mode}
+                        onChange={on_change}
+                        className="w-5 h-5 rounded border-zinc-700 bg-zinc-950 text-green-500 focus:ring-green-500/20 cursor-pointer"
+                    />
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed italic">
+                    {settings_state.privacy_mode
+                        ? i18n.t('settings.desc_privacy_mode_on')
+                        : i18n.t('settings.desc_privacy_mode_off')}
+                </p>
+                {settings_state.privacy_mode && (
+                    <div className="mt-2 text-[10px] flex items-center gap-1.5 text-emerald-500/80 font-bold uppercase tracking-widest">
+                        <div className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
+                        {i18n.t('settings.status_active_verification')}
+                    </div>
+                )}
+            </div>
+        </Settings_Section_Shell>
+    );
+}
+
+function Swarm_Architecture_Section({
+    settings_state,
+    on_numeric_change
+}: {
+    settings_state: Tadpole_OS_Settings;
+    on_numeric_change: (name: string, value: number) => void;
+}): React.ReactElement {
+    return (
+        <Settings_Section_Shell
+            title={i18n.t('settings.header_architecture')}
+            icon={<Cpu size={80} />}
+            className="space-y-4 pb-12"
+        >
+            <div className="space-y-4 z-10 relative">
+                <Settings_Range_Slider
+                    id="max_agents"
+                    label={i18n.t('settings.label_max_agents')}
+                    tooltip={i18n.t('settings.tooltip_max_agents')}
+                    min={1}
+                    max={200}
+                    value={settings_state.max_agents}
+                    accent_class="accent-green-500"
+                    on_change={(val) => on_numeric_change('max_agents', val)}
+                />
+                <Settings_Range_Slider
+                    id="max_clusters"
+                    label={i18n.t('settings.label_max_clusters')}
+                    tooltip={i18n.t('settings.tooltip_max_clusters')}
+                    min={1}
+                    max={50}
+                    value={settings_state.max_clusters}
+                    accent_class="accent-cyan-500"
+                    on_change={(val) => on_numeric_change('max_clusters', val)}
+                />
+                <Settings_Range_Slider
+                    id="max_swarm_depth"
+                    label={i18n.t('settings.label_max_depth')}
+                    tooltip={i18n.t('settings.tooltip_max_depth')}
+                    min={1}
+                    max={10}
+                    value={settings_state.max_swarm_depth}
+                    accent_class="accent-amber-500"
+                    on_change={(val) => on_numeric_change('max_swarm_depth', val)}
+                />
+            </div>
+
+            <div className="space-y-4 z-10 relative">
+                <div className="space-y-2">
+                    <Tooltip content={i18n.t('settings.tooltip_max_tokens')} position="top">
+                        <label htmlFor="max_task_length" className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                            {i18n.t('settings.label_max_tokens')}
+                        </label>
+                    </Tooltip>
+                    <input
+                        id="max_task_length"
+                        type="number"
+                        name="max_task_length"
+                        value={settings_state.max_task_length}
+                        onChange={(e) =>
+                            on_numeric_change(
+                                'max_task_length',
+                                parse_numeric_setting(e.target.value, settings_state.max_task_length, false)
+                            )
+                        }
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500 font-mono"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <Tooltip content={i18n.t('settings.tooltip_mission_budget')} position="top">
+                        <label htmlFor="default_budget_usd" className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                            {i18n.t('settings.label_mission_budget', { symbol: i18n.t('agent_config.fiscal_symbol') })}
+                        </label>
+                    </Tooltip>
+                    <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
+                            {i18n.t('agent_config.fiscal_symbol')}
+                        </span>
+                        <input
+                            id="default_budget_usd"
+                            type="number"
+                            name="default_budget_usd"
+                            step="0.1"
+                            value={settings_state.default_budget_usd}
+                            onChange={(e) =>
+                                on_numeric_change(
+                                    'default_budget_usd',
+                                    parse_numeric_setting(e.target.value, settings_state.default_budget_usd, true)
+                                )
+                            }
+                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 pl-6 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                    </div>
+                </div>
+
+                <div className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50 mt-2">
+                    <p className="text-[10px] text-zinc-500 leading-tight uppercase tracking-wider font-bold">
+                        {i18n.t('settings.alert_architecture')}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                        {i18n.t('settings.desc_architecture_alert')}
+                    </p>
+                </div>
+            </div>
+        </Settings_Section_Shell>
+    );
+}
 
 /**
  * Settings Page
@@ -36,20 +466,27 @@ export default function Settings(): React.ReactElement {
 
     // Local state for settings form
     const [settings_state, set_settings_state] = useState(() => get_settings());
-
     const [is_saved, set_is_saved] = useState(false);
     const [validation_error, set_validation_error] = useState<string | null>(null);
     const [sync_error, set_sync_error] = useState<string | null>(null);
-    const [is_swarm_scanning] = useState(false); // Default state for Swarm Discovery indicator
+    const save_timer_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (save_timer_ref.current) {
+                clearTimeout(save_timer_ref.current);
+            }
+        };
+    }, []);
 
     const handle_change = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
         const { name, value, type } = e.target;
         const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
 
-        set_settings_state({
-            ...settings_state,
+        set_settings_state(prev => ({
+            ...prev,
             [name]: val
-        });
+        }));
         set_is_saved(false);
         set_validation_error(null);
         set_sync_error(null);
@@ -57,7 +494,7 @@ export default function Settings(): React.ReactElement {
 
     /** Typed handler for numeric inputs (range, number) that coerces values before updating state. */
     const handle_numeric_change = (name: string, value: number): void => {
-        set_settings_state({ ...settings_state, [name]: value });
+        set_settings_state(prev => ({ ...prev, [name]: value }));
         set_is_saved(false);
         set_validation_error(null);
         set_sync_error(null);
@@ -65,14 +502,6 @@ export default function Settings(): React.ReactElement {
 
     /**
      * Persists settings to local storage and synchronizes with the engine.
-     *
-     * ### 🔄 Governance Sync
-     * Local persistence always succeeds first (guaranteed success flash).
-     * Backend governance sync is fire-and-forget — failures surface as a
-     * non-blocking warning near the Save button, but do NOT block the save.
-     * This prevents the token-change self-referential 401 loop where saving
-     * a new token caused the sync to fail with the new (yet-to-be-accepted)
-     * token, silently preventing the success state from being shown.
      */
     const handle_save = async (): Promise<void> => {
         // Step 1: Validate & persist locally — this is always the source of truth.
@@ -90,7 +519,13 @@ export default function Settings(): React.ReactElement {
         set_is_saved(true);
         set_validation_error(null);
         set_sync_error(null);
-        setTimeout(() => set_is_saved(false), 2000);
+        if (save_timer_ref.current) {
+            clearTimeout(save_timer_ref.current);
+        }
+        save_timer_ref.current = setTimeout(() => {
+            save_timer_ref.current = null;
+            set_is_saved(false);
+        }, 2000);
 
         // Step 4: Pre-warm sentinel if enabled (local, async side-effect).
         if (settings_state.sentinel_mode) {
@@ -103,8 +538,6 @@ export default function Settings(): React.ReactElement {
         }
 
         // Step 5: Fire-and-forget backend governance sync.
-        // Uses the already-saved token from the store (which is the newly entered token).
-        // A 401 here means the new token does not match the engine's NEURAL_ENGINE_ACCESS_TOKEN.
         const has_api_token = settings_state.tadpole_os_api_key.trim().length > 0;
         if (has_api_token) {
             system_api_service.update_governance_settings({
@@ -128,18 +561,9 @@ export default function Settings(): React.ReactElement {
     return (
         <div className="max-w-4xl mx-auto p-6 space-y-8 h-full overflow-y-auto custom-scrollbar relative">
             {/* GEO Optimization: Structured Data & Semantic Header */}
-            <script type="application/ld+json">
-            {JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "SoftwareApplication",
-              "name": "Tadpole OS System Settings",
-              "description": "Global configuration and environmental tuning hub for the Tadpole OS. Manage neural preferences, API vault synchronization, and governance caps.",
-              "author": { "@type": "Organization", "name": "Sovereign Engineering" },
-              "applicationCategory": "Configuration Tool",
-              "operatingSystem": "Tadpole OS"
-            })}
-            </script>
+            <script type="application/ld+json">{SETTINGS_JSON_LD}</script>
             <h1 className="sr-only">Tadpole OS System Configuration & Environmental Governance</h1>
+
             <div className="flex flex-col items-end gap-2 pr-2">
                 <Tooltip content={i18n.t('settings.tooltip_save')} position="left">
                     <button
@@ -157,353 +581,72 @@ export default function Settings(): React.ReactElement {
                 )}
             </div>
 
-            {/* Connection Settings */}
-            <div className="space-y-4">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_connection')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Server size={80} />
-                    </div>
+            <Connection_Section
+                settings_state={settings_state}
+                on_change={handle_change}
+                validation_error={validation_error}
+            />
 
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_api_url')} position="top">
-                            <label htmlFor="tadpole_os_url" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_api_url')}</label>
-                        </Tooltip>
-                        <input
-                            id="tadpole_os_url"
-                            type="text"
-                            name="tadpole_os_url"
-                            value={settings_state.tadpole_os_url}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20 transition-all font-mono shadow-inner"
-                            placeholder={i18n.t('settings.placeholder_api_url')}
-                        />
-                        <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_api_url')}</p>
-                        {validation_error && (
-                            <p className="text-xs text-red-400 font-medium mt-1">{validation_error}</p>
-                        )}
-                    </div>
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_api_token')} position="top">
-                            <label htmlFor="tadpole_os_api_key" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_api_token')}</label>
-                        </Tooltip>
-                        <input
-                            id="tadpole_os_api_key"
-                            type="password"
-                            name="tadpole_os_api_key"
-                            value={settings_state.tadpole_os_api_key}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20 transition-all font-mono shadow-inner"
-                            placeholder={i18n.t('settings.placeholder_api_token')}
-
-                        />
-                        <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_api_token')}</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Appearance Settings */}
-            <div className="space-y-4">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_appearance')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Monitor size={80} />
-                    </div>
-
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_theme')} position="top">
-                            <label htmlFor="theme" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_theme')}</label>
-                        </Tooltip>
-                        <select
-                            id="theme"
-                            name="theme"
-                            value={settings_state.theme}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
-                        >
-                            <option value="zinc">{i18n.t('settings.theme_zinc')}</option>
-                            <option value="slate">{i18n.t('settings.theme_slate')}</option>
-                            <option value="neutral">{i18n.t('settings.theme_neutral')}</option>
-                        </select>
-                    </div>
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_density')} position="top">
-                            <label htmlFor="density" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_density')}</label>
-                        </Tooltip>
-                        <select
-                            id="density"
-                            name="density"
-                            value={settings_state.density}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
-                        >
-                            <option value="compact">{i18n.t('settings.density_compact')}</option>
-                            <option value="comfortable">{i18n.t('settings.density_comfortable')}</option>
-                        </select>
-                    </div>
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_backdrop_theme')} position="top">
-                            <label htmlFor="backdrop_theme" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_backdrop_theme')}</label>
-                        </Tooltip>
-                        <select
-                            id="backdrop_theme"
-                            name="backdrop_theme"
-                            value={settings_state.backdrop_theme}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer shadow-sm"
-                        >
-                            <option value="cyan">{i18n.t('settings.theme_cyan')}</option>
-                            <option value="emerald">{i18n.t('settings.theme_emerald')}</option>
-                            <option value="nebula">{i18n.t('settings.theme_nebula')}</option>
-                            <option value="slate">{i18n.t('settings.theme_slate')}</option>
-                            <option value="amber">{i18n.t('settings.theme_amber')}</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
+            <Appearance_Section settings_state={settings_state} on_change={handle_change} />
 
             {/* Agent Defaults */}
-            <div className="space-y-4">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_agent_defaults')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Cpu size={80} />
-                    </div>
+            <Settings_Section_Shell title={i18n.t('settings.header_agent_defaults')} icon={<Cpu size={80} />}>
+                <div className="space-y-3 z-10 relative">
+                    <Tooltip content={i18n.t('settings.tooltip_default_model')} position="top">
+                        <label htmlFor="default_model" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                            {i18n.t('settings.label_default_model')}
+                        </label>
+                    </Tooltip>
+                    <select
+                        id="default_model"
+                        name="default_model"
+                        value={settings_state.default_model}
+                        onChange={handle_change}
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 transition-colors cursor-pointer font-mono shadow-sm"
+                    >
+                        {models.map(model => (
+                            <option key={model.id} value={model.name}>{model.name}</option>
+                        ))}
+                    </select>
+                    <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_default_model')}</p>
+                </div>
 
-                    <div className="space-y-3 z-10 relative">
-                        <Tooltip content={i18n.t('settings.tooltip_default_model')} position="top">
-                            <label htmlFor="default_model" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_default_model')}</label>
+                <div className="space-y-3 z-10 relative">
+                    <div className="flex justify-between items-center">
+                        <Tooltip content={i18n.t('settings.tooltip_temperature')} position="top">
+                            <label htmlFor="default_temperature" className="text-sm font-bold text-zinc-300 block cursor-help w-max">
+                                {i18n.t('settings.label_temperature')}
+                            </label>
                         </Tooltip>
-                        <select
-                            id="default_model"
-                            name="default_model"
-                            value={settings_state.default_model}
-                            onChange={handle_change}
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 focus:outline-none focus:border-green-500 transition-colors cursor-pointer font-mono shadow-sm"
-                        >
-                            {models.map(model => (
-                                <option key={model.id} value={model.name}>{model.name}</option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-zinc-500 leading-relaxed">{i18n.t('settings.desc_default_model')}</p>
+                        <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">
+                            {settings_state.default_temperature}
+                        </span>
                     </div>
-
-                    <div className="space-y-3 z-10 relative">
-                        <div className="flex justify-between items-center">
-                            <Tooltip content={i18n.t('settings.tooltip_temperature')} position="top">
-                                <label htmlFor="default_temperature" className="text-sm font-bold text-zinc-300 block cursor-help w-max">{i18n.t('settings.label_temperature')}</label>
-                            </Tooltip>
-                            <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">{settings_state.default_temperature}</span>
-                        </div>
-                        <input
-                            id="default_temperature"
-                            type="range"
-                            name="default_temperature"
-                            min="0"
-                            max="2"
-                            step="0.1"
-                            value={settings_state.default_temperature}
-                            onChange={handle_change}
-                            className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 mt-2 hover:bg-zinc-700 transition-colors"
-                        />
-                        <div className="flex justify-between text-[10px] text-zinc-500 uppercase font-bold tracking-widest mt-1">
-                            <span>{i18n.t('settings.temp_precise')}</span>
-                            <span>{i18n.t('settings.temp_balanced')}</span>
-                            <span>{i18n.t('settings.temp_creative')}</span>
-                        </div>
+                    <input
+                        id="default_temperature"
+                        type="range"
+                        name="default_temperature"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={settings_state.default_temperature}
+                        onChange={handle_change}
+                        className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 mt-2 hover:bg-zinc-700 transition-colors"
+                    />
+                    <div className="flex justify-between text-[10px] text-zinc-500 uppercase font-bold tracking-widest mt-1">
+                        <span>{i18n.t('settings.temp_precise')}</span>
+                        <span>{i18n.t('settings.temp_balanced')}</span>
+                        <span>{i18n.t('settings.temp_creative')}</span>
                     </div>
                 </div>
-            </div>
+            </Settings_Section_Shell>
 
-            {/* Governance & Oversight */}
-            <div className="space-y-4">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_governance')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Shield size={80} />
-                    </div>
+            <Governance_Section settings_state={settings_state} on_change={handle_change} />
 
-                    <div className="space-y-3 z-10 relative">
-                        <div className="flex items-center justify-between">
-                            <Tooltip content={i18n.t('settings.tooltip_auto_approve')} position="top">
-                                <label htmlFor="auto_approve_safe_skills" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_auto_approve')}</label>
-                            </Tooltip>
-                            <input
-                                id="auto_approve_safe_skills"
-                                type="checkbox"
-                                name="auto_approve_safe_skills"
-                                checked={settings_state.auto_approve_safe_skills}
-                                onChange={handle_change}
-                                className="w-5 h-5 rounded border-zinc-700 bg-zinc-950 text-green-500 focus:ring-green-500/20 cursor-pointer"
-                            />
-                        </div>
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                            {i18n.t('settings.desc_auto_approve', { skills: 'weather, reasoning' })}
-                        </p>
-                    </div>
-
-                    {/* Privacy Shield Logic
-                        Enables "Air-Gap Simulation" by stripping bulky system 
-                        prompts and enforcing strict data-residency policies 
-                        within the agent execution loop. */}
-                    <div className="space-y-3 z-10 relative p-4 bg-zinc-950/50 rounded-lg border border-zinc-800 group/shield">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className={`p-1.5 rounded ${settings_state.privacy_mode ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
-                                    <Shield size={14} className={settings_state.privacy_mode ? 'animate-pulse' : ''} />
-                                </div>
-                                <Tooltip content={i18n.t('settings.tooltip_privacy_mode')} position="top">
-                                    <label htmlFor="privacy_mode" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_privacy_mode')}</label>
-                                </Tooltip>
-                                {settings_state.privacy_mode && (
-                                    <span className="text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 px-1.5 py-0.5 rounded uppercase tracking-tighter">
-                                        {i18n.t('settings.badge_air_gap')}
-                                    </span>
-                                )}
-                            </div>
-                            <input
-                                id="privacy_mode"
-                                type="checkbox"
-                                name="privacy_mode"
-                                checked={settings_state.privacy_mode}
-                                onChange={handle_change}
-                                className="w-5 h-5 rounded border-zinc-700 bg-zinc-950 text-green-500 focus:ring-green-500/20 cursor-pointer"
-                            />
-                        </div>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed italic">
-                            {settings_state.privacy_mode
-                                ? i18n.t('settings.desc_privacy_mode_on')
-                                : i18n.t('settings.desc_privacy_mode_off')}
-                        </p>
-                        {settings_state.privacy_mode && (
-                            <div className="mt-2 text-[10px] flex items-center gap-1.5 text-emerald-500/80 font-bold uppercase tracking-widest">
-                                <div className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
-                                {i18n.t('settings.status_active_verification')}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Swarm Architecture Configuration */}
-            <div className="space-y-4 pb-12">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_architecture')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Cpu size={80} />
-                    </div>
-
-                    <div className="space-y-4 z-10 relative">
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <Tooltip content={i18n.t('settings.tooltip_max_agents')} position="top">
-                                    <label htmlFor="max_agents" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_max_agents')}</label>
-                                </Tooltip>
-                                <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">{settings_state.max_agents}</span>
-                            </div>
-                            <input
-                                id="max_agents"
-                                type="range"
-                                name="max_agents"
-                                min="1"
-                                max="200"
-                                value={settings_state.max_agents}
-                                onChange={(e) => handle_numeric_change('max_agents', parseInt(e.target.value))}
-                                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <Tooltip content={i18n.t('settings.tooltip_max_clusters')} position="top">
-                                    <label htmlFor="max_clusters" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_max_clusters')}</label>
-                                </Tooltip>
-                                <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">{settings_state.max_clusters}</span>
-                            </div>
-                            <input
-                                id="max_clusters"
-                                type="range"
-                                name="max_clusters"
-                                min="1"
-                                max="50"
-                                value={settings_state.max_clusters}
-                                onChange={(e) => handle_numeric_change('max_clusters', parseInt(e.target.value))}
-                                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <Tooltip content={i18n.t('settings.tooltip_max_depth')} position="top">
-                                    <label htmlFor="max_swarm_depth" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_max_depth')}</label>
-                                </Tooltip>
-                                <span className="text-xs font-mono text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded">{settings_state.max_swarm_depth}</span>
-                            </div>
-                            <input
-                                id="max_swarm_depth"
-                                type="range"
-                                name="max_swarm_depth"
-                                min="1"
-                                max="10"
-                                value={settings_state.max_swarm_depth}
-                                onChange={(e) => handle_numeric_change('max_swarm_depth', parseInt(e.target.value))}
-                                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-4 z-10 relative">
-                        <div className="space-y-2">
-                            <Tooltip content={i18n.t('settings.tooltip_max_tokens')} position="top">
-                                <label htmlFor="max_task_length" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_max_tokens')}</label>
-                            </Tooltip>
-                            <input
-                                id="max_task_length"
-                                type="number"
-                                name="max_task_length"
-                                value={settings_state.max_task_length}
-                                onChange={(e) => handle_numeric_change('max_task_length', parseInt(e.target.value))}
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500 font-mono"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Tooltip content={i18n.t('settings.tooltip_mission_budget')} position="top">
-                                <label htmlFor="default_budget_usd" className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_mission_budget', { symbol: i18n.t('agent_config.fiscal_symbol') })}</label>
-                            </Tooltip>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">{i18n.t('agent_config.fiscal_symbol')}</span>
-                                <input
-                                    id="default_budget_usd"
-                                    type="number"
-                                    name="default_budget_usd"
-                                    step="0.1"
-                                    value={settings_state.default_budget_usd}
-                                    onChange={(e) => handle_numeric_change('default_budget_usd', parseFloat(e.target.value))}
-                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 pl-6 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50 mt-2">
-                            <p className="text-[10px] text-zinc-500 leading-tight uppercase tracking-wider font-bold">{i18n.t('settings.alert_architecture')}</p>
-                            <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
-                                {i18n.t('settings.desc_architecture_alert')}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <Swarm_Architecture_Section
+                settings_state={settings_state}
+                on_numeric_change={handle_numeric_change}
+            />
 
             {/* Sovereign Intelligence Store (SEC-05) */}
             <div className="space-y-4">
@@ -517,8 +660,12 @@ export default function Settings(): React.ReactElement {
                     <div className="flex items-start justify-between relative z-10">
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                                <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tight">{i18n.t('settings.title_intelligence_store')}</h3>
-                                <span className="bg-green-500 text-[9px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">{i18n.t('settings.badge_alpha')}</span>
+                                <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tight">
+                                    {i18n.t('settings.title_intelligence_store')}
+                                </h3>
+                                <span className="bg-green-500 text-[9px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
+                                    {i18n.t('settings.badge_alpha')}
+                                </span>
                             </div>
                             <p className="text-zinc-500 text-xs max-w-md italic leading-relaxed">
                                 Deploy high-fidelity LLMs and vision models directly to your local Swarm nodes with one-click orchestration. VRAM-aware and privacy-first.
@@ -532,7 +679,7 @@ export default function Settings(): React.ReactElement {
                                 </button>
                                 <div className="h-4 w-px bg-zinc-800" />
                                 <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">
-                                    {is_swarm_scanning ? 'Scanning Cluster...' : 'Swarm Discovery Active'}
+                                    Swarm Discovery Active
                                 </div>
                             </div>
                         </div>
@@ -550,12 +697,13 @@ export default function Settings(): React.ReactElement {
                     <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.1] transition-opacity">
                         <Zap size={120} />
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                        {/* Browser Specialist Model */}
                         <div className="space-y-2">
                             <Tooltip content={i18n.t('settings.tooltip_browser_model')} position="top">
-                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_browser_model')}</label>
+                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                                    {i18n.t('settings.label_browser_model')}
+                                </label>
                             </Tooltip>
                             <input
                                 type="text"
@@ -567,10 +715,11 @@ export default function Settings(): React.ReactElement {
                             />
                         </div>
 
-                        {/* Computer Architect URL */}
                         <div className="space-y-2">
                             <Tooltip content={i18n.t('settings.tooltip_computer_url')} position="top">
-                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">{i18n.t('settings.label_computer_url')}</label>
+                                <label className="text-sm font-bold text-zinc-300 cursor-help w-max">
+                                    {i18n.t('settings.label_computer_url')}
+                                </label>
                             </Tooltip>
                             <input
                                 type="text"
@@ -584,79 +733,66 @@ export default function Settings(): React.ReactElement {
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-6 pt-2 relative z-10">
-                        {/* Toggle Handoff */}
-                        <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-700/50 flex-1 group/toggle">
-                            <div className="flex flex-col">
-                                <Tooltip content={i18n.t('settings.tooltip_enable_handoff')} position="top">
-                                    <span className="text-sm font-bold text-zinc-200 cursor-help">{i18n.t('settings.label_enable_handoff')}</span>
-                                </Tooltip>
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-tighter">Tactical ↔ Strategic Escalation</span>
-                            </div>
-                            <button
-                                onClick={() => set_settings_state({...settings_state, enable_neural_handoff: !settings_state.enable_neural_handoff})}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${settings_state.enable_neural_handoff ? 'bg-amber-500' : 'bg-zinc-700'}`}
-                            >
-                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings_state.enable_neural_handoff ? 'left-7' : 'left-1'}`} />
-                            </button>
-                        </div>
+                        <Settings_Toggle_Pill
+                            label={i18n.t('settings.label_enable_handoff')}
+                            subtitle="Tactical ↔ Strategic Escalation"
+                            tooltip={i18n.t('settings.tooltip_enable_handoff')}
+                            enabled={settings_state.enable_neural_handoff}
+                            active_bg_class="bg-amber-500"
+                            on_toggle={() =>
+                                set_settings_state(prev => ({
+                                    ...prev,
+                                    enable_neural_handoff: !prev.enable_neural_handoff
+                                }))
+                            }
+                        />
 
-                        {/* Toggle Sentinel */}
-                        <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-700/50 flex-1 group/toggle">
-                            <div className="flex flex-col">
-                                <Tooltip content={i18n.t('settings.tooltip_sentinel_mode')} position="top">
-                                    <span className="text-sm font-bold text-zinc-200 cursor-help">{i18n.t('settings.label_sentinel_mode')}</span>
-                                </Tooltip>
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-tighter">Real-time UI Integrity</span>
-                            </div>
-                            <button
-                                onClick={() => set_settings_state({...settings_state, sentinel_mode: !settings_state.sentinel_mode})}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${settings_state.sentinel_mode ? 'bg-green-500' : 'bg-zinc-700'}`}
-                            >
-                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings_state.sentinel_mode ? 'left-7' : 'left-1'}`} />
-                            </button>
-                        </div>
+                        <Settings_Toggle_Pill
+                            label={i18n.t('settings.label_sentinel_mode')}
+                            subtitle="Real-time UI Integrity"
+                            tooltip={i18n.t('settings.tooltip_sentinel_mode')}
+                            enabled={settings_state.sentinel_mode}
+                            active_bg_class="bg-green-500"
+                            on_toggle={() =>
+                                set_settings_state(prev => ({
+                                    ...prev,
+                                    sentinel_mode: !prev.sentinel_mode
+                                }))
+                            }
+                        />
                     </div>
                 </div>
             </div>
 
             {/* Template Distribution */}
-            <div className="space-y-4 pb-12">
-                <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    {i18n.t('settings.header_templates')}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-900 py-8 pl-8 pr-32 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Store size={80} />
-                    </div>
-
-                    <div className="space-y-4 z-10 relative md:col-span-2">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-green-500/10 rounded-lg text-green-400">
-                                <Store size={24} />
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-bold text-zinc-300">{i18n.t('settings.title_template_store')}</h3>
-                                <p className="text-xs text-zinc-500 leading-relaxed max-w-xl">
-                                    {i18n.t('settings.desc_template_store')}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => navigate('/store')}
-                                className="ml-auto flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold text-sm transition-colors shadow-lg"
-                            >
-                                <ExternalLink size={16} />
-                                {i18n.t('settings.btn_open_store')}
-                            </button>
+            <Settings_Section_Shell
+                title={i18n.t('settings.header_templates')}
+                icon={<Store size={80} />}
+                className="space-y-4 pb-12"
+            >
+                <div className="space-y-4 z-10 relative md:col-span-2">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-green-500/10 rounded-lg text-green-400">
+                            <Store size={24} />
                         </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-300">{i18n.t('settings.title_template_store')}</h3>
+                            <p className="text-xs text-zinc-500 leading-relaxed max-w-xl">
+                                {i18n.t('settings.desc_template_store')}
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/store')}
+                            className="ml-auto flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold text-sm transition-colors shadow-lg"
+                        >
+                            <ExternalLink size={16} />
+                            {i18n.t('settings.btn_open_store')}
+                        </button>
                     </div>
                 </div>
-            </div>
-
+            </Settings_Section_Shell>
         </div>
     );
 }
-
-
-
 
 // Metadata: [Settings]

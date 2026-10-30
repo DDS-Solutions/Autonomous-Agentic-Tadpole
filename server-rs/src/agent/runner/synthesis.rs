@@ -69,6 +69,50 @@ static SYSTEM_TOKEN_REPLACEMENTS: &[(&str, &str)] = &[
     ("Task in progress", "*busy*"),
 ];
 
+/// Formats a list of items under a token budget, appending `truncated_notice` if the budget is exceeded.
+fn format_budgeted_items<T, F>(
+    items: Vec<T>,
+    token_budget: usize,
+    empty_fallback: &str,
+    truncated_notice: &str,
+    format_item: F,
+) -> String
+where
+    F: Fn(&T) -> String,
+{
+    let mut lines = Vec::new();
+    let mut used_tokens = 0;
+    let mut truncated = false;
+
+    for item in &items {
+        let line = format_item(item);
+        let tokens = count_tokens_fast(&line);
+        if used_tokens + tokens <= token_budget {
+            lines.push(line);
+            used_tokens += tokens;
+        } else {
+            truncated = true;
+            break;
+        }
+    }
+
+    if truncated {
+        lines.push(truncated_notice.to_string());
+    }
+
+    if lines.is_empty() {
+        empty_fallback.to_string()
+    } else {
+        lines.join("\n")
+    }
+}
+
+/// Checks whether an agent ID corresponds to a top-tier orchestrator identity.
+#[inline]
+fn is_orchestrator_identity(agent_id: &str) -> bool {
+    agent_id == AGENT_CEO || agent_id == AGENT_COO || agent_id == AGENT_ALPHA
+}
+
 impl AgentRunner {
     /// 📟 [Token Compression]
     /// Shortens system tokens by replacing common verbose status strings
@@ -83,8 +127,59 @@ impl AgentRunner {
         encoded
     }
 
-    // ─────────────────────────────────────────────────────────
+    /// Evaluates whether a registered tool is authorized and eligible for the given `RunContext`.
+    /// Shared between `generate_tool_directory_display` and `build_tools` to guarantee 1:1 parity.
+    pub(crate) fn is_registered_tool_eligible(&self, ctx: &RunContext, tool_name: &str) -> bool {
+        if !self
+            .state
+            .resources
+            .acl
+            .is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, tool_name)
+        {
+            return false;
+        }
 
+        // Strict Membership Filter: Only include the tool if it's in the agent's context skills or is a system core tool.
+        let is_core_tool = tool_name == "complete_mission"
+            || tool_name == "issue_alpha_directive"
+            || tool_name == "set_confidence";
+        if !is_core_tool && !ctx.skills.iter().any(|s| s == tool_name) {
+            return false;
+        }
+
+        // Specialized Skill Checks
+        if tool_name == "execute_shell"
+            && !ctx
+                .skills
+                .iter()
+                .any(|s| s == "shell" || s == "terminal")
+        {
+            return false;
+        }
+
+        // Safe Mode Restrictions (Mutation Block)
+        if ctx.safe_mode
+            && matches!(
+                tool_name,
+                "write_file" | "delete_file" | "execute_shell" | "synthesize_micro_script"
+            )
+        {
+            return false;
+        }
+
+        // Filesystem Capability Check
+        if matches!(
+            tool_name,
+            "read_file" | "write_file" | "list_files" | "delete_file"
+        ) && !self.has_file_system_capability(ctx)
+        {
+            return false;
+        }
+
+        true
+    }
+
+    // ─────────────────────────────────────────────────────────
     //  SYSTEM PROMPT CONSTRUCTION (MODULARIZED)
     // ─────────────────────────────────────────────────────────
 
@@ -93,9 +188,23 @@ impl AgentRunner {
     /// Synthesizes identity, long-term memory, repo-map, and shared swarm
     /// findings into a single prompt, emphasizing modularity and robust error handling.
     pub async fn build_system_prompt(&self, ctx: &RunContext, payload_message: &str) -> String {
-        let (directives_str, reviews_str) = self.fetch_external_context(ctx).await;
-        
-        let _global_intel_str = match self.gather_global_intelligence(ctx, payload_message).await {
+        let (
+            (directives_str, reviews_str),
+            global_intel_res,
+            identity_res,
+            memory_res,
+            mission_ctx_res,
+            (_repo_summary, repo_map_text),
+        ) = tokio::join!(
+            self.fetch_external_context(ctx),
+            self.gather_global_intelligence(ctx, payload_message),
+            self.fetch_identity(),
+            self.fetch_memory(),
+            self.fetch_mission_context(ctx),
+            self.generate_repo_map(ctx, payload_message),
+        );
+
+        let global_intel_str = match global_intel_res {
             Ok(intel) => intel,
             Err(e) => {
                 tracing::warn!("⚠️ [Global Intelligence] Vault search failed: {}.", e);
@@ -106,37 +215,48 @@ impl AgentRunner {
         let mut criticality_score = 0;
         let mut failure_context = Vec::new();
 
-        let identity = match self.fetch_identity().await {
+        let identity = match identity_res {
             Ok(id) => id,
             Err(e) => {
                 criticality_score += 1;
-                failure_context.push(format!("IDENTITY_FAILURE: Core identity directives could not be loaded: {}.", e));
+                failure_context.push(format!(
+                    "IDENTITY_FAILURE: Core identity directives could not be loaded: {}.",
+                    e
+                ));
                 tracing::error!("🚨 [Runner] Identity lookup failed: {}.", e);
                 String::new()
             }
         };
 
-        let memory = match self.fetch_memory().await {
+        let memory = match memory_res {
             Ok(mem) => mem,
             Err(e) => {
                 criticality_score += 1;
-                failure_context.push(format!("MEMORY_FAILURE: Long-term memory context could not be retrieved: {}.", e));
+                failure_context.push(format!(
+                    "MEMORY_FAILURE: Long-term memory context could not be retrieved: {}.",
+                    e
+                ));
                 tracing::error!("🚨 [Runner] Memory lookup failed: {}.", e);
                 String::new()
             }
         };
 
-        let swarm_context_str = match self.fetch_mission_context(ctx).await {
+        let swarm_context_str = match mission_ctx_res {
             Ok(context) => context,
             Err(e) => {
                 criticality_score += 1;
-                failure_context.push(format!("SWARM_CONTEXT_FAILURE: Failed to retrieve mission context: {:?}.", e));
-                tracing::error!("🚨 [Runner] Failed to retrieve mission context for {}: {:?}.", ctx.mission_id, e);
+                failure_context.push(format!(
+                    "SWARM_CONTEXT_FAILURE: Failed to retrieve mission context: {:?}.",
+                    e
+                ));
+                tracing::error!(
+                    "🚨 [Runner] Failed to retrieve mission context for {}: {:?}.",
+                    ctx.mission_id,
+                    e
+                );
                 String::from("⚠️ WARNING: Failed to load shared mission context.")
             }
         };
-
-        let (_repo_summary, repo_map_text) = self.generate_repo_map(ctx, payload_message).await;
 
         let (pruned_repo_map, pruned_swarm_context_str) = self.prune_context(
             ctx,
@@ -146,30 +266,42 @@ impl AgentRunner {
             &swarm_context_str,
         );
 
-        let sovereign_manifest = crate::system::manifest::SovereignStateManifest::generate(&self.state).await;
+        let sovereign_manifest =
+            crate::system::manifest::SovereignStateManifest::generate(&self.state).await;
 
         let vars = self.assemble_prompt_variables(
-            ctx, 
-            &directives_str, 
-            &reviews_str, 
-            &identity, 
-            &memory, 
-            &pruned_repo_map, 
+            ctx,
+            &directives_str,
+            &reviews_str,
+            &identity,
+            &memory,
+            &pruned_repo_map,
             &pruned_swarm_context_str,
             criticality_score,
             failure_context,
             sovereign_manifest,
-            _global_intel_str
+            global_intel_str,
         );
 
-        let system_prompt = self.state.resources.renderer.render(self.state.resources.renderer.default_system_template(), &vars);
+        let system_prompt = self
+            .state
+            .resources
+            .renderer
+            .render(self.state.resources.renderer.default_system_template(), &vars);
 
         #[cfg(debug_assertions)]
         {
             let _ = std::fs::create_dir_all(".tmp");
-            let safe_mission = ctx.mission_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
-            let safe_agent = ctx.agent_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
-            let _ = std::fs::write(format!(".tmp/prompt_{}_{}.txt", safe_mission, safe_agent), &system_prompt);
+            let safe_mission = ctx
+                .mission_id
+                .replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
+            let safe_agent = ctx
+                .agent_id
+                .replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
+            let _ = std::fs::write(
+                format!(".tmp/prompt_{}_{}.txt", safe_mission, safe_agent),
+                &system_prompt,
+            );
             let _ = std::fs::write(".tmp/system_prompt.txt", &system_prompt);
         }
 
@@ -186,65 +318,40 @@ impl AgentRunner {
     // =============================================================
 
     async fn fetch_external_context(&self, ctx: &RunContext) -> (String, String) {
-        let pending_directives = super::swarm_persistence::get_pending_directives(&self.state.resources.pool, &ctx.agent_id)
-            .await
-            .unwrap_or_default();
-        let pending_reviews = super::swarm_persistence::get_pending_reviews(&self.state.resources.pool, &ctx.agent_id)
-            .await
-            .unwrap_or_default();
+        let (pending_directives, pending_reviews) = tokio::join!(
+            super::swarm_persistence::get_pending_directives(
+                &self.state.resources.pool,
+                &ctx.agent_id
+            ),
+            super::swarm_persistence::get_pending_reviews(
+                &self.state.resources.pool,
+                &ctx.agent_id
+            ),
+        );
 
         let tpm = ctx.model_config.tpm.unwrap_or(100_000);
         let dynamic_budget = ((tpm as f32) * 0.01).clamp(500.0, 4000.0) as usize;
 
-        let mut directives_vec = Vec::new();
-        let mut directives_tokens = 0;
-        let mut directives_truncated = false;
-        
-        for d in pending_directives {
-            let line = format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction);
-            let tokens = count_tokens_fast(&line);
-            if directives_tokens + tokens <= dynamic_budget {
-                directives_vec.push(line);
-                directives_tokens += tokens;
-            } else {
-                directives_truncated = true;
-                break;
-            }
-        }
-        if directives_truncated {
-            directives_vec.push("- ... [Remaining directives truncated due to token budget]".to_string());
-        }
+        let directives_str = format_budgeted_items(
+            pending_directives.unwrap_or_default(),
+            dynamic_budget,
+            "No active directives. Proceed with mission objectives.",
+            "- ... [Remaining directives truncated due to token budget]",
+            |d| format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction),
+        );
 
-        let directives_str = if directives_vec.is_empty() {
-            "No active directives. Proceed with mission objectives.".to_string()
-        } else {
-            directives_vec.join("\n")
-        };
-
-        let mut reviews_vec = Vec::new();
-        let mut reviews_tokens = 0;
-        let mut reviews_truncated = false;
-
-        for r in pending_reviews {
-            let line = format!("- [Review Task] Target: {}. Requirement: {}", r.requester_id, r.content_to_review);
-            let tokens = count_tokens_fast(&line);
-            if reviews_tokens + tokens <= dynamic_budget {
-                reviews_vec.push(line);
-                reviews_tokens += tokens;
-            } else {
-                reviews_truncated = true;
-                break;
-            }
-        }
-        if reviews_truncated {
-            reviews_vec.push("- ... [Remaining peer reviews truncated due to token budget]".to_string());
-        }
-
-        let reviews_str = if reviews_vec.is_empty() {
-            "No peer reviews pending. Maintain standard quality protocols.".to_string()
-        } else {
-            reviews_vec.join("\n")
-        };
+        let reviews_str = format_budgeted_items(
+            pending_reviews.unwrap_or_default(),
+            dynamic_budget,
+            "No peer reviews pending. Maintain standard quality protocols.",
+            "- ... [Remaining peer reviews truncated due to token budget]",
+            |r| {
+                format!(
+                    "- [Review Task] Target: {}. Requirement: {}",
+                    r.requester_id, r.content_to_review
+                )
+            },
+        );
 
         (directives_str, reviews_str)
     }
@@ -259,8 +366,15 @@ impl AgentRunner {
         Ok(mem)
     }
 
-    async fn fetch_mission_context(&self, ctx: &RunContext) -> Result<String, crate::error::AppError> {
-        let context = crate::agent::mission::get_mission_context(&self.state.resources.pool, &ctx.mission_id).await?;
+    async fn fetch_mission_context(
+        &self,
+        ctx: &RunContext,
+    ) -> Result<String, crate::error::AppError> {
+        let context = crate::agent::mission::get_mission_context(
+            &self.state.resources.pool,
+            &ctx.mission_id,
+        )
+        .await?;
         Ok(context)
     }
 
@@ -271,29 +385,7 @@ impl AgentRunner {
         let mut allowed_tools = Vec::new();
 
         for tool in tool_list {
-            if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
-                // --- 🛡️ Strict Membership Filter ---
-                // Only include the tool if it's in the agent's context skills or is a system core tool.
-                let is_core_tool = tool.name == "complete_mission" || tool.name == "issue_alpha_directive" || tool.name == "set_confidence";
-                if !is_core_tool && !ctx.skills.contains(&tool.name) {
-                    continue;
-                }
-
-                // Specialized Skill Checks
-                if tool.name == "execute_shell" && !(ctx.skills.contains(&"shell".to_string()) || ctx.skills.contains(&"terminal".to_string())) {
-                    continue;
-                }
-
-                // Safe Mode Restrictions (Mutation Block)
-                if ctx.safe_mode && (tool.name == "write_file" || tool.name == "delete_file" || tool.name == "execute_shell" || tool.name == "synthesize_micro_script") {
-                    continue;
-                }
-
-                // Filesystem Capability Check
-                if (tool.name == "read_file" || tool.name == "write_file" || tool.name == "list_files" || tool.name == "delete_file") && !self.has_file_system_capability(ctx) {
-                    continue;
-                }
-
+            if self.is_registered_tool_eligible(ctx, &tool.name) {
                 allowed_tools.push(tool);
             }
         }
@@ -302,24 +394,32 @@ impl AgentRunner {
         let snapshot = self.state.registry.skills.snapshot();
         for entry in snapshot.skills.iter() {
             let skill = entry.value();
-            if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &skill.name) {
+            if self.state.resources.acl.is_tool_allowed(
+                &ctx.agent_id,
+                &ctx.role,
+                ctx.authority_level,
+                &skill.name,
+            ) {
                 let has_skill = ctx.skills.is_empty()
                     || ctx.skills.contains(&skill.name)
-                    || ctx.skills.contains(&"all".to_string())
-                    || ctx.skills.contains(&"execution".to_string())
-                    || ctx.skills.contains(&"operations".to_string());
-                if has_skill && !allowed_tools.iter().any(|t| t.name == skill.name) {
-                    allowed_tools.push(crate::agent::runner::tools::trait_tool::ToolDefinitionData {
-                        name: skill.name.clone(),
-                        description: skill.description.clone(),
-                        parameters: skill.schema.clone(),
+                    || ctx.skills.iter().any(|s| {
+                        s == "all" || s == "execution" || s == "operations"
                     });
+                if has_skill && !allowed_tools.iter().any(|t| t.name == skill.name) {
+                    allowed_tools.push(
+                        crate::agent::runner::tools::trait_tool::ToolDefinitionData {
+                            name: skill.name.clone(),
+                            description: skill.description.clone(),
+                            parameters: skill.schema.clone(),
+                        },
+                    );
                 }
             }
         }
 
         if allowed_tools.is_empty() {
-            return "No tools are currently authorized or available for your security clearance/skills.".to_string();
+            return "No tools are currently authorized or available for your security clearance/skills."
+                .to_string();
         }
 
         let mut display = String::new();
@@ -546,14 +646,12 @@ impl AgentRunner {
         String, // Tool Mode Prefix
     ) {
         let cluster_specialists = self.state.registry.list_active_specialists();
+        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id);
 
         // --- Cluster Directory ---
         let cluster_directory = if cluster_specialists.is_empty() {
             "No specialized agents currently registered in the cluster pool. You are encouraged to recruit a NEW specialist ID (e.g. 'researcher', 'coder') if needed.".to_string()
         } else {
-            let is_orchestrator =
-                ctx.agent_id == AGENT_CEO || ctx.agent_id == AGENT_COO || ctx.agent_id == AGENT_ALPHA;
-
             cluster_specialists
                 .into_iter()
                 .map(|id| {
@@ -581,7 +679,6 @@ impl AgentRunner {
         };
 
         // --- Lineage Display ---
-        let is_orchestrator = ctx.agent_id == AGENT_CEO || ctx.agent_id == AGENT_COO || ctx.agent_id == AGENT_ALPHA;
         let lineage_display = if ctx.lineage.is_empty() {
             "None (You are the root node)".to_string()
         } else {
@@ -662,7 +759,7 @@ impl AgentRunner {
     /// Generates the shared Swarm Protocol rules using the ACL Service.
     fn generate_swarm_protocols(&self, ctx: &RunContext) -> String {
         let mut swarm_protocols = self.state.resources.acl.get_role_protocols(&ctx.agent_id, &ctx.role, ctx.authority_level);
-        let is_orchestrator = ctx.agent_id == AGENT_CEO || ctx.agent_id == AGENT_COO || ctx.agent_id == AGENT_ALPHA;
+        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id);
 
         // Add shared/invariant swarm rules
         if !is_orchestrator && !ctx.safe_mode {
@@ -886,29 +983,7 @@ impl AgentRunner {
         // 1. Inject Registered Tools (Core, Filesystem, Advanced)
         let tool_list = self.state.registry.tool_registry.list_tools();
         for tool in tool_list {
-            if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
-                // --- 🛡️ Strict Membership Filter ---
-                // Only include the tool if it's in the agent's context skills or is a system core tool.
-                let is_core_tool = tool.name == "complete_mission" || tool.name == "issue_alpha_directive" || tool.name == "set_confidence";
-                if !is_core_tool && !ctx.skills.contains(&tool.name) {
-                    continue;
-                }
-
-                // Specialized Skill Checks
-                if tool.name == "execute_shell" && !(ctx.skills.contains(&"shell".to_string()) || ctx.skills.contains(&"terminal".to_string())) {
-                    continue;
-                }
-
-                // Safe Mode Restrictions (Mutation Block)
-                if ctx.safe_mode && (tool.name == "write_file" || tool.name == "delete_file" || tool.name == "execute_shell" || tool.name == "synthesize_micro_script") {
-                    continue;
-                }
-
-                // Filesystem Capability Check
-                if (tool.name == "read_file" || tool.name == "write_file" || tool.name == "list_files" || tool.name == "delete_file") && !self.has_file_system_capability(ctx) {
-                    continue;
-                }
-
+            if self.is_registered_tool_eligible(ctx, &tool.name) {
                 function_declarations.push(FunctionDeclaration {
                     name: tool.name.clone(),
                     description: tool.description.clone(),
@@ -1238,6 +1313,37 @@ mod tests {
         assert!(prompt.contains("SYSTEM WARNING"), "Prompt should contain system warning alert");
         assert!(prompt.contains("IDENTITY_FAILURE"), "Prompt should mention IDENTITY_FAILURE");
         assert!(prompt.contains("MEMORY_FAILURE"), "Prompt should mention MEMORY_FAILURE");
+    }
+
+    #[test]
+    fn test_format_budgeted_items_three_paths() {
+        // (a) Happy Path: all items fit within token budget
+        let items = vec!["Alpha directive", "Beta directive"];
+        let formatted = format_budgeted_items(
+            items.clone(),
+            500,
+            "EMPTY",
+            "TRUNCATED",
+            |item| format!("- {item}"),
+        );
+        assert_eq!(formatted, "- Alpha directive\n- Beta directive");
+
+        // (b) Failure / Overflow Path: budget exceeded triggers truncation notice
+        let truncated = format_budgeted_items(
+            items,
+            1, // Tiny budget forces immediate truncation
+            "EMPTY",
+            "- ... [Truncated]",
+            |item| format!("- {item}"),
+        );
+        assert_eq!(truncated, "- ... [Truncated]");
+
+        // (c) Edge Case Path: empty input list returns fallback string
+        let empty: Vec<&str> = Vec::new();
+        let fallback = format_budgeted_items(empty, 500, "No active directives.", "TRUNCATED", |s| s.to_string());
+        assert_eq!(fallback, "No active directives.");
+        assert!(is_orchestrator_identity(AGENT_CEO));
+        assert!(!is_orchestrator_identity("specialist-42"));
     }
 }
 

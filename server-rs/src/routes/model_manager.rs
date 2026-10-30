@@ -38,6 +38,20 @@ use axum::{
 };
 use std::sync::Arc;
 
+const ANTHROPIC_FALLBACK_MODELS: &[&str] = &[
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+];
+
+fn anthropic_fallback_models() -> Vec<String> {
+    ANTHROPIC_FALLBACK_MODELS
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect()
+}
+
 #[derive(serde::Serialize)]
 pub struct ProviderResponse {
     pub id: String,
@@ -96,6 +110,53 @@ pub fn is_secure_local(url_str: &str) -> bool {
     false
 }
 
+/// SEC-01: Validates a provider endpoint URL and blocks transmission of credentials over unencrypted HTTP
+/// to external (non-loopback/non-RFC1918) hosts unless `TADPOLE_ALLOW_LOCAL_HTTP` is explicitly set.
+pub fn validate_provider_transport_url(url: &str, enforce_tls_guard: bool) -> Result<(), AppError> {
+    let parsed_url = reqwest::Url::parse(url)
+        .map_err(|e| AppError::BadRequest(format!("Malformed provider URL: {}", e)))?;
+    if !enforce_tls_guard {
+        return Ok(());
+    }
+    let secure_local = is_secure_local(url);
+    let allow_insecure = std::env::var("TADPOLE_ALLOW_LOCAL_HTTP").is_ok();
+
+    if parsed_url.scheme() == "http" && !secure_local && !allow_insecure {
+        return Err(AppError::BadRequest(
+            "Insecure transmission blocked: API keys cannot be sent over HTTP to external providers. Use HTTPS."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Enriches a `ModelEntry` with inferred capabilities and normalizes cloud pricing safeguards.
+pub(crate) fn enrich_and_normalize_model_entry(entry: &mut ModelEntry, id: &str) {
+    entry.id = id.to_string();
+    if let Some(cw) = entry.context_window {
+        entry.capabilities.context_window = Some(cw);
+    } else if entry.capabilities.context_window.unwrap_or(0) == 0 {
+        entry.capabilities = CapabilityMatrix::infer_capabilities(id);
+    }
+
+    // Safeguard: Normalize 0.0 custom pricing on cloud models to None
+    // so catalog pricing is preserved and paid models are never inadvertently zeroed out.
+    let lower_id = id.to_ascii_lowercase();
+    let is_local_provider = entry.provider_id.eq_ignore_ascii_case("ollama")
+        || entry.provider_id.eq_ignore_ascii_case("local")
+        || lower_id.starts_with("ollama")
+        || lower_id.starts_with("local/");
+    if !is_local_provider {
+        if entry.input_cost_per_m == Some(0.0) {
+            entry.input_cost_per_m = None;
+        }
+        if entry.output_cost_per_m == Some(0.0) {
+            entry.output_cost_per_m = None;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProtocolRouter {
     Anthropic,
     Google,
@@ -117,7 +178,11 @@ impl ProtocolRouter {
         match self {
             Self::Anthropic => format!(
                 "{}/v1/models",
-                if base_url.is_empty() { "https://api.anthropic.com" } else { base_url.trim_end_matches('/') }
+                if base_url.is_empty() {
+                    "https://api.anthropic.com"
+                } else {
+                    base_url.trim_end_matches('/')
+                }
             ),
             Self::Google => {
                 let base = if base_url.is_empty() {
@@ -125,21 +190,33 @@ impl ProtocolRouter {
                 } else {
                     base_url.trim_end_matches('/').to_string()
                 };
-                if is_sync { format!("{}/v1/models", base) } else {
+                if is_sync {
+                    format!("{}/v1/models", base)
+                } else {
                     let mut b = base;
-                    if !b.contains("/v1") && !b.contains("/beta") { b.push_str("/v1"); }
+                    if !b.contains("/v1") && !b.contains("/beta") {
+                        b.push_str("/v1");
+                    }
                     format!("{}/models", b)
                 }
-            },
+            }
             Self::Ollama => {
                 let base = if base_url.is_empty() {
                     get_ollama_host()
                 } else {
                     base_url.trim_end_matches('/').to_string()
                 };
-                let base = if !base.contains("/api") && !base.contains("/v1") { format!("{}/api", base) } else { base };
-                if is_sync && !base.contains("/v1") { format!("{}/tags", base) } else { format!("{}/models", base) }
-            },
+                let base = if !base.contains("/api") && !base.contains("/v1") {
+                    format!("{}/api", base)
+                } else {
+                    base
+                };
+                if is_sync && !base.contains("/v1") {
+                    format!("{}/tags", base)
+                } else {
+                    format!("{}/models", base)
+                }
+            }
             Self::OpenAI => format!(
                 "{}/models",
                 if base_url.is_empty() {
@@ -154,13 +231,23 @@ impl ProtocolRouter {
         }
     }
 
-    fn authenticate_request(&self, req: reqwest::RequestBuilder, api_key: &str) -> reqwest::RequestBuilder {
+    fn authenticate_request(
+        &self,
+        req: reqwest::RequestBuilder,
+        api_key: &str,
+    ) -> reqwest::RequestBuilder {
         match self {
             Self::Google => req.header("x-goog-api-key", api_key),
-            Self::Anthropic => req.header("x-api-key", api_key).header("anthropic-version", "2023-06-01"),
+            Self::Anthropic => req
+                .header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01"),
             Self::Ollama => {
-                if !api_key.is_empty() { req.header("Authorization", format!("Bearer {}", api_key)) } else { req }
-            },
+                if !api_key.is_empty() {
+                    req.header("Authorization", format!("Bearer {}", api_key))
+                } else {
+                    req
+                }
+            }
             Self::OpenAI => req.header("Authorization", format!("Bearer {}", api_key)),
         }
     }
@@ -169,28 +256,29 @@ impl ProtocolRouter {
         let mut discovered_ids = Vec::new();
         match self {
             Self::Ollama if url.contains("/tags") => {
-                 if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
-                     for m in models {
-                         if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
-                             discovered_ids.push(name.to_string());
-                         }
-                     }
-                 }
-            },
+                if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
+                    for m in models {
+                        if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                            discovered_ids.push(name.to_string());
+                        }
+                    }
+                }
+            }
             Self::Google => {
-                 if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
-                     for m in models {
-                         if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
-                             discovered_ids.push(name.replace("models/", ""));
-                         }
-                     }
-                 }
-            },
-            _ => { // OpenAI standard
+                if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
+                    for m in models {
+                        if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                            discovered_ids.push(name.replace("models/", ""));
+                        }
+                    }
+                }
+            }
+            _ => {
+                // OpenAI standard
                 if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
                     for m in data {
                         if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
-                             discovered_ids.push(id.to_string());
+                            discovered_ids.push(id.to_string());
                         }
                     }
                 }
@@ -279,7 +367,6 @@ pub async fn get_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         .iter()
         .map(|kv| {
             let mut entry = kv.value().clone();
-            // Enrich with capabilities if they are empty/default
             if entry.capabilities.context_window.unwrap_or(0) == 0 {
                 entry.capabilities = CapabilityMatrix::infer_capabilities(&entry.id);
             }
@@ -297,7 +384,7 @@ pub async fn get_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
 pub async fn update_model(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Json(entry): Json<ModelEntry>,
+    Json(mut entry): Json<ModelEntry>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Err(e) = entry.validate() {
         return Err(AppError::BadRequest(e));
@@ -311,28 +398,7 @@ pub async fn update_model(
         )));
     }
 
-    let mut entry = entry;
-    entry.id = id.clone();
-    if let Some(cw) = entry.context_window {
-        entry.capabilities.context_window = Some(cw);
-    } else if entry.capabilities.context_window.unwrap_or(0) == 0 {
-        entry.capabilities = CapabilityMatrix::infer_capabilities(&id);
-    }
-
-    // Safeguard: Normalize 0.0 custom pricing on cloud models to None
-    // so catalog pricing is preserved and paid models are never inadvertently zeroed out.
-    let is_local_provider = entry.provider_id.eq_ignore_ascii_case("ollama")
-        || entry.provider_id.eq_ignore_ascii_case("local")
-        || id.to_ascii_lowercase().starts_with("ollama")
-        || id.to_ascii_lowercase().starts_with("local/");
-    if !is_local_provider {
-        if entry.input_cost_per_m == Some(0.0) {
-            entry.input_cost_per_m = None;
-        }
-        if entry.output_cost_per_m == Some(0.0) {
-            entry.output_cost_per_m = None;
-        }
-    }
+    enrich_and_normalize_model_entry(&mut entry, &id);
 
     tracing::info!(
         "🔄 [infra-trace] Model updated: id={}, context_window={:?}, input_cost_per_m={:?}, output_cost_per_m={:?}",
@@ -377,9 +443,16 @@ pub async fn test_provider(
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("🔍 [Test Trace] Initiating handshake for provider: {}", id);
 
-    let api_key = config.api_key
+    let api_key = config
+        .api_key
         .filter(|k| !k.is_empty())
-        .or_else(|| state.registry.providers.get(&id).and_then(|p| p.api_key.clone()))
+        .or_else(|| {
+            state
+                .registry
+                .providers
+                .get(&id)
+                .and_then(|p| p.api_key.clone())
+        })
         .unwrap_or_default();
     let base_url = config.base_url.as_deref().unwrap_or("");
     let protocol = config.protocol.to_string().to_lowercase();
@@ -394,18 +467,7 @@ pub async fn test_provider(
     let url = router.build_models_url(&protocol, base_url, false);
 
     // SEC-01: Prevent transmission of API keys over unencrypted HTTP for external endpoints.
-    let parsed_url = reqwest::Url::parse(&url).map_err(|e| {
-        AppError::BadRequest(format!("Malformed provider URL: {}", e))
-    })?;
-    let secure_local = is_secure_local(&url);
-    let allow_insecure = std::env::var("TADPOLE_ALLOW_LOCAL_HTTP").is_ok();
-    
-    if parsed_url.scheme() == "http" && !secure_local && !allow_insecure {
-        return Err(AppError::BadRequest(
-            "Insecure transmission blocked: API keys cannot be sent over HTTP to external providers. Use HTTPS."
-                .to_string(),
-        ));
-    }
+    validate_provider_transport_url(&url, true)?;
 
     let request = state.resources.http_client.get(&url);
     let request = router.authenticate_request(request, &api_key);
@@ -454,33 +516,33 @@ pub async fn sync_provider_models(
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("🔄 [IMR] Synchronizing models for provider: {}", id);
 
-    let provider = state.registry.providers.get(&id).ok_or_else(|| {
-        AppError::NotFound(format!("Provider '{}' not found", id))
-    })?;
-
-    let api_key = provider.api_key.as_deref().unwrap_or("").to_string();
-    let base_url = provider.base_url.as_deref().unwrap_or("");
-    let protocol = provider.protocol.to_string().to_lowercase();
+    // Scope DashMap read guard so it is dropped before any network or disk .await
+    let (api_key, base_url, provider_protocol, protocol) = {
+        let provider = state
+            .registry
+            .providers
+            .get(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Provider '{}' not found", id)))?;
+        (
+            provider.api_key.as_deref().unwrap_or("").to_string(),
+            provider.base_url.as_deref().unwrap_or("").to_string(),
+            provider.protocol,
+            provider.protocol.to_string().to_lowercase(),
+        )
+    };
 
     // 1. Resolve URL and Authenticate via Router
     let router = ProtocolRouter::from_protocol(&protocol);
-    let url = router.build_models_url(&protocol, base_url, true);
+    let url = router.build_models_url(&protocol, &base_url, true);
 
     // SEC-01: Prevent transmission of API keys over unencrypted HTTP for external endpoints.
-    let parsed_url = reqwest::Url::parse(&url).map_err(|e| {
-        AppError::BadRequest(format!("Malformed provider URL: {}", e))
-    })?;
-    let secure_local = is_secure_local(&url);
-    let allow_insecure = std::env::var("TADPOLE_ALLOW_LOCAL_HTTP").is_ok();
+    validate_provider_transport_url(&url, !api_key.is_empty())?;
 
-    if parsed_url.scheme() == "http" && !api_key.is_empty() && !secure_local && !allow_insecure {
-        return Err(AppError::BadRequest(
-            "Insecure transmission blocked: API keys cannot be sent over HTTP to external providers. Use HTTPS."
-                .to_string(),
-        ));
-    }
-
-    let request = state.resources.http_client.get(&url).timeout(std::time::Duration::from_secs(10));
+    let request = state
+        .resources
+        .http_client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10));
     let request = router.authenticate_request(request, &api_key);
 
     let discovered_ids = match request.send().await {
@@ -488,39 +550,30 @@ pub async fn sync_provider_models(
             if let Ok(body) = resp.json::<serde_json::Value>().await {
                 let ids = router.parse_discovery_response(&body, &url);
                 if ids.is_empty() && protocol == "anthropic" {
-                    vec![
-                        "claude-3-7-sonnet-20250219".to_string(),
-                        "claude-3-5-sonnet-20241022".to_string(),
-                        "claude-3-5-haiku-20241022".to_string(),
-                        "claude-3-opus-20240229".to_string(),
-                    ]
+                    anthropic_fallback_models()
                 } else {
                     ids
                 }
             } else if protocol == "anthropic" {
-                vec![
-                    "claude-3-7-sonnet-20250219".to_string(),
-                    "claude-3-5-sonnet-20241022".to_string(),
-                    "claude-3-5-haiku-20241022".to_string(),
-                    "claude-3-opus-20240229".to_string(),
-                ]
+                anthropic_fallback_models()
             } else {
-                return Err(AppError::InternalServerError("Failed to parse discovery response.".to_string()));
+                return Err(AppError::InternalServerError(
+                    "Failed to parse discovery response.".to_string(),
+                ));
             }
         }
-        _ if protocol == "anthropic" => {
-            vec![
-                "claude-3-7-sonnet-20250219".to_string(),
-                "claude-3-5-sonnet-20241022".to_string(),
-                "claude-3-5-haiku-20241022".to_string(),
-                "claude-3-opus-20240229".to_string(),
-            ]
-        }
+        _ if protocol == "anthropic" => anthropic_fallback_models(),
         Ok(resp) => {
-            return Err(AppError::Unauthorized(format!("Discovery failed ({}): Provider rejected credentials or endpoint unreachable.", resp.status())));
+            return Err(AppError::Unauthorized(format!(
+                "Discovery failed ({}): Provider rejected credentials or endpoint unreachable.",
+                resp.status()
+            )));
         }
         Err(e) => {
-            return Err(AppError::InternalServerError(format!("Handshake failed during discovery: {}", e)));
+            return Err(AppError::InternalServerError(format!(
+                "Handshake failed during discovery: {}",
+                e
+            )));
         }
     };
 
@@ -530,22 +583,26 @@ pub async fn sync_provider_models(
 
     // 3. Register and Enrich
     for model_id in discovered_ids {
-        let entry_id = format!("{}:{}", id, model_id.replace("/", "-"));
+        let entry_id = format!("{}:{}", id, model_id.replace('/', "-"));
         let capabilities = CapabilityMatrix::infer_capabilities(&model_id);
 
         if let Some(mut existing) = state.registry.models.get_mut(&entry_id) {
             existing.last_synced_at = Some(chrono::Utc::now());
             if existing.capabilities.source != "manual" {
-                existing.capabilities = capabilities.clone();
+                existing.capabilities = capabilities;
             }
             modified = true;
         } else {
             let entry = ModelEntry {
                 id: model_id.clone(),
-                name: model_id.clone(),
+                name: model_id,
                 provider_id: id.clone(),
-                provider: Some(provider.protocol),
-                modality: if capabilities.supports_vision { crate::agent::types::Modality::Vision } else { crate::agent::types::Modality::Llm },
+                provider: Some(provider_protocol),
+                modality: if capabilities.supports_vision {
+                    crate::agent::types::Modality::Vision
+                } else {
+                    crate::agent::types::Modality::Llm
+                },
                 capabilities,
                 last_synced_at: Some(chrono::Utc::now()),
                 ..ModelEntry::default()
@@ -647,14 +704,16 @@ pub async fn pull_model(
         payload.node_id
     );
 
-    // 1. Locate the node
-    let node = state.registry.nodes.get(&payload.node_id).ok_or_else(|| {
-        AppError::NotFound(format!("Node '{}' not found in swarm", payload.node_id))
-    })?;
+    // 1. Locate the node and drop the DashMap read guard prior to network .await
+    let (node_name, node_address) = {
+        let node = state.registry.nodes.get(&payload.node_id).ok_or_else(|| {
+            AppError::NotFound(format!("Node '{}' not found in swarm", payload.node_id))
+        })?;
+        (node.name.clone(), node.address.clone())
+    };
 
     // 2. Prepare the Ollama pull request
-    // We hit the Tadpole Engine's unified proxy on the target node.
-    let ollama_url = format!("http://{}/v1/api/pull", node.address);
+    let ollama_url = format!("http://{}/v1/api/pull", node_address);
     let ollama_payload = serde_json::json!({
         "name": payload.tag,
         "stream": false
@@ -679,13 +738,14 @@ pub async fn pull_model(
     if resp.status().is_success() {
         tracing::info!(
             "✅ [ModelStore] Successfully initiated pull on {}",
-            node.name
+            node_name
         );
         Ok((
             StatusCode::OK,
-            Json(
-                serde_json::json!({ "status": "success", "message": format!("Model {} is being pulled to {}", payload.tag, node.name) }),
-            ),
+            Json(serde_json::json!({
+                "status": "success",
+                "message": format!("Model {} is being pulled to {}", payload.tag, node_name)
+            })),
         ))
     } else {
         let status = resp.status();
@@ -695,13 +755,13 @@ pub async fn pull_model(
             .unwrap_or_else(|_| "Unknown error".to_string());
         tracing::error!(
             "❌ [ModelStore] Pull failed on {} ({}): {}",
-            node.name,
+            node_name,
             status,
             err
         );
         Err(AppError::InternalServerError(format!(
             "Bunker node '{}' reported error ({}): {}",
-            node.name, status, err
+            node_name, status, err
         )))
     }
 }
@@ -751,6 +811,75 @@ pub async fn ollama_proxy_pull(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_model_manager_router_and_transport_happy_failure_and_edge() {
+        // (a) Happy Path: ProtocolRouter URL construction, discovery parsing, and HTTPS/local transport validation
+        let google_router = ProtocolRouter::from_protocol("google");
+        assert_eq!(
+            google_router.build_models_url("google", "", true),
+            "https://generativelanguage.googleapis.com/v1/models"
+        );
+        let google_body = serde_json::json!({
+            "models": [
+                {"name": "models/gemini-2.5-pro"},
+                {"name": "models/gemini-2.5-flash"}
+            ]
+        });
+        assert_eq!(
+            google_router.parse_discovery_response(&google_body, "https://generativelanguage.googleapis.com/v1/models"),
+            vec!["gemini-2.5-pro".to_string(), "gemini-2.5-flash".to_string()]
+        );
+
+        let ollama_router = ProtocolRouter::from_protocol("ollama");
+        assert_eq!(
+            ollama_router.build_models_url("ollama", "http://127.0.0.1:11434", true),
+            "http://127.0.0.1:11434/api/tags"
+        );
+        assert!(validate_provider_transport_url("https://api.openai.com/v1/models", true).is_ok());
+        assert!(validate_provider_transport_url("http://127.0.0.1:11434/api/tags", true).is_ok());
+        assert!(validate_provider_transport_url("http://192.168.1.50:11434/api/tags", true).is_ok());
+
+        // (b) Failure Path (Input Validation & SEC-01): External unencrypted HTTP with API key and malformed URLs
+        let insecure_err = validate_provider_transport_url("http://api.openai.com/v1/models", true)
+            .expect_err("External HTTP with API key must be blocked by SEC-01");
+        assert!(matches!(insecure_err, AppError::BadRequest(msg) if msg.contains("Insecure transmission blocked")));
+
+        let malformed_err = validate_provider_transport_url("not a valid url", true)
+            .expect_err("Malformed URL must return BadRequest");
+        assert!(matches!(malformed_err, AppError::BadRequest(msg) if msg.contains("Malformed provider URL")));
+
+        // (c) Edge Case Path: Trailing slashes, cloud vs. local 0.0 pricing normalization, and Anthropic fallback list
+        let openai_router = ProtocolRouter::from_protocol("openai");
+        assert_eq!(
+            openai_router.build_models_url("openai", "https://custom.endpoint.io/v1///", false),
+            "https://custom.endpoint.io/v1/models"
+        );
+        assert_eq!(anthropic_fallback_models().len(), 4);
+
+        let mut cloud_entry = ModelEntry {
+            provider_id: "openai".to_string(),
+            input_cost_per_m: Some(0.0),
+            output_cost_per_m: Some(0.0),
+            ..ModelEntry::default()
+        };
+        enrich_and_normalize_model_entry(&mut cloud_entry, "gpt-4o");
+        assert_eq!(cloud_entry.input_cost_per_m, None);
+        assert_eq!(cloud_entry.output_cost_per_m, None);
+
+        let mut local_entry = ModelEntry {
+            provider_id: "ollama".to_string(),
+            input_cost_per_m: Some(0.0),
+            output_cost_per_m: Some(0.0),
+            ..ModelEntry::default()
+        };
+        enrich_and_normalize_model_entry(&mut local_entry, "qwen2.5-coder:7b");
+        assert_eq!(local_entry.input_cost_per_m, Some(0.0));
+        assert_eq!(local_entry.output_cost_per_m, Some(0.0));
+    }
+}
 
 // Metadata: [model_manager]

@@ -171,6 +171,28 @@ describe('Settings Page', () => {
 
         expect(screen.getByText('INVALID_URL')).toBeInTheDocument();
     });
+
+    it('guards against NaN when numeric inputs are cleared or malformed (Happy, Failure, Edge paths)', () => {
+        render(<MemoryRouter><Settings /></MemoryRouter>);
+        const max_task_input = screen.getByLabelText(/Max Task Token Limit/i);
+        const budget_input = screen.getByLabelText(/Base Mission Budget/i);
+
+        // (a) Happy Path: valid integer and float strings
+        fireEvent.change(max_task_input, { target: { value: '4096' } });
+        expect(max_task_input).toHaveValue(4096);
+        fireEvent.change(budget_input, { target: { value: '12.75' } });
+        expect(budget_input).toHaveValue(12.75);
+
+        // (b) Failure Path: non-numeric input falls back to previous value instead of NaN
+        fireEvent.change(max_task_input, { target: { value: 'not-a-number' } });
+        expect(max_task_input).toHaveValue(4096);
+
+        // (c) Edge Case Path: empty string when user clears input box in UI
+        fireEvent.change(max_task_input, { target: { value: '' } });
+        expect(max_task_input).toHaveValue(4096);
+        fireEvent.change(budget_input, { target: { value: '   ' } });
+        expect(budget_input).toHaveValue(12.75);
+    });
 });
 
 

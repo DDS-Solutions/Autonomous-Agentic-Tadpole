@@ -306,6 +306,31 @@ describe('Tadpole_OS_Socket_Client', () => {
 
         expect(event_bus.emit_log).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', text: expect.stringContaining('10 attempts') }));
     });
+
+    it('should allow immediate reconnect after disconnect() during pending backoff timer and ignore 0-byte binary frames', () => {
+        const socket = get_tadpole_os_socket();
+        socket.connect();
+        if (mock_web_socket.onopen) mock_web_socket.onopen();
+
+        if (mock_web_socket.onclose) mock_web_socket.onclose();
+        expect(socket.get_connection_state()).toBe('reconnecting');
+
+        (use_settings_store as any).__triggerChange({
+            settings: { tadpole_os_url: 'http://recovered:8000', tadpole_os_api_key: 'recovered-key' }
+        });
+
+        expect(socket.get_connection_state()).toBe('connecting');
+        expect(ws_constructor).toHaveBeenLastCalledWith(
+            'ws://recovered:8000/v1/engine/ws',
+            ['bearer.recovered-key', 'tadpole-pulse-v1']
+        );
+
+        if (mock_web_socket.onopen) mock_web_socket.onopen();
+        const empty_buffer = new ArrayBuffer(0);
+        expect(() => {
+            if (mock_web_socket.onmessage) mock_web_socket.onmessage({ data: empty_buffer });
+        }).not.toThrow();
+    });
 });
 
 

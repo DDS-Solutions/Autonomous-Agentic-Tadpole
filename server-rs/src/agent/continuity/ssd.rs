@@ -134,16 +134,17 @@ impl SSDManager {
         while let Some(entry) = entries.next_entry().await.map_err(AppError::Io)? {
             let path = entry.path();
             if path.extension().is_some_and(|ext| ext == "mpk") {
-                // Reading the file using memmap2 forces the OS to pull it into the page cache without allocating large heap vectors
+                // Warm the OS page cache using safe buffered 4KB reads without unsafe mmap
                 let _ = tokio::task::spawn_blocking(move || {
-                    if let Ok(file) = std::fs::File::open(&path) {
-                        if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&file) } {
-                            let mut _black_box = 0;
-                            for chunk in mmap.chunks(4096) {
-                                if let Some(&b) = chunk.first() {
-                                    _black_box ^= b;
-                                }
+                    use std::io::Read;
+                    if let Ok(mut file) = std::fs::File::open(&path) {
+                        let mut buf = [0u8; 4096];
+                        let mut _black_box = 0u8;
+                        while let Ok(n) = file.read(&mut buf) {
+                            if n == 0 {
+                                break;
                             }
+                            _black_box ^= buf[0];
                         }
                     }
                 }).await;
@@ -262,9 +263,5 @@ impl SSDManager {
         Ok(deleted)
     }
 }
-
-
-
-
 
 // Metadata: [ssd]

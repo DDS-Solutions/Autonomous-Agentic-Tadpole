@@ -34,7 +34,7 @@ use axum::{
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -104,10 +104,11 @@ struct CatalogCache {
 
 static CATALOG_CACHE: Lazy<RwLock<Option<CatalogCache>>> = Lazy::new(|| RwLock::new(None));
 const CATALOG_TTL: Duration = Duration::from_secs(300);
+const GIT_CLONE_TIMEOUT: Duration = Duration::from_secs(60);
 const REGISTRY_UPSTREAM_URL: &str =
     "https://raw.githubusercontent.com/DDS-Solutions/AI-Tadpole-OS-Industry-Templates/main/registry.json";
 
-// ─── Verification Utilities (Item #10) ──────────────────────────────────────
+// ─── Verification & Installation Helpers (Item #10) ─────────────────────────
 
 /// Extracts the expected SHA-256 hash for a skill filename from `connector-lock.json`.
 pub fn parse_expected_skill_hash(lock: &serde_json::Value, filename: &str) -> Option<String> {
@@ -161,15 +162,8 @@ pub fn verify_skill_sha256(file_bytes: &[u8], expected_hash: &str) -> bool {
     computed_hash == expected_hash.to_lowercase()
 }
 
-// ─── Handlers ───────────────────────────────────────────────────────────────
-
-#[axum::debug_handler]
-#[tracing::instrument(skip(state, payload), name = "templates::install")]
-pub async fn install_template(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<InstallTemplateRequest>,
-) -> Result<axum::response::Response, AppError> {
-    // 🛡️ [Security Hardening] Validate repository URL to prevent command/flag injection
+/// Validates repository URL scheme/flags and relative template path prior to invoking `git`.
+pub(crate) fn validate_install_request(payload: &InstallTemplateRequest) -> Result<String, AppError> {
     let repo_url = payload.repository_url.trim();
     if repo_url.starts_with('-') {
         return Err(AppError::BadRequest(
@@ -177,7 +171,6 @@ pub async fn install_template(
         ));
     }
 
-    // Parse URL scheme validation
     let parsed_url = reqwest::Url::parse(repo_url)
         .map_err(|e| AppError::BadRequest(format!("Invalid Repository URL: {e}")))?;
     let scheme = parsed_url.scheme();
@@ -187,7 +180,6 @@ pub async fn install_template(
         )));
     }
 
-    // Validate path parameter to prevent directory traversal
     if payload.path.contains("..")
         || payload.path.starts_with('/')
         || payload.path.starts_with('\\')
@@ -197,6 +189,304 @@ pub async fn install_template(
                 .to_string(),
         ));
     }
+
+    Ok(repo_url.to_string())
+}
+
+/// Executes a shallow `git clone --depth 1` with interactive terminal prompts disabled and a hard timeout.
+async fn clone_template_repository(
+    git_cmd: &FsPath,
+    repo_url: &str,
+    temp_dir: &FsPath,
+) -> Result<(), AppError> {
+    let mut cmd = tokio::process::Command::new(git_cmd);
+    cmd.kill_on_drop(true)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg(repo_url)
+        .arg(temp_dir);
+
+    let status_res = tokio::time::timeout(GIT_CLONE_TIMEOUT, cmd.status()).await;
+    match status_res {
+        Ok(Ok(status)) if status.success() => Ok(()),
+        Ok(Ok(_)) => {
+            let _ = tokio::fs::remove_dir_all(temp_dir).await;
+            Err(AppError::InternalServerError(
+                "Failed to clone template repository".to_string(),
+            ))
+        }
+        Ok(Err(e)) => {
+            let _ = tokio::fs::remove_dir_all(temp_dir).await;
+            Err(AppError::InternalServerError(format!(
+                "Failed to execute git: {e}"
+            )))
+        }
+        Err(_) => {
+            let _ = tokio::fs::remove_dir_all(temp_dir).await;
+            Err(AppError::InternalServerError(
+                "Timed out while cloning template repository".to_string(),
+            ))
+        }
+    }
+}
+
+/// Preflight-validates all agent JSON profiles in memory before any disk/database writes occur.
+async fn preflight_validate_agents(
+    agents_src: &FsPath,
+    temp_dir: &FsPath,
+) -> Result<Vec<(String, PathBuf, crate::agent::types::EngineAgent)>, AppError> {
+    let mut validated_agents = Vec::new();
+    if !agents_src.exists() {
+        return Ok(validated_agents);
+    }
+
+    if let Ok(mut entries) = tokio::fs::read_dir(agents_src).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let file_path = entry.path();
+            if file_path.is_file()
+                && file_path.extension().and_then(|s| s.to_str()) == Some("json")
+            {
+                let filename = entry.file_name().to_string_lossy().to_string();
+                let content = match tokio::fs::read_to_string(&file_path).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = tokio::fs::remove_dir_all(temp_dir).await;
+                        return Err(AppError::BadRequest(format!(
+                            "Failed to read agent file '{filename}': {e}"
+                        )));
+                    }
+                };
+
+                match serde_json::from_str::<crate::agent::types::EngineAgent>(&content) {
+                    Ok(agent) => validated_agents.push((filename, file_path, agent)),
+                    Err(e) => {
+                        let _ = tokio::fs::remove_dir_all(temp_dir).await;
+                        return Err(AppError::BadRequest(format!(
+                            "Agent profile preflight validation failed for '{filename}': {e}"
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(validated_agents)
+}
+
+/// Preflight-validates skill scripts against `connector-lock.json` SHA-256 digests before installation.
+async fn preflight_validate_skills(
+    skills_src: &FsPath,
+    source_path: &FsPath,
+    temp_dir: &FsPath,
+) -> Result<Vec<(String, PathBuf)>, AppError> {
+    let mut validated_skills = Vec::new();
+    if !skills_src.exists() {
+        return Ok(validated_skills);
+    }
+
+    let lock_path = source_path.join("connector-lock.json");
+    let lock_val: Option<serde_json::Value> = if lock_path.exists() {
+        tokio::fs::read_to_string(&lock_path)
+            .await
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+    } else {
+        None
+    };
+
+    if let Ok(mut entries) = tokio::fs::read_dir(skills_src).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if ext == "json" || ext == "py" || ext == "js" || ext == "ts" {
+                let filename = entry.file_name().to_string_lossy().to_string();
+                let bytes = match tokio::fs::read(&path).await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        let _ = tokio::fs::remove_dir_all(temp_dir).await;
+                        return Err(AppError::BadRequest(format!(
+                            "Failed to read skill file '{filename}': {e}"
+                        )));
+                    }
+                };
+
+                if let Some(ref lock) = lock_val {
+                    if let Some(expected_hash) = parse_expected_skill_hash(lock, &filename) {
+                        if !verify_skill_sha256(&bytes, &expected_hash) {
+                            let _ = tokio::fs::remove_dir_all(temp_dir).await;
+                            return Err(AppError::BadRequest(format!(
+                                "Integrity check failed for skill '{filename}': SHA-256 hash mismatch with connector-lock.json"
+                            )));
+                        }
+                    }
+                }
+                validated_skills.push((filename, path));
+            }
+        }
+    }
+
+    Ok(validated_skills)
+}
+
+/// Copies all `.md` files from `src_dir` into `dest_dir`, recording copied filenames in `receipt_list`.
+async fn copy_markdown_assets(
+    src_dir: &FsPath,
+    dest_dir: &FsPath,
+    receipt_list: &mut Vec<String>,
+) -> usize {
+    if !src_dir.exists() {
+        return 0;
+    }
+
+    let _ = tokio::fs::create_dir_all(dest_dir).await;
+    let mut copied = 0;
+    if let Ok(mut entries) = tokio::fs::read_dir(src_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if entry.path().extension().and_then(|s| s.to_str()) == Some("md") {
+                let filename = entry.file_name().to_string_lossy().to_string();
+                let dest_file = dest_dir.join(&filename);
+                if tokio::fs::copy(entry.path(), dest_file).await.is_ok() {
+                    receipt_list.push(filename);
+                    copied += 1;
+                }
+            }
+        }
+    }
+    copied
+}
+
+/// Merges template `mcps.json` into `.agent/mcp_config.json`, rejecting `__` in server names and failing closed on collisions.
+async fn merge_template_mcp_config(
+    mcps_src: &FsPath,
+    receipt: &mut InstallReceipt,
+    errors: &mut Vec<String>,
+) -> bool {
+    if !mcps_src.exists() {
+        return false;
+    }
+
+    let Ok(content) = tokio::fs::read_to_string(mcps_src).await else {
+        return false;
+    };
+    let Ok(incoming_config) = serde_json::from_str::<crate::agent::mcp::McpConfig>(&content) else {
+        return false;
+    };
+
+    let mcp_config_path = PathBuf::from(".agent/mcp_config.json");
+    let mut current_config = if mcp_config_path.exists() {
+        tokio::fs::read_to_string(&mcp_config_path)
+            .await
+            .ok()
+            .and_then(|c| serde_json::from_str::<crate::agent::mcp::McpConfig>(&c).ok())
+            .unwrap_or_else(|| crate::agent::mcp::McpConfig {
+                mcp_servers: std::collections::HashMap::new(),
+            })
+    } else {
+        crate::agent::mcp::McpConfig {
+            mcp_servers: std::collections::HashMap::new(),
+        }
+    };
+
+    let mut servers_added = 0;
+    for (name, config) in incoming_config.mcp_servers {
+        if name.contains("__") {
+            tracing::warn!(
+                "MCP server name '{}' contains '__' — rejected per specification",
+                name
+            );
+            errors.push(format!("MCP server '{}' rejected: contains '__'", name));
+            continue;
+        }
+
+        if current_config.mcp_servers.contains_key(&name) {
+            tracing::warn!(
+                "MCP server collision for '{}' — skipping (fail closed)",
+                name
+            );
+            errors.push(format!(
+                "MCP server '{}' collision: existing server preserved",
+                name
+            ));
+            continue;
+        }
+
+        current_config.mcp_servers.insert(name.clone(), config);
+        receipt.mcp_servers.push(name);
+        servers_added += 1;
+    }
+
+    if servers_added > 0 {
+        if let Ok(merged_json) = serde_json::to_string_pretty(&current_config) {
+            let _ = tokio::fs::create_dir_all(".agent").await;
+            let _ = tokio::fs::write(mcp_config_path, merged_json).await;
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Resolves an installed template directory by direct ID, sanitized ID, or `install_receipt.json` lookup.
+async fn resolve_installed_template_folder(
+    installed_dir: &FsPath,
+    id: &str,
+    safe_id: &str,
+) -> Result<crate::utils::security::SafePath, AppError> {
+    if let Ok(p) = crate::utils::security::validate_path(installed_dir, id) {
+        if p.exists() && p.is_dir() {
+            return Ok(p);
+        }
+    }
+
+    let safe_p = crate::utils::security::validate_path(installed_dir, safe_id)
+        .map_err(|e| AppError::BadRequest(format!("Invalid template ID: {e}")))?;
+    if safe_p.exists() && safe_p.is_dir() {
+        return Ok(safe_p);
+    }
+
+    if installed_dir.exists() {
+        if let Ok(mut entries) = tokio::fs::read_dir(installed_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let entry_name = entry.file_name().to_string_lossy().to_string();
+                if let Ok(valid_entry) =
+                    crate::utils::security::validate_path(installed_dir, &entry_name)
+                {
+                    let receipt_file = valid_entry.join("install_receipt.json");
+                    if receipt_file.exists() {
+                        if let Ok(c) = tokio::fs::read_to_string(&receipt_file).await {
+                            if let Ok(r) = serde_json::from_str::<InstallReceipt>(&c) {
+                                if r.template_id == id || r.template_path == id {
+                                    return Ok(valid_entry);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(AppError::NotFound(format!(
+        "Template '{id}' is not currently installed."
+    )))
+}
+
+// ─── Handlers ───────────────────────────────────────────────────────────────
+
+#[axum::debug_handler]
+#[tracing::instrument(skip(state, payload), name = "templates::install")]
+pub async fn install_template(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<InstallTemplateRequest>,
+) -> Result<axum::response::Response, AppError> {
+    // 🛡️ [Security Hardening] Validate repository URL and relative path
+    let repo_url = validate_install_request(&payload)?;
 
     let git_cmd = match state.resources.git_path.as_ref() {
         Some(path) => path.clone(),
@@ -216,33 +506,8 @@ pub async fn install_template(
 
     let _ = tokio::fs::create_dir_all(&temp_dir).await;
 
-    // 1. Clone repository using the boot-resolved git command
-    let mut cmd = tokio::process::Command::new(&git_cmd);
-    cmd.kill_on_drop(true);
-    let status = match cmd
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg(repo_url)
-        .arg(&temp_dir)
-        .status()
-        .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-            return Err(AppError::InternalServerError(format!(
-                "Failed to execute git: {e}"
-            )));
-        }
-    };
-
-    if !status.success() {
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-        return Err(AppError::InternalServerError(
-            "Failed to clone template repository".to_string(),
-        ));
-    }
+    // 1. Clone repository using the boot-resolved git command with timeout & non-interactive env
+    clone_template_repository(&git_cmd, &repo_url, &temp_dir).await?;
 
     // 2. Identify template source directory
     let source_path = match crate::utils::security::validate_path(&temp_dir, &payload.path) {
@@ -261,7 +526,7 @@ pub async fn install_template(
     }
 
     // Resolve template identifier and target directory
-    let safe_name = crate::utils::security::sanitize_id(&payload.path.replace("/", "_"));
+    let safe_name = crate::utils::security::sanitize_id(&payload.path.replace('/', "_"));
     let mut template_id = safe_name.clone();
     let swarm_json_src = source_path.as_path().join("swarm.json");
     if swarm_json_src.exists() {
@@ -292,101 +557,16 @@ pub async fn install_template(
     };
     let mut errors: Vec<String> = Vec::new();
 
-    // ─── 3. Preflight Agent Profile Validation (Item #3) ───────────────────
-    // The upstream compatibility matrix requires: "invalid profiles abort before writes".
-    // We deserialize all agent profiles in memory first. Any failure aborts install cleanly.
+    // 3. Preflight Agent & Skill Validation (Items #3 and #10)
     let agents_src = source_path.as_path().join("agents");
-    let agents_dest = PathBuf::from("data/swarm_config/agents");
-    let mut validated_agents: Vec<(String, PathBuf, crate::agent::types::EngineAgent)> = Vec::new();
+    let validated_agents = preflight_validate_agents(&agents_src, &temp_dir).await?;
 
-    if agents_src.exists() {
-        if let Ok(mut entries) = tokio::fs::read_dir(&agents_src).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let file_path = entry.path();
-                if file_path.is_file()
-                    && file_path.extension().and_then(|s| s.to_str()) == Some("json")
-                {
-                    let filename = entry.file_name().to_string_lossy().to_string();
-                    let content = match tokio::fs::read_to_string(&file_path).await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-                            return Err(AppError::BadRequest(format!(
-                                "Failed to read agent file '{filename}': {e}"
-                            )));
-                        }
-                    };
-
-                    match serde_json::from_str::<crate::agent::types::EngineAgent>(&content) {
-                        Ok(agent) => {
-                            validated_agents.push((filename, file_path, agent));
-                        }
-                        Err(e) => {
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-                            return Err(AppError::BadRequest(format!(
-                                "Agent profile preflight validation failed for '{filename}': {e}"
-                            )));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ─── 4. Preflight Skills & connector-lock.json Hash Verification (Item #10) ──
     let skills_src = source_path.as_path().join("skills");
-    let skills_dest = PathBuf::from("execution");
-    let lock_path = source_path.as_path().join("connector-lock.json");
-    let lock_val: Option<serde_json::Value> = if lock_path.exists() {
-        tokio::fs::read_to_string(&lock_path)
-            .await
-            .ok()
-            .and_then(|c| serde_json::from_str(&c).ok())
-    } else {
-        None
-    };
+    let validated_skills =
+        preflight_validate_skills(&skills_src, source_path.as_path(), &temp_dir).await?;
 
-    let mut validated_skills: Vec<(String, PathBuf)> = Vec::new();
-    if skills_src.exists() {
-        if let Ok(mut entries) = tokio::fs::read_dir(&skills_src).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                let ext = path
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-                if ext == "json" || ext == "py" || ext == "js" || ext == "ts" {
-                    let filename = entry.file_name().to_string_lossy().to_string();
-                    let bytes = match tokio::fs::read(&path).await {
-                        Ok(b) => b,
-                        Err(e) => {
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-                            return Err(AppError::BadRequest(format!(
-                                "Failed to read skill file '{filename}': {e}"
-                            )));
-                        }
-                    };
-
-                    if let Some(ref lock) = lock_val {
-                        if let Some(expected_hash) = parse_expected_skill_hash(lock, &filename) {
-                            if !verify_skill_sha256(&bytes, &expected_hash) {
-                                let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-                                return Err(AppError::BadRequest(format!(
-                                    "Integrity check failed for skill '{filename}': SHA-256 hash mismatch with connector-lock.json"
-                                )));
-                            }
-                        }
-                    }
-                    validated_skills.push((filename, path));
-                }
-            }
-        }
-    }
-
-    // ─── 5. Atomic Component Persistence (Post-Validation) ──────────────────
-
-    // 5.1 Persist validated agents
+    // 5. Atomic Component Persistence (Post-Validation)
+    let agents_dest = PathBuf::from("data/swarm_config/agents");
     let mut agents_installed = 0;
     if !validated_agents.is_empty() {
         let _ = tokio::fs::create_dir_all(&agents_dest).await;
@@ -395,11 +575,13 @@ pub async fn install_template(
             let dest_file = agents_dest.join(&filename);
             let _ = tokio::fs::copy(&src_path, &dest_file).await;
 
-            // Persist to database and active registry
             match crate::agent::persistence::create_agent_db(&state.resources.pool, &agent).await {
                 Ok(version) => agent.version = version,
                 Err(error) => {
-                    errors.push(format!("Agent '{}' was not installed: {}", agent.identity.id, error));
+                    errors.push(format!(
+                        "Agent '{}' was not installed: {}",
+                        agent.identity.id, error
+                    ));
                     continue;
                 }
             }
@@ -414,32 +596,18 @@ pub async fn install_template(
         }
     }
 
-    // 5.2 Persist swarm.json
     if swarm_json_src.exists() {
         let _ = tokio::fs::copy(&swarm_json_src, dest_folder.join("swarm.json")).await;
     }
 
-    // 5.3 Copy workflows to directives
-    let workflows_src = source_path.as_path().join("workflows");
-    let workflows_dest = PathBuf::from("directives");
-    let mut workflows_copied = 0;
-    if workflows_src.exists() {
-        let _ = tokio::fs::create_dir_all(&workflows_dest).await;
-        if let Ok(mut entries) = tokio::fs::read_dir(&workflows_src).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("md") {
-                    let filename = entry.file_name().to_string_lossy().to_string();
-                    let dest_file = workflows_dest.join(&filename);
-                    if tokio::fs::copy(entry.path(), dest_file).await.is_ok() {
-                        receipt.workflows.push(filename);
-                        workflows_copied += 1;
-                    }
-                }
-            }
-        }
-    }
+    let workflows_copied = copy_markdown_assets(
+        &source_path.as_path().join("workflows"),
+        FsPath::new("directives"),
+        &mut receipt.workflows,
+    )
+    .await;
 
-    // 5.4 Copy validated skills to execution
+    let skills_dest = PathBuf::from("execution");
     let mut skills_copied = 0;
     if !validated_skills.is_empty() {
         let _ = tokio::fs::create_dir_all(&skills_dest).await;
@@ -452,104 +620,31 @@ pub async fn install_template(
         }
     }
 
-    // 5.5 Merge MCP configuration (Items #2 and #7: fail closed & reject '__')
-    let mcps_src = source_path.as_path().join("mcps.json");
-    let mut mcp_merged = false;
-    if mcps_src.exists() {
-        if let Ok(content) = tokio::fs::read_to_string(&mcps_src).await {
-            if let Ok(incoming_config) =
-                serde_json::from_str::<crate::agent::mcp::McpConfig>(&content)
-            {
-                let mcp_config_path = PathBuf::from(".agent/mcp_config.json");
-                let mut current_config = if mcp_config_path.exists() {
-                    tokio::fs::read_to_string(&mcp_config_path)
-                        .await
-                        .ok()
-                        .and_then(|c| serde_json::from_str::<crate::agent::mcp::McpConfig>(&c).ok())
-                        .unwrap_or_else(|| crate::agent::mcp::McpConfig {
-                            mcp_servers: std::collections::HashMap::new(),
-                        })
-                } else {
-                    crate::agent::mcp::McpConfig {
-                        mcp_servers: std::collections::HashMap::new(),
-                    }
-                };
+    let mcp_merged = merge_template_mcp_config(
+        &source_path.as_path().join("mcps.json"),
+        &mut receipt,
+        &mut errors,
+    )
+    .await;
 
-                let mut servers_added = 0;
-                for (name, config) in incoming_config.mcp_servers {
-                    // Rule #7: Server names cannot contain double underscores `__`
-                    if name.contains("__") {
-                        tracing::warn!(
-                            "MCP server name '{}' contains '__' — rejected per specification",
-                            name
-                        );
-                        errors.push(format!("MCP server '{}' rejected: contains '__'", name));
-                        continue;
-                    }
-
-                    // Rule #2: Existing server-name collisions fail closed
-                    if current_config.mcp_servers.contains_key(&name) {
-                        tracing::warn!(
-                            "MCP server collision for '{}' — skipping (fail closed)",
-                            name
-                        );
-                        errors.push(format!(
-                            "MCP server '{}' collision: existing server preserved",
-                            name
-                        ));
-                        continue;
-                    }
-
-                    current_config.mcp_servers.insert(name.clone(), config);
-                    receipt.mcp_servers.push(name);
-                    servers_added += 1;
-                }
-
-                if servers_added > 0 {
-                    if let Ok(merged_json) = serde_json::to_string_pretty(&current_config) {
-                        let _ = tokio::fs::create_dir_all(".agent").await;
-                        let _ = tokio::fs::write(mcp_config_path, merged_json).await;
-                        mcp_merged = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // 5.6 Copy knowledge assets for OKF/IKS vector ingestion
-    let knowledge_dir_src = source_path.as_path().join("knowledge");
-    let knowledge_dest = PathBuf::from("data/knowledge");
-    let mut knowledge_copied = 0;
-    if knowledge_dir_src.exists() {
-        let _ = tokio::fs::create_dir_all(&knowledge_dest).await;
-        if let Ok(mut entries) = tokio::fs::read_dir(&knowledge_dir_src).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("md") {
-                    let filename = entry.file_name().to_string_lossy().to_string();
-                    let dest_file = knowledge_dest.join(&filename);
-                    if tokio::fs::copy(entry.path(), dest_file).await.is_ok() {
-                        receipt.knowledge.push(filename);
-                        knowledge_copied += 1;
-                    }
-                }
-            }
-        }
-    }
+    let knowledge_copied = copy_markdown_assets(
+        &source_path.as_path().join("knowledge"),
+        FsPath::new("data/knowledge"),
+        &mut receipt.knowledge,
+    )
+    .await;
 
     let knowledge_json_src = source_path.as_path().join("knowledge.json");
     if knowledge_json_src.exists() {
         let _ = tokio::fs::copy(&knowledge_json_src, dest_folder.join("knowledge.json")).await;
     }
 
-    // 5.7 Write installation receipt (Item #11)
     if let Ok(receipt_str) = serde_json::to_string_pretty(&receipt) {
         let _ = tokio::fs::write(dest_folder.join("install_receipt.json"), receipt_str).await;
     }
 
-    // 6. Cleanup clone workspace
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 
-    // Structured install receipt (Items #1 and #8)
     let response = InstallTemplateResponse {
         status: if errors.is_empty() {
             "success".to_string()
@@ -612,34 +707,27 @@ pub async fn list_installed_templates() -> Result<axum::response::Response, AppE
                             None
                         };
 
-                        if let Some(ref mut s) = summary {
-                            if swarm_file.exists() {
-                                if let Ok(sc) = tokio::fs::read_to_string(&swarm_file).await {
-                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&sc)
-                                    {
-                                        s.name = val
-                                            .get("name")
-                                            .and_then(|v| v.as_str())
-                                            .map(String::from);
-                                    }
-                                }
-                            }
-                            results.push(s.clone());
+                        let swarm_name = if swarm_file.exists() {
+                            tokio::fs::read_to_string(&swarm_file)
+                                .await
+                                .ok()
+                                .and_then(|sc| serde_json::from_str::<serde_json::Value>(&sc).ok())
+                                .and_then(|val| {
+                                    val.get("name").and_then(|v| v.as_str()).map(String::from)
+                                })
+                        } else {
+                            None
+                        };
+
+                        if let Some(mut s) = summary.take() {
+                            s.name = swarm_name;
+                            results.push(s);
                         } else if swarm_file.exists() {
                             let folder_name = entry.file_name().to_string_lossy().to_string();
-                            let mut name = None;
-                            if let Ok(sc) = tokio::fs::read_to_string(&swarm_file).await {
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&sc) {
-                                    name = val
-                                        .get("name")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from);
-                                }
-                            }
                             results.push(InstalledTemplateSummary {
                                 id: folder_name.clone(),
                                 path: folder_name,
-                                name,
+                                name: swarm_name,
                                 installed_at: None,
                                 agents_count: 0,
                                 workflows_count: 0,
@@ -659,6 +747,14 @@ pub async fn list_installed_templates() -> Result<axum::response::Response, AppE
 
 // ─── Uninstall Template (Item #11) ──────────────────────────────────────────
 
+async fn remove_validated_files(base_dir: &FsPath, filenames: &[String]) {
+    for name in filenames {
+        if let Ok(p) = crate::utils::security::validate_path(base_dir, name) {
+            let _ = tokio::fs::remove_file(&p).await;
+        }
+    }
+}
+
 #[axum::debug_handler]
 #[tracing::instrument(skip(state), name = "templates::uninstall")]
 pub async fn uninstall_template(
@@ -668,81 +764,22 @@ pub async fn uninstall_template(
     // 🛡️ [M56: Path Containment] Reject traversal sequences and separators in template ID
     if id.contains('/') || id.contains('\\') || id.contains("..") || id.contains('\0') {
         return Err(AppError::BadRequest(
-            "Invalid template ID: Path separators and traversal sequences are prohibited.".to_string(),
+            "Invalid template ID: Path separators and traversal sequences are prohibited."
+                .to_string(),
         ));
     }
 
     let installed_dir = PathBuf::from("data/swarm_config/installed");
-    let safe_id = crate::utils::security::sanitize_id(&id.replace("/", "_"));
-
-    // Identify target installation folder with strict path containment
-    let target_folder = if let Ok(p) = crate::utils::security::validate_path(&installed_dir, &id) {
-        if p.exists() && p.is_dir() {
-            Some(p)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let target_folder = match target_folder {
-        Some(p) => p,
-        None => {
-            let safe_p = crate::utils::security::validate_path(&installed_dir, &safe_id)
-                .map_err(|e| AppError::BadRequest(format!("Invalid template ID: {e}")))?;
-            if safe_p.exists() && safe_p.is_dir() {
-                safe_p
-            } else {
-                let mut found = None;
-                if installed_dir.exists() {
-                    if let Ok(mut entries) = tokio::fs::read_dir(&installed_dir).await {
-                        while let Ok(Some(entry)) = entries.next_entry().await {
-                            let entry_name = entry.file_name().to_string_lossy().to_string();
-                            if let Ok(valid_entry) =
-                                crate::utils::security::validate_path(&installed_dir, &entry_name)
-                            {
-                                let receipt_file = valid_entry.join("install_receipt.json");
-                                if receipt_file.exists() {
-                                    if let Ok(c) = tokio::fs::read_to_string(&receipt_file).await {
-                                        if let Ok(r) = serde_json::from_str::<InstallReceipt>(&c) {
-                                            if r.template_id == id || r.template_path == id {
-                                                found = Some(valid_entry);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                match found {
-                    Some(f) => f,
-                    None => {
-                        return Err(AppError::NotFound(format!(
-                            "Template '{id}' is not currently installed."
-                        )));
-                    }
-                }
-            }
-        }
-    };
+    let safe_id = crate::utils::security::sanitize_id(&id.replace('/', "_"));
+    let target_folder = resolve_installed_template_folder(&installed_dir, &id, &safe_id).await?;
 
     // Clean up installed assets using install_receipt.json
     let receipt_path = target_folder.join("install_receipt.json");
     if receipt_path.exists() {
         if let Ok(c) = tokio::fs::read_to_string(&receipt_path).await {
             if let Ok(receipt) = serde_json::from_str::<InstallReceipt>(&c) {
-                // 1. Delete agent files and cascade database records
-                for agent_file in &receipt.agents {
-                    if let Ok(p) = crate::utils::security::validate_path(
-                        &PathBuf::from("data/swarm_config/agents"),
-                        agent_file,
-                    ) {
-                        let _ = tokio::fs::remove_file(&p).await;
-                    }
-                }
+                remove_validated_files(FsPath::new("data/swarm_config/agents"), &receipt.agents)
+                    .await;
                 for agent_id in &receipt.agent_ids {
                     let _lifecycle = state.registry.lock_agent(agent_id).await;
                     crate::agent::persistence::delete_agent_cascade(
@@ -750,41 +787,16 @@ pub async fn uninstall_template(
                         agent_id,
                     )
                     .await?;
-                    if let Some((_, runner)) = state.comms.active_runners.remove(agent_id) { runner.abort(); }
+                    if let Some((_, runner)) = state.comms.active_runners.remove(agent_id) {
+                        runner.abort();
+                    }
                     state.registry.agents.remove(agent_id);
                 }
 
-                // 2. Delete copied workflows
-                for wf in &receipt.workflows {
-                    if let Ok(p) = crate::utils::security::validate_path(
-                        &PathBuf::from("directives"),
-                        wf,
-                    ) {
-                        let _ = tokio::fs::remove_file(&p).await;
-                    }
-                }
+                remove_validated_files(FsPath::new("directives"), &receipt.workflows).await;
+                remove_validated_files(FsPath::new("execution"), &receipt.skills).await;
+                remove_validated_files(FsPath::new("data/knowledge"), &receipt.knowledge).await;
 
-                // 3. Delete copied skills
-                for sk in &receipt.skills {
-                    if let Ok(p) = crate::utils::security::validate_path(
-                        &PathBuf::from("execution"),
-                        sk,
-                    ) {
-                        let _ = tokio::fs::remove_file(&p).await;
-                    }
-                }
-
-                // 4. Delete copied knowledge
-                for kn in &receipt.knowledge {
-                    if let Ok(p) = crate::utils::security::validate_path(
-                        &PathBuf::from("data/knowledge"),
-                        kn,
-                    ) {
-                        let _ = tokio::fs::remove_file(&p).await;
-                    }
-                }
-
-                // 5. Clean MCP configuration
                 if !receipt.mcp_servers.is_empty() {
                     let mcp_path = PathBuf::from(".agent/mcp_config.json");
                     if mcp_path.exists() {
@@ -811,15 +823,15 @@ pub async fn uninstall_template(
         }
     }
 
-    // Finally remove installation directory after verifying path containment
     let target_name = target_folder
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
-    let validated_target =
-        crate::utils::security::validate_path(&installed_dir, &target_name)
-            .map_err(|e| AppError::BadRequest(format!("Security error validating target folder: {e}")))?;
+    let validated_target = crate::utils::security::validate_path(&installed_dir, &target_name)
+        .map_err(|e| {
+            AppError::BadRequest(format!("Security error validating target folder: {e}"))
+        })?;
     let _ = tokio::fs::remove_dir_all(&validated_target).await;
 
     Ok((
@@ -838,7 +850,6 @@ pub async fn uninstall_template(
 #[axum::debug_handler]
 #[tracing::instrument(name = "templates::get_catalog")]
 pub async fn get_template_catalog() -> Result<axum::response::Response, AppError> {
-    // 1. Check in-memory cache
     {
         let cache_lock = CATALOG_CACHE.read().await;
         if let Some(ref cache) = *cache_lock {
@@ -848,7 +859,6 @@ pub async fn get_template_catalog() -> Result<axum::response::Response, AppError
         }
     }
 
-    // 2. Fetch fresh registry from upstream using official TadpoleOS User-Agent
     let client = reqwest::Client::builder()
         .user_agent("TadpoleOS/1.1.59")
         .timeout(Duration::from_secs(10))
@@ -872,7 +882,6 @@ pub async fn get_template_catalog() -> Result<axum::response::Response, AppError
             Ok((StatusCode::OK, Json(data)).into_response())
         }
         Ok(resp) => {
-            // Check stale cache fallback
             let cache_lock = CATALOG_CACHE.read().await;
             if let Some(ref cache) = *cache_lock {
                 tracing::warn!(
@@ -887,7 +896,6 @@ pub async fn get_template_catalog() -> Result<axum::response::Response, AppError
             )))
         }
         Err(e) => {
-            // Check stale cache fallback
             let cache_lock = CATALOG_CACHE.read().await;
             if let Some(ref cache) = *cache_lock {
                 tracing::warn!("Upstream registry network error: {e}, using stale cache");
@@ -956,14 +964,12 @@ mod tests {
         hasher.update(sample_bytes);
         let valid_hash = hex::encode(hasher.finalize());
 
-        // Test hash verification
         assert!(verify_skill_sha256(sample_bytes, &valid_hash));
         assert!(!verify_skill_sha256(
             sample_bytes,
             "0000000000000000000000000000000000000000000000000000000000000000"
         ));
 
-        // Test parsing formats from connector-lock.json
         let lock_json = serde_json::json!({
             "skills": {
                 "scrape.py": format!("sha256:{valid_hash}")
@@ -987,14 +993,12 @@ mod tests {
 
     #[test]
     fn test_mcp_validation_rules() {
-        // Rule #7: '__' rejection
         let invalid_mcp_name = "custom__server";
         assert!(invalid_mcp_name.contains("__"));
 
         let valid_mcp_name = "custom-server";
         assert!(!valid_mcp_name.contains("__"));
 
-        // Rule #2: Collision fail-closed
         let mut local_servers = std::collections::HashMap::new();
         local_servers.insert("brave-search".to_string(), ());
 
