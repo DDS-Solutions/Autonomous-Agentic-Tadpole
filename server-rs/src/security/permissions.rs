@@ -92,7 +92,12 @@ impl PermissionPolicy {
         self.cache.clear();
         for (name, agent_id, mode_str) in rows {
             if let Ok(mode) = mode_str.parse::<PermissionMode>() {
-                let key = agent_id.map(|id| format!("{}:{}", id, name)).unwrap_or(name);
+                let normalized_agent = agent_id
+                    .map(|id| id.trim().to_string())
+                    .filter(|id| !id.is_empty());
+                let key = normalized_agent
+                    .map(|id| format!("{}:{}", id, name))
+                    .unwrap_or(name);
                 self.cache.insert(key, mode);
             }
         }
@@ -120,12 +125,13 @@ impl PermissionPolicy {
         }
 
         // 3. Try DB (Agent-Specific)
-        let res: Result<(String,), sqlx::Error> =
-            sqlx::query_as("SELECT mode FROM permission_policies WHERE tool_name = ? AND agent_id = ?")
-                .bind(tool_name)
-                .bind(agent_id)
-                .fetch_one(&self.pool)
-                .await;
+        let res: Result<(String,), sqlx::Error> = sqlx::query_as(
+            "SELECT mode FROM permission_policies WHERE tool_name = ? AND agent_id = ?",
+        )
+        .bind(tool_name)
+        .bind(agent_id)
+        .fetch_one(&self.pool)
+        .await;
 
         if let Ok((mode_str,)) = res {
             if let Ok(mode) = mode_str.parse::<PermissionMode>() {
@@ -134,12 +140,13 @@ impl PermissionPolicy {
             }
         }
 
-        // 4. Try DB (Global)
-        let res: Result<(String,), sqlx::Error> =
-            sqlx::query_as("SELECT mode FROM permission_policies WHERE tool_name = ? AND agent_id IS NULL")
-                .bind(tool_name)
-                .fetch_one(&self.pool)
-                .await;
+        // 4. Try DB (Global: agent_id IS NULL or empty sentinel)
+        let res: Result<(String,), sqlx::Error> = sqlx::query_as(
+            "SELECT mode FROM permission_policies WHERE tool_name = ? AND (agent_id IS NULL OR agent_id = '') ORDER BY id DESC LIMIT 1",
+        )
+        .bind(tool_name)
+        .fetch_one(&self.pool)
+        .await;
 
         if let Ok((mode_str,)) = res {
             if let Ok(mode) = mode_str.parse::<PermissionMode>() {
@@ -159,19 +166,25 @@ impl PermissionPolicy {
     }
 
     /// Manually sets the permission mode for a tool (used for tests and admin updates).
+    /// Deduplicates global policies where `agent_id IS NULL` or `''` prior to insertion.
     #[allow(dead_code)]
     pub async fn set_mode(&self, tool_name: &str, mode: PermissionMode) {
-        let _ = sqlx::query("INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, NULL, ?) ON CONFLICT(tool_name, agent_id) DO UPDATE SET mode = excluded.mode")
-            .bind(tool_name)
-            .bind(mode.to_string())
-            .execute(&self.pool)
-            .await;
+        let mode_str = mode.to_string().to_ascii_lowercase();
+        let _ = sqlx::query(
+            "DELETE FROM permission_policies WHERE tool_name = ? AND (agent_id IS NULL OR agent_id = '')",
+        )
+        .bind(tool_name)
+        .execute(&self.pool)
+        .await;
+        let _ = sqlx::query(
+            "INSERT INTO permission_policies (tool_name, agent_id, mode) VALUES (?, NULL, ?)",
+        )
+        .bind(tool_name)
+        .bind(mode_str)
+        .execute(&self.pool)
+        .await;
         self.cache.insert(tool_name.to_string(), mode);
     }
 }
-
-
-
-
 
 // Metadata: [permissions]

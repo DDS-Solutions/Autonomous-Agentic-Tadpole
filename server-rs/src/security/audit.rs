@@ -127,7 +127,10 @@ impl MerkleAuditTrail {
                 if let Err(e) = std::fs::write(&key_path, &hex_str) {
                     tracing::warn!("⚠️ [SecurityAudit] Failed to write sovereign audit key: {}", e);
                 } else {
-                    tracing::info!("🔑 [SecurityAudit] Generated persistent sovereign Ed25519 key at {}", key_path.display());
+                    tracing::info!(
+                        "🔑 [SecurityAudit] Generated persistent sovereign Ed25519 key at {}",
+                        key_path.display()
+                    );
                 }
                 std::env::set_var("AUDIT_PRIVATE_KEY", &hex_str);
                 Some(key)
@@ -150,15 +153,50 @@ impl MerkleAuditTrail {
         }
     }
 
+    /// Returns whether Ed25519 digital signing is active on this audit trail instance.
+    pub fn is_signing_enabled(&self) -> bool {
+        self.signing_key.is_some() && self.verifying_key.is_some()
+    }
+
+    /// Creates an audit trail backed by the provided `SqlitePool` and ensures the schema exists.
+    pub async fn with_pool(pool: SqlitePool) -> Self {
+        let _ = sqlx::query(
+            "CREATE TABLE IF NOT EXISTS audit_trail (
+                id TEXT PRIMARY KEY NOT NULL,
+                agent_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                params TEXT NOT NULL,
+                prev_hash TEXT NOT NULL,
+                current_hash TEXT NOT NULL,
+                timestamp DATETIME NOT NULL,
+                signature TEXT,
+                mission_id TEXT,
+                user_id TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )",
+        )
+        .execute(&pool)
+        .await;
+
+        Self {
+            pool,
+            signing_key: None,
+            verifying_key: None,
+            last_hash: Arc::new(RwLock::new(None)),
+            record_mutex: Arc::new(Mutex::new(())),
+        }
+    }
+
     /// Reconciles the in-memory `last_hash` cache with the current DB head.
     ///
     /// Call this on startup to guard against stale cache in multi-instance
     /// deployments or after a DB restore (IV-01).
     pub async fn verify_head(&self) -> anyhow::Result<()> {
-        let row: Option<(String,)> =
-            sqlx::query_as("SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1")
-                .fetch_optional(&self.pool)
-                .await?;
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
         let db_head = row.map(|r| r.0).unwrap_or_else(|| "0".repeat(64));
         *self.last_hash.write() = Some(db_head);
         tracing::info!("🔐 [Audit] Head cache reconciled with DB.");
@@ -180,32 +218,7 @@ impl MerkleAuditTrail {
     /// Creates a mock audit trail and initializes the schema (Asynchronous).
     pub async fn mock_async() -> Self {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::query(
-            "CREATE TABLE audit_trail (
-                id TEXT PRIMARY KEY NOT NULL,
-                agent_id TEXT NOT NULL,
-                action TEXT NOT NULL,
-                params TEXT NOT NULL,
-                prev_hash TEXT NOT NULL,
-                current_hash TEXT NOT NULL,
-                timestamp DATETIME NOT NULL,
-                signature TEXT,
-                mission_id TEXT,
-                user_id TEXT,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        Self {
-            pool,
-            signing_key: None,
-            verifying_key: None,
-            last_hash: Arc::new(RwLock::new(None)),
-            record_mutex: Arc::new(Mutex::new(())),
-        }
+        Self::with_pool(pool).await
     }
 
     /// Records a new action in the audit trail.
@@ -249,7 +262,7 @@ impl MerkleAuditTrail {
 
         sqlx::query(
             "INSERT INTO audit_trail (id, agent_id, mission_id, user_id, action, params, prev_hash, current_hash, timestamp, signature) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )
         .bind(&id)
         .bind(agent_id)
@@ -288,10 +301,11 @@ impl MerkleAuditTrail {
             return Ok(h.clone());
         }
 
-        let row: Option<(String,)> =
-            sqlx::query_as("SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1")
-                .fetch_optional(&self.pool)
-                .await?;
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT current_hash FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
 
         let hash = row.map(|r| r.0).unwrap_or_else(|| "0".repeat(64));
         *self.last_hash.write() = Some(hash.clone());
@@ -315,12 +329,17 @@ impl MerkleAuditTrail {
     /// Verifies only the last `n` entries (Partial Scan).
     /// Highly useful for high-speed periodic health checks.
     #[tracing::instrument(skip(self), fields(n = n), name = "security::audit_verify_n")]
-    pub async fn verify_last_n(&self, n: usize, public_key_hex: Option<&str>) -> Result<(usize, usize)> {
-        let entries: Vec<AuditEntry> =
-            sqlx::query_as("SELECT * FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT ?")
-                .bind(n as i64)
-                .fetch_all(&self.pool)
-                .await?;
+    pub async fn verify_last_n(
+        &self,
+        n: usize,
+        public_key_hex: Option<&str>,
+    ) -> Result<(usize, usize)> {
+        let entries: Vec<AuditEntry> = sqlx::query_as(
+            "SELECT * FROM audit_trail ORDER BY timestamp DESC, rowid DESC LIMIT ?",
+        )
+        .bind(n as i64)
+        .fetch_all(&self.pool)
+        .await?;
 
         // Reverse to ascending for sequential re-hashing
         let mut entries = entries;
@@ -458,7 +477,6 @@ impl MerkleAuditTrail {
                 .await?;
         Ok(entry)
     }
-
 }
 
 #[cfg(test)]
@@ -636,9 +654,5 @@ mod tests {
         assert!(!audit.verify_record(&stripped_entry));
     }
 }
-
-
-
-
 
 // Metadata: [audit]

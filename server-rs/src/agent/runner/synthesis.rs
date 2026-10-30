@@ -6,29 +6,26 @@
 //! shared swarm findings.
 //!
 //! ### 🛡️ Hardened Protocols
-//! - **Context Pruning** (PERF-07): Precise TPM-aware truncation using `tiktoken`.
+//! - **Context Pruning** (PERF-07): Precise context-window-aware prompt truncation.
 //! - **Hierarchy Enforcement** (SEC-06): Specialized access control (e.g., blocking
 //!   Agent 1 from direct filesystem tools to enforce delegation).
 //! - **Identity Masking**: Specialists are anonymized in cluster directories for
 //!   high-level managers (OVERLORD/ORCHESTRATOR) to prioritize strategic delegation.
-//! - **Safe Mode** (SEC-05): Disables all mutation tools based on mission metadata.
+//! - **Safe Mode** (SEC-05): Strict capability allow-list for read-only tools.
+//! - **Untrusted Data Fencing**: Fences external/peer inputs with secret redaction.
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Telemetry Link**: Search `[synthesis]` in tracing logs.
-//! - **Failure Path**: Tokenizer failure, mission context retrieval fault (match fallback),
+//! - **Failure Path**: Tokenizer failure, mission context retrieval fault,
 //!   or identity lookup cache miss.
 //! - **Trace Scope**: `server-rs::agent::runner::synthesis`
 //!
 
 // Modules/Crates
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
 
 // External Crates
-// External Crates
-use lru::LruCache;
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 
 // Internal Modules
 use super::{AgentRunner, RunContext};
@@ -49,27 +46,41 @@ pub fn count_tokens_fast(text: &str) -> usize {
     }
 }
 
-/// Static lookup table for token compression to eliminate per-turn HashMap allocations
-static SYSTEM_TOKEN_REPLACEMENTS: &[(&str, &str)] = &[
-    ("STATUS: ok", "*ok*"),
-    ("STATUS: success", "*ok*"),
-    ("STATUS: failed", "*err*"),
-    ("STATUS: error", "*err*"),
-    ("RESULT:", "RES:"),
-    ("FINDING:", "FND:"),
-    ("SOURCE:", "SRC:"),
-    ("Location:", "LOC:"),
-    ("Primary Goal:", "GOAL:"),
-    ("Weather for zip", "WTR|"),
-    ("degrees", "deg"),
-    ("temperature", "temp"),
-    ("Finding for mission", "FND|"),
-    ("Strategic Intent:", "INT:"),
-    ("Mission Complete", "*done*"),
-    ("Task in progress", "*busy*"),
+/// Static regex lookup table for token compression with strict word-boundary protection.
+/// Ensures words like "okay" or identifiers like "temperature_sensor" are never corrupted.
+static SYSTEM_TOKEN_REGEXES: Lazy<Vec<(regex::Regex, &'static str)>> = Lazy::new(|| {
+    vec![
+        (regex::Regex::new(r"\bSTATUS:\s*ok\b").unwrap(), "*ok*"),
+        (regex::Regex::new(r"\bSTATUS:\s*success\b").unwrap(), "*ok*"),
+        (regex::Regex::new(r"\bSTATUS:\s*failed\b").unwrap(), "*err*"),
+        (regex::Regex::new(r"\bSTATUS:\s*error\b").unwrap(), "*err*"),
+        (regex::Regex::new(r"\bRESULT:").unwrap(), "RES:"),
+        (regex::Regex::new(r"\bFINDING:").unwrap(), "FND:"),
+        (regex::Regex::new(r"\bSOURCE:").unwrap(), "SRC:"),
+        (regex::Regex::new(r"\bLocation:").unwrap(), "LOC:"),
+        (regex::Regex::new(r"\bPrimary Goal:").unwrap(), "GOAL:"),
+        (regex::Regex::new(r"\bWeather for zip\b").unwrap(), "WTR|"),
+        (regex::Regex::new(r"\bFinding for mission\b").unwrap(), "FND|"),
+        (regex::Regex::new(r"\bStrategic Intent:").unwrap(), "INT:"),
+        (regex::Regex::new(r"\bMission Complete\b").unwrap(), "*done*"),
+        (regex::Regex::new(r"\bTask in progress\b").unwrap(), "*busy*"),
+    ]
+});
+
+/// Fail-closed allow-list of read-only tools permitted in Safe Mode.
+pub const SAFE_MODE_ALLOWED_TOOLS: &[&str] = &[
+    "read_file",
+    "list_files",
+    "grep_search",
+    "get_current_time",
+    "inspect_health",
+    "set_confidence",
+    "list_graph",
+    "get_symbol",
 ];
 
-/// Formats a list of items under a token budget, appending `truncated_notice` if the budget is exceeded.
+/// Formats a list of items under a token budget, guaranteeing that the appended
+/// `truncated_notice` never causes the total output to exceed `token_budget`.
 fn format_budgeted_items<T, F>(
     items: Vec<T>,
     token_budget: usize,
@@ -80,6 +91,11 @@ fn format_budgeted_items<T, F>(
 where
     F: Fn(&T) -> String,
 {
+    if items.is_empty() {
+        return empty_fallback.to_string();
+    }
+
+    let notice_tokens = count_tokens_fast(truncated_notice);
     let mut lines = Vec::new();
     let mut used_tokens = 0;
     let mut truncated = false;
@@ -87,7 +103,11 @@ where
     for item in &items {
         let line = format_item(item);
         let tokens = count_tokens_fast(&line);
-        if used_tokens + tokens <= token_budget {
+        if used_tokens + tokens + notice_tokens <= token_budget {
+            lines.push(line);
+            used_tokens += tokens;
+        } else if used_tokens + tokens <= token_budget && lines.len() + 1 == items.len() {
+            // Exactly last item and fits within total budget without notice
             lines.push(line);
             used_tokens += tokens;
         } else {
@@ -97,11 +117,21 @@ where
     }
 
     if truncated {
+        // Ensure adding the notice does not push total over budget
+        while !lines.is_empty() && used_tokens + notice_tokens > token_budget {
+            if let Some(removed) = lines.pop() {
+                used_tokens = used_tokens.saturating_sub(count_tokens_fast(&removed));
+            }
+        }
         lines.push(truncated_notice.to_string());
     }
 
     if lines.is_empty() {
-        empty_fallback.to_string()
+        if truncated {
+            truncated_notice.to_string()
+        } else {
+            empty_fallback.to_string()
+        }
     } else {
         lines.join("\n")
     }
@@ -115,20 +145,19 @@ fn is_orchestrator_identity(agent_id: &str) -> bool {
 
 impl AgentRunner {
     /// 📟 [Token Compression]
-    /// Shortens system tokens by replacing common verbose status strings
-    /// with concise aliases to increase context fidelity without reallocating maps.
+    /// Shortens system tokens using strict boundary regexes to prevent identifier corruption.
     fn shorten_system_tokens(&self, text: &str) -> String {
         let mut encoded = text.to_string();
-        for (pattern, replacement) in SYSTEM_TOKEN_REPLACEMENTS {
-            if encoded.contains(pattern) {
-                encoded = encoded.replace(pattern, replacement);
+        for (re, replacement) in SYSTEM_TOKEN_REGEXES.iter() {
+            if re.is_match(&encoded) {
+                encoded = re.replace_all(&encoded, *replacement).to_string();
             }
         }
         encoded
     }
 
     /// Evaluates whether a registered tool is authorized and eligible for the given `RunContext`.
-    /// Shared between `generate_tool_directory_display` and `build_tools` to guarantee 1:1 parity.
+    /// Shared between `format_tool_directory_display` and `build_tools` to guarantee 1:1 parity.
     pub(crate) fn is_registered_tool_eligible(&self, ctx: &RunContext, tool_name: &str) -> bool {
         if !self
             .state
@@ -157,13 +186,8 @@ impl AgentRunner {
             return false;
         }
 
-        // Safe Mode Restrictions (Mutation Block)
-        if ctx.safe_mode
-            && matches!(
-                tool_name,
-                "write_file" | "delete_file" | "execute_shell" | "synthesize_micro_script"
-            )
-        {
+        // Safe Mode Restrictions (Fail-Closed Deny-by-Default Capability Allow-List)
+        if ctx.safe_mode && !SAFE_MODE_ALLOWED_TOOLS.contains(&tool_name) {
             return false;
         }
 
@@ -179,6 +203,29 @@ impl AgentRunner {
         true
     }
 
+    /// Encloses untrusted or external input in security boundaries with secret redaction
+    fn fence_untrusted_data(&self, role: &str, content: &str) -> String {
+        let redacted = self.state.security.secret_redactor.redact(content);
+        format!(
+            "<<<UNTRUSTED_EXTERNAL_DATA role=\"{}\">>>\n{}\n<<<END_UNTRUSTED_EXTERNAL_DATA>>>",
+            role, redacted
+        )
+    }
+
+    /// Computes the usable prompt token budget derived from model context window
+    pub(crate) fn compute_prompt_token_budget(&self, ctx: &RunContext) -> usize {
+        if let Some(cw) = ctx.model_config.context_window {
+            let max_resp = ctx.model_config.max_tokens.unwrap_or(4096) as usize;
+            (cw as usize).saturating_sub(max_resp).max(20)
+        } else if let Some(tpm) = ctx.model_config.tpm {
+            tpm as usize
+        } else {
+            let cw = 32_768;
+            let max_resp = ctx.model_config.max_tokens.unwrap_or(4096) as usize;
+            cw - max_resp
+        }
+    }
+
     // ─────────────────────────────────────────────────────────
     //  SYSTEM PROMPT CONSTRUCTION (MODULARIZED)
     // ─────────────────────────────────────────────────────────
@@ -186,9 +233,12 @@ impl AgentRunner {
     /// Constructs the final system prompt for an agent run.
     ///
     /// Synthesizes identity, long-term memory, repo-map, and shared swarm
-    /// findings into a single prompt, emphasizing modularity and robust error handling.
+    /// findings into a single prompt, bounded by the model's context window.
     pub async fn build_system_prompt(&self, ctx: &RunContext, payload_message: &str) -> String {
+        let prompt_budget = self.compute_prompt_token_budget(ctx);
+
         let (
+            tools_def,
             (directives_str, reviews_str),
             global_intel_res,
             identity_res,
@@ -196,7 +246,8 @@ impl AgentRunner {
             mission_ctx_res,
             (_repo_summary, repo_map_text),
         ) = tokio::join!(
-            self.fetch_external_context(ctx),
+            self.build_tools(ctx),
+            self.fetch_external_context(ctx, prompt_budget),
             self.gather_global_intelligence(ctx, payload_message),
             self.fetch_identity(),
             self.fetch_memory(),
@@ -269,6 +320,8 @@ impl AgentRunner {
         let sovereign_manifest =
             crate::system::manifest::SovereignStateManifest::generate(&self.state).await;
 
+        let tool_directory_str = Self::format_tool_directory_display(&tools_def.function_declarations);
+
         let vars = self.assemble_prompt_variables(
             ctx,
             &directives_str,
@@ -281,16 +334,51 @@ impl AgentRunner {
             failure_context,
             sovereign_manifest,
             global_intel_str,
+            tool_directory_str,
         );
 
-        let system_prompt = self
+        let mut system_prompt = self
             .state
             .resources
             .renderer
             .render(self.state.resources.renderer.default_system_template(), &vars);
 
-        #[cfg(debug_assertions)]
-        {
+        // Enforce total rendered prompt context budget
+        let total_tokens = count_tokens_fast(&system_prompt);
+        if total_tokens > prompt_budget {
+            tracing::warn!(
+                "⚠️ [Prompt Synthesis] Rendered prompt ({} tokens) exceeds budget ({} tokens). Applying emergency compaction.",
+                total_tokens,
+                prompt_budget
+            );
+            let mut compact_vars = vars;
+            compact_vars.insert(
+                "repo_map",
+                "⚠️ Repo Map omitted due to context window limits. Use 'list_files' for discovery.".to_string(),
+            );
+            compact_vars.insert(
+                "history",
+                "⚠️ History summarized due to context window limits.".to_string(),
+            );
+            compact_vars.insert(
+                "swarm_context",
+                self.safe_truncate(&pruned_swarm_context_str, 400),
+            );
+
+            system_prompt = self
+                .state
+                .resources
+                .renderer
+                .render(self.state.resources.renderer.default_system_template(), &compact_vars);
+
+            let compact_tokens = count_tokens_fast(&system_prompt);
+            if compact_tokens > prompt_budget {
+                system_prompt = self.safe_truncate(&system_prompt, prompt_budget * 4);
+            }
+        }
+
+        // Optional debug prompt logging strictly gated by environment variable with secret redaction
+        if std::env::var_os("TADPOLE_DUMP_PROMPTS").is_some() {
             let _ = std::fs::create_dir_all(".tmp");
             let safe_mission = ctx
                 .mission_id
@@ -298,11 +386,11 @@ impl AgentRunner {
             let safe_agent = ctx
                 .agent_id
                 .replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
+            let redacted_prompt = self.state.security.secret_redactor.redact(&system_prompt);
             let _ = std::fs::write(
                 format!(".tmp/prompt_{}_{}.txt", safe_mission, safe_agent),
-                &system_prompt,
+                &redacted_prompt,
             );
-            let _ = std::fs::write(".tmp/system_prompt.txt", &system_prompt);
         }
 
         tracing::info!(
@@ -317,7 +405,7 @@ impl AgentRunner {
     // PRIVATE HELPER METHODS FOR MODULARITY
     // =============================================================
 
-    async fn fetch_external_context(&self, ctx: &RunContext) -> (String, String) {
+    async fn fetch_external_context(&self, ctx: &RunContext, budget: usize) -> (String, String) {
         let (pending_directives, pending_reviews) = tokio::join!(
             super::swarm_persistence::get_pending_directives(
                 &self.state.resources.pool,
@@ -329,29 +417,54 @@ impl AgentRunner {
             ),
         );
 
-        let tpm = ctx.model_config.tpm.unwrap_or(100_000);
-        let dynamic_budget = ((tpm as f32) * 0.01).clamp(500.0, 4000.0) as usize;
+        let dynamic_budget = (budget / 10).clamp(500, 4000);
 
-        let directives_str = format_budgeted_items(
-            pending_directives.unwrap_or_default(),
-            dynamic_budget,
-            "No active directives. Proceed with mission objectives.",
-            "- ... [Remaining directives truncated due to token budget]",
-            |d| format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction),
-        );
+        let directives_str = match pending_directives {
+            Ok(directives) => {
+                let formatted = format_budgeted_items(
+                    directives,
+                    dynamic_budget,
+                    "No active directives. Proceed with mission objectives.",
+                    "- ... [Remaining directives truncated due to token budget]",
+                    |d| format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction),
+                );
+                if formatted.starts_with("No active directives") {
+                    formatted
+                } else {
+                    self.fence_untrusted_data("directives", &formatted)
+                }
+            }
+            Err(e) => {
+                tracing::warn!("⚠️ [External Context] Directives fetch failed: {}", e);
+                "⚠️ DIRECTIVES_UNAVAILABLE: Database error while querying pending directives. Maintain operational caution.".to_string()
+            }
+        };
 
-        let reviews_str = format_budgeted_items(
-            pending_reviews.unwrap_or_default(),
-            dynamic_budget,
-            "No peer reviews pending. Maintain standard quality protocols.",
-            "- ... [Remaining peer reviews truncated due to token budget]",
-            |r| {
-                format!(
-                    "- [Review Task] Target: {}. Requirement: {}",
-                    r.requester_id, r.content_to_review
-                )
-            },
-        );
+        let reviews_str = match pending_reviews {
+            Ok(reviews) => {
+                let formatted = format_budgeted_items(
+                    reviews,
+                    dynamic_budget,
+                    "No peer reviews pending. Maintain standard quality protocols.",
+                    "- ... [Remaining peer reviews truncated due to token budget]",
+                    |r| {
+                        format!(
+                            "- [Review Task] Target: {}. Requirement: {}",
+                            r.requester_id, r.content_to_review
+                        )
+                    },
+                );
+                if formatted.starts_with("No peer reviews pending") {
+                    formatted
+                } else {
+                    self.fence_untrusted_data("peer_reviews", &formatted)
+                }
+            }
+            Err(e) => {
+                tracing::warn!("⚠️ [External Context] Peer reviews fetch failed: {}", e);
+                "⚠️ REVIEWS_UNAVAILABLE: Database error while querying pending peer reviews.".to_string()
+            }
+        };
 
         (directives_str, reviews_str)
     }
@@ -378,52 +491,15 @@ impl AgentRunner {
         Ok(context)
     }
 
-    /// Generates a human-readable text directory of all available and allowed tools
-    /// with their descriptions and parameter JSON schemas.
-    fn generate_tool_directory_display(&self, ctx: &RunContext) -> String {
-        let tool_list = self.state.registry.tool_registry.list_tools();
-        let mut allowed_tools = Vec::new();
-
-        for tool in tool_list {
-            if self.is_registered_tool_eligible(ctx, &tool.name) {
-                allowed_tools.push(tool);
-            }
-        }
-
-        // Include indexed dynamic skills and Layer-3 execution scripts
-        let snapshot = self.state.registry.skills.snapshot();
-        for entry in snapshot.skills.iter() {
-            let skill = entry.value();
-            if self.state.resources.acl.is_tool_allowed(
-                &ctx.agent_id,
-                &ctx.role,
-                ctx.authority_level,
-                &skill.name,
-            ) {
-                let has_skill = ctx.skills.is_empty()
-                    || ctx.skills.contains(&skill.name)
-                    || ctx.skills.iter().any(|s| {
-                        s == "all" || s == "execution" || s == "operations"
-                    });
-                if has_skill && !allowed_tools.iter().any(|t| t.name == skill.name) {
-                    allowed_tools.push(
-                        crate::agent::runner::tools::trait_tool::ToolDefinitionData {
-                            name: skill.name.clone(),
-                            description: skill.description.clone(),
-                            parameters: skill.schema.clone(),
-                        },
-                    );
-                }
-            }
-        }
-
-        if allowed_tools.is_empty() {
+    /// Formats a list of function declarations into human-readable directory text.
+    pub(crate) fn format_tool_directory_display(tools: &[FunctionDeclaration]) -> String {
+        if tools.is_empty() {
             return "No tools are currently authorized or available for your security clearance/skills."
                 .to_string();
         }
 
         let mut display = String::new();
-        for tool in allowed_tools {
+        for tool in tools {
             display.push_str(&format!(
                 "- Tool Name: {}\n  Description: {}\n  Parameters Schema: {}\n\n",
                 tool.name,
@@ -432,6 +508,14 @@ impl AgentRunner {
             ));
         }
         display
+    }
+
+    /// Generates a human-readable text directory of all available and allowed tools
+    /// with 1:1 parity with the dynamically synthesized manifest.
+    #[allow(dead_code)]
+    pub(crate) async fn generate_tool_directory_display(&self, ctx: &RunContext) -> String {
+        let tools = self.build_tools(ctx).await;
+        Self::format_tool_directory_display(&tools.function_declarations)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -448,10 +532,11 @@ impl AgentRunner {
         failure_context: Vec<String>,
         sovereign_manifest: String,
         global_intel: String,
+        tool_directory_str: String,
     ) -> HashMap<&'static str, String> {
         let hierarchy_label = self.get_hierarchy_label(ctx.authority_level);
         let compressed_swarm_context = self.shorten_system_tokens(pruned_swarm_context_str);
-        
+
         let priority_str = if ctx.agent_id == AGENT_CEO {
             "STRATEGIC OVERLORD: You are the final authority. Your priority is mission synthesis and high-level routing."
         } else if ctx.agent_id == AGENT_ALPHA {
@@ -460,9 +545,14 @@ impl AgentRunner {
             "TACTICAL SPECIALIST: Your priority is focused task completion."
         };
 
-        let compressed_findings = self.shorten_system_tokens(ctx.recent_findings.as_deref().unwrap_or("No recent findings inherited."));
-        let swarm_str = self.generate_swarm_protocols(ctx);
+        let raw_findings = ctx.recent_findings.as_deref().unwrap_or("No recent findings inherited.");
+        let compressed_findings = if raw_findings == "No recent findings inherited." {
+            raw_findings.to_string()
+        } else {
+            self.fence_untrusted_data("peer_findings", &self.shorten_system_tokens(raw_findings))
+        };
 
+        let swarm_str = self.generate_swarm_protocols(ctx);
         let skill_fragments_str = self.generate_skill_fragments(ctx);
         let workflow_fragments_str = self.generate_workflow_fragments(ctx);
 
@@ -476,14 +566,18 @@ impl AgentRunner {
         ) = self.generate_structural_components(ctx);
 
         let working_memory_str = serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string());
-        
+
         let mut final_safe_mode_prefix = safe_mode_prefix.clone();
         if count_tokens_fast(&working_memory_str) > 1000 {
             final_safe_mode_prefix.push_str("\n⚠️ SYSTEM WARNING: Your working_memory JSON block is large (>1,000 tokens). Please clean up or summarize old keys in your working memory to avoid prompt bloat.\n");
         }
 
         if criticality_score > 0 {
-            let warning = format!("\n\n!!! SYSTEM WARNING: Critical services failed (Score: {}/3) !!!\n- {}\n!!! ACTION: Acknowledge these failures in your internal reasoning and attempt to recover missing context manually if possible. !!!\n", criticality_score, failure_context.join("\n- "));
+            let warning = format!(
+                "\n\n!!! SYSTEM WARNING: Critical services failed (Score: {}/3) !!!\n- {}\n!!! ACTION: Acknowledge these failures in your internal reasoning and attempt to recover missing context manually if possible. !!!\n",
+                criticality_score,
+                failure_context.join("\n- ")
+            );
             final_safe_mode_prefix.push_str(&warning);
         }
 
@@ -499,28 +593,26 @@ impl AgentRunner {
         vars.insert("global_intelligence", global_intel);
         vars.insert("priority", priority_str.to_string());
         vars.insert("personality", ctx.model_config.system_prompt.as_deref().unwrap_or("No specific personality instructions.").to_string());
-        vars.insert("skill_fragments", skill_fragments_str.to_string());
-        vars.insert("workflow_fragments", workflow_fragments_str.to_string());
-        vars.insert("swarm_context", compressed_swarm_context.to_string());
-        vars.insert("breadcrumbs", self.generate_breadcrumbs_display(ctx).to_string());
-        vars.insert("findings", compressed_findings.to_string());
+        vars.insert("skill_fragments", skill_fragments_str);
+        vars.insert("workflow_fragments", workflow_fragments_str);
+        vars.insert("swarm_context", compressed_swarm_context);
+        vars.insert("breadcrumbs", self.generate_breadcrumbs_display(ctx));
+        vars.insert("findings", compressed_findings);
         vars.insert("primary_goal", ctx.primary_goal.clone().unwrap_or_else(|| "See mission scope for details.".to_string()));
-        vars.insert("cluster_directory", cluster_directory.to_string());
-        vars.insert("lineage", lineage_display.to_string());
-        vars.insert("skills", format!("{:?}", ctx.skills));
-        vars.insert("workflows", format!("{:?}", ctx.workflows));
-        vars.insert("filesystem_bias", filesystem_bias_mandate.to_string());
-        vars.insert("swarm_protocols", swarm_str.to_string());
+        vars.insert("cluster_directory", cluster_directory);
+        vars.insert("lineage", lineage_display);
+        vars.insert("skills", if ctx.skills.is_empty() { "None".to_string() } else { ctx.skills.join(", ") });
+        vars.insert("workflows", if ctx.workflows.is_empty() { "None".to_string() } else { ctx.workflows.join(", ") });
+        vars.insert("filesystem_bias", filesystem_bias_mandate);
+        vars.insert("swarm_protocols", swarm_str);
         vars.insert("repo_map", pruned_repo_map.to_string());
         vars.insert("identity", identity.to_string());
         vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
         vars.insert("working_memory", working_memory_str);
-        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")).to_string());
+        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")));
         vars.insert("safe_mode_prefix", final_safe_mode_prefix);
-        vars.insert("tool_mode_prefix", tool_mode_prefix.to_string());
-        
-        let tool_directory_str = self.generate_tool_directory_display(ctx);
+        vars.insert("tool_mode_prefix", tool_mode_prefix);
         vars.insert("tool_directory", tool_directory_str);
 
         let local_now = chrono::Local::now();
@@ -536,9 +628,6 @@ impl AgentRunner {
     }
 
     /// Generates the Repo Map summary, applying pruning logic if needed.
-    /// Generates a real-time repository map for the agent's context.
-    /// This includes a structural overview of the codebase and a list of
-    /// recently accessed files to provide localized context for modifications.
     async fn generate_repo_map(&self, ctx: &RunContext, payload_message: &str) -> (crate::utils::graph::GraphSummary, String) {
         let graph: std::sync::Arc<parking_lot::RwLock<crate::utils::graph::CodeGraph>> =
             self.state.resources.get_code_graph().await;
@@ -559,13 +648,7 @@ impl AgentRunner {
         }
     }
 
-    /// Handles context pruning based on token count (TPM Protection).
-    /// Prunes the assembled context to fit within the model's TPM (Tokens Per Minute) limit.
-    /// Prioritizes identity and recent history, truncating the repo map and
-    /// shared findings if necessary to ensure prompt validity.
-    /// Handles semantic context pruning based on weights.
-    /// Prioritizes high-weight resources (Identity, Mission) and prunes
-    /// low-weight ones (Repo Map, Memory) when approaching TPM limits.
+    /// Handles context pruning based on token count and context window limits.
     fn prune_context(
         &self,
         ctx: &RunContext,
@@ -574,8 +657,8 @@ impl AgentRunner {
         repo_map: &str,
         swarm_context_str: &str,
     ) -> (String, String) {
-        let tpm_limit = ctx.model_config.tpm.unwrap_or(100_000);
-        let safe_limit = (tpm_limit as f32 * 0.85) as usize;
+        let budget_limit = self.compute_prompt_token_budget(ctx);
+        let safe_limit = (budget_limit as f32 * 0.85) as usize;
 
         let mut pruned_repo_map = if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama {
             "⚠️ Repo Map pruned to optimize local model performance. Use 'list_files' for discovery.".to_string()
@@ -592,7 +675,11 @@ impl AgentRunner {
         let mut current_tokens = get_total_tokens(&pruned_repo_map, &pruned_swarm_context);
 
         if current_tokens > safe_limit {
-            tracing::warn!("⚠️ [Pruning] Context size {} exceeds safe limit {}. Applying semantic weights.", current_tokens, safe_limit);
+            tracing::warn!(
+                "⚠️ [Pruning] Context size {} exceeds safe limit {}. Applying semantic weights.",
+                current_tokens,
+                safe_limit
+            );
 
             // 1. Prune Repo Map (Weight: 0.8)
             if current_tokens > safe_limit {
@@ -613,8 +700,11 @@ impl AgentRunner {
             }
 
             // 3. Emergency Truncation
-            if current_tokens > tpm_limit as usize {
-                tracing::error!("🚨 [Pruning] EMERGENCY: Context still exceeds TPM limit ({}). Hard truncating swarm context.", current_tokens);
+            if current_tokens > budget_limit {
+                tracing::error!(
+                    "🚨 [Pruning] EMERGENCY: Context still exceeds budget limit ({}). Hard truncating swarm context.",
+                    current_tokens
+                );
                 pruned_swarm_context = self.safe_truncate(&pruned_swarm_context, 500);
             }
         }
@@ -631,9 +721,7 @@ impl AgentRunner {
         }
     }
 
-    /// Collects the necessary meta-info (protocols, etc.) for the prompt.
-    /// Compiles the structural components of the prompt, including identity,
-    /// long-term memory, working context, and the current repository map.
+    /// Compiles the structural components of the prompt.
     fn generate_structural_components(
         &self,
         ctx: &RunContext,
@@ -646,7 +734,8 @@ impl AgentRunner {
         String, // Tool Mode Prefix
     ) {
         let cluster_specialists = self.state.registry.list_active_specialists();
-        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id);
+        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id)
+            || ctx.authority_level >= crate::agent::types::RoleAuthorityLevel::Management;
 
         // --- Cluster Directory ---
         let cluster_directory = if cluster_specialists.is_empty() {
@@ -703,9 +792,7 @@ impl AgentRunner {
 
         // --- Prefixes ---
         let safe_mode_prefix = if ctx.safe_mode {
-            "🔒 TOOLS FORBIDDEN: You are in CONVERSATIONAL MODE. Do NOT attempt to call any tools. \
-             Respond directly with natural language. You are chatting with the Overlord (user). \
-             Be helpful, insightful, and conversational. No tool calls, no mission completion — just talk.\n".to_string()
+            "🔒 SAFE MODE ACTIVE: You are in READ-ONLY / INSPECTION mode. State mutations (file writing/deletion, shell execution) and agent recruitment are strictly disabled. You may query repository status, inspect files, or converse with the user.\n".to_string()
         } else {
             "🔓 SECURITY: ACTIVE. You have authority to propose and execute mutations within your workspace scope.\n".to_string()
         };
@@ -717,7 +804,7 @@ impl AgentRunner {
             "⚙️ TOOL REFINEMENT: Standard operation.".to_string()
         };
 
-        // ### 🧠 Resilience: Model-Specific Protocol Injection for Ollama/Local Models
+        // Model-Specific Protocol Injection for Local Models
         if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama 
            || ctx.model_config.provider == crate::agent::types::ModelProvider::Local {
             tool_mode_prefix.push_str("\n\n=== 🛠️ LOCAL MODEL TOOL CALLING MANDATE ===\n\
@@ -759,7 +846,8 @@ impl AgentRunner {
     /// Generates the shared Swarm Protocol rules using the ACL Service.
     fn generate_swarm_protocols(&self, ctx: &RunContext) -> String {
         let mut swarm_protocols = self.state.resources.acl.get_role_protocols(&ctx.agent_id, &ctx.role, ctx.authority_level);
-        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id);
+        let is_orchestrator = is_orchestrator_identity(&ctx.agent_id)
+            || ctx.authority_level >= crate::agent::types::RoleAuthorityLevel::Management;
 
         // Add shared/invariant swarm rules
         if !is_orchestrator && !ctx.safe_mode {
@@ -773,7 +861,13 @@ impl AgentRunner {
         swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission to execute a tool or recruit an agent. The system handles approval flows and budget gates automatically. YOUR SILENCE OR ASKING FOR PERMISSION IS A PROTOCOL VIOLATION AND MISSION FAILURE.".to_string());
         swarm_protocols.push("RECRUITMENT PRECISION: When recruiting, you MUST use the exact ID from the 'CLUSTER DIRECTORY' (e.g. '2', '12', '99'). Do NOT use generic names like 'Security Specialist' if a specific ID exists.".to_string());
         swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_file, list_files, grep_search) over general knowledge for repository queries.".to_string());
-        swarm_protocols.push(format!("RECURSION PROTECTION: You are FORBIDDEN from recruiting agents in your LINEAGE ({:?}) or YOURSELF ({}).", ctx.lineage, ctx.agent_id));
+        
+        let lineage_repr = if ctx.lineage.is_empty() {
+            "None (Root)".to_string()
+        } else {
+            ctx.lineage.join(" -> ")
+        };
+        swarm_protocols.push(format!("RECURSION PROTECTION: You are FORBIDDEN from recruiting agents in your LINEAGE ({}) or YOURSELF ({}).", lineage_repr, ctx.agent_id));
 
         swarm_protocols
             .iter()
@@ -798,6 +892,11 @@ impl AgentRunner {
         // Core skills that are ALWAYS loaded
         let core_skills = ["systematic-debugging", "plan-writing", "verify-changes", "context-compression"];
         if core_skills.contains(&skill_name) {
+            return true;
+        }
+
+        // Small skill sets (< 6) are loaded in full to ensure all tools have operational instructions
+        if ctx.skills.len() <= 6 {
             return true;
         }
 
@@ -849,31 +948,42 @@ impl AgentRunner {
         true
     }
 
-    /// Generates instructions for skills.
+    /// Generates bounded instructions for skills.
     fn generate_skill_fragments(&self, ctx: &RunContext) -> String {
         let mut skill_fragments = Vec::new();
         let snapshot = self.state.registry.skills.snapshot();
+        let mut tokens_accum = 0;
+        const MAX_SKILL_TOKENS: usize = 2000;
+
         for skill_name in &ctx.skills {
             if !self.should_load_skill(skill_name, ctx) {
                 tracing::debug!("🧠 [ContextManager] Skipped loading skill '{}' (progressive disclosure)", skill_name);
                 continue;
             }
             if let Some(skill) = snapshot.skills.get(skill_name) {
+                let mut fragment = String::new();
                 if let Some(instructions) = &skill.full_instructions {
-                    skill_fragments.push(format!(
-                        "### [{}] Full Instructions:\n{}",
+                    fragment.push_str(&format!(
+                        "### [{}] Full Instructions:\n{}\n",
                         skill.name, instructions
                     ));
                 }
                 if let Some(constraints) = &skill.negative_constraints {
                     if !constraints.is_empty() {
-                        skill_fragments.push(format!(
-                            "### [{}] Negative Constraints (PROHIBITED USES):\n- {}",
+                        fragment.push_str(&format!(
+                            "### [{}] Negative Constraints (PROHIBITED USES):\n- {}\n",
                             skill.name,
                             constraints.join("\n- ")
                         ));
                     }
                 }
+                let fragment_tokens = count_tokens_fast(&fragment);
+                if tokens_accum + fragment_tokens > MAX_SKILL_TOKENS {
+                    skill_fragments.push("- ... [Additional skill instructions truncated due to token budget]".to_string());
+                    break;
+                }
+                tokens_accum += fragment_tokens;
+                skill_fragments.push(fragment);
             }
         }
         if skill_fragments.is_empty() {
@@ -886,16 +996,26 @@ impl AgentRunner {
         }
     }
 
-    /// Generates instructions for workflows.
+    /// Generates bounded instructions for workflows.
     fn generate_workflow_fragments(&self, ctx: &RunContext) -> String {
         let mut workflow_fragments = Vec::new();
         let snapshot = self.state.registry.skills.snapshot();
+        let mut tokens_accum = 0;
+        const MAX_WORKFLOW_TOKENS: usize = 1500;
+
         for workflow_name in &ctx.workflows {
             if let Some(wf) = snapshot.workflows.get(workflow_name) {
-                workflow_fragments.push(format!(
+                let fragment = format!(
                     "### [{}] Workflow Procedure:\n{}",
                     wf.name, wf.content
-                ));
+                );
+                let fragment_tokens = count_tokens_fast(&fragment);
+                if tokens_accum + fragment_tokens > MAX_WORKFLOW_TOKENS {
+                    workflow_fragments.push("- ... [Additional workflow procedures truncated due to token budget]".to_string());
+                    break;
+                }
+                tokens_accum += fragment_tokens;
+                workflow_fragments.push(fragment);
             }
         }
         if workflow_fragments.is_empty() {
@@ -908,11 +1028,10 @@ impl AgentRunner {
         }
     }
 
-    /// 🧠 [AAAK Intelligence Loop] (Phase 4)
-    /// Performs a semantic search across the global swarm intelligence vault
-    /// to retrieve relevant findings from past missions.
+    /// Performs semantic search across the global swarm intelligence vault,
+    /// bounding the query logging to debug level and fencing untrusted vault contents.
     async fn gather_global_intelligence(&self, ctx: &RunContext, query: &str) -> Result<String, crate::error::AppError> {
-        tracing::info!("🧠 [Global Intelligence] Agent {} querying global vault for: {}", ctx.agent_id, query);
+        tracing::debug!("🧠 [Global Intelligence] Agent {} querying global vault (len: {})", ctx.agent_id, query.len());
         
         #[cfg(feature = "vector-memory")]
         {
@@ -924,58 +1043,27 @@ impl AgentRunner {
             let http_client = self.state.resources.http_client.clone();
 
             let vec = crate::agent::memory::get_gemini_embedding(&http_client, &api_key, query).await?;
-            #[cfg(feature = "vector-memory")]
-            {
-                let vault = self.state.resources.get_swarm_vault().await?;
-                let results = vault.search_knowledge(vec, 3).await?;
-                
-                if !results.is_empty() {
-                    return Ok(format!("Relevant global intelligence retrieved:\n- {}", results.join("\n- ")));
-                }
+            let vault = self.state.resources.get_swarm_vault().await?;
+            let results = vault.search_knowledge(vec, 3).await?;
+            
+            if !results.is_empty() {
+                let formatted = format!("Relevant global intelligence retrieved:\n- {}", results.join("\n- "));
+                return Ok(self.fence_untrusted_data("global_vault", &formatted));
             }
         }
 
         Ok("No relevant global intelligence found in the vault.".to_string())
     }
+
     /// Dynamically manifests tool definitions for the LLM provider.
     ///
-    /// Maps enabled skills and MCP tools into Gemini-compatible functions,
-    /// leveraging modular injectors for specialized capabilities.
-    /// Manifests the agent's toolbelt, enforcing hierarchy-based access control.
-    /// Injects core, filesystem, and advanced tools while programmatically
-    /// blocking restricted tools for specific identities (e.g., Agent 1 CEO).
+    /// Manifests the agent's toolbelt, enforcing hierarchy-based access control,
+    /// dynamic skills, and MCP tools with strict parameter isolation and zero cross-agent cache leaks.
     pub(crate) async fn build_tools(&self, ctx: &RunContext) -> ToolDefinition {
         if !ctx.model_config.supports_native_tools() {
             return ToolDefinition {
                 function_declarations: vec![],
             };
-        }
-
-        // Static cache for tool definitions, keyed by a combined hash of skills and safe_mode
-        static TOOL_CACHE: Lazy<Mutex<LruCache<String, ToolDefinition>>> =
-            Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(64).unwrap())));
-
-        let mut sorted_skills = ctx.skills.clone();
-        sorted_skills.sort();
-        let effective_agent_id = match ctx.agent_id.as_str() {
-            AGENT_CEO => AGENT_CEO,
-            AGENT_COO => AGENT_COO,
-            _ => "specialist",
-        };
-        let cache_key = format!(
-            "{}:{}:{}:{:?}:{}",
-            sorted_skills.join(","),
-            ctx.safe_mode,
-            effective_agent_id,
-            ctx.authority_level,
-            ctx.role
-        );
-
-        {
-            let mut cache = TOOL_CACHE.lock();
-            if let Some(cached) = cache.get(&cache_key) {
-                return cached.clone();
-            }
         }
 
         let mut function_declarations = Vec::new();
@@ -992,22 +1080,50 @@ impl AgentRunner {
             }
         }
 
-        // 2. Special Utility: Confidence Halting
-        function_declarations.push(FunctionDeclaration {
-            name: "set_confidence".to_string(),
-            description: "Signals your current confidence in the answer. If score >= act_threshold, reasoning halts early.".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "score": { "type": "number", "description": "Confidence score between 0.0 and 1.0." }
-                },
-                "required": ["score"]
-            }),
-        });
+        // 2. Dynamic Skills / Execution Scripts
+        let snapshot = self.state.registry.skills.snapshot();
+        for entry in snapshot.skills.iter() {
+            let skill = entry.value();
+            if self.state.resources.acl.is_tool_allowed(
+                &ctx.agent_id,
+                &ctx.role,
+                ctx.authority_level,
+                &skill.name,
+            ) {
+                let has_skill = ctx.skills.is_empty()
+                    || ctx.skills.contains(&skill.name)
+                    || ctx.skills.iter().any(|s| {
+                        s == "all" || s == "execution" || s == "operations"
+                    });
+                if has_skill && !function_declarations.iter().any(|t| t.name == skill.name) {
+                    if !ctx.safe_mode || SAFE_MODE_ALLOWED_TOOLS.contains(&skill.name.as_str()) {
+                        function_declarations.push(FunctionDeclaration {
+                            name: skill.name.clone(),
+                            description: skill.description.clone(),
+                            parameters: skill.schema.clone(),
+                        });
+                    }
+                }
+            }
+        }
 
-        // 4. Dynamic MCP Tools
+        // 3. Special Utility: Confidence Halting (Guarded to avoid duplicate declaration)
+        if !function_declarations.iter().any(|f| f.name == "set_confidence") {
+            function_declarations.push(FunctionDeclaration {
+                name: "set_confidence".to_string(),
+                description: "Signals your current confidence in the answer. If score >= act_threshold, reasoning halts early.".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "score": { "type": "number", "description": "Confidence score between 0.0 and 1.0." }
+                    },
+                    "required": ["score"]
+                }),
+            });
+        }
+
+        // 4. Dynamic MCP Tools (Strictly disabled in safe mode; enforced by namespace & ACL)
         if !ctx.safe_mode {
-            let snapshot = self.state.registry.skills.snapshot();
             let mcp_tools = self
                 .state
                 .registry
@@ -1016,11 +1132,11 @@ impl AgentRunner {
                 .await;
             for tool in mcp_tools {
                 if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
-                    // --- 🛡️ Strict Membership Filter (MCP) ---
-                    // Only include if explicitly in ctx.skills or if it's a structural MCP server tool
-                    let is_allowed = ctx.skills.contains(&tool.name) || tool.name.contains(":server");
+                    // Strict Membership Filter (MCP): Only explicit skill assignments or server:<name> prefix
+                    let is_allowed = ctx.skills.contains(&tool.name)
+                        || (tool.name.starts_with("server:") && ctx.skills.iter().any(|s| s == "mcp" || s == "all" || s == &tool.name));
                     
-                    if is_allowed {
+                    if is_allowed && !function_declarations.iter().any(|f| f.name == tool.name) {
                         function_declarations.push(FunctionDeclaration {
                             name: tool.name,
                             description: tool.description,
@@ -1031,15 +1147,11 @@ impl AgentRunner {
             }
         }
 
-        let final_definition = ToolDefinition {
+        ToolDefinition {
             function_declarations,
-        };
-
-        TOOL_CACHE.lock().put(cache_key, final_definition.clone());
-        final_definition
+        }
     }
 
-    // --- Tool registration functions refactored into data-driven registry ---
     /// Central check for filesystem interaction permissions.
     fn has_file_system_capability(&self, ctx: &RunContext) -> bool {
         ctx.skills.iter().any(|s| {
@@ -1074,6 +1186,12 @@ mod tests {
         assert!(encoded.contains("RES:"));
         assert!(encoded.contains("FND|"));
         assert!(!encoded.contains("STATUS: success"));
+
+        // Boundary checks: words like "okay" and identifiers like "temperature_sensor" must remain uncorrupted
+        let raw_boundary = "STATUS: okay and temperature_sensor = 25";
+        let encoded_boundary = runner.shorten_system_tokens(raw_boundary);
+        assert!(encoded_boundary.contains("STATUS: okay"), "Word boundary must protect 'okay'");
+        assert!(encoded_boundary.contains("temperature_sensor"), "Identifiers must not be corrupted");
     }
 
     #[tokio::test]
@@ -1148,8 +1266,6 @@ mod tests {
         let runner = AgentRunner::new(state);
         let mut ctx = RunContext::default();
         
-        // We set a budget that is exactly enough for identity and memory, but leaves NO room for repo_map
-        // Assume 1 character ≈ 1 token for simplicity in this mock test context if tiktoken is not used or mocked
         ctx.model_config = ModelConfig {
             tpm: Some(20), // Extremely tight
             ..Default::default()
@@ -1158,7 +1274,7 @@ mod tests {
         let identity = "Identity ".repeat(20); 
         let memory = "Memory ".repeat(20);     
         let repo_map = "RepoMap ".repeat(100);
-        let swarm_context = "Findings ".repeat(200); // 1800 chars, target_len will be 900 > 500
+        let swarm_context = "Findings ".repeat(200);
 
         let (pruned_map, pruned_swarm) = runner.prune_context(
             &ctx, &identity, &memory, &repo_map, &swarm_context
@@ -1176,9 +1292,8 @@ mod tests {
         let mut ctx = RunContext::default();
         ctx.agent_id = "observer-1".to_string();
         ctx.authority_level = crate::agent::types::RoleAuthorityLevel::Observer;
-        // Even if the observer is assigned a mutation skill, the ACL should block it
         ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
-        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
+        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
         
         let tools = runner.build_tools(&ctx).await;
         
@@ -1191,7 +1306,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_failure_context_injection() {
-        // We use a mock state where base_dir points to a non-existent path to trigger file read failures
         let (tx, _) = tokio::sync::broadcast::channel(1);
         let (etx, _) = tokio::sync::broadcast::channel(1);
         let (atx, _) = tokio::sync::broadcast::channel(1);
@@ -1203,7 +1317,6 @@ mod tests {
         let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(pool.clone()));
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(true);
 
-        // Manual assembly of AppState to ensure no files exist
         let state = Arc::new(AppState {
             start_time: chrono::Utc::now(),
             boot_gate: (boot_tx, boot_rx),
@@ -1230,7 +1343,7 @@ mod tests {
                 observed_max_depth: std::sync::atomic::AtomicU32::new(0),
             }),
             registry: Arc::new(crate::state::hubs::reg::RegistryHub {
-            lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
+                lifecycle_locks: crate::state::hubs::reg::lifecycle_locks(),
                 agents: dashmap::DashMap::new(),
                 providers: dashmap::DashMap::new(),
                 provider_health: DashMap::new(),
@@ -1309,7 +1422,6 @@ mod tests {
 
         let prompt = runner.build_system_prompt(&ctx, &payload.message).await;
 
-        // The prompt should contain the system alert about identity failure
         assert!(prompt.contains("SYSTEM WARNING"), "Prompt should contain system warning alert");
         assert!(prompt.contains("IDENTITY_FAILURE"), "Prompt should mention IDENTITY_FAILURE");
         assert!(prompt.contains("MEMORY_FAILURE"), "Prompt should mention MEMORY_FAILURE");
@@ -1345,10 +1457,62 @@ mod tests {
         assert!(is_orchestrator_identity(AGENT_CEO));
         assert!(!is_orchestrator_identity("specialist-42"));
     }
+
+    #[tokio::test]
+    async fn test_safe_mode_deny_by_default() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+        let mut ctx = RunContext::default();
+        ctx.agent_id = "specialist-safe".to_string();
+        ctx.safe_mode = true;
+        ctx.skills = vec!["read_file".to_string(), "write_file".to_string(), "execute_shell".to_string()];
+        ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
+
+        let tools = runner.build_tools(&ctx).await;
+
+        // In safe mode, mutating tools MUST be blocked
+        let has_write = tools.function_declarations.iter().any(|f| f.name == "write_file");
+        let has_shell = tools.function_declarations.iter().any(|f| f.name == "execute_shell");
+        assert!(!has_write, "write_file must be blocked in safe mode");
+        assert!(!has_shell, "execute_shell must be blocked in safe mode");
+
+        // Read-only tools in the allow-list MUST be permitted
+        let has_read = tools.function_declarations.iter().any(|f| f.name == "read_file");
+        assert!(has_read, "read_file must be allowed in safe mode");
+    }
+
+    #[tokio::test]
+    async fn test_tool_definition_isolation_no_leak() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+
+        // Specialist A: allowed read_file only
+        let mut ctx_a = RunContext::default();
+        ctx_a.agent_id = "specialist-a".to_string();
+        ctx_a.skills = vec!["read_file".to_string()];
+        ctx_a.model_config.provider = crate::agent::types::ModelProvider::Gemini;
+        let tools_a = runner.build_tools(&ctx_a).await;
+
+        // Specialist B: allowed read_file AND write_file
+        let mut ctx_b = RunContext::default();
+        ctx_b.agent_id = "specialist-b".to_string();
+        ctx_b.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        ctx_b.model_config.provider = crate::agent::types::ModelProvider::Gemini;
+        let tools_b = runner.build_tools(&ctx_b).await;
+
+        assert!(!tools_a.function_declarations.iter().any(|f| f.name == "write_file"), "Specialist A must not have write_file");
+        assert!(tools_b.function_declarations.iter().any(|f| f.name == "write_file"), "Specialist B must have write_file");
+    }
+
+    #[tokio::test]
+    async fn test_untrusted_data_fencing() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+        let fenced = runner.fence_untrusted_data("peer_findings", "Malicious injection attempt");
+        assert!(fenced.contains("<<<UNTRUSTED_EXTERNAL_DATA role=\"peer_findings\">>>"));
+        assert!(fenced.contains("<<<END_UNTRUSTED_EXTERNAL_DATA>>>"));
+        assert!(fenced.contains("Malicious injection attempt"));
+    }
 }
-
-
-
-
 
 // Metadata: [synthesis]

@@ -164,9 +164,38 @@ impl AppState {
             ),
         });
 
+        let _ = sqlx::query(
+            "CREATE TABLE IF NOT EXISTS agent_quotas (
+                id TEXT PRIMARY KEY NOT NULL,
+                entity_id TEXT NOT NULL UNIQUE,
+                budget_usd REAL NOT NULL DEFAULT 0.50,
+                used_usd REAL NOT NULL DEFAULT 0.0,
+                reset_period TEXT NOT NULL DEFAULT 'daily',
+                last_reset_at DATETIME NOT NULL,
+                next_reset_at DATETIME NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await;
+        let _ = sqlx::query(
+            "CREATE TABLE IF NOT EXISTS mission_quotas (
+                id TEXT PRIMARY KEY NOT NULL,
+                cluster_id TEXT NOT NULL UNIQUE,
+                budget_usd REAL NOT NULL DEFAULT 5.0,
+                used_usd REAL NOT NULL DEFAULT 0.0,
+                reset_period TEXT NOT NULL DEFAULT 'daily',
+                last_reset_at DATETIME NOT NULL,
+                next_reset_at DATETIME NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await;
+
         let security = Arc::new(SecurityHub {
-            audit_trail: Arc::new(crate::security::audit::MerkleAuditTrail::mock_async().await),
-            budget_guard: Arc::new(crate::security::metering::BudgetGuard::mock()),
+            audit_trail: Arc::new(
+                crate::security::audit::MerkleAuditTrail::with_pool(pool.clone()).await,
+            ),
+            budget_guard: Arc::new(crate::security::metering::BudgetGuard::new(pool.clone())),
             shell_scanner: Arc::new(crate::security::scanner::ShellScanner::mock()),
             secret_redactor,
             system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new())

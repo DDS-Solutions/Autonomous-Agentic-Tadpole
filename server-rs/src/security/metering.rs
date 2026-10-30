@@ -227,39 +227,108 @@ impl BudgetGuard {
         (100.0, total_used)
     }
 
-    /// Fetches all registered quotas.
+    /// Parses a nullable reset period string from SQLite safely without panicking on NULL.
+    pub fn parse_reset_period(raw: Option<&str>) -> ResetPeriod {
+        match raw.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+            Some("daily") => ResetPeriod::Daily,
+            Some("monthly") => ResetPeriod::Monthly,
+            Some("never") | None | Some("") => ResetPeriod::Never,
+            Some(other) => {
+                tracing::warn!(
+                    reset_period = %other,
+                    "Unknown quota reset_period encountered in database; defaulting to Never"
+                );
+                ResetPeriod::Never
+            }
+        }
+    }
+
+    fn decode_quota_timestamp(row: &sqlx::sqlite::SqliteRow, col: &str) -> Result<DateTime<Utc>> {
+        use sqlx::Row;
+        if let Ok(Some(dt)) = row.try_get::<Option<DateTime<Utc>>, _>(col) {
+            return Ok(dt);
+        }
+        if let Ok(Some(raw)) = row.try_get::<Option<String>, _>(col) {
+            let trimmed = raw.trim();
+            if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+                return Ok(dt.with_timezone(&Utc));
+            }
+            if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S") {
+                return Ok(naive.and_utc());
+            }
+        }
+        Ok(Utc::now())
+    }
+
+    /// Fetches all registered agent quotas, including in-memory buffered usage.
     #[allow(dead_code)]
     pub async fn get_all_quotas(&self) -> Result<Vec<Quota>> {
         let rows = sqlx::query(
-            "SELECT id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM agent_quotas ORDER BY entity_id ASC",
+            "SELECT id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM agent_quotas ORDER BY entity_id ASC LIMIT 1000",
         )
         .fetch_all(&self.pool)
         .await?;
 
-        let mut results = Vec::new();
+        let mut results = Vec::with_capacity(rows.len());
         for r in rows {
             use sqlx::Row;
-            let period_str: String = r.get("reset_period");
-            let period = match period_str.as_str() {
-                "daily" => ResetPeriod::Daily,
-                "monthly" => ResetPeriod::Monthly,
-                _ => ResetPeriod::Never,
-            };
+            let period_opt: Option<String> = r.try_get("reset_period")?;
+            let period = Self::parse_reset_period(period_opt.as_deref());
+            let entity_id: String = r.try_get("entity_id")?;
+            let db_used: f64 = r.try_get::<Option<f64>, _>("used_usd")?.unwrap_or(0.0);
+            let buffered = self.buffer.get(&entity_id).map(|v| *v.value()).unwrap_or(0.0);
 
             results.push(Quota {
-                id: r.get("id"),
-                entity_id: r.get("entity_id"),
-                budget_usd: r.get("budget_usd"),
-                used_usd: r.get("used_usd"),
+                id: r.try_get::<Option<String>, _>("id")?.unwrap_or_else(|| entity_id.clone()),
+                entity_id,
+                budget_usd: r.try_get::<Option<f64>, _>("budget_usd")?.unwrap_or(0.0),
+                used_usd: db_used + buffered,
                 reset_period: period,
-                last_reset_at: r.get("last_reset_at"),
-                next_reset_at: r.get("next_reset_at"),
+                last_reset_at: Self::decode_quota_timestamp(&r, "last_reset_at")?,
+                next_reset_at: Self::decode_quota_timestamp(&r, "next_reset_at")?,
             });
         }
         Ok(results)
     }
 
-    /// Updates an entity's quota.
+    /// Fetches all registered mission quotas from the authoritative `BudgetGuard` store,
+    /// including any debounced in-memory `mission_buffer` usage.
+    pub async fn get_all_mission_quotas(&self) -> Result<Vec<Quota>> {
+        let rows = sqlx::query(
+            "SELECT id, cluster_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at FROM mission_quotas ORDER BY cluster_id ASC LIMIT 1000",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for r in rows {
+            use sqlx::Row;
+            let period_opt: Option<String> = r.try_get("reset_period")?;
+            let period = Self::parse_reset_period(period_opt.as_deref());
+            let cluster_id: String = r.try_get("cluster_id")?;
+            let db_used: f64 = r.try_get::<Option<f64>, _>("used_usd")?.unwrap_or(0.0);
+            let buffered = self
+                .mission_buffer
+                .get(&cluster_id)
+                .map(|v| *v.value())
+                .unwrap_or(0.0);
+
+            results.push(Quota {
+                id: r
+                    .try_get::<Option<String>, _>("id")?
+                    .unwrap_or_else(|| cluster_id.clone()),
+                entity_id: cluster_id,
+                budget_usd: r.try_get::<Option<f64>, _>("budget_usd")?.unwrap_or(0.0),
+                used_usd: db_used + buffered,
+                reset_period: period,
+                last_reset_at: Self::decode_quota_timestamp(&r, "last_reset_at")?,
+                next_reset_at: Self::decode_quota_timestamp(&r, "next_reset_at")?,
+            });
+        }
+        Ok(results)
+    }
+
+    /// Updates an entity's quota (inserting the row if it does not yet exist).
     #[allow(dead_code)]
     #[tracing::instrument(skip(self), fields(entity_id = %entity_id, budget = budget_usd), name = "security::budget_update")]
     pub async fn update_quota(
@@ -268,7 +337,7 @@ impl BudgetGuard {
         budget_usd: f64,
         reset_period: Option<ResetPeriod>,
     ) -> Result<()> {
-        if let Some(period) = reset_period {
+        let updated = if let Some(period) = reset_period {
             let period_str = match period {
                 ResetPeriod::Daily => "daily",
                 ResetPeriod::Monthly => "monthly",
@@ -282,13 +351,34 @@ impl BudgetGuard {
             .bind(period_str)
             .bind(entity_id)
             .execute(&self.pool)
-            .await?;
+            .await?
         } else {
             sqlx::query("UPDATE agent_quotas SET budget_usd = ?1 WHERE entity_id = ?2")
                 .bind(budget_usd)
                 .bind(entity_id)
                 .execute(&self.pool)
-                .await?;
+                .await?
+        };
+
+        if updated.rows_affected() == 0 {
+            let period_str = match reset_period.unwrap_or(ResetPeriod::Daily) {
+                ResetPeriod::Daily => "daily",
+                ResetPeriod::Monthly => "monthly",
+                ResetPeriod::Never => "never",
+            };
+            let now = Utc::now();
+            sqlx::query(
+                "INSERT INTO agent_quotas (id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
+                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6)",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(entity_id)
+            .bind(budget_usd)
+            .bind(period_str)
+            .bind(now)
+            .bind(now + chrono::Duration::days(1))
+            .execute(&self.pool)
+            .await?;
         }
         Ok(())
     }
