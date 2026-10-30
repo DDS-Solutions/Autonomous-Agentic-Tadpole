@@ -54,9 +54,9 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `GET` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::get_context_packet` | Protected |
 | `PUT` | `/v1/agents/{id}/context-packet` | `routes::agentic_engine::update_context_packet` | Protected |
 | `GET` | `/v1/agents/{id}/maintenance-report` | `routes::agentic_engine::get_maintenance_report` | Protected |
-| `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Uses LanceDB vector store when feature `vector-memory` is enabled; falls back gracefully to SQLite memories (200 OK). |
-| `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Persists to LanceDB vector store when `vector-memory` is enabled; otherwise stores in SQLite fallback memories (200 OK). |
-| `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Deletes memory entry from active store (LanceDB or SQLite fallback memories). |
+| `GET` | `/v1/agents/{id}/memories` | `routes::memory::get_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
+| `POST` | `/v1/agents/{id}/memories` | `routes::memory::save_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
+| `DELETE` | `/v1/agents/{id}/memories/{row_id}` | `routes::memory::delete_agent_memory` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 | `POST` | `/v1/agents/{id}/mission` | `routes::agent::sync_mission` | Protected |
 | `POST` | `/v1/agents/{id}/pause` | `routes::agent::pause_agent` | Protected |
 | `POST` | `/v1/agents/{id}/reset` | `routes::agent::reset_agent` | Protected |
@@ -78,6 +78,12 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `POST` | `/v1/benchmarks` | `routes::benchmarks::create_benchmark` | Protected |
 | `POST` | `/v1/benchmarks/run/{id}` | `routes::benchmarks::trigger_benchmark` | Protected |
 | `GET` | `/v1/benchmarks/{id}` | `routes::benchmarks::get_benchmark_history` | Protected |
+
+## Cas
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/cas/history` | `routes::cas::get_cas_history_handler` | Protected |
 
 ## Continuity
 
@@ -187,6 +193,14 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `GET` | `/v1/memory/search/hybrid` | `routes::memory::hybrid_rag_search_handler` | Protected |
 | `GET` | `/v1/search/memory` | `routes::memory::global_search` | Protected; Requires Cargo feature vector-memory; otherwise returns 501. |
 
+## Missions
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/missions` | `routes::missions::get_missions_catalog` | Protected |
+| `GET` | `/v1/missions/{id}/dossier` | `routes::missions::get_mission_dossier` | Protected |
+| `POST` | `/v1/missions/{id}/pin` | `routes::missions::toggle_mission_pin` | Protected |
+
 ## Model Manager
 
 | Method | Path | Handler | Notes |
@@ -205,8 +219,6 @@ Successful agent deletion commits dependent database cleanup before removing the
 
 ## Oversight
 
-The Oversight engine provides human-in-the-loop (HITL) review for privileged tools, budget thresholds, and circuit-breaker activations. Decisions accept `'approved' | 'rejected'` with optional operator `answer` (guidance). Suggested remediation strings populated by the engine or QA-99 Sentinel allow one-click guided approval.
-
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/v1/oversight/ledger` | `routes::oversight::get_ledger` | Protected |
@@ -222,7 +234,7 @@ The Oversight engine provides human-in-the-loop (HITL) review for privileged too
 | `PUT` | `/v1/oversight/security/quotas/{id}` | `routes::oversight::update_agent_quota` | Protected |
 | `PUT` | `/v1/oversight/settings` | `routes::oversight::update_settings` | Protected |
 | `GET` | `/v1/oversight/token-burn` | `routes::oversight::get_token_burn` | Protected |
-| `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected. Body: `{"decision": "approved"|"rejected", "answer": Option<String>}` |
+| `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected |
 
 ## Skills
 
@@ -245,6 +257,15 @@ The Oversight engine provides human-in-the-loop (HITL) review for privileged too
 | `PUT` | `/v1/skills/scripts/{name}` | `routes::skills::post_script` | Protected |
 | `DELETE` | `/v1/skills/workflows/{name}` | `routes::skills::delete_workflow` | Protected |
 | `PUT` | `/v1/skills/workflows/{name}` | `routes::skills::post_workflow` | Protected |
+
+## CAS & Missions
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/v1/cas/history` | `routes::cas::get_cas_history_handler` | Protected |
+| `GET` | `/v1/missions` | `routes::missions::get_missions_catalog` | Protected |
+| `GET` | `/v1/missions/{id}/dossier` | `routes::missions::get_mission_dossier` | Protected |
+| `POST` | `/v1/missions/{id}/pin` | `routes::missions::toggle_mission_pin` | Protected |
 
 ## Sovereign
 

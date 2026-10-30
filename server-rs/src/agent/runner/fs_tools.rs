@@ -147,6 +147,23 @@ impl AgentRunner {
         }
 
         let adapter = &ctx.fs_adapter;
+        if let Ok(safe_target) = adapter.get_safe_path(filename).await {
+            if let Err(e) = crate::services::cas::capture_pre_mutation(
+                &self.state.resources.pool,
+                &adapter.root_path,
+                &safe_target,
+                Some(&ctx.mission_id),
+                Some(&ctx.agent_id),
+            )
+            .await
+            {
+                tracing::warn!(
+                    "⚠️ [CAS] Pre-mutation capture failed for '{}': {}",
+                    filename,
+                    e
+                );
+            }
+        }
         let write_res = adapter.write_file(filename, content).await;
         self.state.security.conflict.release_lease(&path_buf);
 
@@ -251,6 +268,23 @@ impl AgentRunner {
 
         if approved {
             let adapter = &ctx.fs_adapter;
+            if let Ok(safe_target) = adapter.get_safe_path(filename).await {
+                if let Err(e) = crate::services::cas::capture_pre_mutation(
+                    &self.state.resources.pool,
+                    &adapter.root_path,
+                    &safe_target,
+                    Some(&ctx.mission_id),
+                    Some(&ctx.agent_id),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "⚠️ [CAS] Pre-delete capture failed for '{}': {}",
+                        filename,
+                        e
+                    );
+                }
+            }
             match adapter.delete_file(filename).await {
                 Ok(_) => {
                     self.broadcast_sys(

@@ -22,6 +22,7 @@ pub mod acl_service;
 pub mod parser;
 pub mod bm25_memory;
 pub mod rag_fusion;
+pub mod cas;
 
 #[cfg(test)]
 mod tests;

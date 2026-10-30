@@ -40,4 +40,23 @@ export interface Mission {
 
 
 
+export type {
+    MissionSummaryItem,
+    CatalogResponse,
+    MerkleAuditSummary,
+    MerkleStepRecord,
+    CasDiffSummary,
+    CasDiffRecord,
+    CasRevisionSummary,
+    SwarmFindingRecord,
+    TrustGraphNode,
+    TrustGraphEdge,
+    TrustGraphPayload,
+    TransactionLedgerRecord,
+    EconomicsPayload,
+    DebriefPayload,
+    MissionDossier,
+    DossierTabKey,
+} from './mission_dossier';
+
 // Metadata: [mission]

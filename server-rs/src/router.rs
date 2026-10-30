@@ -185,6 +185,8 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
         .nest("/knowledge", build_knowledge_routes())
         .nest("/iacp", build_iacp_routes())
         .nest("/a2a", build_a2a_routes())
+        .nest("/cas", build_cas_routes())
+        .nest("/missions", build_missions_routes())
         .route("/search/memory", build_search_memory_route())
         .route("/memory/search/bm25", get(routes::memory::bm25_search_handler))
         .route("/memory/search/hybrid", get(routes::memory::hybrid_rag_search_handler))
@@ -193,6 +195,18 @@ fn build_protected_v1_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> 
             app_state,
             middleware::auth::validate_token,
         ))
+}
+
+fn build_missions_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/", get(routes::missions::get_missions_catalog))
+        .route("/{id}/dossier", get(routes::missions::get_mission_dossier))
+        .route("/{id}/pin", post(routes::missions::toggle_mission_pin))
+}
+
+fn build_cas_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/history", get(routes::cas::get_cas_history_handler))
 }
 
 fn build_sovereign_routes() -> Router<Arc<AppState>> {

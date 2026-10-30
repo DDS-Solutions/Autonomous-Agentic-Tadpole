@@ -44,6 +44,8 @@ pub mod governance;
 pub mod knowledge;
 pub mod sovereign_state;
 pub mod agentic_engine;
+pub mod cas;
+pub mod missions;
 
 #[cfg(test)]
 mod agent_tests;

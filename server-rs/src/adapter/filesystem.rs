@@ -46,7 +46,7 @@ impl FilesystemAdapter {
     /// This implementation defeats **Symlink-based Sandbox Escapes** and 
     /// **TOCTOU** (Time-of-Check Time-of-Use) races by canonicalizing both 
     /// the root and the candidate before the prefix check.
-    async fn get_safe_path(&self, requested_path: &str) -> Result<PathBuf> {
+    pub async fn get_safe_path(&self, requested_path: &str) -> Result<PathBuf> {
         // Platform-agnostic path normalization (slash standardization and drive strip)
         let mut cleaned = requested_path.replace('\\', "/");
         let mut chars = cleaned.chars();

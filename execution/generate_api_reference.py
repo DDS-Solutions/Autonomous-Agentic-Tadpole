@@ -55,6 +55,8 @@ NESTS = {
     "build_sovereign_routes": "/sovereign",
     "build_knowledge_routes": "/knowledge",
     "build_iacp_routes": "/iacp",
+    "build_cas_routes": "/cas",
+    "build_missions_routes": "/missions",
     "build_engine_public_routes": "",
     "build_engine_protected_routes": "",
 }
@@ -92,6 +94,8 @@ TAG_BY_PREFIX = [
     ("/v1/sovereign", "sovereign"),
     ("/v1/knowledge", "knowledge"),
     ("/v1/iacp", "iacp"),
+    ("/v1/cas", "cas"),
+    ("/v1/missions", "missions"),
     ("/v1/search/memory", "memory"),
     ("/v1/memory/search", "memory"),
     ("/v1/mcp", "mcp"),

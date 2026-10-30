@@ -3,21 +3,22 @@
  * 
  * ### AI Assist Note
  * **Root View**: Operational command center for active agent missions. 
- * Orchestrates mission initialization, real-time status tracking, and swarm collaboration logs.
+ * Orchestrates mission initialization, real-time status tracking, swarm collaboration logs,
+ * and the Sovereign Observability Core (SOC) Flight Recorder & Run History.
  * 
  * ### 🔍 Debugging & Observability
  * - **Telemetry Link**: Uses `crypto.randomUUID()` for `trace_id` generation. Search `[Missions]` or specific `mission_id` in logs.
  */
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
-import { Repeat, Check, X, Cpu, Target } from 'lucide-react';
+import { Repeat, Check, X, Cpu, Target, Activity, History } from 'lucide-react';
 import { use_workspace_store, type Task_Branch } from '../stores/workspace_store';
 import { tadpole_os_service } from '../services/tadpoleos_service';
 import { event_bus } from '../services/event_bus';
 import { tadpole_os_socket, type Handoff_Event } from '../services/socket';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { get_theme_colors } from '../utils/agent_uiutils';
-import { Tw_Empty_State } from '../components/ui';
+import { Tw_Empty_State, Tooltip } from '../components/ui';
 import { use_agent_store } from '../stores/agent_store';
 import { resolve_agent_model_config } from '../utils/model_utils';
 import { use_trace_store } from '../stores/trace_store';
@@ -30,6 +31,7 @@ import { Mission_Header } from '../components/missions/Mission_Header';
 import { Neural_Map } from '../components/missions/Neural_Map';
 import { Agent_Team_View } from '../components/missions/Agent_Team_View';
 import { Buffered_Transcript_View } from '../components/transcript/Buffered_Transcript_View';
+import { Mission_History_View } from '../components/missions/history/Mission_History_View';
 
 export default function Missions() {
     const {
@@ -47,6 +49,32 @@ export default function Missions() {
         toggle_mission_analysis
     } = use_workspace_store();
     const [selected_cluster_id, set_selected_cluster_id] = useState<string | null>((clusters && clusters[0]) ? clusters[0].id : null);
+    const [view_mode, set_view_mode] = useState<'live' | 'history'>(() => {
+        if (typeof window === 'undefined') return 'live';
+        try {
+            return new URLSearchParams(window.location.search).get('view') === 'history' ? 'history' : 'live';
+        } catch {
+            return 'live';
+        }
+    });
+
+    const handle_tab_change = useCallback((mode: 'live' | 'history') => {
+        set_view_mode(mode);
+        if (typeof window !== 'undefined') {
+            try {
+                const url = new URL(window.location.href);
+                if (mode === 'history') {
+                    url.searchParams.set('view', 'history');
+                } else {
+                    url.searchParams.delete('view');
+                    url.searchParams.delete('id');
+                }
+                window.history.replaceState({}, '', url.toString());
+            } catch {
+                // Ignore in restricted test contexts
+            }
+        }
+    }, []);
     const { agents, fetch_agents, update_agent: store_update_agent, is_loading: agents_loading } = use_agent_store();
 
     useEffect(() => {
@@ -250,8 +278,50 @@ export default function Missions() {
             <h2 className="sr-only">Mission Lifecycle Orchestration</h2>
             <h2 className="sr-only">Swarm Collaboration Intelligence</h2>
 
+            {/* Top Sub-Navigation Toggle Bar (Overlord Flight Recorder Switcher) */}
+            <div className="flex items-center justify-between px-4 py-2 mb-4 rounded-xl border border-zinc-800 bg-zinc-950/80 flex-shrink-0">
+                <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800">
+                    <Tooltip content="Live swarm clusters, neural task execution, and real-time interaction" position="bottom">
+                        <button
+                            onClick={() => handle_tab_change('live')}
+                            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                view_mode === 'live'
+                                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                            }`}
+                        >
+                            <Activity size={13} />
+                            <span>Active Operations</span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="ALCOA+ audit trail, CAS pre/post mutation diffs, and Agent 99 QA debriefs" position="bottom">
+                        <button
+                            onClick={() => handle_tab_change('history')}
+                            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                view_mode === 'history'
+                                    ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-sm'
+                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                            }`}
+                        >
+                            <History size={13} />
+                            <span>Flight Recorder & Run History</span>
+                        </button>
+                    </Tooltip>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                    {view_mode === 'live' ? (
+                        <span>Swarm Clusters: {(clusters || []).length}</span>
+                    ) : (
+                        <span className="text-cyan-400/80">Flight Dossier Telemetry Active</span>
+                    )}
+                </div>
+            </div>
 
-
+            {view_mode === 'history' ? (
+                <div className="flex-1 min-h-0 overflow-hidden">
+                    <Mission_History_View />
+                </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
                 <Cluster_Sidebar
                     clusters={clusters}
@@ -400,10 +470,9 @@ export default function Missions() {
                     )}
                 </div>
             </div>
+            )}
         </div>
     );
 }
-
-
 
 // Metadata: [Missions]

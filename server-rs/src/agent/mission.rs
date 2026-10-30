@@ -163,6 +163,15 @@ pub async fn update_mission(
     Ok(())
 }
 
+/// Convenience helper that updates a mission's lifecycle status without incrementing cost.
+pub async fn update_mission_status(
+    pool: &SqlitePool,
+    mission_id: &str,
+    status: MissionStatus,
+) -> Result<(), AppError> {
+    update_mission(pool, mission_id, status, 0.0).await
+}
+
 /// Sweeps any abandoned missions that were left in `active` state due to a crash or unexpected shutdown,
 /// reconciling missions with checkpoints to `suspended` (for resumption) and checkpointless missions to `failed`.
 pub async fn sweep_interrupted_missions(pool: &SqlitePool) -> Result<u64, AppError> {
@@ -321,6 +330,29 @@ pub async fn get_tool_result(
 /// Swarm reasoning often generates multi-megabyte trace logs. To prevent 
 /// database saturation and OOM events during UI rehydration, we prune 
 /// `text` fields to a strict 2KB limit before persistence. 
+/// Computes SHA-256 Merkle chain hash for a discrete mission log step.
+/// Hash format: SHA256(prev_hash + mission_id + agent_id + source + pruned_text + timestamp_iso)
+pub fn compute_log_hash(
+    prev_hash: Option<&str>,
+    mission_id: &str,
+    agent_id: &str,
+    source: &str,
+    text: &str,
+    timestamp_iso: &str,
+) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    if let Some(ph) = prev_hash {
+        hasher.update(ph.as_bytes());
+    }
+    hasher.update(mission_id.as_bytes());
+    hasher.update(agent_id.as_bytes());
+    hasher.update(source.as_bytes());
+    hasher.update(text.as_bytes());
+    hasher.update(timestamp_iso.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 pub async fn log_step(
     pool: &SqlitePool,
     mission_id: &str,
@@ -343,19 +375,43 @@ pub async fn log_step(
         .as_ref()
         .map(|m| serde_json::to_string(m).unwrap_or_default());
 
+    let now_iso = now.to_rfc3339();
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+
+    let prev_hash: Option<String> = sqlx::query_scalar::<sqlx::Sqlite, Option<String>>(
+        "SELECT hash FROM mission_logs WHERE mission_id = ?1 ORDER BY rowid DESC LIMIT 1",
+    )
+    .bind(mission_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+
+    let hash = compute_log_hash(
+        prev_hash.as_deref().filter(|s| !s.is_empty()),
+        mission_id,
+        agent_id,
+        source,
+        &pruned_text,
+        &now_iso,
+    );
+
     sqlx::query::<sqlx::Sqlite>(
-        "INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity, timestamp, metadata)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
+        "INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity, timestamp, metadata, hash, prev_hash)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")
     .bind(&log_id)
     .bind(mission_id)
     .bind(agent_id)
     .bind(source)
     .bind(&pruned_text)
     .bind(severity)
-    .bind(now)
+    .bind(&now_iso)
     .bind(metadata_json)
-    .execute(pool)
+    .bind(&hash)
+    .bind(&prev_hash)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     Ok(MissionLog {
         id: log_id,
@@ -366,6 +422,8 @@ pub async fn log_step(
         severity: severity.to_string(),
         timestamp: now,
         metadata: sanitized_metadata,
+        hash: Some(hash),
+        prev_hash,
     })
 }
 
@@ -482,7 +540,7 @@ pub async fn get_recent_missions(pool: &SqlitePool, limit: i64) -> Result<Vec<Mi
 /// Retrieves all logs for a given mission.
 pub async fn get_mission_logs(pool: &SqlitePool, mission_id: &str) -> Result<Vec<MissionLog>, AppError> {
     let rows =
-        sqlx::query::<sqlx::Sqlite>("SELECT id, mission_id, agent_id, source, text, severity, timestamp, metadata FROM mission_logs WHERE mission_id = ?1 ORDER BY timestamp ASC")
+        sqlx::query::<sqlx::Sqlite>("SELECT id, mission_id, agent_id, source, text, severity, timestamp, metadata, hash, prev_hash FROM mission_logs WHERE mission_id = ?1 ORDER BY timestamp ASC")
             .bind(mission_id)
             .fetch_all(pool)
             .await?;
@@ -501,6 +559,8 @@ pub async fn get_mission_logs(pool: &SqlitePool, mission_id: &str) -> Result<Vec
             severity: row.get("severity"),
             timestamp: row.get("timestamp"),
             metadata,
+            hash: row.try_get("hash").ok().flatten(),
+            prev_hash: row.try_get("prev_hash").ok().flatten(),
         });
     }
     Ok(logs)
@@ -513,7 +573,7 @@ pub async fn get_recent_mission_logs(
     limit: i64,
 ) -> Result<Vec<MissionLog>, AppError> {
     let rows = sqlx::query::<sqlx::Sqlite>(
-        "SELECT id, mission_id, agent_id, source, text, severity, timestamp, metadata
+        "SELECT id, mission_id, agent_id, source, text, severity, timestamp, metadata, hash, prev_hash
          FROM mission_logs
          WHERE mission_id = ?1
          ORDER BY timestamp DESC
@@ -538,6 +598,8 @@ pub async fn get_recent_mission_logs(
             severity: row.get("severity"),
             timestamp: row.get("timestamp"),
             metadata,
+            hash: row.try_get("hash").ok().flatten(),
+            prev_hash: row.try_get("prev_hash").ok().flatten(),
         });
     }
 

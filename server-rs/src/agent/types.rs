@@ -1217,6 +1217,8 @@ pub struct MissionLog {
     pub severity: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub metadata: Option<serde_json::Value>,
+    pub hash: Option<String>,
+    pub prev_hash: Option<String>,
 }
 
 /// Enhanced memory entry with scoring metadata for Advanced RAG.

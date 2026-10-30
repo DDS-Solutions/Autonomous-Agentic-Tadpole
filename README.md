@@ -282,6 +282,8 @@ Protected route groups and WebSocket streams:
 | `/v1/system` | Compute profile and system introspection |
 | `/v1/governance` | Blueprints and sovereign manifest |
 | `/v1/sovereign` | Mission session tree and branch state |
+| `/v1/cas` | Lean read-only file revision history for diff observability |
+| `/v1/missions` | Mission run catalog, cryptographic flight dossier, and retention pinning |
 | `/v1/intelligence` | High-fidelity symbol graph mapping and dependent blast-radius analytics |
 | `/v1/knowledge` | Sovereign knowledge base nodes, edges, peers, and synthesis |
 | `/v1/iacp` | Inter-Agent Communication Protocol (negotiate, hire) |

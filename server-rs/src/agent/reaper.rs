@@ -121,6 +121,7 @@ impl SwarmReaper {
             sqlx::query("DELETE FROM peer_reviews WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM mission_nodes WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             sqlx::query("DELETE FROM mission_checkpoints WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
+            sqlx::query("DELETE FROM file_revisions WHERE mission_id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
             
             sqlx::query("DELETE FROM mission_history WHERE id = ?").bind(&mission_id).execute(&mut *tx).await.map_err(AppError::Sqlx)?;
 

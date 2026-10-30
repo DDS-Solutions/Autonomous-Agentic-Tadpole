@@ -696,6 +696,11 @@ pub async fn delete_agent_cascade(pool: &SqlitePool, agent_id: &str) -> Result<(
         .execute(&mut *tx)
         .await?;
 
+    sqlx::query("DELETE FROM file_revisions WHERE agent_id = ?1 OR mission_id IN (SELECT id FROM mission_history WHERE agent_id = ?1)")
+        .bind(agent_id)
+        .execute(&mut *tx)
+        .await?;
+
     // 2. Delete parent missions referencing agent_id
     sqlx::query("DELETE FROM mission_history WHERE agent_id = ?")
         .bind(agent_id)
