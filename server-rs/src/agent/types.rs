@@ -685,6 +685,7 @@ pub struct ToolContext {
     pub last_accessed_files: std::sync::Arc<parking_lot::Mutex<Vec<String>>>,
     pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
     pub accounting: std::sync::Arc<crate::agent::runner::accounting::MissionAccounting>,
+    pub execution_plane: ExecutionPlane,
 }
 
 impl ToolContext {
@@ -713,6 +714,7 @@ impl ToolContext {
             last_accessed_files: std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::default()),
             accounting: std::sync::Arc::new(crate::agent::runner::accounting::MissionAccounting::default()),
+            execution_plane: ExecutionPlane::default(),
         }
     }
 }

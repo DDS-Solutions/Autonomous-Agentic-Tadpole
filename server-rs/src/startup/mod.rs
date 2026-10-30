@@ -434,6 +434,7 @@ pub async fn spawn_background_tasks(
         Box::new(services::HeartbeatService),
         Box::new(services::ContinuitySchedulerService),
         Box::new(services::SwarmReaperService),
+        Box::new(services::ToolOverflowCleanupService),
         Box::new(services::MemoryCleanupService),
         Box::new(services::IngestionWorkerService),
         Box::new(services::PrivacyGuardService),

@@ -18,7 +18,7 @@ pub use code_graph::{CodeGraphDbRefreshService, CodeGraphWarmupService, SymbolGr
 pub use networking::{SwarmDiscoveryService, SwarmPulseService};
 pub use telemetry::{HeartbeatService, MetricAggregatorService, SystemHealthMonitorService, RecoverActiveAgentsService, SpanWatchdogService};
 pub use security::{BudgetFlushService, PrivacyGuardService, SecurityEvictionService};
-pub use jobs::{ContinuitySchedulerService, IngestionWorkerService, MemoryCleanupService, RecipeIngestionService, SwarmReaperService};
+pub use jobs::{ContinuitySchedulerService, IngestionWorkerService, MemoryCleanupService, RecipeIngestionService, SwarmReaperService, ToolOverflowCleanupService};
 
 #[cfg(feature = "vector-memory")]
 pub use jobs::{IksDecayService, IksEvictionService};

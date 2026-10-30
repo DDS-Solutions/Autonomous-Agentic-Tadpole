@@ -317,6 +317,7 @@ impl AgentRunner {
             last_accessed_files: ctx.last_accessed_files.clone(),
             metrics: ctx.metrics.clone(),
             accounting: ctx.accounting.clone(),
+            execution_plane: ctx.execution_plane,
         };
 
         // Execution Loop with Self-Annealing
@@ -522,6 +523,7 @@ impl AgentRunner {
             last_accessed_files: ctx.last_accessed_files.clone(),
             metrics: ctx.metrics.clone(),
             accounting: ctx.accounting.clone(),
+            execution_plane: ctx.execution_plane,
         };
 
         let result = self

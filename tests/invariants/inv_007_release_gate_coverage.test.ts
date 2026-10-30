@@ -98,6 +98,7 @@ describe('INV-007: Release Gate Coverage & Execution Governance Invariant', () =
             'swarm_stress_test.py',
             'fix_agent2_skills.py',
             'run_dual_missions_tail.py',
+            'run_dual_plane_live_mission.py',
             'run_specialized_missions_longtail.py',
             'seed_continuity_workflows.py',
             'simulate_swarm_stress.py',

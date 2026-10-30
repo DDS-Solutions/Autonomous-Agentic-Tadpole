@@ -81,6 +81,9 @@ WORKFLOWS: {{workflows}}
 
 ACTION BIAS (Troubleshooting & Discovery):
 {{filesystem_bias}}
+- NO REDUNDANT DISCOVERY: Once a directory is listed via 'list_files', do NOT call 'list_files' on the same path again. Use the file listing already in your conversation context to immediately proceed to reading, editing, or inspecting specific target files.
+- NO REPETITIVE TOOL LOOPS: Repeating the same tool call with identical arguments across turns without forward progress will trigger the kernel DoomLoopDetector and abort execution. Always change strategy or advance to the next logical action.
+- PROGRESSIVE REASONING: Analyze tool observations directly. Never make back-to-back duplicate requests.
 - NO REPEATS: If 'search_mission_knowledge' returns no results, do not try it again with slightly different wording. Immediately switch to technical discovery tools.
 
 SWARM PROTOCOL:

@@ -263,4 +263,53 @@ impl SystemService for IksEvictionService {
     }
 }
 
+
+
+pub struct ToolOverflowCleanupService;
+
+#[async_trait]
+impl SystemService for ToolOverflowCleanupService {
+    fn name(&self) -> &'static str { "ToolOverflowCleanup" }
+    fn shutdown_phase(&self) -> ShutdownPhase { ShutdownPhase::Phase3SecurityCleanup }
+    async fn start(
+        &self,
+        context: SystemContext,
+    ) -> Result<(), anyhow::Error> {
+        let app_state = context.app_state;
+        let mut shutdown_rx = context.shutdown_rx;
+        app_state.resources.set_subsystem_status("ToolOverflowCleanup", crate::types::SubsystemStatus::Ready);
+        let workspace_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 3600)); // Every 6 hours
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.changed() => {
+                        if *shutdown_rx.borrow() {
+                            tracing::info!("🛑 [TurnCompactor] Tool overflow cleanup daemon shutting down gracefully.");
+                            break;
+                        }
+                    }
+                    _ = interval.tick() => {
+                        let max_age = std::time::Duration::from_secs(48 * 3600);
+                        match crate::agent::runner::turn_compactor::cleanup_overflow_directory(&workspace_root, max_age).await {
+                            Ok(removed) if removed > 0 => {
+                                tracing::info!("🧹 [TurnCompactor] Cleaned up {} expired tool overflow files (>48h)", removed);
+                            }
+                            Err(e) => {
+                                tracing::warn!("⚠️ [TurnCompactor] Tool overflow sweep error: {}", e);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        });
+        tracing::info!("🧹 [TurnCompactor] Tool overflow cleanup daemon launched (48h retention, 6h interval).");
+        Ok(())
+    }
+}
+
 // Metadata: [jobs]

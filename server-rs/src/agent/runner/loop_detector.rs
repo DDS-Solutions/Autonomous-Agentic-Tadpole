@@ -62,6 +62,7 @@ pub enum LoopCheckResult {
 }
 
 impl LoopCheckResult {
+    #[allow(dead_code)]
     pub fn is_terminal(&self) -> bool {
         matches!(self, LoopCheckResult::Terminal)
     }
@@ -123,6 +124,7 @@ impl DoomLoopDetector {
         self.evaluate_loop()
     }
 
+    #[allow(dead_code)]
     pub fn has_loop(&self) -> bool {
         self.evaluate_loop().is_terminal()
     }

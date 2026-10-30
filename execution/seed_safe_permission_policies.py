@@ -35,6 +35,15 @@ def seed_safe_policies():
         "get_current_time",
         "calculate",
         "search_global_vault",
+        "parity_guard",
+        "security_scan",
+        "verify_ai_context",
+        "verify_telemetry",
+        "resource_check",
+        "parse_errors",
+        "mission_diagnose",
+        "tool_loop_guard",
+        "system_telemetry",
     ]
 
     print("=== Seeding Safe Tools in permission_policies ===")

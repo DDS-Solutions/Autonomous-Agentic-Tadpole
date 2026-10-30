@@ -204,7 +204,7 @@ mod tests {
         bus.publish(file_changed("bounded.rs"));
         let filled = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             while providers.iter().map(|provider| provider.calls.load(Ordering::SeqCst)).sum::<usize>() < MAX_EVENT_JOBS_IN_FLIGHT {
-                tokio::task::yield_now().await;
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         }).await;
         if filled.is_err() {

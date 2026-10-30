@@ -16,6 +16,32 @@
 //! - **Trace Scope**: `server-rs::agent::runner::turn_compactor`
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicI64, Ordering};
+
+pub const DEFAULT_OVERFLOW_MAX_AGE_HOURS: u64 = 48;
+static LAST_SWEEP_EPOCH_SECS: AtomicI64 = AtomicI64::new(0);
+
+/// Triggers a non-blocking background sweep of expired overflow files (>48h) if throttled window has elapsed (>1h).
+pub fn trigger_lazy_overflow_cleanup(workspace_root: PathBuf) {
+    let now = chrono::Utc::now().timestamp();
+    let last = LAST_SWEEP_EPOCH_SECS.load(Ordering::Relaxed);
+    if now - last > 3600 {
+        if LAST_SWEEP_EPOCH_SECS.compare_exchange(last, now, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
+            tokio::spawn(async move {
+                let max_age = std::time::Duration::from_secs(DEFAULT_OVERFLOW_MAX_AGE_HOURS * 3600);
+                match cleanup_overflow_directory(&workspace_root, max_age).await {
+                    Ok(removed) if removed > 0 => {
+                        tracing::info!("🧹 [TurnCompactor] Cleaned up {} expired tool overflow files (>{}h)", removed, DEFAULT_OVERFLOW_MAX_AGE_HOURS);
+                    }
+                    Err(e) => {
+                        tracing::warn!("⚠️ [TurnCompactor] Tool overflow sweep error: {}", e);
+                    }
+                    _ => {}
+                }
+            });
+        }
+    }
+}
 
 /// Safely truncates a string to at most `max_chars` UTF-8 characters without splitting codepoints.
 pub fn safe_truncate_str(s: &str, max_chars: usize) -> &str {
@@ -90,6 +116,9 @@ pub async fn compact_and_offload_observation(
         rel_path,
         rel_path
     );
+
+    // Trigger lazy background sweep of expired overflow files (>48h)
+    trigger_lazy_overflow_cleanup(workspace_root.to_path_buf());
 
     (compacted, Some(target_path))
 }
@@ -209,7 +238,8 @@ mod tests {
     #[tokio::test]
     async fn test_compact_and_offload_long_output() {
         let dir = tempdir().unwrap();
-        let long_text = "A".repeat(10000);
+        let long_len = DEFAULT_OVERFLOW_THRESHOLD_CHARS + 1000;
+        let long_text = "A".repeat(long_len);
         let (out, path) = compact_and_offload_observation("big_tool", &long_text, dir.path()).await;
         
         assert!(path.is_some());
@@ -218,7 +248,7 @@ mod tests {
         let disk_content = tokio::fs::read_to_string(&written_path).await.unwrap();
         assert_eq!(disk_content, long_text);
 
-        assert!(out.contains("[TRUNCATED TOOL OUTPUT: 10000 chars total"));
+        assert!(out.contains(&format!("[TRUNCATED TOOL OUTPUT: {} chars total", long_len)));
         assert!(out.contains(".tmp/tool_overflow/"));
     }
 

@@ -96,7 +96,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_auth_accepts_old_token() {
+    async fn test_auth_rejects_old_token_missing_rotation_metadata() {
+        // SEC-AUTH-01: Fail closed if rotation metadata (rotated_at, grace_secs) is missing to prevent perpetual fallback credentials
         let app = test_app_with_tokens("current-123", Some("new-456"), Some("old-789")).await;
 
         let request = Request::builder()
@@ -106,7 +107,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

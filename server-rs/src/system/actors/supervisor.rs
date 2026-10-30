@@ -231,7 +231,7 @@ impl Supervisor {
                         Ok(Ok(())) => {
                             warn!("⚠️ [Supervisor:{}] Child '{}' exited normally. Evaluating restart budget...", supervisor_name, name_str);
                         }
-                        Ok(Err(join_err)) => {
+                        Ok(Err(ref join_err)) => {
                             if join_err.is_panic() {
                                 error!("💥 [Supervisor:{}] Child '{}' PANICKED! Isolating blast radius...", supervisor_name, name_str);
                             } else if join_err.is_cancelled() {
@@ -240,7 +240,7 @@ impl Supervisor {
                                 warn!("⚠️ [Supervisor:{}] Child '{}' join error: {}", supervisor_name, name_str, join_err);
                             }
                         }
-                        Err(cascade_msg) => {
+                        Err(ref cascade_msg) => {
                             info!("🔄 [Supervisor:{}] Child '{}' received: {}", supervisor_name, name_str, cascade_msg);
                         }
                     }
@@ -262,7 +262,9 @@ impl Supervisor {
                 }
 
                 // 5. If strategy is OneForAll, broadcast cascade restart to all siblings
-                if strategy == SupervisorStrategy::OneForAll {
+                // ONLY if this child terminated on its own (not in response to a sibling cascade),
+                // preventing infinite ping-pong cascade echoes between siblings.
+                if strategy == SupervisorStrategy::OneForAll && termination_reason.is_ok() {
                     info!("📢 [Supervisor:{}] Strategy is OneForAll. Signaling cascading restart of all siblings due to '{}' termination...", supervisor_name, name_str);
                     let _ = restart_all_tx.send(name_str.clone());
 
@@ -288,6 +290,9 @@ impl Supervisor {
 
                 info!("⏳ [Supervisor:{}] Restarting child '{}' in {:?}...", supervisor_name, name_str, backoff_duration);
                 tokio::time::sleep(backoff_duration).await;
+
+                // Drain any buffered cascade notifications so fresh restart doesn't immediately abort
+                while restart_all_rx.try_recv().is_ok() {}
             }
         });
     }

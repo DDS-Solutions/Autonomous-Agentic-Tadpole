@@ -43,7 +43,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 pub const MAX_MCP_REPLY_BYTES: usize = 2 * 1024 * 1024;
-/// Operational statistics for a specific tool.
+
+/// Operational statistics for a specific tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct McpToolStats {
     pub invocations: u64,
@@ -346,17 +347,41 @@ impl McpHost {
             }
             PermissionMode::Prompt => {
                 let prompter_guard = self.prompter.read();
-                let prompter = prompter_guard.as_ref().ok_or_else(|| {
+                if let Some(prompter) = prompter_guard.as_ref() {
+                    let decision = prompter.prompt_user(clean_name, &arguments.to_string())
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    if decision != PermissionMode::Allow {
+                        return Err(AppError::Forbidden("User rejected tool execution".to_string()));
+                    }
+                } else if ctx.execution_plane == crate::agent::types::ExecutionPlane::EngineMaintenance
+                    && matches!(
+                        clean_name,
+                        "parity_guard"
+                            | "security_scan"
+                            | "verify_ai_context"
+                            | "verify_telemetry"
+                            | "resource_check"
+                            | "parse_errors"
+                            | "mission_diagnose"
+                            | "tool_loop_guard"
+                            | "system_telemetry"
+                            | "greeting_skill"
+                            | "research_orchestrator"
+                    )
+                {
+                    // 🛡️ [Headless Auto-Approval] Diagnostic & parity guard tools under Plane 1 (EngineMaintenance)
+                    // represent safe read/audit operations allowed when running headlessly without an interactive UI prompter.
+                    tracing::info!(
+                        tool = %clean_name,
+                        agent_id = %ctx.agent_id,
+                        "🛡️ [MCP Headless] Auto-approving diagnostic tool under Plane 1 (EngineMaintenance)"
+                    );
+                } else {
                     tracing::error!(tool = %clean_name, "PermissionMode::Prompt configured but no prompter is registered");
-                    AppError::Forbidden(format!(
+                    return Err(AppError::Forbidden(format!(
                         "Tool '{}' requires interactive approval, but no prompter is configured.",
                         clean_name
-                    ))
-                })?;
-                let decision = prompter.prompt_user(clean_name, &arguments.to_string())
-                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-                if decision != PermissionMode::Allow {
-                    return Err(AppError::Forbidden("User rejected tool execution".to_string()));
+                    )));
                 }
             }
             PermissionMode::Allow => {}
