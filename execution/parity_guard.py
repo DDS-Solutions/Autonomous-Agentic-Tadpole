@@ -188,7 +188,7 @@ def check_doc_file_refs(root):
             continue
         text = doc.read_text(encoding="utf-8")
         refs = re.findall(r'`([^`\n]+\.(?:md|yaml|yml|json|toml|rs|tsx|ts|py|bat|css))`', text)
-        refs += [m.replace("/", "\\") for m in re.findall(rf'file:///(?:[A-Za-z]:/[^/]+/|[^/]+/)*{re.escape(root.name)}/([^\)\s]+)', text)]
+        refs += [m.replace("\\", "/") for m in re.findall(rf'file:///(?:[A-Za-z]:/[^/]+/|[^/]+/)*{re.escape(root.name)}/([^\)\s]+)', text)]
         for ref in refs:
             if (
                 ref.startswith("http")
@@ -202,7 +202,7 @@ def check_doc_file_refs(root):
                 continue
             if ref.endswith(".meta.json"):
                 continue
-            normalized = ref.replace("/", os.sep)
+            normalized = ref.replace("\\", os.sep).replace("/", os.sep)
             candidates = [
                 root / normalized,
                 root / "execution" / normalized,

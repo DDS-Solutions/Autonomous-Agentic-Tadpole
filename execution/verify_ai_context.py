@@ -209,8 +209,16 @@ def verify_file(file_path, auto_fix=False):
             findings = []  # Clear findings as we fixed it
             meta = extract_metadata(fixed_content)
 
+        try:
+            rel_path = str(Path(file_path).resolve().relative_to(ROOT.resolve()))
+        except ValueError:
+            try:
+                rel_path = str(Path(file_path).relative_to(ROOT))
+            except ValueError:
+                rel_path = str(file_path)
+
         return {
-            "file": str(Path(file_path).relative_to(ROOT)),
+            "file": rel_path,
             "passed": len(findings) == 0,
             "findings": findings,
             "meta": meta

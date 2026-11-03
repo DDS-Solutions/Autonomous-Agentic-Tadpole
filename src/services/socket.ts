@@ -588,7 +588,7 @@ class Tadpole_OS_Socket_Client {
                 const attrs = (data.attributes && typeof data.attributes === 'object') ? (data.attributes as Record<string, unknown>) : {};
                 const message = (attrs.message || data.message || `[${data.target || 'Trace'}] Alert`) as string;
                 event_bus.emit_log({
-                    source: (data.target as string) || 'Kernel',
+                    source: 'System',
                     text: message,
                     severity: level === 'ERROR' ? 'error' : 'warning'
                 });

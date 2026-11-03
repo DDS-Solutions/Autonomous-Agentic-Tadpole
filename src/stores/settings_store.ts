@@ -99,6 +99,8 @@ export type ThemeOption = 'zinc' | 'slate' | 'neutral';
 export type DensityOption = 'compact' | 'comfortable';
 export type BackdropThemeOption = 'cyan' | 'emerald' | 'nebula' | 'slate' | 'amber';
 
+export type Tadpole_OS_Settings = Tadpole_Settings;
+
 export interface Tadpole_Settings {
     tadpole_os_url: string;
     tadpole_os_api_key: string;

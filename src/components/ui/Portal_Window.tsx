@@ -179,7 +179,7 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
         const features = `width=${width},height=${height},left=100,top=100,resizable=yes,scrollbars=yes,status=no,menubar=no,toolbar=no,location=no,directories=no`;
         
         // Check if an existing browser window is already open and alive across StrictMode passes
-        let win = active_windows.get(window_name);
+        let win: Window | null = active_windows.get(window_name) || null;
         const is_existing = !!(win && !win.closed);
 
         if (!is_existing) {
@@ -195,6 +195,7 @@ export const Portal_Window: React.FC<Portal_Window_Props> = ({
             try { win.focus(); } catch { /* ignore */ }
         }
 
+        if (!win) return;
         external_window_ref.current = win;
 
         // If URL route mode, window loads independent React view
