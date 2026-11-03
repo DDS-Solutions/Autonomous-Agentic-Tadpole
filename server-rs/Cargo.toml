@@ -76,7 +76,7 @@ tree-sitter-rust = "0.24.2"
 tree-sitter-typescript = "0.23"
 ignore = "0.4"
 streaming-iterator = "0.1"
-md5 = "0.7"
+md5 = "0.8"
 walkdir = "2.5"
 bm25 = { version = "2.3.2", features = ["parallelism"] }
 # Vector Database (Optional for Legacy CPUs)
