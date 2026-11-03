@@ -33,6 +33,13 @@ use subtle::ConstantTimeEq;
 #[derive(Clone, Copy, Debug)]
 pub struct AuthenticatedOperator;
 
+/// Detailed server-verified operator identity with name and optional mission scopes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperatorIdentity {
+    pub name: String,
+    pub allowed_missions: Option<std::collections::HashSet<String>>,
+}
+
 /// Constant-time string comparison to prevent timing-based side-channel attacks.
 ///
 /// ### 🔒 Security: Constant-Time Comparison (AUTH-01)
@@ -113,6 +120,10 @@ pub async fn validate_token(
         if let Some(token_name) = match_token(token, &state) {
             tracing::debug!("🔑 [Auth] Authorized request using {}", token_name);
             crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
+            req.extensions_mut().insert(OperatorIdentity {
+                name: token_name.to_string(),
+                allowed_missions: None,
+            });
             req.extensions_mut().insert(AuthenticatedOperator);
             return Ok(next.run(req).await);
         } else {
@@ -146,6 +157,10 @@ pub async fn validate_token(
                 if let Some(token_name) = match_token(token, &state) {
                     tracing::info!("🔑 [Auth] Authorized WebSocket request using {}", token_name);
                     crate::middleware::auth_rate_limit::record_auth_success(&client_ip);
+                    req.extensions_mut().insert(OperatorIdentity {
+                        name: token_name.to_string(),
+                        allowed_missions: None,
+                    });
                     req.extensions_mut().insert(AuthenticatedOperator);
                     return Ok(next.run(req).await);
                 }

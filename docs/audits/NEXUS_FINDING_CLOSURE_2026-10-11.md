@@ -41,18 +41,21 @@ Terminal persistence is decomposed into `server-rs/src/agent/runner/terminal.rs`
 
 The current graph inventory covers 849 source files and all 138 route handlers. The refreshed persistent graph contains 5,589 nodes, 46,861 edges, 4,620 risk records, six communities, and 250 flow snapshots. Risk records are scoring entries, not confirmed defects. CSS remains unindexed. Static name resolution, ambiguous callers, traversal limits, and the flow cap prevent these counts from proving runtime coverage. Evidence: `graph-build.json`, `trace-inventory.json`, and `trace-closure.log`. Changed-file impact includes newly added source files as well as tracked edits.
 
-| Priority | File | Useful decomposition |
-|---|---|---|
-| High | `server-rs/src/agent/persistence.rs` | Separate agent row/OCC writes, connector/skill synchronization, cascade cleanup, and inline fixtures. Keep transaction ownership explicit. |
-| High | `server-rs/src/agent/runner/synthesis.rs` | Separate provider context, tool-turn orchestration, completion parsing, and fixtures. |
-| High | `server-rs/src/routes/agentic_engine.rs` | Separate task/receipt routes from hiring, economics, and subscription routes. |
-| High | `src/logic/command_processor.ts` | Separate command parsing from domain dispatch handlers behind the existing facade. |
-| Medium | `server-rs/src/state/mod.rs` | Separate production construction, mock construction, and persistence orchestration. |
-| Medium | `server-rs/src/agent/types.rs` | Separate identity/configuration DTOs from mission/usage/runner state; preserve serde contracts. |
-| Medium | `server-rs/src/agent/runner/oversight.rs` | Separate authorization decisions, queue coordination, and telemetry. |
-| Medium | `server-rs/src/intelligence/graph_store.rs` | Separate extraction/discovery from risk, community, and flow derivation. |
-| Medium | `server-rs/src/routes/templates.rs` | Separate registry access/cache from validated installation and removal. |
-| Medium | `execution/generate_api_reference.py` | Separate route discovery, OpenAPI generation, and Markdown rendering. |
+| Priority | File | Useful decomposition | Status |
+|---|---|---|---|
+| High | server-rs/src/agent/persistence.rs | Separate agent row/OCC writes, connector/skill synchronization, cascade cleanup, and inline fixtures. Keep transaction ownership explicit. | Pending |
+| High | server-rs/src/agent/runner/synthesis.rs | Separate provider context, tool-turn orchestration, completion parsing, and fixtures. | **Closed** (Decomposed into server-rs/src/agent/runner/synthesis/: budget, tools, repo_map, context, prompt, tests) |
+| High | server-rs/src/routes/agentic_engine.rs | Separate task/receipt routes from hiring, economics, and subscription routes. | Pending |
+| High | src/logic/command_processor.ts | Separate command parsing from domain dispatch handlers behind the existing facade. | Pending |
+| Medium | server-rs/src/state/mod.rs | Separate production construction, mock construction, and persistence orchestration. | **Closed** (Decomposed into server-rs/src/state/: boot, kernel, persist, session, telemetry) |
+| Medium | server-rs/src/agent/types.rs | Separate identity/configuration DTOs from mission/usage/runner state; preserve serde contracts. | Pending |
+| Medium | server-rs/src/routes/oversight.rs | Separate authorization decisions, queue coordination, and telemetry. | **Closed** (Decomposed into server-rs/src/routes/oversight/: principal, settings, queue, quotas, policies, audit, telemetry, validation, redaction, ledger, health, tests) |
+| Medium | server-rs/src/routes/missions.rs | Separate catalog, Merkle hash chains, CAS diffs, dossier synthesis, and pins. | **Closed** (Decomposed into server-rs/src/routes/missions/: catalog, merkle, cas_diff, dossier, pin, models, tests) |
+| Medium | server-rs/src/intelligence/graph_store.rs | Separate extraction/discovery from risk, community, and flow derivation. | Pending |
+| Medium | server-rs/src/routes/templates.rs | Separate registry access/cache from validated installation and removal. | **Closed** (Decomposed into server-rs/src/routes/templates/: catalog, install, uninstall, security, principal, models, tests) |
+| Medium | execution/generate_api_reference.py | Separate route discovery, OpenAPI generation, and Markdown rendering. | Pending |
+
+*Decomposition Certification*: Full audit verification and test results are recorded in [NEXUS_DECOMPOSITION_CLOSURE_2026-11-03](./NEXUS_DECOMPOSITION_CLOSURE_2026-11-03.md).*
 
 These are architectural recommendations, not defects being marked fixed. Large decompositions are deliberately kept separate from this correctness patch. Cross-process contention, blocking-pool saturation, external providers, native audio/vector dependencies, and desktop runtime behavior require operational evidence.
 

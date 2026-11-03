@@ -114,6 +114,10 @@ impl CodeSymbolGraph {
             let mut visited = HashSet::new();
             let mut queue = VecDeque::new();
             let mut affected_indices = Vec::new();
+            let max_traversal_steps = limit
+                .saturating_mul(50)
+                .clamp(10_000, crate::intelligence::graph::constants::MAX_TRAVERSAL_STEPS);
+            let mut traversal_steps = 0usize;
 
             for &start_idx in &start_indices {
                 if visited.insert(start_idx) {
@@ -131,6 +135,11 @@ impl CodeSymbolGraph {
                     .graph
                     .edges_directed(current_idx, petgraph::Direction::Incoming)
                 {
+                    traversal_steps += 1;
+                    if traversal_steps >= max_traversal_steps {
+                        truncated = true;
+                        break 'traverse;
+                    }
                     let neighbor_idx = edge.source();
                     if !visited.contains(&neighbor_idx) {
                         if depth >= 50 {

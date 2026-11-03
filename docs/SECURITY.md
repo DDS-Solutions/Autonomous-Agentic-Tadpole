@@ -58,15 +58,37 @@ All WebSocket connections (`GET /v1/engine/ws`, `GET /v1/engine/live-voice`) are
 
 ## Cryptographic & Financial Security Controls
 
-1. **Zeroized In-Memory Key Material (`server-rs/src/security/audit.rs`)**:
+1. **Zeroized In-Memory Key Material & File Permissions (`server-rs/src/security/audit.rs`)**:
    - Staged Ed25519 audit signing key material and hex-decoded private key buffers implement `Zeroize` and `Secrecy`. Memory buffers are wiped automatically upon `Drop`, preventing cold-boot and process memory dump key extraction.
+   - Private key files are written strictly with POSIX `0o600` permissions (`-rw-------`), and runtime process environment modification via `std::env::set_var` is prohibited.
 
-2. **A2E-01 Financial Ledger Risk Containment (`server-rs/src/routes/a2a.rs`)**:
+2. **Deterministic Credential Preservation (`server-rs/src/agent/persistence.rs`)**:
+   - Agent provider credentials utilize SQL `COALESCE(excluded.api_key, agents.api_key)` with explicit optional string binding, preventing destructive key nullification during periodic 30-second persistence flushes.
+
+3. **Atomic Authorization Cache Invariants (`server-rs/src/security/permissions.rs`)**:
+   - Permission policy reloading enforces retain-and-upsert semantics instead of clear-then-fetch, eliminating the authorization race window where incoming requests could observe an empty permission cache.
+
+4. **Fail-Closed Sovereign Security Channels (`server-rs/src/state/kernel.rs`)**:
+   - Security inspection actions fail closed (`PiiCheck => Ok(false)`), and sovereign audit channel receivers are bounded with a strict 5.0-second `tokio::time::timeout` to prevent channel exhaustion deadlocks.
+
+5. **Server-Verified Operator Trust Boundaries (`server-rs/src/routes/oversight/principal.rs`)**:
+   - `OversightPrincipal` is extracted exclusively from server-verified request extensions (`OperatorIdentity` / `AuthenticatedOperator`), preventing elevation of privilege or spoofed operator IDs from unauthenticated client headers or bodies.
+
+6. **A2E-01 Financial Ledger Risk Containment (`server-rs/src/routes/a2a.rs`)**:
    - **24-Hour Rolling Spend Limits**: Tracked in `agent_economics_meta` table (default $10.00 cap / 10,000,000 micros) with automatic 24-hour resets.
    - **Lock-Aware Spend Projection**: Before issuing a Two-Phase Commit (2PC) lock, the router calculates Total Projected Spend:
      $$\text{Projected} = \text{Spent Today} + \sum \text{Pending Prepared Locks} + \text{New Amount}$$
      If projected spend exceeds the daily limit, the transaction is rejected (`400 Bad Request`).
    - **Zero-Drift Micro-USDC Integer Arithmetic**: Integer amounts (`u64` micro-USDC: $1.00 = 1,000,000 micros) eliminate IEEE-754 floating-point rounding errors in cryptographic audit chains.
+
+7. **Asynchronous SSRF & Transport Isolation (`server-rs/src/routes/templates/security.rs`)**:
+   - Swarm template remote catalog downloads enforce strict scheme whitelisting (`http`/`https`), DNS resolution verification, and rejection of loopback and RFC 1918/RFC 3927 private IP ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, link-local `169.254.0.0/16`, IPv6 loopback `::1`), mitigating Server-Side Request Forgery (SSRF) during template catalog synchronization.
+
+8. **Cryptographic Merkle Hash-Chain Tamper Detection (`server-rs/src/routes/missions/merkle.rs`)**:
+   - Mission flight recorder operations and historical logs are anchored to a cryptographic Merkle hash tree and content-addressable storage (CAS). Any discrepancy between computed state root and recorded transaction hashes triggers an immediate integrity alarm and blocks mission state promotion.
+
+9. **Fail-Closed Safe Mode & Untrusted Data Fencing (`server-rs/src/agent/runner/synthesis/mod.rs`)**:
+   - Prompt assembly (`server-rs/src/agent/runner/synthesis/prompt.rs`) fences untrusted user inputs, dynamic tool definitions (`server-rs/src/agent/runner/synthesis/tools.rs`), and dynamic repository maps (`server-rs/src/agent/runner/synthesis/repo_map.rs`) within strict XML/delimiter boundaries. Model-invoking context collapses to fail-closed minimal prompts whenever budget thresholds or safety violations are detected (`server-rs/src/agent/runner/synthesis/budget.rs`).
 
 ## Middleware Controls
 

@@ -255,6 +255,7 @@ async fn async_main(config: Config, args: Vec<String>) -> anyhow::Result<()> {
 
     // Signal all background tasks to shut down gracefully
     let _ = shutdown_tx.send(true);
+    let _ = app_state.hot_reload_tx.send(true);
     for worker in optional_workers {
         worker.abort();
         let _ = worker.await;

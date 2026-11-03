@@ -19,7 +19,7 @@ This directive defines the code patterns, compiler constraints, and architectura
 
 ## Architectural Invariants
 
-### 1. The Hub Pattern for Global State
+### 1. The Hub Pattern & Decomposed State Architecture
 All global systems and database connections reside under the centralized [AppState](../server-rs/src/state/mod.rs) struct. Sub-states are grouped logically into static hubs under [server-rs/src/state/hubs/](../server-rs/src/state/hubs/):
 - **Registry Hub (`reg`)**: In-memory and persistent agent registry databases.
 - **Resource Hub (`res`)**: Database pools, task executors, and file locks.
@@ -27,7 +27,25 @@ All global systems and database connections reside under the centralized [AppSta
 - **Governance Hub (`gov`)**: Configuration values, active limits, and state variables.
 - **Communication Hub (`comm`)**: Live event bus and WebSocket dispatchers.
 
+The state coordinator is decomposed into domain-specific modules under `server-rs/src/state/`:
+- `boot.rs`: Initialization, token loading, SQLite `governance_settings` hydration, and ceiling clamps.
+- `kernel.rs`: Bounded sovereign cross-system IPC, timeout-guarded audit trail recording, and fail-closed PII checking.
+- `persist.rs`: Non-blocking multi-stripe agent persistence (`save_agents`), releasing mutex stripes before executing SQLite transactions and disk I/O.
+- `session.rs`: Sovereign session graph node appending, lineage traversal, and state rollback checkpoints.
+- `telemetry.rs`: Swarm event broadcasting and phase transition yielding.
+- `mod.rs`: Facade re-exporting `AppState` and hubs for zero-churn downstream compatibility.
+
 **Rule**: Do not create new ad-hoc global states or static variables. All new subsystem states must be registered within an appropriate hub in `server-rs/src/state/hubs/` and initialized during boot.
+
+### 2. Modular Routing & Oversight Architecture
+Monolithic route handlers must be decomposed into domain-delimited submodules. In `server-rs/src/routes/oversight/`:
+- `principal.rs`: Strict server-verified operator principal extraction (`OversightPrincipal`), mission-scoping authorization, and recursive JSON secret sanitization.
+- `settings.rs`: Global governance configuration (`GET`/`PUT` `/v1/oversight/settings`) with SQLite persistence and atomic ceiling clamps.
+- `queue.rs`: Human-in-the-loop pending approval queue (`GET /v1/oversight/pending`, `POST /v1/oversight/{id}/decide`) with conflict isolation and sanitized client responses.
+- `quotas.rs`: Economic spend quotas for agents and missions with audited Merkle ledger writes.
+- `policies.rs`: Declarative tool permission policies with retain-and-upsert in-memory cache synchrony.
+- `audit.rs`: Historical decision ledger, Merkle hash-chain traversal, and cryptographic tamper detection.
+- `telemetry.rs`: Swarm token burn analysis (`GET /v1/oversight/token-burn`) with task/agent reconciliation and Prometheus metrics synchronization.
 
 ---
 

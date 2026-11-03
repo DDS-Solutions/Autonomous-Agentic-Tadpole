@@ -578,4 +578,47 @@ fn test_wildcard_file_blast_radius() {
     assert!(affected.iter().any(|n| n.name == "test_utils"));
 }
 
+#[test]
+fn test_blast_radius_traversal_ceiling_bounds() {
+    let dir = tempdir().unwrap();
+    let mut graph = CodeSymbolGraph::new(dir.path().to_path_buf());
+
+    let target_node = SymbolNode {
+        name: "hot_spot".to_string(),
+        path: "src/hot.rs".to_string(),
+        kind: "function".to_string(),
+        signature: "fn hot_spot()".to_string(),
+        tokens: 10,
+        start_line: 1,
+        end_line: 5,
+    };
+    let target_idx = graph.graph.add_node(target_node);
+    graph.index.insert(crate::intelligence::graph::key::index_key("src/hot.rs", "hot_spot"), target_idx);
+
+    // Create 100 callers calling hot_spot
+    for i in 0..100 {
+        let caller = SymbolNode {
+            name: format!("caller_{}", i),
+            path: format!("src/caller_{}.rs", i),
+            kind: "function".to_string(),
+            signature: format!("fn caller_{}()", i),
+            tokens: 10,
+            start_line: 1,
+            end_line: 5,
+        };
+        let c_idx = graph.graph.add_node(caller);
+        graph.graph.add_edge(c_idx, target_idx, SymbolEdge { kind: "call".to_string() });
+    }
+
+    // Normal query with limit 200 should discover all 101 nodes without hitting ceiling
+    let (affected, truncated) = graph.calculate_blast_radius_bounded("hot_spot", "src/hot.rs", Some(200));
+    assert_eq!(affected.len(), 101);
+    assert!(!truncated);
+
+    // Query with limit 5 should truncate gracefully at 5 nodes
+    let (clamped, was_truncated) = graph.calculate_blast_radius_bounded("hot_spot", "src/hot.rs", Some(5));
+    assert_eq!(clamped.len(), 5);
+    assert!(was_truncated);
+}
+
 // Metadata: [tests]

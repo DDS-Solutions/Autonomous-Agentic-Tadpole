@@ -337,46 +337,47 @@ impl BudgetGuard {
         budget_usd: f64,
         reset_period: Option<ResetPeriod>,
     ) -> Result<()> {
-        let updated = if let Some(period) = reset_period {
-            let period_str = match period {
-                ResetPeriod::Daily => "daily",
-                ResetPeriod::Monthly => "monthly",
-                ResetPeriod::Never => "never",
-            };
-
-            sqlx::query(
-                "UPDATE agent_quotas SET budget_usd = ?1, reset_period = ?2 WHERE entity_id = ?3",
-            )
-            .bind(budget_usd)
-            .bind(period_str)
-            .bind(entity_id)
-            .execute(&self.pool)
-            .await?
-        } else {
-            sqlx::query("UPDATE agent_quotas SET budget_usd = ?1 WHERE entity_id = ?2")
-                .bind(budget_usd)
-                .bind(entity_id)
-                .execute(&self.pool)
-                .await?
+        let period_str = match reset_period.unwrap_or(ResetPeriod::Daily) {
+            ResetPeriod::Daily => "daily",
+            ResetPeriod::Monthly => "monthly",
+            ResetPeriod::Never => "never",
+        };
+        let now = Utc::now();
+        let next_reset_at: Option<chrono::DateTime<Utc>> = match reset_period.unwrap_or(ResetPeriod::Daily) {
+            ResetPeriod::Daily => Some(now + chrono::Duration::days(1)),
+            ResetPeriod::Monthly => Some(now + chrono::Duration::days(30)),
+            ResetPeriod::Never => None,
         };
 
-        if updated.rows_affected() == 0 {
-            let period_str = match reset_period.unwrap_or(ResetPeriod::Daily) {
-                ResetPeriod::Daily => "daily",
-                ResetPeriod::Monthly => "monthly",
-                ResetPeriod::Never => "never",
-            };
-            let now = Utc::now();
+        if reset_period.is_some() {
             sqlx::query(
                 "INSERT INTO agent_quotas (id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
-                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6)",
+                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6) \
+                 ON CONFLICT(entity_id) DO UPDATE SET \
+                    budget_usd = excluded.budget_usd, \
+                    reset_period = excluded.reset_period, \
+                    next_reset_at = excluded.next_reset_at",
             )
             .bind(uuid::Uuid::new_v4().to_string())
             .bind(entity_id)
             .bind(budget_usd)
             .bind(period_str)
             .bind(now)
-            .bind(now + chrono::Duration::days(1))
+            .bind(next_reset_at)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query(
+                "INSERT INTO agent_quotas (id, entity_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
+                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6) \
+                 ON CONFLICT(entity_id) DO UPDATE SET budget_usd = excluded.budget_usd",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(entity_id)
+            .bind(budget_usd)
+            .bind(period_str)
+            .bind(now)
+            .bind(next_reset_at)
             .execute(&self.pool)
             .await?;
         }
@@ -396,20 +397,45 @@ impl BudgetGuard {
             ResetPeriod::Monthly => "monthly",
             ResetPeriod::Never => "never",
         };
+        let now = Utc::now();
+        let next_reset_at: Option<chrono::DateTime<Utc>> = match reset_period.unwrap_or(ResetPeriod::Daily) {
+            ResetPeriod::Daily => Some(now + chrono::Duration::days(1)),
+            ResetPeriod::Monthly => Some(now + chrono::Duration::days(30)),
+            ResetPeriod::Never => None,
+        };
 
-        sqlx::query(
-            "INSERT INTO mission_quotas (id, cluster_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
-             VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6) \
-             ON CONFLICT(cluster_id) DO UPDATE SET budget_usd = ?3, reset_period = ?4"
-        )
-        .bind(uuid::Uuid::new_v4().to_string())
-        .bind(cluster_id)
-        .bind(budget_usd)
-        .bind(period_str)
-        .bind(Utc::now())
-        .bind(Utc::now() + chrono::Duration::days(1))
-        .execute(&self.pool)
-        .await?;
+        if reset_period.is_some() {
+            sqlx::query(
+                "INSERT INTO mission_quotas (id, cluster_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
+                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6) \
+                 ON CONFLICT(cluster_id) DO UPDATE SET \
+                    budget_usd = excluded.budget_usd, \
+                    reset_period = excluded.reset_period, \
+                    next_reset_at = excluded.next_reset_at",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(cluster_id)
+            .bind(budget_usd)
+            .bind(period_str)
+            .bind(now)
+            .bind(next_reset_at)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query(
+                "INSERT INTO mission_quotas (id, cluster_id, budget_usd, used_usd, reset_period, last_reset_at, next_reset_at) \
+                 VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6) \
+                 ON CONFLICT(cluster_id) DO UPDATE SET budget_usd = excluded.budget_usd",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(cluster_id)
+            .bind(budget_usd)
+            .bind(period_str)
+            .bind(now)
+            .bind(next_reset_at)
+            .execute(&self.pool)
+            .await?;
+        }
         Ok(())
     }
 

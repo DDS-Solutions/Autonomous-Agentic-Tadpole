@@ -213,6 +213,9 @@ Operational capabilities include:
 
 - pending oversight decisions with 1-click guided remediation auto-population
 - oversight ledger and audit logs
+- **Governance Settings Management**: `GET /v1/oversight/settings` and `PUT /v1/oversight/settings` backed by the `governance_settings` SQLite table with ceiling enforcement (`max_agents <= 10,000`, `max_clusters <= 1,000`, `max_swarm_depth <= 64`, `max_task_length <= 1,048,576`, `default_budget_usd <= $1,000,000.0`)
+- **Swarm Token Burn Analytics**: `GET /v1/oversight/token-burn` providing authoritative token and cost burn reconciled from `agent_tasks` or `agents` fallback with real-time Prometheus gauge export
+- **Mission Scoping Authorization**: Fine-grained `OversightPrincipal` access control ensuring operators can only decide or inspect oversight entries within their authorized mission clusters
 - **Error Sentinel Triage**: Agent QA-99 mid-flight fault classification (`directives/error_sentinel_triage.md`) attaching remediation prescriptions to tripped circuit breaker entries
 - **RFC 9457 Problem Details Remediation Engine**: Structured `remediation` metadata emitted across all HTTP, tool execution, and runtime error paths
 - security quotas

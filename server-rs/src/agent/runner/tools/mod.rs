@@ -509,8 +509,8 @@ impl AgentRunner {
         self.evaluate_aletheia_gate(ctx, fc, &mut validation, mission_id_opt.clone())
             .await?;
 
-        // 4. Oversight Check
-        if validation.oversight_required {
+        // 4. Oversight Check (§4.3: Prevent double human approval; execute_shell has its own dedicated Sapphire Gate)
+        if validation.oversight_required && fc.name != "execute_shell" {
             self.broadcast_sys(
                 &format!("🔒 Security Gate: '{}' requires explicit approval.", fc.name),
                 "warning",
@@ -572,6 +572,7 @@ impl AgentRunner {
 
             match result {
                 Ok(res) => {
+                    let output_summary = self.safe_truncate(&res, 1000);
                     let _ = self
                         .state
                         .record_audit(
@@ -579,7 +580,7 @@ impl AgentRunner {
                             mission_id_opt.as_deref(),
                             ctx.user_id.as_deref(),
                             &format!("[SUCCESS] {}", fc.name),
-                            "Execution completed successfully",
+                            &output_summary,
                         )
                         .await;
                     return Ok(res);
@@ -883,8 +884,16 @@ impl AgentRunner {
         );
 
         // 2. Sapphire Gate Oversight
-        let approved = self
-            .submit_oversight(
+        let auto_approved = self
+            .state
+            .governance
+            .auto_approve_safe_skills
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        let approved = if auto_approved {
+            true
+        } else {
+            self.submit_oversight(
                 crate::agent::types::ToolCallAudit {
                     id: uuid::Uuid::new_v4().to_string(),
                     agent_id: ctx.agent_id.clone(),
@@ -897,7 +906,8 @@ impl AgentRunner {
                 },
                 Some(ctx.mission_id.clone()),
             )
-            .await?;
+            .await?
+        };
 
         if !approved {
             *output_text = format!("(Shell execution REJECTED by Oversight) {}", output_text);

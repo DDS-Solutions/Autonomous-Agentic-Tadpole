@@ -41,7 +41,7 @@ This map reflects the current code layout and should be used as the first orient
 | Browser Sentinel & DLP Shield | `src/services/sentinel_daemon.ts`, `src/services/browser_inference.ts`, `src/stores/browser_specialist_store.ts`, `src/utils/security_utils.ts` | Local 4-bit ONNX browser reasoning (`SmolLM-360M-Instruct`), WebGPU/WASM device chain, autonomous DOM health audits, WebGPU buffer disposal, and zero-leakage regex DLP pre-flight shield. |
 | Stores and hooks | `src/stores/`, `src/hooks/` | Client state, dashboard data, logs, engine status, agents, models, settings, skills, browser specialist telemetry, and telemetry. |
 | Frontend services | `src/services/`, `src/services/telemetry_buffer.ts` | API clients, sockets, IndexedDB rolling telemetry cache (7-day TTL), model services, and governance. |
-| Agent engine | `server-rs/src/agent/` | Providers, mission runner, registry, skills, MCP bridge, continuity, tools (`get_symbol_context`, `get_impacted_tests`), hooks, and agent persistence. |
+| Agent engine | `server-rs/src/agent/` | Providers, mission runner (`runner/synthesis/` decomposed into budget, tools, repo_map, context, prompt), registry, skills, MCP bridge, continuity, tools (`get_symbol_context`, `get_impacted_tests`), hooks, and agent persistence. |
 | OTP Actor Supervision | `server-rs/src/system/actors/supervisor.rs` | Erlang/OTP supervision tree engine (`OneForOne`, `OneForAll`, `AbortHandle` hard shutdown, stability backoff reset, and `DashMap` registry). |
 | Hybrid RAG Triad Fusion | `server-rs/src/services/rag_fusion.rs` | Reciprocal Rank Fusion (RRF) combining LanceDB Vector, BM25 Lexical, and TrustGraph Entity subgraphs. |
 | Durable Workflow Engine | `server-rs/src/agent/durable.rs` | SQLite-native step memoization with SHA-256 parameter hashing, crash fast-forwarding, and mutation re-execution. |
@@ -56,9 +56,9 @@ This map reflects the current code layout and should be used as the first orient
 | TrustGraph GraphRAG | `server-rs/src/agent/trustgraph.rs` | Directed entity-relation graph engine for O(N) BFS multi-hop GraphRAG context traversal. |
 | BM25 Lexical Search | `server-rs/src/services/bm25_memory.rs` | Zero-embedding sub-millisecond lexical search engine (< 1ms) with 5s TTL double-checked cache. |
 | A2A Economic Governance | `server-rs/src/routes/a2a.rs` | Agent-to-Agent 2PC budget transactions, integer micro-USDC accounting, and 24h rolling limit resets. |
-| Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, A2A budget, oversight, model manager, skills, docs, governance, and engine control. |
+| Routes | `server-rs/src/routes/` | REST and WebSocket handlers for agents, A2A budget, oversight (`routes/oversight/`), templates (`routes/templates/` decomposed into catalog, install, uninstall, security, principal), missions (`routes/missions/` decomposed into catalog, merkle, cas_diff, dossier, pin), model manager, skills, docs, governance, and engine control. |
 | Code Intelligence | `server-rs/src/intelligence/`, `src/components/intelligence/` | Codebase-wide symbol mapping, directed force-graph visualization, downstream blast-radius analysis, and impacted test suite selection (`/v1/intelligence/impacted-tests`). |
-| State hubs | `server-rs/src/state/hubs/` | Communication, governance, registry, resources, and security hub separation. |
+| Sovereign State & Hubs | `server-rs/src/state/` | Decomposed runtime state facade (`server-rs/src/state/{boot,kernel,persist,session,telemetry}.rs`) with communication, governance, registry, resources, and security hubs (`server-rs/src/state/hubs/`). |
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
 | Conflict Management | `server-rs/src/security/conflict.rs` | 30s TTL file write leases preventing multi-agent race conditions during concurrent workspace edits. |
@@ -69,7 +69,7 @@ This map reflects the current code layout and should be used as the first orient
 | Telemetry File Sink | `server-rs/src/telemetry/sink.rs` | 7-day auto-rotating JSONL file sink for system event logs with automatic daily sweeping. |
 | Clean-Room WASM Codec | `crates/wasm-codec/` | High-efficiency MIT-licensed Postcard binary pulse serializer/deserializer. |
 | Multi-Agent Starter Kits | `starter_kits/` | Ready-to-deploy swarms (Customer Success, Explorer Scout, Finance Compliance, Marketing Growth). |
-| Persistence | `server-rs/src/db/{mod,migrations,seed,init,contract_tests}.rs`, `server-rs/migrations/`, `data/` | Modular SQLite initialization, migrations (`20260304000100`–`20260918000100`), contract test coverage, safe fallback memory provisioning, and gated reconciliation (`ALLOW_MIGRATION_RECONCILE=true`). |
+| Persistence | `server-rs/src/db/{mod,migrations,seed,init,contract_tests}.rs`, `server-rs/migrations/`, `data/` | Modular SQLite initialization, migrations (`20260304000100`–`20261101000100`), contract test coverage, safe fallback memory provisioning, and gated reconciliation (`ALLOW_MIGRATION_RECONCILE=true`). |
 | Execution tools | `execution/`, `execution/core/`, `execution/skills/` | JSON tool manifests, Python scripts, circuit breakers (`tool_loop_guard.py`), and self-annealing evaluation (`evaluate_annealing.py`). |
 | Shared Tool Cache & Invalidation | `server-rs/src/agent/runner/tools/cache.rs` | In-memory read-only LRU tool cache with monotonic file mtime/size freshness validation and mutation invalidation. |
 | Cyclic Loop Detection & Monologue Compactor | `server-rs/src/agent/runner/{loop_detector,monologue}.rs` | Period 1-4 cyclical tool loop detection and 2-stage monologue compaction (embedded log trimming + older turn summarization). |

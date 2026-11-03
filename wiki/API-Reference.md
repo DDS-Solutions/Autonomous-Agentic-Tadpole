@@ -104,6 +104,7 @@
 | `GET` | `/v1/oversight/pending` | List pending oversight requests |
 | `POST` | `/v1/oversight/{id}/decide` | Approve or reject an oversight decision |
 | `GET` | `/v1/oversight/ledger` | Agent spend ledger |
+| `GET` | `/v1/oversight/settings` | Retrieve governance limits and budget settings |
 | `PUT` | `/v1/oversight/settings` | Update governance and budget settings |
 | `GET` | `/v1/oversight/token-burn` | Aggregated swarm token burn |
 | `GET` | `/v1/oversight/security/quotas` | Agent quota allocations |
@@ -236,6 +237,16 @@
 | `GET` | `/v1/sovereign/missions/{id}/nodes/{leaf_id}/history` | Get branch history leading to node |
 | `POST` | `/v1/sovereign/missions/{id}/nodes/{node_id}/revert` | Revert to previous session node |
 
+
+---
+
+### /v1/missions — Mission Flight Recorder & Dossiers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /v1/missions | Paginated mission history catalog with log and diff counts |
+| GET | /v1/missions/{id}/dossier | Complete Merkle flight log dossier, CAS diffs, economics, and debrief |
+| POST | /v1/missions/{id}/pin | Atomically toggle or set mission retention pin |
 ---
 
 ### `/v1/system` & Memory Search

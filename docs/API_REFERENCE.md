@@ -232,6 +232,7 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `PUT` | `/v1/oversight/security/policies` | `routes::oversight::update_policy` | Protected |
 | `GET` | `/v1/oversight/security/quotas` | `routes::oversight::get_security_quotas` | Protected |
 | `PUT` | `/v1/oversight/security/quotas/{id}` | `routes::oversight::update_agent_quota` | Protected |
+| `GET` | `/v1/oversight/settings` | `routes::oversight::get_settings` | Protected |
 | `PUT` | `/v1/oversight/settings` | `routes::oversight::update_settings` | Protected |
 | `GET` | `/v1/oversight/token-burn` | `routes::oversight::get_token_burn` | Protected |
 | `POST` | `/v1/oversight/{id}/decide` | `routes::oversight::decide_oversight` | Protected |

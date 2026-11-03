@@ -97,7 +97,8 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .layer(tower_http::trace::TraceLayer::new_for_http().make_span_with(
             |request: &axum::http::Request<axum::body::Body>| {
                 let path = request.uri().path();
-                if path.starts_with("/v1/oversight")
+                if path == "/v1/oversight/pending"
+                    || path == "/v1/oversight/token-burn"
                     || path.starts_with("/v1/telemetry")
                     || path.starts_with("/v1/system/debug")
                     || path.starts_with("/v1/engine/ws")
@@ -318,7 +319,7 @@ fn build_oversight_routes() -> Router<Arc<AppState>> {
         .route("/{id}/decide", post(routes::oversight::decide_oversight))
         .route("/pending", get(routes::oversight::get_pending))
         .route("/ledger", get(routes::oversight::get_ledger))
-        .route("/settings", put(routes::oversight::update_settings))
+        .route("/settings", get(routes::oversight::get_settings).put(routes::oversight::update_settings))
         // ── Agentic Engine Phase 3: Swarm Token Burn Aggregation ─────────
         .route("/token-burn", get(routes::oversight::get_token_burn))
         .route(

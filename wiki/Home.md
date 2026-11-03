@@ -76,6 +76,6 @@ Open `http://localhost:5173` · Health: `http://127.0.0.1:8000/v1/engine/health`
 5. **Self-Annealing** — Errors update directives; the system grows stronger from every failure
 
 ---
-*Last updated: 2026-08-22 · v1.1.59 Agentic Engine Release*
+*Last updated: 2026-11-03 · v1.1.59 Agentic Engine Release*
 
 [//]: # (Metadata: [Home])

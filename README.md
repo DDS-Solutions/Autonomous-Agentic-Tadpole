@@ -272,7 +272,7 @@ Protected route groups and WebSocket streams:
 | `/v1/engine/live-voice` | Live voice audio WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
 | `/v1/agents` | Agent CRUD, graph, tasks, pause/resume, memory, ledger, claims, receipts |
 | `/v1/a2a` | Agent-to-Agent communication protocols and inter-agent delegation |
-| `/v1/oversight` | Decisions, ledger, quotas, audit trail, health, policy |
+| `/v1/oversight` | Decisions, governance settings, ledger, quotas, audit trail, health, policy, token burn |
 | `/v1/infra` | Node discovery and infrastructure nodes |
 | `/v1/model-manager` | Providers, models, catalog, pulls, provider tests |
 | `/v1/skills` | Skill manifests, MCP tools, imports, promotion, scripts, workflows, hooks |
@@ -502,6 +502,12 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **Persistent Telemetry Event Bridging** (`server-rs/src/telemetry/mod.rs`, `server-rs/src/telemetry/bridge.rs`): `TelemetryLayer::on_event` broadcasts structured `trace:event` signals to `TELEMETRY_TX`, which persists error events to SQLite `mission_logs`.
 - **Trace Status Immutability** (`src/stores/trace_store.ts`): Hardened span lifecycle handling to ensure error spans remain marked as `status: 'error'` when closed.
 - **WAL Concurrency Lock Timeout** (`execution/mission_diagnose.py`, `execution/verify_telemetry.py`): Added 30.0-second SQLite timeout and `PRAGMA busy_timeout = 30000;` preventing lock contention with active server writers during diagnostic scans.
+
+### 🧩 Modular Engine Architecture & Kernel Concurrency Hardening
+- **Monolith Decomposition**: Decomposed legacy multi-thousand-line monoliths into clean, cohesive sub-packages: `server-rs/src/routes/oversight/` (12 modules), `server-rs/src/routes/templates/` (7 modules), `server-rs/src/routes/missions/` (7 modules), and `server-rs/src/agent/runner/synthesis/` (6 modules).
+- **Convoy-Free Agent Persistence** (`server-rs/src/state/persist.rs`): Replaced global 64-stripe mutex lock acquisition with lock-free `DashMap` snapshotting during 30-second periodic flushes, eliminating swarm-wide convoy stalling while preserving SQLite OCC safety (`WHERE agents.id = excluded.id AND agents.version = ?`).
+- **Zeroized Thread-Safe Key Management** (`server-rs/src/security/audit.rs`): Removed process-level `std::env::set_var` key exports, preventing multi-threaded libc memory races and eliminating Ed25519 private key leakage to child subprocesses and `/proc/self/environ`.
+- **Bounded AST Traversal Ceilings** (`server-rs/src/intelligence/graph/engine/analysis.rs`): Implemented cooperative traversal step ceilings (`MAX_TRAVERSAL_STEPS`) in BFS blast radius analysis, preventing CPU runaway and thread pool starvation in Tokio `spawn_blocking` workers during dense graph traversals.
 
 ## Previous Upgrades (v1.1.58) — Next-Gen Orchestration Engine
 

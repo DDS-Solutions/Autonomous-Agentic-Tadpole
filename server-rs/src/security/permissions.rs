@@ -89,7 +89,7 @@ impl PermissionPolicy {
                 .fetch_all(&self.pool)
                 .await?;
 
-        self.cache.clear();
+        let mut new_entries = Vec::with_capacity(rows.len());
         for (name, agent_id, mode_str) in rows {
             if let Ok(mode) = mode_str.parse::<PermissionMode>() {
                 let normalized_agent = agent_id
@@ -98,8 +98,15 @@ impl PermissionPolicy {
                 let key = normalized_agent
                     .map(|id| format!("{}:{}", id, name))
                     .unwrap_or(name);
-                self.cache.insert(key, mode);
+                new_entries.push((key, mode));
             }
+        }
+
+        let new_keys: std::collections::HashSet<String> =
+            new_entries.iter().map(|(k, _)| k.clone()).collect();
+        self.cache.retain(|k, _| new_keys.contains(k));
+        for (k, v) in new_entries {
+            self.cache.insert(k, v);
         }
 
         tracing::info!(

@@ -306,7 +306,7 @@ where
             heartbeat_at = excluded.heartbeat_at,
             active_mission = excluded.active_mission,
             provider = excluded.provider,
-            api_key = excluded.api_key,
+            api_key = COALESCE(excluded.api_key, agents.api_key),
             base_url = excluded.base_url,
             system_prompt = excluded.system_prompt,
             temperature = excluded.temperature,
@@ -351,7 +351,7 @@ where
     .bind(agent.health.heartbeat_at)
     .bind(agent.state.active_mission.as_ref().map(sqlx::types::Json))
     .bind(agent.models.model.provider.to_string())
-    .bind(None::<String>)
+    .bind(agent.models.model.api_key.as_deref())
     .bind(&agent.models.model.base_url)
     .bind(&agent.models.model.system_prompt)
     .bind(agent.models.model.temperature.map(|f| f as f64))

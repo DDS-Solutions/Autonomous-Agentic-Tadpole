@@ -77,7 +77,16 @@ The engine starts in `server-rs/src/main.rs`.
 
 ## AppState Hubs
 
-`server-rs/src/state/mod.rs` decomposes runtime state into hubs:
+## Sovereign AppState Architecture & Hubs
+
+`server-rs/src/state/` decomposes runtime state into domain-focused submodules fronted by the `AppState` facade:
+
+- **`server-rs/src/state/boot.rs`**: Application state constructors (`new`, `with_pool`, `new_mock`, `new_minimal_mock`), token extraction, SQLite governance hydration (`governance_settings` table), and environment bounds enforcement.
+- **`server-rs/src/state/kernel.rs`**: Sovereign cross-system IPC, bounded audit logging (with 5-second timeout), and fail-closed security checking (`PiiCheck => Ok(false)`).
+- **`server-rs/src/state/persist.rs`**: Non-blocking multi-stripe agent persistence (`save_agents`), provider/model database sync, and workspace skill scanning.
+- **`server-rs/src/state/session.rs`**: Sovereign session graph node appending, lineage traversal, and state rollback checkpoints.
+- **`server-rs/src/state/telemetry.rs`**: Swarm event broadcasting and phase transitions.
+- **`hubs/`**: Logical subsystem hubs:
 
 | Hub | Purpose |
 | --- | --- |
@@ -86,6 +95,50 @@ The engine starts in `server-rs/src/main.rs`.
 | RegistryHub | Agents, providers, models, nodes, skills, MCP host, hooks, and tool registry. |
 | ResourceHub | SQLite pool, HTTP client, audio cache, code graph, parser, hardware profiler, ACL, renderer, and semaphores. |
 | SecurityHub | Audit trail, budget guard, shell scanner, secret redactor, security monitor, permission policy, and deploy token. |
+
+## Oversight & Governance Subsystem
+
+`server-rs/src/routes/oversight/` provides a modular governance and human-in-the-loop review architecture:
+
+- **`server-rs/src/routes/oversight/principal.rs`**: Strict server-verified operator principal extraction (`OversightPrincipal`), mission-scoping authorization, and recursive JSON secret sanitization.
+- **`server-rs/src/routes/oversight/settings.rs`**: Global governance configuration (`GET`/`PUT` `/v1/oversight/settings`) with SQLite persistence (`governance_settings`) and atomic ceiling clamps.
+- **`server-rs/src/routes/oversight/queue.rs`**: Human-in-the-loop pending approval queue (`GET /v1/oversight/pending`, `POST /v1/oversight/{id}/decide`) with conflict isolation, unredacted agent guidance delivery, and sanitized client responses.
+- **`server-rs/src/routes/oversight/quotas.rs`**: Economic spend quotas for agents and missions (`GET`/`PUT` `/v1/oversight/security/quotas`, `GET`/`PUT` `/v1/oversight/security/missions/quotas`) with audited Merkle ledger writes.
+- **`server-rs/src/routes/oversight/policies.rs`**: Declarative tool permission policies (`GET`/`PUT` `/v1/oversight/security/policies`) with retain-and-upsert in-memory cache synchrony.
+- **`server-rs/src/routes/oversight/audit.rs`**: Historical decision ledger, Merkle hash-chain traversal, and cryptographic tamper detection (`GET /v1/oversight/ledger`, `GET /v1/oversight/security/audit-trail`, `GET /v1/oversight/security/integrity`).
+- **`server-rs/src/routes/oversight/telemetry.rs`**: Swarm token burn analysis (`GET /v1/oversight/token-burn`) with task/agent reconciliation and Prometheus metrics synchronization.
+
+## Swarm Templates Subsystem
+
+`server-rs/src/routes/templates/` manages starter kit distribution and atomic swarm provisioning:
+
+- **`server-rs/src/routes/templates/catalog.rs`**: Cached upstream catalog querying (`GET /v1/engine/templates/catalog`, 1h TTL, 2 MiB ceiling) with stale fallback and local installed inventory inspection (`GET /v1/engine/templates/installed`).
+- **`server-rs/src/routes/templates/install.rs`**: Hardened git clone (`CLONE_SEMAPHORE` limit 2, 60s timeout), preflight agent/skill validation, atomic asset copying, and Merkle install receipt generation (`POST /v1/engine/templates/install`).
+- **`server-rs/src/routes/templates/uninstall.rs`**: Audited teardown (`DELETE /v1/engine/templates/{id}`) verifying file SHA-256 digests before deletion to prevent data loss, deregistering agents, and terminating active runners.
+- **`server-rs/src/routes/templates/security.rs`**: Asynchronous DNS SSRF guards (`is_public_routable_ip`), URL credential redaction, path traversal filters, and MCP command whitelist checks.
+- **`server-rs/src/routes/templates/principal.rs`**: Authenticated operator validation gating template installations and unregistrations.
+- **`server-rs/src/routes/templates/models.rs`**: Strongly typed data contracts for requests, installation receipts, and catalog summaries.
+
+## Missions & Flight Recorder Subsystem
+
+`server-rs/src/routes/missions/` provides mission auditing, Merkle flight recording, and state diffing:
+
+- **`server-rs/src/routes/missions/catalog.rs`**: Paginated catalog queries (`GET /v1/missions`) with status filtering, wild-card escaped search, and atomic count queries inside read transactions.
+- **`server-rs/src/routes/missions/merkle.rs`**: Flight log extraction (`GET /v1/missions/{id}/dossier`, `rowid ASC`) and sequential cryptographic hash-chain verification (`prev_hash` -> `hash`) detecting tamper events.
+- **`server-rs/src/routes/missions/cas_diff.rs`**: Lean Content-Addressed Storage diffing against live workspace disk files, bounded by 256 KB per preview and an aggregate 4 MB payload budget.
+- **`server-rs/src/routes/missions/dossier.rs`**: Full dossier aggregation linking Merkle flight logs, CAS diffs, swarm context (memory palace), TrustGraph nodes/edges, A2A economic settlement ledgers, and Agent 99 debrief synthesis.
+- **`server-rs/src/routes/missions/pin.rs`**: Atomic retention flag updates (`POST /v1/missions/{id}/pin`) with operator audit logging and event bus notifications.
+- **`server-rs/src/routes/missions/models.rs`**: Resource bounds (`MAX_LOG_ROWS: 2000`, `MAX_REVISION_ROWS: 500`) and data contracts for dossiers, flight logs, and economics.
+
+## Modular Prompt Synthesizer Subsystem
+
+`server-rs/src/agent/runner/synthesis/` orchestrates agent consciousness and runtime prompt construction:
+
+- **`server-rs/src/agent/runner/synthesis/prompt.rs`**: 7-way async `tokio::join!` pipeline synthesizing tools, directives, memory, identity, mission context, repo-map, and sovereign state manifests into bounded system prompts.
+- **`server-rs/src/agent/runner/synthesis/budget.rs`**: Zero-reinitialization BPE tokenizer (`tiktoken_rs`), model context window budget calculation, and word-boundary protected token compression.
+- **`server-rs/src/agent/runner/synthesis/tools.rs`**: Dynamic toolbelt manifestation with ACL clearance filtering, safe-mode capability allow-listing (`SAFE_MODE_ALLOWED_TOOLS`), and zero cross-agent tool definition leaks.
+- **`server-rs/src/agent/runner/synthesis/context.rs`**: Untrusted data fencing (`<<<UNTRUSTED_EXTERNAL_DATA>>>`), progressive disclosure skill loader, workflow procedural fragments, and global vector vault intelligence search.
+- **`server-rs/src/agent/runner/synthesis/repo_map.rs`**: Architectural code graph summarization and hot-path topological discovery.
 
 ## Routing And Middleware
 

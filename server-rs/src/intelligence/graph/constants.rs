@@ -22,4 +22,7 @@ pub const MAX_NODES: usize = 20_000;
 /// Maximum number of edges allowed in the `CodeSymbolGraph`.
 pub const MAX_EDGES: usize = 100_000;
 
+/// Maximum number of traversal exploration steps allowed during BFS queries.
+pub const MAX_TRAVERSAL_STEPS: usize = 100_000;
+
 // Metadata: [constants]

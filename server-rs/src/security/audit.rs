@@ -103,12 +103,13 @@ impl MerkleAuditTrail {
                 let key_path = key_dir.join("audit_ed25519.key");
                 if key_path.exists() {
                     if let Ok(content) = std::fs::read_to_string(&key_path) {
-                        let hex_clean = content.trim();
-                        if let Ok(bytes_vec) = hex::decode(hex_clean) {
-                            if let Ok(bytes) = <[u8; 32]>::try_from(bytes_vec.as_slice()) {
-                                std::env::set_var("AUDIT_PRIVATE_KEY", hex_clean);
+                        let hex_source = Zeroizing::new(content.trim().to_string());
+                        if let Ok(mut decoded) = hex::decode(hex_source.as_str()) {
+                            if let Ok(bytes) = <[u8; 32]>::try_from(decoded.as_slice()) {
+                                decoded.fill(0);
                                 return Some(SigningKey::from_bytes(&bytes));
                             }
+                            decoded.fill(0);
                         }
                     }
                 }
@@ -124,7 +125,21 @@ impl MerkleAuditTrail {
                 let key = SigningKey::from_bytes(&seed);
                 let hex_str = hex::encode(seed);
                 seed.fill(0);
-                if let Err(e) = std::fs::write(&key_path, &hex_str) {
+                let write_res = {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::OpenOptionsExt;
+                        use std::io::Write;
+                        let mut options = std::fs::OpenOptions::new();
+                        options.write(true).create(true).truncate(true).mode(0o600);
+                        options.open(&key_path).and_then(|mut f| f.write_all(hex_str.as_bytes()))
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        std::fs::write(&key_path, &hex_str)
+                    }
+                };
+                if let Err(e) = write_res {
                     tracing::warn!("⚠️ [SecurityAudit] Failed to write sovereign audit key: {}", e);
                 } else {
                     tracing::info!(
@@ -132,7 +147,6 @@ impl MerkleAuditTrail {
                         key_path.display()
                     );
                 }
-                std::env::set_var("AUDIT_PRIVATE_KEY", &hex_str);
                 Some(key)
             });
 
@@ -344,6 +358,28 @@ impl MerkleAuditTrail {
         // Reverse to ascending for sequential re-hashing
         let mut entries = entries;
         entries.reverse();
+
+        // 🛡️ Anchor Check (§3.6): Anchor the segment head to genesis or to the preceding DB record
+        if let Some(first) = entries.first() {
+            let preceding_hash: Option<String> = sqlx::query_scalar(
+                "SELECT current_hash FROM audit_trail WHERE (timestamp < ?1) OR (timestamp = ?1 AND id != ?2) ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+            )
+            .bind(&first.timestamp)
+            .bind(&first.id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            let expected_anchor = preceding_hash.unwrap_or_else(|| "0".repeat(64));
+            if first.prev_hash != expected_anchor {
+                tracing::warn!(
+                    first_id = %first.id,
+                    first_prev_hash = %first.prev_hash,
+                    expected_anchor = %expected_anchor,
+                    "Audit trail segment fails anchor check: chain truncated or detached from genesis"
+                );
+                return Ok((0, entries.len()));
+            }
+        }
 
         self.verify_segments(&entries, public_key_hex).await
     }

@@ -43,7 +43,7 @@ main.rs
   ├── Load .env + validate config  (config.rs)
   ├── Init tracing + telemetry     (telemetry/)
   ├── Run SQLite migrations        (db/migrations.rs)
-  ├── Build AppState               (state/mod.rs)
+  ├── Build AppState               (state/boot.rs via state/mod.rs facade)
   │     ├── CommunicationHub       (broadcast channels, WebSocket)
   │     ├── GovernanceHub          (budget, swarm depth, privacy)
   │     ├── RegistryHub            (agents, providers, models, skills, MCP)
@@ -117,9 +117,9 @@ AgentRunner::run()
   ├── 2. context.rs       Build prompt context (memory, skills, identity)
   ├── 3. intelligence.rs  Resolve knowledge graph + blast-radius
   ├── 4. provider.rs      Select LLM provider (Ollama, OpenAI, Anthropic, etc.)
-  ├── 5. synthesis.rs     Generate response via LLM
+  ├── 5. synthesis/       Generate response via LLM (budget, tools, repo_map, context, prompt)
   ├── 6. tools/mod.rs     Execute tool calls (MCP, Python, WASM, Docker)
-  ├── 7. oversight.rs     Check governance gates (budget, approval queue)
+  ├── 7. oversight/       Check governance gates (principal, queue, quotas, settings, policies, audit)
   ├── 8. refinement.rs    Quality gate + retry logic
   ├── 9. lifecycle.rs     Update agent state and health
   └── 10. finalize.rs     Persist results, emit telemetry
