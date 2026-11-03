@@ -149,7 +149,16 @@ async fn async_main(config: Config, args: Vec<String>) -> anyhow::Result<()> {
         let domain = if config.socket_addr.is_ipv4() { Domain::IPV4 } else { Domain::IPV6 };
         let socket = Socket::new(domain, Type::STREAM, None)?;
         socket.set_reuse_address(true)?;
-        #[cfg(not(windows))]
+        #[cfg(all(
+            unix,
+            not(any(
+                target_os = "solaris",
+                target_os = "illumos",
+                target_os = "cygwin",
+                target_os = "nuttx",
+                target_os = "wasi"
+            ))
+        ))]
         let _ = socket.set_reuse_port(true);
         socket.set_nonblocking(true)?;
         socket.bind(&config.socket_addr.into())?;
