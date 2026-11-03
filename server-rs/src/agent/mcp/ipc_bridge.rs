@@ -10,6 +10,7 @@
 //! - `[Structural]` Framed JSON-RPC 2.0 over newline-delimited JSON (NDJSON).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[ipc_bridge]` in system logs.
 //! - **Local Errors**: `IPC_BRIDGE_001` (bind failure), `IPC_BRIDGE_002` (frame parse error)
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_jsonrpc_request_parsing`, `test_dispatch_ping`
@@ -504,3 +505,4 @@ mod tests {
         assert_eq!(resp.error.unwrap().code, -32003); // Security policy denied mutation
     }
 }
+// Metadata: [ipc_bridge]

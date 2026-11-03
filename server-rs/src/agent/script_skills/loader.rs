@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[loader]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -472,3 +473,4 @@ impl ReloadCache {
         Ok(results)
     }
 }
+// Metadata: [loader]

@@ -85,6 +85,7 @@ This map reflects the current code layout and should be used as the first orient
 
 Public routes:
 
+- `GET /health`
 - `GET /v1/engine/health`
 
 Protected route groups require `Authorization: Bearer <NEURAL_TOKEN>` (or `Sec-WebSocket-Protocol: bearer.<token>` for WebSocket upgrades):

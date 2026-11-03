@@ -5,6 +5,7 @@
 //! Features **Lock-Aware Projected Spend Calculation**, **24-Hour Rolling Budget Resets**, and **Integer Micro-USDC Accounting**.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[a2a]` in system logs.
 //! - **Failure Path**: Exceeded daily spend limit cap, invalid lock_id, or un-committed transaction expiration.
 
 use axum::{

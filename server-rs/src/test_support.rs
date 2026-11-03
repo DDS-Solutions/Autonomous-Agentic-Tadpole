@@ -4,6 +4,7 @@
 //! Local provider fixtures for background worker regression tests.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[test_support]` in system logs.
 //! - **Failure Path**: Loopback binding failure or a worker never reaching its provider.
 //! - **Telemetry Link**: Test assertions identify the failing worker.
 
@@ -133,3 +134,4 @@ pub(crate) async fn state_with_agent(agent_id: &str, base_url: &str) -> Arc<AppS
     state.registry.agents.insert(agent_id.to_string(), agent);
     Arc::new(state)
 }
+// Metadata: [test_support]

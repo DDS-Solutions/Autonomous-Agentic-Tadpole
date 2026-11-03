@@ -5,6 +5,7 @@
 //! to facilitate unit and integration testing boundaries.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[lib]` in system logs.
 //! - **Failure Path**: Struct configuration drift or compilation errors in dependency injection.
 //! - **Telemetry Link**: Not tracked (static module declarations).
 //!
@@ -39,6 +40,6 @@ pub(crate) mod test_support;
 
 pub use state::AppState;
 
-// Metadata: [lib]
+
 
 // Metadata: [lib]

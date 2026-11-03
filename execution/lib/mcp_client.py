@@ -10,6 +10,7 @@
 - `[Structural]` Platform-agnostic IPC abstraction (Named Pipe on Windows, UDS on Unix).
 
 ### 🔍 Debugging & Observability
+# - **Telemetry Link**: Search `[mcp_client]` in system logs.
 - **Local Errors**: `TadpoleClientError`
 - **Telemetry Targets**: none declared
 - **Witness Tests**: none declared
@@ -311,3 +312,4 @@ if __name__ == "__main__":
         sys.exit(1)
     finally:
         client.close()
+# Metadata: [mcp_client]

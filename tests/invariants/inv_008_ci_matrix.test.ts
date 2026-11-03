@@ -14,7 +14,7 @@
  * - **Failure Path**: Ungoverned directories sneaking past CI checks without running tests/lints.
  * - **Telemetry Link**: Search `[inv_008_ci_matrix]` in test logs.
  *
- * // Metadata: [inv_008_ci_matrix]
+ * 
  */
 
 import { describe, it, expect } from 'vitest';

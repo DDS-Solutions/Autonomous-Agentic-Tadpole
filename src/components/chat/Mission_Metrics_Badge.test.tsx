@@ -8,6 +8,7 @@
  * - `[Structural]` Component state and props flow adhere strictly to unidirectional UI data bindings.
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Mission_Metrics_Badge_test]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: none declared
@@ -79,3 +80,4 @@ describe('Mission_Metrics_Badge', () => {
         expect(screen.getByText('3c')).toBeInTheDocument();
     });
 });
+// Metadata: [Mission_Metrics_Badge_test]

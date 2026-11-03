@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+"""
+@docs ARCHITECTURE:Infrastructure:Execution
+
+### AI Assist Note
+**awaken**: Universal Awakening Orchestrator for the Tadpole OS swarm.
+Scans and enforces Sovereign Awakening headers, docs links, and telemetry tags.
+
+### 🔍 Debugging & Observability
+- **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.
+- **Telemetry Link**: Search `[awaken]` in system logs.
+"""
 import os
 import sys
 import argparse
@@ -84,7 +95,7 @@ def get_headers(file_path, pillar, purpose=None):
 //! 
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
 //! 
 """
     elif ext in ['.ts', '.tsx', '.js']:
@@ -97,7 +108,7 @@ def get_headers(file_path, pillar, purpose=None):
  * 
  * ### 🔍 Debugging & Observability
  * - **Failure Path**: UI regression, hook desync, or API timeout.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
  */
 
 """
@@ -111,7 +122,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 
 ### 🔍 Debugging & Observability
 - **Failure Path**: Script error, API failure, or logic drift in the 3-layer architecture.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
 """
 
 '''
@@ -121,7 +132,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 > This document is part of the "Sovereign Reality" documentation.
 > - **@docs ARCHITECTURE:{pillar}**
 > - **Failure Path**: Information drift, legacy terminology, or documentation mismatch.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
 >
 > ### AI Assist Note
 > {purpose}
@@ -138,7 +149,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
   Standardized HTML resource.
   ### 🔍 Debugging & Observability
   - **Failure Path**: Rendering error or broken asset links.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
 -->
 
 """
@@ -151,7 +162,7 @@ Advanced agentic logic and tool orchestration for the Tadpole OS swarm.
 #
 # ### 🔍 Debugging & Observability
 # - **Failure Path**: Environment error, permission denied, or command failure.
-//! - **Telemetry Link**: Search `[awaken]` in system logs.
+//! - **Telemetry Link**: Search `[{tag}]` in system logs.
 
 """
     else:
@@ -200,6 +211,21 @@ def get_footer(file_path, tag):
         return f"\n{comment_prefix} Metadata: [{tag}]\n"
     return ""
 
+def extract_telemetry_tag(content):
+    m = re.search(r'Search\s+.*?\[([a-zA-Z0-9_\-]+)\]', content)
+    if m: return m.group(1)
+    m = re.search(r'Telemetry Targets.*?\[([a-zA-Z0-9_\-]+)\]', content)
+    if m: return m.group(1)
+    m = re.search(r'Metadata:\s*\[([a-zA-Z0-9_\-]+)\]', content)
+    if m: return m.group(1)
+    return None
+
+def check_headers_compliant(content):
+    has_docs = bool(re.search(r'@docs\s+[A-Z0-9_]+:[a-zA-Z0-9_]+', content))
+    has_note = bool(re.search(r'###\s+AI\s+(?:Assist\s+Note|Context\s+Alignment)', content))
+    has_debugging = bool(re.search(r'###\s+.*?\s+Debugging\s+&\s+Observability', content))
+    return has_docs and has_note and has_debugging
+
 def process_file(file_path, audit_only=False):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -207,13 +233,15 @@ def process_file(file_path, audit_only=False):
             
         stem = os.path.splitext(os.path.basename(file_path))[0]
         tag = stem.replace('.', '_').replace('-', '_')
-        tag_marker = f"[{tag}]"
+        existing_tag = extract_telemetry_tag(content)
+        active_tag = existing_tag if existing_tag else tag
+        tag_marker = f"[{active_tag}]"
         
         # Check compliance
-        missing_markers = [m for m in REQUIRED_MARKERS if m not in content]
-        has_telemetry = content.count(tag_marker) >= 2
+        compliant_headers = check_headers_compliant(content)
+        has_telemetry = content.count(tag_marker) >= 2 or (existing_tag is not None and "test" in os.path.basename(file_path).lower())
         
-        if not missing_markers and has_telemetry:
+        if compliant_headers and has_telemetry:
             return "ALREADY_AWAKENED"
             
         if audit_only:
@@ -222,19 +250,52 @@ def process_file(file_path, audit_only=False):
         pillar = get_pillar(file_path)
         purpose = extract_purpose_heuristic(content)
         
-        # If headers are already there but telemetry is missing, just append footer
-        if not missing_markers:
-            footer = get_footer(file_path, tag)
-            with open(file_path, 'a', encoding='utf-8') as f:
-                f.write(footer)
+        # If headers are already compliant, ensure telemetry tag & footer
+        if compliant_headers:
+            new_content = content
+            if not bool(re.search(r"Search\s+.*?\[([a-zA-Z0-9_\-]+)\]", new_content)):
+                # Add telemetry link in debugging section
+                debug_match = re.search(r'(###\s+.*?\s+Debugging\s+&\s+Observability[^\n]*\n)', new_content)
+                if debug_match:
+                    ext = os.path.splitext(file_path)[1]
+                    if ext == '.rs':
+                        tele_line = f"//! - **Telemetry Link**: Search `[{active_tag}]` in system logs.\n"
+                    elif ext in ['.ts', '.tsx', '.js']:
+                        tele_line = f" * - **Telemetry Link**: Search `[{active_tag}]` in system logs.\n"
+                    elif ext == '.py':
+                        tele_line = f"# - **Telemetry Link**: Search `[{active_tag}]` in system logs.\n"
+                    elif ext == '.md':
+                        tele_line = f"> - **Telemetry Link**: Search `[{active_tag}]` in audit logs.\n"
+                    else:
+                        tele_line = f"- **Telemetry Link**: Search `[{active_tag}]` in system logs.\n"
+                    idx = debug_match.end()
+                    new_content = new_content[:idx] + tele_line + new_content[idx:]
+            
+            # Ensure footer
+            if f"Metadata: [{active_tag}]" not in new_content:
+                footer = get_footer(file_path, active_tag)
+                new_content = new_content.rstrip() + footer
+                
+            if new_content != content:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
             return "FIXED"
         
         # Standard full Awakening
         header = get_headers(file_path, pillar, purpose=purpose)
-        footer = get_footer(file_path, tag)
+        footer = get_footer(file_path, active_tag)
         
+        # If file has shebang
+        if content.startswith("#!"):
+            lines = content.splitlines(keepends=True)
+            shebang = lines[0]
+            rest = "".join(lines[1:])
+            full_content = shebang + header + rest.rstrip() + footer
+        else:
+            full_content = header + content.rstrip() + footer
+            
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(header + content + footer)
+            f.write(full_content)
             
         return "FIXED"
     except Exception as e:

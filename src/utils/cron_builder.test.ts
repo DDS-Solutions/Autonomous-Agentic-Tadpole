@@ -6,6 +6,7 @@
  * Validates minute, hour, day, month interval synthesis, calendar-to-cron synthesis, and human-readable descriptions.
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[cron_builder_test]` in system logs.
  * - Failure Path: Invalid cron token synthesis or descriptive mapping drift.
  * - Telemetry Link: Traceable via `[CRON_BUILDER_TEST]` in test output.
  */
@@ -82,3 +83,4 @@ describe('cron_builder utility', () => {
         });
     });
 });
+// Metadata: [cron_builder_test]

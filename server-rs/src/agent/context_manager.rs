@@ -8,6 +8,7 @@
 //! Uses `tiktoken-rs` via `TokenizerService` for precise model tokenization.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[context_manager]` in system logs.
 //! - **Failure Path**: Token limit breach due to high-latency summarization
 //!   loop, or loss of fact-preservation (file paths, error codes)
 //!   during heuristic compaction.
@@ -130,6 +131,6 @@ mod tests {
     }
 }
 
-// Metadata: [context_manager]
+
 
 // Metadata: [context_manager]

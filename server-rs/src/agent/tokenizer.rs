@@ -6,6 +6,7 @@
 //! (Qwen, Llama 3, Gemma 4, DeepSeek, Phi) and cloud models (OpenAI, Anthropic, Gemini).
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[tokenizer]` in system logs.
 //! - **Failure Path**: Tokenizer initialization failure, unknown model fallback.
 //! - **Trace Scope**: `server-rs::agent::tokenizer`
 
@@ -160,6 +161,6 @@ mod tests {
     }
 }
 
-// Metadata: [tokenizer]
+
 
 // Metadata: [tokenizer]

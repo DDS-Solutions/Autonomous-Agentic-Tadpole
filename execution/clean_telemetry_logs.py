@@ -8,6 +8,7 @@ Deterministic Python tool for cross-platform 7-day rolling telemetry log retenti
 Prevents disk exhaustion during long-running autonomous swarm operations.
 
 ### 🔍 Debugging & Observability
+# - **Telemetry Link**: Search `[clean_telemetry_logs]` in system logs.
 Traceability via `execution/parity_guard.py`.
 """
 

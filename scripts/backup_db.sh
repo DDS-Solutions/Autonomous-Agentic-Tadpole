@@ -1,4 +1,14 @@
 #!/bin/bash
+# @docs ARCHITECTURE:Core
+#
+# ### AI Assist Note
+# **!/bin/bash**
+# Shell-level automation for the Tadpole OS deployment and maintenance.
+#
+# ### 🔍 Debugging & Observability
+# - **Failure Path**: Environment error, permission denied, or command failure.
+//! - **Telemetry Link**: Search `[backup_db]` in system logs.
+
 # ================================================================
 # Tadpole OS — Automated Database Backup (WAL-Safe & Verified)
 # ================================================================
@@ -70,3 +80,4 @@ find "$BACKUP_DIR" -maxdepth 1 -name "tadpole_*.meta.json" -mtime +"$KEEP_DAYS" 
 if [ "$PRUNED" -gt 0 ]; then
     echo "[BACKUP] Pruned $PRUNED backup(s) older than $KEEP_DAYS days"
 fi
+# Metadata: [backup_db]

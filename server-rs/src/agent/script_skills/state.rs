@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[state]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -99,3 +100,4 @@ impl RegistryState {
         self.hooks.get(name).map(|r| r.value().clone())
     }
 }
+// Metadata: [state]

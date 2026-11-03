@@ -10,6 +10,7 @@
  * - Adheres strictly to docs/design.md tokens (zinc-900 surface, 12px xl rounding, 8px grid spacing).
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Question_Choice_Pill]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: `Question_Choice_Pill.test.tsx`
@@ -199,3 +200,4 @@ export const Question_Choice_Pill: React.FC<Question_Choice_Pill_Props> = ({
 };
 
 Question_Choice_Pill.displayName = 'Question_Choice_Pill';
+// Metadata: [Question_Choice_Pill]

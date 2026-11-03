@@ -1,4 +1,14 @@
 #!/bin/bash
+# @docs ARCHITECTURE:Core
+#
+# ### AI Assist Note
+# **!/bin/bash**
+# Shell-level automation for the Tadpole OS deployment and maintenance.
+#
+# ### 🔍 Debugging & Observability
+# - **Failure Path**: Environment error, permission denied, or command failure.
+//! - **Telemetry Link**: Search `[rollback]` in system logs.
+
 # ================================================================
 # Tadpole OS — POSIX Automated Binary Rollback
 # ================================================================
@@ -65,3 +75,4 @@ if [ -f "$DB_PATH" ] && command -v sqlite3 >/dev/null 2>&1; then
 fi
 
 echo "✅ Rollback to version $TARGET_VERSION completed successfully."
+# Metadata: [rollback]

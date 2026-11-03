@@ -258,15 +258,6 @@ Successful agent deletion commits dependent database cleanup before removing the
 | `DELETE` | `/v1/skills/workflows/{name}` | `routes::skills::delete_workflow` | Protected |
 | `PUT` | `/v1/skills/workflows/{name}` | `routes::skills::post_workflow` | Protected |
 
-## CAS & Missions
-
-| Method | Path | Handler | Notes |
-| --- | --- | --- | --- |
-| `GET` | `/v1/cas/history` | `routes::cas::get_cas_history_handler` | Protected |
-| `GET` | `/v1/missions` | `routes::missions::get_missions_catalog` | Protected |
-| `GET` | `/v1/missions/{id}/dossier` | `routes::missions::get_mission_dossier` | Protected |
-| `POST` | `/v1/missions/{id}/pin` | `routes::missions::toggle_mission_pin` | Protected |
-
 ## Sovereign
 
 | Method | Path | Handler | Notes |

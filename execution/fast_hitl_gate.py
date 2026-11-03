@@ -9,6 +9,7 @@ Agents can invoke this to validate workspace boundary safety before executing
 filesystem-sensitive tool calls.
 
 ### 🔍 Debugging & Observability
+# - **Telemetry Link**: Search `[fast_hitl_gate]` in system logs.
 Traceability via `execution/parity_guard.py`.
 """
 
@@ -71,6 +72,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Metadata: [fast_hitl_gate]
+
 
 # Metadata: [fast_hitl_gate]

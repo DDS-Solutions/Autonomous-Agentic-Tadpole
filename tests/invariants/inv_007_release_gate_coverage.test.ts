@@ -16,7 +16,7 @@
  * - **Failure Path**: New unclassified execution scripts added without release governance.
  * - **Telemetry Link**: Search `[inv_007_release_gate]` in test logs.
  *
- * // Metadata: [inv_007_release_gate]
+ * 
  */
 
 import { describe, it, expect } from 'vitest';

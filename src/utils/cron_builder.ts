@@ -6,6 +6,7 @@
  * Enforces standard 5-field cron syntax matching `server-rs` scheduler requirements.
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[cron_builder]` in system logs.
  * - Failure Path: Invalid date inputs or modulo overflow in cron fields.
  * - Telemetry Link: Traceable via `[CRON_BUILDER]` in client audit logs.
  */
@@ -170,3 +171,4 @@ export function describe_cron(cron_expr: string, timezone: Cron_Timezone = 'utc'
 
     return `Schedule: ${trimmed}`;
 }
+// Metadata: [cron_builder]

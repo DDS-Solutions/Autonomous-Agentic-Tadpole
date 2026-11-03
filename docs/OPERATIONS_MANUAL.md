@@ -270,6 +270,9 @@ Execution layer paths:
 - `execution/tool_loop_guard.py` (10-iteration ceiling & 3-repetition circuit breaker)
 - `execution/evaluate_annealing.py` (Fault registry analyzer & self-annealing proposer)
 - `execution/cargo_fast_check.py` (Fast background compiler checker)
+- `execution/mission_diagnose.py` (`mission_diagnose`: Active and failed mission diagnostics via SQLite and OpenTelemetry correlation)
+- `execution/debrief_mission.py` (`debrief_mission`: Mission debriefing and wisdom extraction committing to long-term memory)
+- `execution/parse_errors.py` (`parse_errors`: Cargo check diagnostics parser for autonomous self-healing code repair)
 
 Capabilities include:
 

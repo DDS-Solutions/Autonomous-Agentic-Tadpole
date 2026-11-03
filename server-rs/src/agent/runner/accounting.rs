@@ -2,6 +2,7 @@
 //! ### AI Assist Note
 //! Server-owned usage receipts retained until mission terminal persistence commits.
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[accounting]` in system logs.
 //! - **Failure Path**: Cancellation or unavailable terminal storage.
 //! - **Telemetry Link**: Owning runner's AgentExecution span and terminal persistence logs.
 

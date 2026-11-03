@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[registry]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -452,3 +453,4 @@ impl ScriptSkillsRegistry {
         }
     }
 }
+// Metadata: [registry]

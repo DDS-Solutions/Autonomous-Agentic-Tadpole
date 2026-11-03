@@ -7,6 +7,7 @@
  * Orchestrates tri-slot model configuration, skill/workflow toggling, and voice engine selection.
  * 
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[use_agent_form]` in system logs.
  * - **Failure Path**: Reducer state mismatch (invalid action type), model slot collision (overwriting slot 1 with slot 2 data), or stale role defaults if `role_store` is uninitialized.
  * - **Telemetry Link**: Check `config_reducer` trace points or search `[useAgentForm]` in component logs.
  */

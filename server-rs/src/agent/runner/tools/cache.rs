@@ -8,6 +8,7 @@
 //! - `[Security]` Non-idempotent tools (commands, tests, mutations) are strictly rejected by `is_cacheable`.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[cache]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_shared_tool_cache_basic`, `test_shared_tool_cache_mtime_invalidation`, `test_shared_tool_cache_invalidate_path`
@@ -250,3 +251,4 @@ mod tests {
         assert!(cache.get(tool, args, root).is_none());
     }
 }
+// Metadata: [cache]

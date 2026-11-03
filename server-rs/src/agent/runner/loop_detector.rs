@@ -9,6 +9,7 @@
 //! - `[Structural]` Sliding window holds last 16 signatures; periodicity detected for periods 1–4.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[loop_detector]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_doom_loop_detector`, `test_normalize_json_depth_limit`, `test_normalize_json_special_chars`
@@ -222,3 +223,4 @@ mod tests {
         assert!(normalized.contains(r#""key with \"quotes\"""#));
     }
 }
+// Metadata: [loop_detector]

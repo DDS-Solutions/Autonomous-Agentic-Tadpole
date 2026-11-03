@@ -8,6 +8,7 @@ for Windows UTF-8 console output re-buffering, color logging, and standardized
 CLI reporting outputs.
 
 ### 🔍 Debugging & Observability
+# - **Telemetry Link**: Search `[py_utils]` in system logs.
 - **Trace Scope**: `execution::py_utils`
 """
 
@@ -58,6 +59,6 @@ def print_header(text: str):
     print(f"{Colors.BOLD}{Colors.CYAN}{text.center(70)}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.ENDC}\n")
 
-# Metadata: [py_utils]
+
 
 # Metadata: [py_utils]

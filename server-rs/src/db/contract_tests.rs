@@ -9,6 +9,7 @@
 //! - `[Structural]` These tests define the behavioral contract — new backends must satisfy all invariants.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[contract_tests]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_contract_dashmap_backend`, `test_contract_sqlite_backend`
@@ -376,3 +377,4 @@ mod tests {
         );
     }
 }
+// Metadata: [contract_tests]

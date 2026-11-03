@@ -28,12 +28,12 @@ Database scaling and concurrency boundaries:
 - **Max Connections**: `max_connections = 25` (optimized for concurrent transaction writes).
 - **Min Connections**: `min_connections = 3`.
 - **Acquire Timeout**: `8s` (threads will wait up to 8s to check out a connection).
-- **Busy Timeout**: `30s` (WAL mode automatic retry lock-holding window before returning `SQLITE_BUSY`).
+- **Busy Timeout**: `10s` (WAL mode automatic retry lock-holding window configured via PRAGMA busy_timeout=10000).
 
 ## Gateway & Ingestion Limits
 
 API gateway payload sizing and network constraints:
-- **HTTP Max Request Body Limit**: `16 MiB` (`axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024)` in `server-rs/src/router.rs`). Prevents memory exhaustion attacks while permitting large skill payloads and multi-file code context submissions.
+- **HTTP Max Request Body Limit**: `256 KiB` (`axum::extract::DefaultBodyLimit::max(256 * 1024)` in `server-rs/src/router.rs`). Accommodates `MAX_TASK_LENGTH` and code submissions while guarding against memory bloat.
 - **Request Timeout**: `120s` (`tower_http::timeout::TimeoutLayer::with_status_code` in `router.rs`).
 - **Telemetry Payload Sizing**: Real-time websocket pulse streams are MessagePack-encoded to minimize frame overhead under high agent concurrency.
 

@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[tests]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -265,3 +266,4 @@ Built-in instructions."#;
         assert_ne!(file_a, file_b, "Hash collision defense must hold");
     }
 }
+// Metadata: [tests]

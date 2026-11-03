@@ -7,6 +7,7 @@
 //! - `[Structural]` Type-safe state handling and bounded execution without unhandled panics.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[sink]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_sink_writes_events_to_jsonl`, `test_sink_handles_lag_gracefully`
@@ -237,3 +238,4 @@ mod tests {
         assert!(result.is_ok(), "sink should not hang on lag");
     }
 }
+// Metadata: [sink]

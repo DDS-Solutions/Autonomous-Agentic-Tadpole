@@ -10,6 +10,7 @@
 //! returning both Node metadata and directed Edges for LLM reasoning.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[trustgraph]` in system logs.
 //! - **Failure Path**: SQLite foreign key violations on un-linked entity deletions,
 //!   BFS loop infinite execution (mitigated by explicit cycle checking and depth caps),
 //!   or pool contention.
@@ -299,6 +300,6 @@ mod tests {
     }
 }
 
-// Metadata: [trustgraph]
+
 
 // Metadata: [trustgraph]

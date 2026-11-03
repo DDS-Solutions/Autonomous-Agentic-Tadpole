@@ -8,6 +8,7 @@
  * - `[Structural]` Component state and props flow adhere strictly to unidirectional UI data bindings.
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Question_Choice_Pill_test]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: none declared
@@ -88,3 +89,4 @@ describe('Question_Choice_Pill', () => {
         expect(screen.queryByText('+ Custom answer')).not.toBeInTheDocument();
     });
 });
+// Metadata: [Question_Choice_Pill_test]

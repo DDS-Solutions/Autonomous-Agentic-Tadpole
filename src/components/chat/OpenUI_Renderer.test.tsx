@@ -9,6 +9,7 @@
  * - `[Structural]` Tests DSL rendering completeness and interactive sorting.
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[OpenUI_Renderer_test]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: none declared
@@ -138,3 +139,4 @@ describe('OpenUI_Renderer', () => {
         expect(screen.queryByText('Deep Leaf')).toBeNull();
     });
 });
+// Metadata: [OpenUI_Renderer_test]

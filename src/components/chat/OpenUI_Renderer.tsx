@@ -11,6 +11,7 @@
  * - Adheres to docs/design.md (zinc-900 surface, border zinc-800, 12px xl rounding, proper padding).
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[OpenUI_Renderer]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: `OpenUI_Renderer.test.tsx`
@@ -334,3 +335,4 @@ export const OpenUI_Renderer: React.FC<OpenUI_Renderer_Props> = React.memo(({ ds
 });
 
 OpenUI_Renderer.displayName = 'OpenUI_Renderer';
+// Metadata: [OpenUI_Renderer]

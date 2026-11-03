@@ -14,6 +14,7 @@ import os
 import json
 import re
 from pathlib import Path
+from datetime import datetime
 
 def audit_manual():
     script_dir = Path(__file__).parent.absolute()
@@ -92,7 +93,7 @@ def audit_manual():
         "",
         "## Summary",
         f"Audited: `OPERATIONS_MANUAL.md`",
-        f"Date: 2026-09-22",
+        f"Date: {datetime.now().strftime('%Y-%m-%d')}",
         "",
         "## Gaps Found",
         "",

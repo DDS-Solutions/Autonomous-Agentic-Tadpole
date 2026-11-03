@@ -7,6 +7,7 @@
 //! - `[Structural]` Type-safe state handling and bounded execution without unhandled panics.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[mod]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: none declared
@@ -43,3 +44,4 @@ mod tests {
             .expect("failed to run migrations in test");
     }
 }
+// Metadata: [mod]

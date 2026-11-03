@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[hot_reload]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -33,3 +34,4 @@ pub fn spawn_hot_reload_loop(registry: Arc<ScriptSkillsRegistry>) -> tokio::task
         }
     })
 }
+// Metadata: [hot_reload]

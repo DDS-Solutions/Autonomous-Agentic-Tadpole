@@ -10,6 +10,7 @@
  * - Adheres strictly to docs/design.md (zinc-900 surface, border zinc-800, JetBrains Mono numbers, emerald cost accent).
  *
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[Mission_Metrics_Badge]` in system logs.
  * - **Local Errors**: none
  * - **Telemetry Targets**: none declared
  * - **Witness Tests**: `Mission_Metrics_Badge.test.tsx`
@@ -101,3 +102,4 @@ export const Mission_Metrics_Badge: React.FC = () => {
 };
 
 Mission_Metrics_Badge.displayName = 'Mission_Metrics_Badge';
+// Metadata: [Mission_Metrics_Badge]

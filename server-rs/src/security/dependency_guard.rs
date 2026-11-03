@@ -7,6 +7,7 @@
 //! - `[Structural]` Type-safe state handling and bounded execution without unhandled panics.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[dependency_guard]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: none declared
@@ -98,3 +99,4 @@ pub fn check_skill_dependencies(skills: &[String]) -> Result<(), Vec<String>> {
         Err(missing)
     }
 }
+// Metadata: [dependency_guard]

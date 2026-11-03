@@ -24,7 +24,7 @@ Autonomous agent swarms perform high-frequency read and write updates on persist
 Configure the SQLite connection pool to use **WAL (Write-Ahead Logging)** mode. Under WAL mode:
 - Readers do not block writers, and writers do not block readers.
 - Set `synchronous = NORMAL` to relax strict fsync safety for massive disk write performance gains.
-- Configure a `busy_timeout` of 30 seconds to handle locking contention.
+- Configure a `busy_timeout` of 10 seconds (`10000ms`) to handle locking contention.
 
 ## Consequences
 

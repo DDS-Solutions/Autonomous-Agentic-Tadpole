@@ -33,9 +33,8 @@ use crate::agent::constants::*;
 use crate::agent::types::{FunctionDeclaration, ToolDefinition};
 
 /// Global, zero-reinitialization BPE tokenizer cache
-static BPE_TOKENIZER: Lazy<Option<tiktoken_rs::CoreBPE>> = Lazy::new(|| {
-    tiktoken_rs::cl100k_base().ok()
-});
+static BPE_TOKENIZER: Lazy<Option<tiktoken_rs::CoreBPE>> =
+    Lazy::new(|| tiktoken_rs::cl100k_base().ok());
 
 /// Fast token counting helper using the shared cached BPE instance
 pub fn count_tokens_fast(text: &str) -> usize {
@@ -60,10 +59,19 @@ static SYSTEM_TOKEN_REGEXES: Lazy<Vec<(regex::Regex, &'static str)>> = Lazy::new
         (regex::Regex::new(r"\bLocation:").unwrap(), "LOC:"),
         (regex::Regex::new(r"\bPrimary Goal:").unwrap(), "GOAL:"),
         (regex::Regex::new(r"\bWeather for zip\b").unwrap(), "WTR|"),
-        (regex::Regex::new(r"\bFinding for mission\b").unwrap(), "FND|"),
+        (
+            regex::Regex::new(r"\bFinding for mission\b").unwrap(),
+            "FND|",
+        ),
         (regex::Regex::new(r"\bStrategic Intent:").unwrap(), "INT:"),
-        (regex::Regex::new(r"\bMission Complete\b").unwrap(), "*done*"),
-        (regex::Regex::new(r"\bTask in progress\b").unwrap(), "*busy*"),
+        (
+            regex::Regex::new(r"\bMission Complete\b").unwrap(),
+            "*done*",
+        ),
+        (
+            regex::Regex::new(r"\bTask in progress\b").unwrap(),
+            "*busy*",
+        ),
     ]
 });
 
@@ -159,12 +167,12 @@ impl AgentRunner {
     /// Evaluates whether a registered tool is authorized and eligible for the given `RunContext`.
     /// Shared between `format_tool_directory_display` and `build_tools` to guarantee 1:1 parity.
     pub(crate) fn is_registered_tool_eligible(&self, ctx: &RunContext, tool_name: &str) -> bool {
-        if !self
-            .state
-            .resources
-            .acl
-            .is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, tool_name)
-        {
+        if !self.state.resources.acl.is_tool_allowed(
+            &ctx.agent_id,
+            &ctx.role,
+            ctx.authority_level,
+            tool_name,
+        ) {
             return false;
         }
 
@@ -178,10 +186,7 @@ impl AgentRunner {
 
         // Specialized Skill Checks
         if tool_name == "execute_shell"
-            && !ctx
-                .skills
-                .iter()
-                .any(|s| s == "shell" || s == "terminal")
+            && !ctx.skills.iter().any(|s| s == "shell" || s == "terminal")
         {
             return false;
         }
@@ -309,18 +314,14 @@ impl AgentRunner {
             }
         };
 
-        let (pruned_repo_map, pruned_swarm_context_str) = self.prune_context(
-            ctx,
-            &identity,
-            &memory,
-            &repo_map_text,
-            &swarm_context_str,
-        );
+        let (pruned_repo_map, pruned_swarm_context_str) =
+            self.prune_context(ctx, &identity, &memory, &repo_map_text, &swarm_context_str);
 
         let sovereign_manifest =
             crate::system::manifest::SovereignStateManifest::generate(&self.state).await;
 
-        let tool_directory_str = Self::format_tool_directory_display(&tools_def.function_declarations);
+        let tool_directory_str =
+            Self::format_tool_directory_display(&tools_def.function_declarations);
 
         let vars = self.assemble_prompt_variables(
             ctx,
@@ -337,11 +338,10 @@ impl AgentRunner {
             tool_directory_str,
         );
 
-        let mut system_prompt = self
-            .state
-            .resources
-            .renderer
-            .render(self.state.resources.renderer.default_system_template(), &vars);
+        let mut system_prompt = self.state.resources.renderer.render(
+            self.state.resources.renderer.default_system_template(),
+            &vars,
+        );
 
         // Enforce total rendered prompt context budget
         let total_tokens = count_tokens_fast(&system_prompt);
@@ -354,7 +354,8 @@ impl AgentRunner {
             let mut compact_vars = vars;
             compact_vars.insert(
                 "repo_map",
-                "⚠️ Repo Map omitted due to context window limits. Use 'list_files' for discovery.".to_string(),
+                "⚠️ Repo Map omitted due to context window limits. Use 'list_files' for discovery."
+                    .to_string(),
             );
             compact_vars.insert(
                 "history",
@@ -365,11 +366,10 @@ impl AgentRunner {
                 self.safe_truncate(&pruned_swarm_context_str, 400),
             );
 
-            system_prompt = self
-                .state
-                .resources
-                .renderer
-                .render(self.state.resources.renderer.default_system_template(), &compact_vars);
+            system_prompt = self.state.resources.renderer.render(
+                self.state.resources.renderer.default_system_template(),
+                &compact_vars,
+            );
 
             let compact_tokens = count_tokens_fast(&system_prompt);
             if compact_tokens > prompt_budget {
@@ -426,7 +426,12 @@ impl AgentRunner {
                     dynamic_budget,
                     "No active directives. Proceed with mission objectives.",
                     "- ... [Remaining directives truncated due to token budget]",
-                    |d| format!("- [Directive] From {}: {}", d.source_agent_id, d.instruction),
+                    |d| {
+                        format!(
+                            "- [Directive] From {}: {}",
+                            d.source_agent_id, d.instruction
+                        )
+                    },
                 );
                 if formatted.starts_with("No active directives") {
                     formatted
@@ -462,7 +467,8 @@ impl AgentRunner {
             }
             Err(e) => {
                 tracing::warn!("⚠️ [External Context] Peer reviews fetch failed: {}", e);
-                "⚠️ REVIEWS_UNAVAILABLE: Database error while querying pending peer reviews.".to_string()
+                "⚠️ REVIEWS_UNAVAILABLE: Database error while querying pending peer reviews."
+                    .to_string()
             }
         };
 
@@ -483,11 +489,9 @@ impl AgentRunner {
         &self,
         ctx: &RunContext,
     ) -> Result<String, crate::error::AppError> {
-        let context = crate::agent::mission::get_mission_context(
-            &self.state.resources.pool,
-            &ctx.mission_id,
-        )
-        .await?;
+        let context =
+            crate::agent::mission::get_mission_context(&self.state.resources.pool, &ctx.mission_id)
+                .await?;
         Ok(context)
     }
 
@@ -545,7 +549,10 @@ impl AgentRunner {
             "TACTICAL SPECIALIST: Your priority is focused task completion."
         };
 
-        let raw_findings = ctx.recent_findings.as_deref().unwrap_or("No recent findings inherited.");
+        let raw_findings = ctx
+            .recent_findings
+            .as_deref()
+            .unwrap_or("No recent findings inherited.");
         let compressed_findings = if raw_findings == "No recent findings inherited." {
             raw_findings.to_string()
         } else {
@@ -565,7 +572,8 @@ impl AgentRunner {
             tool_mode_prefix,
         ) = self.generate_structural_components(ctx);
 
-        let working_memory_str = serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string());
+        let working_memory_str =
+            serde_json::to_string_pretty(&ctx.working_memory).unwrap_or_else(|_| "{}".to_string());
 
         let mut final_safe_mode_prefix = safe_mode_prefix.clone();
         if count_tokens_fast(&working_memory_str) > 1000 {
@@ -592,17 +600,43 @@ impl AgentRunner {
         vars.insert("reviews", reviews_str.to_string());
         vars.insert("global_intelligence", global_intel);
         vars.insert("priority", priority_str.to_string());
-        vars.insert("personality", ctx.model_config.system_prompt.as_deref().unwrap_or("No specific personality instructions.").to_string());
+        vars.insert(
+            "personality",
+            ctx.model_config
+                .system_prompt
+                .as_deref()
+                .unwrap_or("No specific personality instructions.")
+                .to_string(),
+        );
         vars.insert("skill_fragments", skill_fragments_str);
         vars.insert("workflow_fragments", workflow_fragments_str);
         vars.insert("swarm_context", compressed_swarm_context);
         vars.insert("breadcrumbs", self.generate_breadcrumbs_display(ctx));
         vars.insert("findings", compressed_findings);
-        vars.insert("primary_goal", ctx.primary_goal.clone().unwrap_or_else(|| "See mission scope for details.".to_string()));
+        vars.insert(
+            "primary_goal",
+            ctx.primary_goal
+                .clone()
+                .unwrap_or_else(|| "See mission scope for details.".to_string()),
+        );
         vars.insert("cluster_directory", cluster_directory);
         vars.insert("lineage", lineage_display);
-        vars.insert("skills", if ctx.skills.is_empty() { "None".to_string() } else { ctx.skills.join(", ") });
-        vars.insert("workflows", if ctx.workflows.is_empty() { "None".to_string() } else { ctx.workflows.join(", ") });
+        vars.insert(
+            "skills",
+            if ctx.skills.is_empty() {
+                "None".to_string()
+            } else {
+                ctx.skills.join(", ")
+            },
+        );
+        vars.insert(
+            "workflows",
+            if ctx.workflows.is_empty() {
+                "None".to_string()
+            } else {
+                ctx.workflows.join(", ")
+            },
+        );
         vars.insert("filesystem_bias", filesystem_bias_mandate);
         vars.insert("swarm_protocols", swarm_str);
         vars.insert("repo_map", pruned_repo_map.to_string());
@@ -610,7 +644,14 @@ impl AgentRunner {
         vars.insert("sovereign_manifest", sovereign_manifest);
         vars.insert("memory", memory.to_string());
         vars.insert("working_memory", working_memory_str);
-        vars.insert("history", self.shorten_system_tokens(ctx.summarized_history.as_deref().unwrap_or("No previous history recorded for this mission.")));
+        vars.insert(
+            "history",
+            self.shorten_system_tokens(
+                ctx.summarized_history
+                    .as_deref()
+                    .unwrap_or("No previous history recorded for this mission."),
+            ),
+        );
         vars.insert("safe_mode_prefix", final_safe_mode_prefix);
         vars.insert("tool_mode_prefix", tool_mode_prefix);
         vars.insert("tool_directory", tool_directory_str);
@@ -628,7 +669,11 @@ impl AgentRunner {
     }
 
     /// Generates the Repo Map summary, applying pruning logic if needed.
-    async fn generate_repo_map(&self, ctx: &RunContext, payload_message: &str) -> (crate::utils::graph::GraphSummary, String) {
+    async fn generate_repo_map(
+        &self,
+        ctx: &RunContext,
+        payload_message: &str,
+    ) -> (crate::utils::graph::GraphSummary, String) {
         let graph: std::sync::Arc<parking_lot::RwLock<crate::utils::graph::CodeGraph>> =
             self.state.resources.get_code_graph().await;
 
@@ -660,7 +705,9 @@ impl AgentRunner {
         let budget_limit = self.compute_prompt_token_budget(ctx);
         let safe_limit = (budget_limit as f32 * 0.85) as usize;
 
-        let mut pruned_repo_map = if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama {
+        let mut pruned_repo_map = if ctx.model_config.provider
+            == crate::agent::types::ModelProvider::Ollama
+        {
             "⚠️ Repo Map pruned to optimize local model performance. Use 'list_files' for discovery.".to_string()
         } else {
             repo_map.to_string()
@@ -685,7 +732,9 @@ impl AgentRunner {
             if current_tokens > safe_limit {
                 let weight = ctx.resource_weights.get("repo_map").cloned().unwrap_or(0.8);
                 if weight < 1.0 {
-                    pruned_repo_map = "⚠️ Repo Map pruned due to context limits. Use 'list_files' for discovery.".to_string();
+                    pruned_repo_map =
+                        "⚠️ Repo Map pruned due to context limits. Use 'list_files' for discovery."
+                            .to_string();
                     current_tokens = get_total_tokens(&pruned_repo_map, &pruned_swarm_context);
                 }
             }
@@ -712,7 +761,10 @@ impl AgentRunner {
         (pruned_repo_map, pruned_swarm_context)
     }
 
-    pub(crate) fn get_hierarchy_label(&self, level: crate::agent::types::RoleAuthorityLevel) -> &str {
+    pub(crate) fn get_hierarchy_label(
+        &self,
+        level: crate::agent::types::RoleAuthorityLevel,
+    ) -> &str {
         match level {
             crate::agent::types::RoleAuthorityLevel::Executive => "OVERLORD (Tier 0)",
             crate::agent::types::RoleAuthorityLevel::Management => "ORCHESTRATOR (Tier 1)",
@@ -805,8 +857,9 @@ impl AgentRunner {
         };
 
         // Model-Specific Protocol Injection for Local Models
-        if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama 
-           || ctx.model_config.provider == crate::agent::types::ModelProvider::Local {
+        if ctx.model_config.provider == crate::agent::types::ModelProvider::Ollama
+            || ctx.model_config.provider == crate::agent::types::ModelProvider::Local
+        {
             tool_mode_prefix.push_str("\n\n=== 🛠️ LOCAL MODEL TOOL CALLING MANDATE ===\n\
             Since you are a local model, native JSON schemas can sometimes be parsed incorrectly by the runtime wrapper. \
             To guarantee 100% tool execution reliability, you MUST invoke tools using XML tags in your response content!\n\
@@ -832,7 +885,7 @@ impl AgentRunner {
             3. Always supply all required parameters within the JSON 'arguments' object.\n\
             4. If you have finished, call 'complete_mission' with the final results.\n");
         }
-        
+
         (
             cluster_directory,
             filesystem_bias_mandate,
@@ -845,7 +898,11 @@ impl AgentRunner {
 
     /// Generates the shared Swarm Protocol rules using the ACL Service.
     fn generate_swarm_protocols(&self, ctx: &RunContext) -> String {
-        let mut swarm_protocols = self.state.resources.acl.get_role_protocols(&ctx.agent_id, &ctx.role, ctx.authority_level);
+        let mut swarm_protocols = self.state.resources.acl.get_role_protocols(
+            &ctx.agent_id,
+            &ctx.role,
+            ctx.authority_level,
+        );
         let is_orchestrator = is_orchestrator_identity(&ctx.agent_id)
             || ctx.authority_level >= crate::agent::types::RoleAuthorityLevel::Management;
 
@@ -861,7 +918,7 @@ impl AgentRunner {
         swarm_protocols.push("OVERSIGHT TRUST: Never ask for permission to execute a tool or recruit an agent. The system handles approval flows and budget gates automatically. YOUR SILENCE OR ASKING FOR PERMISSION IS A PROTOCOL VIOLATION AND MISSION FAILURE.".to_string());
         swarm_protocols.push("RECRUITMENT PRECISION: When recruiting, you MUST use the exact ID from the 'CLUSTER DIRECTORY' (e.g. '2', '12', '99'). Do NOT use generic names like 'Security Specialist' if a specific ID exists.".to_string());
         swarm_protocols.push("SOURCE OF TRUTH: Prioritize codebase tools (read_file, list_files, grep_search) over general knowledge for repository queries.".to_string());
-        
+
         let lineage_repr = if ctx.lineage.is_empty() {
             "None (Root)".to_string()
         } else {
@@ -890,7 +947,12 @@ impl AgentRunner {
     /// Dynamic progressive disclosure skill check helper
     fn should_load_skill(&self, skill_name: &str, ctx: &RunContext) -> bool {
         // Core skills that are ALWAYS loaded
-        let core_skills = ["systematic-debugging", "plan-writing", "verify-changes", "context-compression"];
+        let core_skills = [
+            "systematic-debugging",
+            "plan-writing",
+            "verify-changes",
+            "context-compression",
+        ];
         if core_skills.contains(&skill_name) {
             return true;
         }
@@ -901,29 +963,78 @@ impl AgentRunner {
         }
 
         // Database/Migration skills trigger rules
-        let db_keywords = ["db", "database", "migration", "rls", "sql", "schema", "prisma", "postgres", "query", "table"];
-        let is_db_skill = skill_name.contains("database") || skill_name.contains("migration") || skill_name.contains("rls") || skill_name.contains("api-patterns");
+        let db_keywords = [
+            "db",
+            "database",
+            "migration",
+            "rls",
+            "sql",
+            "schema",
+            "prisma",
+            "postgres",
+            "query",
+            "table",
+        ];
+        let is_db_skill = skill_name.contains("database")
+            || skill_name.contains("migration")
+            || skill_name.contains("rls")
+            || skill_name.contains("api-patterns");
 
         // UI/Frontend skills trigger rules
-        let ui_keywords = ["ui", "frontend", "css", "html", "react", "component", "styling", "layout", "page", "button", "view"];
-        let is_ui_skill = skill_name.contains("frontend") || skill_name.contains("web-design") || skill_name.contains("mobile-design") || skill_name.contains("react");
+        let ui_keywords = [
+            "ui",
+            "frontend",
+            "css",
+            "html",
+            "react",
+            "component",
+            "styling",
+            "layout",
+            "page",
+            "button",
+            "view",
+        ];
+        let is_ui_skill = skill_name.contains("frontend")
+            || skill_name.contains("web-design")
+            || skill_name.contains("mobile-design")
+            || skill_name.contains("react");
 
         // Vulnerability/Security skills trigger rules
-        let sec_keywords = ["security", "vulnerability", "audit", "cve", "auth", "permission", "token", "jwt", "hacker", "attack"];
-        let is_sec_skill = skill_name.contains("security") || skill_name.contains("vulnerability") || skill_name.contains("scanner");
+        let sec_keywords = [
+            "security",
+            "vulnerability",
+            "audit",
+            "cve",
+            "auth",
+            "permission",
+            "token",
+            "jwt",
+            "hacker",
+            "attack",
+        ];
+        let is_sec_skill = skill_name.contains("security")
+            || skill_name.contains("vulnerability")
+            || skill_name.contains("scanner");
 
         // Inspect Primary Goal / Task prompt
         let goal_text = ctx.primary_goal.as_deref().unwrap_or("").to_lowercase();
-        
+
         // Inspect recently accessed files
         let accessed_files = ctx.last_accessed_files.lock();
         let has_db_files = accessed_files.iter().any(|f| {
             let f_lower = f.to_lowercase();
-            f_lower.ends_with(".sql") || f_lower.ends_with(".prisma") || f_lower.contains("migration") || f_lower.contains("schema") || f_lower.contains("db.rs")
+            f_lower.ends_with(".sql")
+                || f_lower.ends_with(".prisma")
+                || f_lower.contains("migration")
+                || f_lower.contains("schema")
+                || f_lower.contains("db.rs")
         });
         let has_ui_files = accessed_files.iter().any(|f| {
             let f_lower = f.to_lowercase();
-            f_lower.ends_with(".tsx") || f_lower.ends_with(".jsx") || f_lower.ends_with(".css") || f_lower.ends_with(".html")
+            f_lower.ends_with(".tsx")
+                || f_lower.ends_with(".jsx")
+                || f_lower.ends_with(".css")
+                || f_lower.ends_with(".html")
         });
         let has_sec_files = accessed_files.iter().any(|f| {
             let f_lower = f.to_lowercase();
@@ -957,7 +1068,10 @@ impl AgentRunner {
 
         for skill_name in &ctx.skills {
             if !self.should_load_skill(skill_name, ctx) {
-                tracing::debug!("🧠 [ContextManager] Skipped loading skill '{}' (progressive disclosure)", skill_name);
+                tracing::debug!(
+                    "🧠 [ContextManager] Skipped loading skill '{}' (progressive disclosure)",
+                    skill_name
+                );
                 continue;
             }
             if let Some(skill) = snapshot.skills.get(skill_name) {
@@ -979,7 +1093,10 @@ impl AgentRunner {
                 }
                 let fragment_tokens = count_tokens_fast(&fragment);
                 if tokens_accum + fragment_tokens > MAX_SKILL_TOKENS {
-                    skill_fragments.push("- ... [Additional skill instructions truncated due to token budget]".to_string());
+                    skill_fragments.push(
+                        "- ... [Additional skill instructions truncated due to token budget]"
+                            .to_string(),
+                    );
                     break;
                 }
                 tokens_accum += fragment_tokens;
@@ -1005,13 +1122,13 @@ impl AgentRunner {
 
         for workflow_name in &ctx.workflows {
             if let Some(wf) = snapshot.workflows.get(workflow_name) {
-                let fragment = format!(
-                    "### [{}] Workflow Procedure:\n{}",
-                    wf.name, wf.content
-                );
+                let fragment = format!("### [{}] Workflow Procedure:\n{}", wf.name, wf.content);
                 let fragment_tokens = count_tokens_fast(&fragment);
                 if tokens_accum + fragment_tokens > MAX_WORKFLOW_TOKENS {
-                    workflow_fragments.push("- ... [Additional workflow procedures truncated due to token budget]".to_string());
+                    workflow_fragments.push(
+                        "- ... [Additional workflow procedures truncated due to token budget]"
+                            .to_string(),
+                    );
                     break;
                 }
                 tokens_accum += fragment_tokens;
@@ -1030,24 +1147,39 @@ impl AgentRunner {
 
     /// Performs semantic search across the global swarm intelligence vault,
     /// bounding the query logging to debug level and fencing untrusted vault contents.
-    async fn gather_global_intelligence(&self, ctx: &RunContext, query: &str) -> Result<String, crate::error::AppError> {
-        tracing::debug!("🧠 [Global Intelligence] Agent {} querying global vault (len: {})", ctx.agent_id, query.len());
-        
+    async fn gather_global_intelligence(
+        &self,
+        ctx: &RunContext,
+        query: &str,
+    ) -> Result<String, crate::error::AppError> {
+        tracing::debug!(
+            "🧠 [Global Intelligence] Agent {} querying global vault (len: {})",
+            ctx.agent_id,
+            query.len()
+        );
+
         #[cfg(feature = "vector-memory")]
         {
             let api_key = ctx.model_config.api_key.clone().unwrap_or_else(|| {
-                self.state.registry.providers.get(&ctx.model_config.provider.to_string())
+                self.state
+                    .registry
+                    .providers
+                    .get(&ctx.model_config.provider.to_string())
                     .and_then(|p| p.api_key.clone())
                     .unwrap_or_default()
             });
             let http_client = self.state.resources.http_client.clone();
 
-            let vec = crate::agent::memory::get_gemini_embedding(&http_client, &api_key, query).await?;
+            let vec =
+                crate::agent::memory::get_gemini_embedding(&http_client, &api_key, query).await?;
             let vault = self.state.resources.get_swarm_vault().await?;
             let results = vault.search_knowledge(vec, 3).await?;
-            
+
             if !results.is_empty() {
-                let formatted = format!("Relevant global intelligence retrieved:\n- {}", results.join("\n- "));
+                let formatted = format!(
+                    "Relevant global intelligence retrieved:\n- {}",
+                    results.join("\n- ")
+                );
                 return Ok(self.fence_untrusted_data("global_vault", &formatted));
             }
         }
@@ -1092,9 +1224,10 @@ impl AgentRunner {
             ) {
                 let has_skill = ctx.skills.is_empty()
                     || ctx.skills.contains(&skill.name)
-                    || ctx.skills.iter().any(|s| {
-                        s == "all" || s == "execution" || s == "operations"
-                    });
+                    || ctx
+                        .skills
+                        .iter()
+                        .any(|s| s == "all" || s == "execution" || s == "operations");
                 if has_skill && !function_declarations.iter().any(|t| t.name == skill.name) {
                     if !ctx.safe_mode || SAFE_MODE_ALLOWED_TOOLS.contains(&skill.name.as_str()) {
                         function_declarations.push(FunctionDeclaration {
@@ -1108,7 +1241,10 @@ impl AgentRunner {
         }
 
         // 3. Special Utility: Confidence Halting (Guarded to avoid duplicate declaration)
-        if !function_declarations.iter().any(|f| f.name == "set_confidence") {
+        if !function_declarations
+            .iter()
+            .any(|f| f.name == "set_confidence")
+        {
             function_declarations.push(FunctionDeclaration {
                 name: "set_confidence".to_string(),
                 description: "Signals your current confidence in the answer. If score >= act_threshold, reasoning halts early.".to_string(),
@@ -1131,11 +1267,20 @@ impl AgentRunner {
                 .list_tools(&ctx.skills, &snapshot.skills)
                 .await;
             for tool in mcp_tools {
-                if self.state.resources.acl.is_tool_allowed(&ctx.agent_id, &ctx.role, ctx.authority_level, &tool.name) {
+                if self.state.resources.acl.is_tool_allowed(
+                    &ctx.agent_id,
+                    &ctx.role,
+                    ctx.authority_level,
+                    &tool.name,
+                ) {
                     // Strict Membership Filter (MCP): Only explicit skill assignments or server:<name> prefix
                     let is_allowed = ctx.skills.contains(&tool.name)
-                        || (tool.name.starts_with("server:") && ctx.skills.iter().any(|s| s == "mcp" || s == "all" || s == &tool.name));
-                    
+                        || (tool.name.starts_with("server:")
+                            && ctx
+                                .skills
+                                .iter()
+                                .any(|s| s == "mcp" || s == "all" || s == &tool.name));
+
                     if is_allowed && !function_declarations.iter().any(|f| f.name == tool.name) {
                         function_declarations.push(FunctionDeclaration {
                             name: tool.name,
@@ -1164,24 +1309,23 @@ impl AgentRunner {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::AppState;
     use crate::agent::runner::{AgentRunner, RunContext};
     use crate::agent::types::ModelConfig;
-    use std::sync::Arc;
+    use crate::state::AppState;
     use dashmap::DashMap;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_shorten_system_tokens() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        
+
         let raw = "STATUS: success. RESULT: Finding for mission was successful.";
         let encoded = runner.shorten_system_tokens(raw);
-        
+
         assert!(encoded.contains("*ok*"));
         assert!(encoded.contains("RES:"));
         assert!(encoded.contains("FND|"));
@@ -1190,8 +1334,14 @@ mod tests {
         // Boundary checks: words like "okay" and identifiers like "temperature_sensor" must remain uncorrupted
         let raw_boundary = "STATUS: okay and temperature_sensor = 25";
         let encoded_boundary = runner.shorten_system_tokens(raw_boundary);
-        assert!(encoded_boundary.contains("STATUS: okay"), "Word boundary must protect 'okay'");
-        assert!(encoded_boundary.contains("temperature_sensor"), "Identifiers must not be corrupted");
+        assert!(
+            encoded_boundary.contains("STATUS: okay"),
+            "Word boundary must protect 'okay'"
+        );
+        assert!(
+            encoded_boundary.contains("temperature_sensor"),
+            "Identifiers must not be corrupted"
+        );
     }
 
     #[tokio::test]
@@ -1209,9 +1359,8 @@ mod tests {
         let repo_map = "This is a big repo map. ".repeat(100);
         let swarm_context = "This is shared findings. ".repeat(1000);
 
-        let (pruned_map, pruned_swarm) = runner.prune_context(
-            &ctx, &identity, &memory, &repo_map, &swarm_context
-        );
+        let (pruned_map, pruned_swarm) =
+            runner.prune_context(&ctx, &identity, &memory, &repo_map, &swarm_context);
 
         // Should have pruned something to fit within the 100 token limit
         assert!(pruned_swarm.len() < swarm_context.len());
@@ -1226,15 +1375,21 @@ mod tests {
         ctx.agent_id = AGENT_CEO.to_string();
         ctx.skills = vec!["read_file".to_string()];
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
-        
+
         let tools = runner.build_tools(&ctx).await;
-        
+
         // CEO should NOT have read_file (it's blocked for him to enforce delegation)
-        let has_read_file = tools.function_declarations.iter().any(|f| f.name == "read_file");
+        let has_read_file = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "read_file");
         assert!(!has_read_file);
-        
+
         // CEO SHOULD have issue_alpha_directive
-        let has_directive = tools.function_declarations.iter().any(|f| f.name == "issue_alpha_directive");
+        let has_directive = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "issue_alpha_directive");
         assert!(has_directive);
     }
 
@@ -1246,17 +1401,26 @@ mod tests {
         ctx.agent_id = "specialist-1".to_string();
         ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
-        
+
         let tools = runner.build_tools(&ctx).await;
-        
+
         // Specialist SHOULD have read_file and write_file
-        let has_read = tools.function_declarations.iter().any(|f| f.name == "read_file");
-        let has_write = tools.function_declarations.iter().any(|f| f.name == "write_file");
+        let has_read = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "read_file");
+        let has_write = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "write_file");
         assert!(has_read);
         assert!(has_write);
-        
+
         // Specialist should NOT have issue_alpha_directive
-        let has_directive = tools.function_declarations.iter().any(|f| f.name == "issue_alpha_directive");
+        let has_directive = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "issue_alpha_directive");
         assert!(!has_directive);
     }
 
@@ -1265,20 +1429,19 @@ mod tests {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
         let mut ctx = RunContext::default();
-        
+
         ctx.model_config = ModelConfig {
             tpm: Some(20), // Extremely tight
             ..Default::default()
         };
 
-        let identity = "Identity ".repeat(20); 
-        let memory = "Memory ".repeat(20);     
+        let identity = "Identity ".repeat(20);
+        let memory = "Memory ".repeat(20);
         let repo_map = "RepoMap ".repeat(100);
         let swarm_context = "Findings ".repeat(200);
 
-        let (pruned_map, pruned_swarm) = runner.prune_context(
-            &ctx, &identity, &memory, &repo_map, &swarm_context
-        );
+        let (pruned_map, pruned_swarm) =
+            runner.prune_context(&ctx, &identity, &memory, &repo_map, &swarm_context);
 
         // repo_map should be significantly truncated or empty to fit the 20 token budget
         assert!(pruned_map.len() < repo_map.len());
@@ -1294,14 +1457,23 @@ mod tests {
         ctx.authority_level = crate::agent::types::RoleAuthorityLevel::Observer;
         ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
-        
+
         let tools = runner.build_tools(&ctx).await;
-        
-        let has_read = tools.function_declarations.iter().any(|f| f.name == "read_file");
-        let has_write = tools.function_declarations.iter().any(|f| f.name == "write_file");
-        
+
+        let has_read = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "read_file");
+        let has_write = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "write_file");
+
         assert!(has_read, "Observer should still be able to read");
-        assert!(!has_write, "Observer should NOT be able to write even if skill is assigned");
+        assert!(
+            !has_write,
+            "Observer should NOT be able to write even if skill is assigned"
+        );
     }
 
     #[tokio::test]
@@ -1314,14 +1486,20 @@ mod tests {
 
         let base_dir = std::path::PathBuf::from("/non/existent/path/to/trigger/failure");
         let pool = crate::db::init_db("sqlite::memory:").await.unwrap();
-        let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(pool.clone()));
+        let permission_policy = Arc::new(crate::security::permissions::PermissionPolicy::new(
+            pool.clone(),
+        ));
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(true);
 
         let state = Arc::new(AppState {
             start_time: chrono::Utc::now(),
             boot_gate: (boot_tx, boot_rx),
             comms: Arc::new(crate::state::hubs::comm::CommunicationHub {
-                tx, event_tx: etx, telemetry_tx: ttx, audio_stream_tx: atx, pulse_tx: ptx,
+                tx,
+                event_tx: etx,
+                telemetry_tx: ttx,
+                audio_stream_tx: atx,
+                pulse_tx: ptx,
                 oversight_queue: dashmap::DashMap::new(),
                 oversight_resolvers: dashmap::DashMap::new(),
                 oversight_answers: dashmap::DashMap::new(),
@@ -1350,14 +1528,18 @@ mod tests {
                 provider_failures: DashMap::new(),
                 models: DashMap::new(),
                 nodes: DashMap::new(),
-                skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(base_dir.clone())),
+                skills: Arc::new(crate::agent::script_skills::ScriptSkillsRegistry::mock(
+                    base_dir.clone(),
+                )),
                 skill_registry: Arc::new(crate::agent::skill_manifest::SkillRegistry::new()),
-                tool_registry: Arc::new(crate::agent::runner::tools::dispatcher::Dispatcher::new().registry),
+                tool_registry: Arc::new(
+                    crate::agent::runner::tools::dispatcher::Dispatcher::new().registry,
+                ),
                 mcp_host: Arc::new(crate::agent::mcp::McpHost::new(
                     tokio::sync::broadcast::channel(1).0,
                     None,
                     permission_policy.clone(),
-                    Arc::new(crate::secret_redactor::SecretRedactor::noop())
+                    Arc::new(crate::secret_redactor::SecretRedactor::noop()),
                 )),
                 hooks: Arc::new(crate::agent::hooks::HooksManager::new(&base_dir)),
             }),
@@ -1368,7 +1550,9 @@ mod tests {
                 secret_redactor: Arc::new(crate::secret_redactor::SecretRedactor::noop()),
                 system_monitor: Arc::new(crate::security::monitoring::SecurityMonitor::new()),
                 permission_policy,
-                verification_gate: Arc::new(crate::agent::verification_gate::VerificationGate::default()),
+                verification_gate: Arc::new(
+                    crate::agent::verification_gate::VerificationGate::default(),
+                ),
                 deploy_token: "test".to_string(),
                 deploy_token_old: None,
                 deploy_token_new: None,
@@ -1394,14 +1578,16 @@ mod tests {
                 renderer: Arc::new(crate::agent::runner::prompt_renderer::PromptRenderer),
                 base_dir: base_dir.clone(),
                 arbiter: Arc::new(tokio::sync::Semaphore::new(4)),
-                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(Arc::new(
-                    crate::agent::continuity::SSDManager::new(base_dir.clone()),
-                ))),
+                continuity_arbiter: Arc::new(crate::agent::continuity::ContextArbiter::new(
+                    Arc::new(crate::agent::continuity::SSDManager::new(base_dir.clone())),
+                )),
                 parser: Arc::new(crate::services::parser::SymbolParser::new()),
                 obfuscation_salt: uuid::Uuid::new_v4().to_string(),
                 git_path: which::which("git").ok(),
                 is_rebuilding_symbol_graph: std::sync::atomic::AtomicBool::new(false),
-                tool_cache: Arc::new(parking_lot::Mutex::new(crate::agent::runner::tools::cache::SharedToolCache::new())),
+                tool_cache: Arc::new(parking_lot::Mutex::new(
+                    crate::agent::runner::tools::cache::SharedToolCache::new(),
+                )),
                 inference_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
                 #[cfg(feature = "vector-memory")]
                 vector_memory: tokio::sync::OnceCell::new(),
@@ -1422,22 +1608,27 @@ mod tests {
 
         let prompt = runner.build_system_prompt(&ctx, &payload.message).await;
 
-        assert!(prompt.contains("SYSTEM WARNING"), "Prompt should contain system warning alert");
-        assert!(prompt.contains("IDENTITY_FAILURE"), "Prompt should mention IDENTITY_FAILURE");
-        assert!(prompt.contains("MEMORY_FAILURE"), "Prompt should mention MEMORY_FAILURE");
+        assert!(
+            prompt.contains("SYSTEM WARNING"),
+            "Prompt should contain system warning alert"
+        );
+        assert!(
+            prompt.contains("IDENTITY_FAILURE"),
+            "Prompt should mention IDENTITY_FAILURE"
+        );
+        assert!(
+            prompt.contains("MEMORY_FAILURE"),
+            "Prompt should mention MEMORY_FAILURE"
+        );
     }
 
     #[test]
     fn test_format_budgeted_items_three_paths() {
         // (a) Happy Path: all items fit within token budget
         let items = vec!["Alpha directive", "Beta directive"];
-        let formatted = format_budgeted_items(
-            items.clone(),
-            500,
-            "EMPTY",
-            "TRUNCATED",
-            |item| format!("- {item}"),
-        );
+        let formatted = format_budgeted_items(items.clone(), 500, "EMPTY", "TRUNCATED", |item| {
+            format!("- {item}")
+        });
         assert_eq!(formatted, "- Alpha directive\n- Beta directive");
 
         // (b) Failure / Overflow Path: budget exceeded triggers truncation notice
@@ -1452,7 +1643,10 @@ mod tests {
 
         // (c) Edge Case Path: empty input list returns fallback string
         let empty: Vec<&str> = Vec::new();
-        let fallback = format_budgeted_items(empty, 500, "No active directives.", "TRUNCATED", |s| s.to_string());
+        let fallback =
+            format_budgeted_items(empty, 500, "No active directives.", "TRUNCATED", |s| {
+                s.to_string()
+            });
         assert_eq!(fallback, "No active directives.");
         assert!(is_orchestrator_identity(AGENT_CEO));
         assert!(!is_orchestrator_identity("specialist-42"));
@@ -1465,19 +1659,32 @@ mod tests {
         let mut ctx = RunContext::default();
         ctx.agent_id = "specialist-safe".to_string();
         ctx.safe_mode = true;
-        ctx.skills = vec!["read_file".to_string(), "write_file".to_string(), "execute_shell".to_string()];
+        ctx.skills = vec![
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "execute_shell".to_string(),
+        ];
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
 
         let tools = runner.build_tools(&ctx).await;
 
         // In safe mode, mutating tools MUST be blocked
-        let has_write = tools.function_declarations.iter().any(|f| f.name == "write_file");
-        let has_shell = tools.function_declarations.iter().any(|f| f.name == "execute_shell");
+        let has_write = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "write_file");
+        let has_shell = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "execute_shell");
         assert!(!has_write, "write_file must be blocked in safe mode");
         assert!(!has_shell, "execute_shell must be blocked in safe mode");
 
         // Read-only tools in the allow-list MUST be permitted
-        let has_read = tools.function_declarations.iter().any(|f| f.name == "read_file");
+        let has_read = tools
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "read_file");
         assert!(has_read, "read_file must be allowed in safe mode");
     }
 
@@ -1500,8 +1707,20 @@ mod tests {
         ctx_b.model_config.provider = crate::agent::types::ModelProvider::Gemini;
         let tools_b = runner.build_tools(&ctx_b).await;
 
-        assert!(!tools_a.function_declarations.iter().any(|f| f.name == "write_file"), "Specialist A must not have write_file");
-        assert!(tools_b.function_declarations.iter().any(|f| f.name == "write_file"), "Specialist B must have write_file");
+        assert!(
+            !tools_a
+                .function_declarations
+                .iter()
+                .any(|f| f.name == "write_file"),
+            "Specialist A must not have write_file"
+        );
+        assert!(
+            tools_b
+                .function_declarations
+                .iter()
+                .any(|f| f.name == "write_file"),
+            "Specialist B must have write_file"
+        );
     }
 
     #[tokio::test]

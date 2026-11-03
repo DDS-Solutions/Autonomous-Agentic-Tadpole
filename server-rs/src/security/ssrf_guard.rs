@@ -9,6 +9,7 @@
 //! - `[Security]` Prevents DNS rebinding by resolving and retaining target IP for connection pinning.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[ssrf_guard]` in system logs.
 //! - **Local Errors**: `AppError`
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_blocked_local_hosts`, `test_blocked_ip_ranges`, `test_validate_public_url`
@@ -300,3 +301,4 @@ mod tests {
         assert!(!is_public_routable_ip(IpAddr::V6("fe80::1".parse().unwrap())));
     }
 }
+// Metadata: [ssrf_guard]

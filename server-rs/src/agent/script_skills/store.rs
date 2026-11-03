@@ -6,6 +6,7 @@
 Core system module providing specialized functionality for the agent swarm.
 
 ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[store]` in system logs.
 - **Failure Path**: Unexpected execution drift or type compatibility issues.
 - **Telemetry Link**: Traced via active system logging channels.
 */
@@ -163,3 +164,4 @@ pub async fn verified_remove<T: Capability>(dir: &Path, expected_name: &str) -> 
 
     Ok(removed)
 }
+// Metadata: [store]

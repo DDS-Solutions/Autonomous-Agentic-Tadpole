@@ -9,6 +9,7 @@
 //! - `[Behavioral]` Fallback summaries are clamped to 2,000 bytes.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[monologue]` in system logs.
 //! - **Local Errors**: none
 //! - **Telemetry Targets**: none declared
 //! - **Witness Tests**: `test_compress_monologue`, `test_truncate_embedded_tool_logs`
@@ -242,3 +243,4 @@ mod tests {
         assert_eq!(monologue_large.last().map(|s| s.as_str()), Some("Turn 2: Tail turn"));
     }
 }
+// Metadata: [monologue]

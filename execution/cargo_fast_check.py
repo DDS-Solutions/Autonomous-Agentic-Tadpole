@@ -8,6 +8,7 @@ Provides fast-feedback cargo checking for Rust server components without full re
 Agents use this for quick syntax validation during autonomous code modifications.
 
 ### 🔍 Debugging & Observability
+# - **Telemetry Link**: Search `[cargo_fast_check]` in system logs.
 Traceability via `execution/parity_guard.py`.
 """
 
@@ -50,6 +51,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Metadata: [cargo_fast_check]
+
 
 # Metadata: [cargo_fast_check]

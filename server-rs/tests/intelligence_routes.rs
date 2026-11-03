@@ -5,6 +5,7 @@
 //! and correct error mapping behavior under path traversal attempts.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[intelligence_routes]` in system logs.
 //! - **Failure Path**: Failures to load mock state or unexpected panic.
 //! - **Telemetry Link**: Not tracked (integration test runner).
 //!

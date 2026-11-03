@@ -3,6 +3,7 @@
  * ### AI Assist Note
  * Session-tree and artifact requests use the configured authenticated API client.
  * ### 🔍 Debugging & Observability
+ * - **Telemetry Link**: Search `[sovereign_api_service]` in system logs.
  * - Failure Path: HTTP failure or malformed session response.
  * - Telemetry Link: Search sovereign requests in the shared HTTP trace store.
  */

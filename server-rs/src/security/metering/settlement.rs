@@ -4,6 +4,7 @@
 //! Cancellation-safe quota transaction and pending-charge settlement.
 //!
 //! ### 🔍 Debugging & Observability
+//! - **Telemetry Link**: Search `[settlement]` in system logs.
 //! - **Failure Path**: Storage failure, invalid input, or ownership conflict.
 //! - **Telemetry Link**: Trace span `security::budget_flush` in server telemetry.
 
