@@ -58,7 +58,7 @@ export type SkillHooks = { before_execute: string | null; after_execute: string 
  */
 export type SymbolNode = { name: string; path: string; kind: string; signature: string; start_line: number; end_line: number; tokens: number }
 
-export type TokenBurnReport = { totalTokensIn: number; totalTokensOut: number; totalCostUsd: number; providers: ProviderTokenBurn[]; agents: AgentTokenBurn[]; recentBurns: RecentTokenBurn[] }
+export type TokenBurnReport = { source: string; totalTokensIn: number; totalTokensOut: number; totalCostUsd: number; providers: ProviderTokenBurn[]; agents: AgentTokenBurn[]; recentBurns: RecentTokenBurn[] }
 
 export type ProviderTokenBurn = { providerId: string; tokensIn: number; tokensOut: number; costUsd: number }
 

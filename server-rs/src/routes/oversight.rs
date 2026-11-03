@@ -1803,8 +1803,10 @@ pub async fn update_policy(
 #[derive(Serialize, Type, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenBurnReport {
-    pub source: &'static str,
+    pub source: String,
+    #[specta(type = f64)]
     pub total_tokens_in: i64,
+    #[specta(type = f64)]
     pub total_tokens_out: i64,
     pub total_cost_usd: f64,
     pub providers: Vec<ProviderTokenBurn>,
@@ -1816,7 +1818,9 @@ pub struct TokenBurnReport {
 #[serde(rename_all = "camelCase")]
 pub struct ProviderTokenBurn {
     pub provider_id: String,
+    #[specta(type = f64)]
     pub tokens_in: i64,
+    #[specta(type = f64)]
     pub tokens_out: i64,
     pub cost_usd: f64,
 }
@@ -1826,7 +1830,9 @@ pub struct ProviderTokenBurn {
 pub struct AgentTokenBurn {
     pub agent_id: String,
     pub agent_name: String,
+    #[specta(type = f64)]
     pub tokens_in: i64,
+    #[specta(type = f64)]
     pub tokens_out: i64,
     pub cost_usd: f64,
 }
@@ -1838,9 +1844,12 @@ pub struct RecentTokenBurn {
     pub title: String,
     pub agent_id: String,
     pub agent_name: String,
+    #[specta(type = f64)]
     pub tokens_in: i64,
+    #[specta(type = f64)]
     pub tokens_out: i64,
     pub cost_usd: f64,
+    #[specta(type = f64)]
     pub updated_at: i64,
 }
 
@@ -2079,7 +2088,7 @@ pub async fn get_token_burn(
     )?;
 
     Ok(Json(TokenBurnReport {
-        source,
+        source: source.to_string(),
         total_tokens_in,
         total_tokens_out,
         total_cost_usd,

@@ -221,7 +221,7 @@ impl AppState {
             std::env::var("INFERENCE_CONCURRENCY")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(4)
+                .unwrap_or(if cfg!(test) { 32 } else { 4 })
         };
 
         let (boot_tx, boot_rx) = tokio::sync::watch::channel(false);

@@ -116,6 +116,9 @@ pub(crate) async fn state_with_agent(agent_id: &str, base_url: &str) -> Arc<AppS
             .build()
             .unwrap(),
     );
+    Arc::get_mut(&mut state.resources).unwrap().inference_semaphore = Arc::new(
+        tokio::sync::Semaphore::new(32),
+    );
     let mut agent = EngineAgent::default();
     agent.identity.id = agent_id.to_string();
     agent.models.model = ModelConfig {
