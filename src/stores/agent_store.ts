@@ -54,6 +54,8 @@ export const use_agent_store = <T = Agent_Store_State>(
                     tokens_used: live.tokens_used ?? agent.tokens_used,
                     cost_usd: live.cost_usd ?? agent.cost_usd,
                     last_pulse: live.last_pulse ?? agent.last_pulse,
+                    failure_count: live.failure_count ?? agent.failure_count,
+                    last_failure_at: live.last_failure_at ?? agent.last_failure_at,
                 };
             }
             return { ...agent, ...live };

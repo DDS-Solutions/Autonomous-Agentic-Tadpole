@@ -359,6 +359,7 @@ impl AgentRunner {
         let payload = serde_json::json!({
             "type": "agent_stream",
             "agent_id": ctx.agent_id,
+            "agent_name": ctx.name,
             "mission_id": ctx.mission_id,
             "trace_id": ctx.trace_id,
             "text": text,

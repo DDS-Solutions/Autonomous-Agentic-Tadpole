@@ -480,6 +480,7 @@ impl AgentRunner {
 
         tracing::info!("🧬 [Sovereignty] Agent of Nine issuing directive to Tadpole Alpha...");
         self.broadcast_agent(ctx, "🧬 Issuing directive to Tadpole Alpha...", "info");
+        self.broadcast_agent_stream(ctx, "🧬 Delegating directive to Tadpole Alpha...", false);
 
         // 🧠 Proactive Neural Handoff for Alpha Directives
         let primary_mission = format!(

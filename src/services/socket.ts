@@ -483,7 +483,7 @@ class Tadpole_OS_Socket_Client {
                 ...(params.target_node ? { target_node: params.target_node } : {}),
                 text: params.text,
                 parts: [params.part],
-                scope: sovereign_store.active_scope
+                scope: 'agent'
             });
         }
     }
@@ -529,9 +529,40 @@ class Tadpole_OS_Socket_Client {
                     part: new_part
                 });
             }
+        } else if (data.type === 'agent_stream') {
+            const agent_id = (data.agent_id as string) || '1';
+            const agent_name = (data.agent_name as string) || this.agent_name_cache.get(agent_id) || agent_id;
+            const resolved_name = agent_name || 'Agent';
+            const text = (data.text || '') as string;
+            const mission_id = (data.mission_id || data.trace_id || `stream-${agent_id}`) as string;
+            const new_part: Message_Part = { type: 'text' as const, content: text };
+
+            const existing = sovereign_store.get_message_by_id(mission_id);
+            if (existing) {
+                sovereign_store.update_message(mission_id, {
+                    text,
+                    parts: [new_part]
+                });
+            } else if (text.trim().length > 0) {
+                sovereign_store.add_message({
+                    id: mission_id,
+                    sender_id: agent_id,
+                    sender_name: resolved_name,
+                    agent_id,
+                    target_node: resolved_name,
+                    text,
+                    parts: [new_part],
+                    scope: 'agent'
+                });
+            }
+
+            // Bridge to Streamdown / ArtifactWorkspace if active
+            if (typeof window !== 'undefined') {
+                window.postMessage(JSON.stringify(data), '*');
+            }
         } else if (data.type === 'agent:message') {
-            const agent_id = data.agent_id as string;
-            const agent_name = this.agent_name_cache.get(agent_id) || (data.agent_name as string);
+            const agent_id = (data.agent_id as string) || '1';
+            const agent_name = (data.agent_name as string) || this.agent_name_cache.get(agent_id) || agent_id;
 
             event_bus.emit_log({
                 id: (data.id || data.message_id || data.messageId) as string,
@@ -544,19 +575,28 @@ class Tadpole_OS_Socket_Client {
             });
 
             const resolved_name = agent_name || agent_id || 'Agent';
-            const message_id = this.resolve_message_id(data, true);
+            const mission_id = (data.mission_id || data.trace_id) as string | undefined;
             const content = (data.text || data.message || 'Mission action complete.') as string;
             const new_part: Message_Part = { type: 'text' as const, content };
 
-            this.bridge_to_sovereign_chat(sovereign_store, {
-                message_id,
-                sender_id: agent_id || 'system',
-                sender_name: resolved_name,
-                agent_id,
-                target_node: resolved_name,
-                text: content,
-                part: new_part
-            });
+            const existing = mission_id ? sovereign_store.get_message_by_id(mission_id) : undefined;
+            if (existing) {
+                sovereign_store.update_message(mission_id!, {
+                    text: content,
+                    parts: [new_part]
+                });
+            } else {
+                const message_id = mission_id || this.resolve_message_id(data, true);
+                this.bridge_to_sovereign_chat(sovereign_store, {
+                    message_id,
+                    sender_id: agent_id || 'system',
+                    sender_name: resolved_name,
+                    agent_id,
+                    target_node: resolved_name,
+                    text: content,
+                    part: new_part
+                });
+            }
         } else if (data.type === 'agent:create' || data.type === 'agent:update' || data.type === 'agent:status' || data.type === 'engine:ui_invalidate') {
             const normalized_agent_id = (data.agent_id ?? data.agentId ?? data.id) as string;
             const normalized_data = data.type === 'agent:status'

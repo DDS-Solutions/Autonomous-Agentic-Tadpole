@@ -229,9 +229,17 @@ impl AgentRunner {
     }
 
     pub(crate) fn broadcast_agent_message(&self, agent_id: &str, mission_id: &str, text: &str) {
+        let agent_name = self
+            .state
+            .registry
+            .agents
+            .get(agent_id)
+            .map(|a| a.identity.name.clone())
+            .unwrap_or_else(|| agent_id.to_string());
         let _ = self.state.comms.telemetry_tx.send(serde_json::json!({
             "type": "agent:message",
             "agent_id": agent_id,
+            "agent_name": agent_name,
             "mission_id": mission_id,
             "text": text,
             "message_id": uuid::Uuid::new_v4().to_string()

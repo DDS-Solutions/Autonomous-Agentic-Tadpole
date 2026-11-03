@@ -64,6 +64,10 @@ pub struct AgentResponse {
     pub cost_usd: f64,
     pub is_healthy: bool,
     pub is_bankrupt: bool,
+    pub is_throttled: bool,
+    pub failure_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_failure_at: Option<chrono::DateTime<chrono::Utc>>,
     pub skills: Vec<String>,
     pub workflows: Vec<String>,
     pub mcp_tools: Vec<String>,
@@ -103,6 +107,9 @@ impl From<&EngineAgent> for AgentResponse {
             cost_usd: agent.economics.cost_usd,
             is_healthy: agent.health.failure_count < 5 && agent.health.status != "suspended",
             is_bankrupt: agent.economics.cost_usd >= agent.economics.budget_usd && agent.economics.budget_usd > 0.0,
+            is_throttled: agent.health.failure_count >= crate::routes::oversight::principal::THROTTLED_FAILURE_THRESHOLD,
+            failure_count: agent.health.failure_count,
+            last_failure_at: agent.health.last_failure_at,
             skills: agent.capabilities.skills.clone(),
             workflows: agent.capabilities.workflows.clone(),
             mcp_tools: agent.capabilities.mcp_tools.clone(),
@@ -806,6 +813,8 @@ mod tests {
 
         let res = AgentResponse::from(&agent);
         assert!(!res.is_healthy, "Agent with 5 failures must not be healthy");
+        assert!(res.is_throttled, "Agent with 5 failures must be throttled");
+        assert_eq!(res.failure_count, 5);
     }
 
     #[test]

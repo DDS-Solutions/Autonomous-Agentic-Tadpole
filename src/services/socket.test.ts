@@ -83,16 +83,18 @@ vi.mock('../stores/agent_store', () => ({
     }
 }));
 
+const mock_sovereign_store = {
+    messages: [],
+    active_scope: 'global',
+    add_message: vi.fn(),
+    update_message: vi.fn(),
+    append_message_part: vi.fn(() => false),
+    get_message_by_id: vi.fn()
+};
+
 vi.mock('../stores/sovereign_store', () => ({
     use_sovereign_store: {
-        getState: vi.fn(() => ({
-            messages: [],
-            active_scope: 'global',
-            add_message: vi.fn(),
-            update_message: vi.fn(),
-            append_message_part: vi.fn(() => false),
-            get_message_by_id: vi.fn()
-        }))
+        getState: vi.fn(() => mock_sovereign_store)
     }
 }));
 
@@ -330,6 +332,92 @@ describe('Tadpole_OS_Socket_Client', () => {
         expect(() => {
             if (mock_web_socket.onmessage) mock_web_socket.onmessage({ data: empty_buffer });
         }).not.toThrow();
+    });
+
+    it('should route agent_stream to sovereign_store and update on subsequent turns', async () => {
+        const { use_sovereign_store } = await import('../stores/sovereign_store');
+        const sovereign_store = use_sovereign_store.getState();
+        const socket = get_tadpole_os_socket();
+        socket.connect();
+        if (mock_web_socket.onopen) mock_web_socket.onopen();
+
+        if (mock_web_socket.onmessage) {
+            mock_web_socket.onmessage({
+                data: JSON.stringify({
+                    type: 'agent_stream',
+                    agent_id: '1',
+                    agent_name: 'Agent of Nine',
+                    mission_id: 'mission-stream-1',
+                    text: 'Streaming chunk 1',
+                    is_final: false
+                })
+            });
+        }
+
+        await vi.waitFor(() => {
+            expect(sovereign_store.add_message).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'mission-stream-1',
+                sender_id: '1',
+                sender_name: 'Agent of Nine',
+                text: 'Streaming chunk 1',
+                scope: 'agent'
+            }));
+        });
+
+        vi.mocked(sovereign_store.get_message_by_id).mockReturnValueOnce({
+            id: 'mission-stream-1',
+            text: 'Streaming chunk 1'
+        } as any);
+
+        if (mock_web_socket.onmessage) {
+            mock_web_socket.onmessage({
+                data: JSON.stringify({
+                    type: 'agent_stream',
+                    agent_id: '1',
+                    agent_name: 'Agent of Nine',
+                    mission_id: 'mission-stream-1',
+                    text: 'Streaming chunk 1 and 2',
+                    is_final: true
+                })
+            });
+        }
+
+        await vi.waitFor(() => {
+            expect(sovereign_store.update_message).toHaveBeenCalledWith('mission-stream-1', expect.objectContaining({
+                text: 'Streaming chunk 1 and 2'
+            }));
+        });
+    });
+
+    it('should correlate agent:message with mission_id and update existing message', async () => {
+        const { use_sovereign_store } = await import('../stores/sovereign_store');
+        const sovereign_store = use_sovereign_store.getState();
+        const socket = get_tadpole_os_socket();
+        socket.connect();
+        if (mock_web_socket.onopen) mock_web_socket.onopen();
+
+        vi.mocked(sovereign_store.get_message_by_id).mockReturnValueOnce({
+            id: 'mission-done-1',
+            text: 'Incomplete stream'
+        } as any);
+
+        if (mock_web_socket.onmessage) {
+            mock_web_socket.onmessage({
+                data: JSON.stringify({
+                    type: 'agent:message',
+                    agent_id: '1',
+                    agent_name: 'Agent of Nine',
+                    mission_id: 'mission-done-1',
+                    text: 'Final deliverable'
+                })
+            });
+        }
+
+        await vi.waitFor(() => {
+            expect(sovereign_store.update_message).toHaveBeenCalledWith('mission-done-1', expect.objectContaining({
+                text: 'Final deliverable'
+            }));
+        });
     });
 });
 

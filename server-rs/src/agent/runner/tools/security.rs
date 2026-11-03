@@ -152,26 +152,31 @@ impl SecurityManager for DefaultSecurityManager {
 
         if !trigger_oversight {
             // 4. [Security Gate] Skill Manifest Validation
-            let mut manifest_requires = false;
+            let is_safe = is_safe_skill(&fc.name, &normalized_name, runner);
+            let auto_approve = runner.state.governance.auto_approve_safe_skills.load(std::sync::atomic::Ordering::Relaxed);
 
-            if let Some(manifest) = runner.state.registry.skill_registry.get(&fc.name).or_else(|| runner.state.registry.skill_registry.get(&normalized_name)) {
-                if manifest.requires_oversight {
-                    manifest_requires = true;
-                }
-            }
-            if !manifest_requires {
-                let requires_oversight = {
-                    let snapshot = runner.state.registry.skills.snapshot();
-                    snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|s| s.oversight_required).unwrap_or(false)
-                };
-                if requires_oversight {
-                    manifest_requires = true;
-                }
-            }
+            if !(is_safe && auto_approve) {
+                let mut manifest_requires = false;
 
-            if manifest_requires {
-                trigger_oversight = true;
-                oversight_reason = format!("Security Gate triggered by manifest for: {}", fc.name);
+                if let Some(manifest) = runner.state.registry.skill_registry.get(&fc.name).or_else(|| runner.state.registry.skill_registry.get(&normalized_name)) {
+                    if manifest.requires_oversight {
+                        manifest_requires = true;
+                    }
+                }
+                if !manifest_requires {
+                    let requires_oversight = {
+                        let snapshot = runner.state.registry.skills.snapshot();
+                        snapshot.skills.get(&fc.name).or_else(|| snapshot.skills.get(&normalized_name)).map(|s| s.oversight_required).unwrap_or(false)
+                    };
+                    if requires_oversight {
+                        manifest_requires = true;
+                    }
+                }
+
+                if manifest_requires {
+                    trigger_oversight = true;
+                    oversight_reason = format!("Security Gate triggered by manifest for: {}", fc.name);
+                }
             }
         }
 
@@ -209,6 +214,23 @@ fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> boo
             | "get_current_mission_status"
             | "search_global_vault"
             | "list_skill_metadata"
+            | "complete_mission"
+            | "pin_mission"
+            | "search_mission_knowledge"
+            | "issue_alpha_directive"
+            | "security_scan"
+            | "parity_guard"
+            | "verify_ai_context"
+            | "verify_telemetry"
+            | "debrief_mission"
+            | "mission_diagnose"
+            | "db_health_check"
+            | "parse_errors"
+            | "resource_check"
+            | "system_telemetry"
+            | "get_symbol_context"
+            | "get_impacted_tests"
+            | "fetch_url"
     ) || matches!(
         normalized_name,
         "read_file"
@@ -226,6 +248,23 @@ fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> boo
             | "get_current_mission_status"
             | "search_global_vault"
             | "list_skill_metadata"
+            | "complete_mission"
+            | "pin_mission"
+            | "search_mission_knowledge"
+            | "issue_alpha_directive"
+            | "security_scan"
+            | "parity_guard"
+            | "verify_ai_context"
+            | "verify_telemetry"
+            | "debrief_mission"
+            | "mission_diagnose"
+            | "db_health_check"
+            | "parse_errors"
+            | "resource_check"
+            | "system_telemetry"
+            | "get_symbol_context"
+            | "get_impacted_tests"
+            | "fetch_url"
     );
 
     if is_builtin_safe {
