@@ -199,7 +199,7 @@ mod tests {
             models: crate::agent::types::AgentModels {
                 model: crate::agent::types::ModelConfig {
                     provider: crate::agent::types::ModelProvider::Openai,
-                    api_key: Some("sk-secret-key-12345".to_string()),
+                    api_key: Some("test-secret-key-12345".to_string()),
                     base_url: Some("https://api.openai.com/v1".to_string()),
                     ..Default::default()
                 },
@@ -228,7 +228,7 @@ mod tests {
             .fetch_one(pool)
             .await
             .expect("fetch agent row");
-        assert_eq!(row.0.as_deref(), Some("sk-secret-key-12345"));
+        assert_eq!(row.0.as_deref(), Some("test-secret-key-12345"));
 
         // Run save_agents a second time (simulating 30s flush)
         state
@@ -244,7 +244,7 @@ mod tests {
             .expect("fetch agent row 2");
         assert_eq!(
             row2.0.as_deref(),
-            Some("sk-secret-key-12345"),
+            Some("test-secret-key-12345"),
             "API key must not be nulled on subsequent saves"
         );
     }

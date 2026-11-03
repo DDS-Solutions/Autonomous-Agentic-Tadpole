@@ -17,6 +17,7 @@ paths = [
     # Rust internal unit test fixtures
     '''(?i)server-rs/src/secret_redactor\.rs$''',
     '''(?i)server-rs/src/utils/security\.rs$''',
+    '''(?i)server-rs/src/.*/tests\.rs$''',
     # Documentation placeholders
     '''(?i)docs/.*\.md$''',
     '''(?i)wiki/.*\.md$''',

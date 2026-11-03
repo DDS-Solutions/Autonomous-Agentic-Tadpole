@@ -694,7 +694,7 @@ async fn test_decide_oversight_happy_path_with_unredacted_guidance() {
     );
 
     let principal = OversightPrincipal::scoped("operator-alice", vec![mission_id.clone()]);
-    let raw_guidance = "Use token sk-proj-1234567890abcdef1234567890abcdef for credentials";
+    let raw_guidance = "Use token Bearer test_token_secret_12345_abcdef for credentials";
 
     let resp = decide_oversight(
         principal,

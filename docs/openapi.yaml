@@ -3609,7 +3609,7 @@ paths:
   /v1/oversight/settings:
     get:
       tags: [oversight]
-      summary: "Get governance settings"
+      summary: "Get settings"
       responses:
         "200":
           description: Success
