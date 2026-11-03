@@ -190,6 +190,7 @@ def check_doc_file_refs(root):
         refs = re.findall(r'`([^`\n]+\.(?:md|yaml|yml|json|toml|rs|tsx|ts|py|bat|css))`', text)
         refs += [m.replace("\\", "/") for m in re.findall(rf'file:///(?:[A-Za-z]:/[^/]+/|[^/]+/)*{re.escape(root.name)}/([^\)\s]+)', text)]
         for ref in refs:
+            ref = ref.split(chr(35))[0].rstrip(',;:')
             if (
                 ref.startswith("http")
                 or "<" in ref

@@ -173,15 +173,14 @@ def verify_file(file_path, auto_fix=False):
             for link in file_links:
                 cleaned_link = link.replace('%3A', ':').replace('%3a', ':')
                 cleaned_link = cleaned_link.replace('\\', '/')
-                link_path = Path(cleaned_link)
+                path_only = cleaned_link.split('#')[0].rstrip(',;:')
+                link_path = Path(path_only)
                 if not link_path.is_absolute():
                     link_path = ROOT / link_path
                 
-                clean_str_path = str(link_path).split('#')[0]
-                link_path_clean = Path(clean_str_path)
-                if not link_path_clean.exists():
+                if not link_path.exists():
                     # Attempt fallback by matching against repo-relative path if absolute from dev host
-                    norm = cleaned_link.lstrip('/')
+                    norm = path_only.lstrip('/')
                     if len(norm) > 2 and norm[1] == ':':
                         norm = norm[2:].lstrip('/')
                     parts = [p for p in norm.split('/') if p]
