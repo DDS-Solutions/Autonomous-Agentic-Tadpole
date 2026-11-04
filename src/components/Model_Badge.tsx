@@ -58,12 +58,12 @@ export const Model_Badge = ({ model, is_active, on_click, capabilities }: Model_
                 borderColor: 'currentColor'
             } : {}}
         >
-            <div className="flex items-center gap-1">
-                {capabilities?.supports_vision && <Eye size={8} className="text-zinc-400" />}
-                {capabilities?.supports_tools && <Wrench size={8} className="text-zinc-400" />}
-                {capabilities?.supports_reasoning && <Brain size={8} className="text-zinc-400" />}
-                <span className="truncate max-w-[80px]">{model}</span>
-                {on_click && <ChevronDown size={8} className="opacity-70" />}
+            <div className="flex items-center gap-1 min-w-0">
+                {capabilities?.supports_vision && <Eye size={8} className="text-zinc-400 shrink-0" />}
+                {capabilities?.supports_tools && <Wrench size={8} className="text-zinc-400 shrink-0" />}
+                {capabilities?.supports_reasoning && <Brain size={8} className="text-zinc-400 shrink-0" />}
+                <span className="truncate max-w-[180px]">{model}</span>
+                {on_click && <ChevronDown size={8} className="opacity-70 shrink-0" />}
             </div>
         </button>
     );

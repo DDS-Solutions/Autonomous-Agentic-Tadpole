@@ -208,6 +208,24 @@ export function get_agent_slot_model(agent: Agent | undefined, slot: 1 | 2 | 3):
 }
 
 /**
+ * Parses any slot representation into a strict 1 | 2 | 3 slot index.
+ */
+export function parse_active_model_slot(val: unknown): 1 | 2 | 3 {
+    if (typeof val === 'number') {
+        if (val === 2) return 2;
+        if (val === 3) return 3;
+        return 1;
+    }
+    if (typeof val === 'string') {
+        const trimmed = val.trim().toLowerCase();
+        if (trimmed === '2' || trimmed === 'execution' || trimmed === 'secondary') return 2;
+        if (trimmed === '3' || trimmed === 'default' || trimmed === 'tertiary') return 3;
+        if (trimmed === '1' || trimmed === 'planning' || trimmed === 'primary') return 1;
+    }
+    return 1;
+}
+
+/**
  * Resolves the active model ID and provider for an agent based on its current slot.
  * Supports global intelligence overrides to ensure swarm-wide synchronization.
  */
