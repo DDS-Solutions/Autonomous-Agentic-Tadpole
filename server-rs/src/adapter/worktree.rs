@@ -45,7 +45,7 @@ impl WorktreeSandbox {
 
         if let Some(parent) = worktree_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                AppError::Internal(format!("Failed to create worktree parent directory: {}", e))
+                AppError::InternalServerError(format!("Failed to create worktree parent directory: {}", e))
             })?;
         }
 
@@ -67,13 +67,13 @@ impl WorktreeSandbox {
             ])
             .output()
             .map_err(|e| {
-                AppError::Internal(format!("Failed to execute 'git worktree add': {}", e))
+                AppError::InternalServerError(format!("Failed to execute 'git worktree add': {}", e))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             error!("🚨 [worktree] 'git worktree add' failed: {}", stderr);
-            return Err(AppError::Internal(format!(
+            return Err(AppError::InternalServerError(format!(
                 "git worktree add failed: {}",
                 stderr.trim()
             )));
@@ -92,11 +92,11 @@ impl WorktreeSandbox {
             .current_dir(&self.worktree_path)
             .args(["diff", "HEAD"])
             .output()
-            .map_err(|e| AppError::Internal(format!("Failed to run 'git diff': {}", e)))?;
+            .map_err(|e| AppError::InternalServerError(format!("Failed to run 'git diff': {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::Internal(format!(
+            return Err(AppError::InternalServerError(format!(
                 "git diff failed: {}",
                 stderr.trim()
             )));

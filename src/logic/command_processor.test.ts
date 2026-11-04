@@ -473,6 +473,29 @@ describe('process_command', () => {
             );
             expect(agent_api_service.send_command).not.toHaveBeenCalled();
         });
+
+        it('should reject over-limit swarm broadcasts before dispatch', async () => {
+            const { event_bus } = await import('../services/event_bus');
+            const emit_spy = vi.spyOn(event_bus, 'emit_log');
+
+            await process_command('x'.repeat(501), mock_agents);
+
+            expect(agent_api_service.send_command).not.toHaveBeenCalled();
+            expect(emit_spy).toHaveBeenCalledWith(expect.objectContaining({
+                source: 'System',
+                text: expect.stringContaining('500 character limit'),
+                severity: 'error'
+            }));
+        });
+
+        it('should allow a swarm broadcast at the 500-character limit', async () => {
+            const message = 'x'.repeat(500);
+
+            await process_command(message, mock_agents);
+
+            expect(agent_api_service.send_command).toHaveBeenCalledOnce();
+            expect(vi.mocked(agent_api_service.send_command).mock.calls[0][1]).toBe(message);
+        });
     });
 });
 

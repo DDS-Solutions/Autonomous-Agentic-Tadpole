@@ -199,6 +199,30 @@ describe('Scheduled_Jobs Page', () => {
         expect(screen.getByText('Database Backup Workflow')).toBeInTheDocument();
     });
 
+    it('opens a new job form with fresh defaults after closing an edited draft', async () => {
+        await act(async () => {
+            render(<Scheduled_Jobs />);
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'scheduled_jobs.new_job' }));
+        });
+        fireEvent.change(screen.getByLabelText('scheduled_jobs.job_name'), { target: { value: 'Draft job' } });
+        fireEvent.change(screen.getByLabelText('scheduled_jobs.cron_expression'), { target: { value: '15 3 * * *' } });
+        fireEvent.change(screen.getByLabelText('scheduled_jobs.budget_cap'), { target: { value: '9' } });
+        fireEvent.change(screen.getByLabelText('scheduled_jobs.max_failures_label'), { target: { value: '8' } });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'common.btn_cancel' }));
+            fireEvent.click(screen.getByRole('button', { name: 'scheduled_jobs.new_job' }));
+        });
+
+        expect(screen.getByLabelText('scheduled_jobs.job_name')).toHaveValue('');
+        expect(screen.getByLabelText('scheduled_jobs.cron_expression')).toHaveValue('0 * * * *');
+        expect(screen.getByLabelText('scheduled_jobs.budget_cap')).toHaveValue(0.1);
+        expect(screen.getByLabelText('scheduled_jobs.max_failures_label')).toHaveValue(3);
+    });
+
     it('toggles job enabled state', async () => {
         await act(async () => {
             render(<Scheduled_Jobs />);

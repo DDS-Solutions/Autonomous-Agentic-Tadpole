@@ -126,100 +126,128 @@ def join_path(prefix: str, path: str) -> str:
     return res if res else "/"
 
 
-def extract_function_body(source: str, fn_name: str) -> str:
-    match = re.search(rf"fn\s+{re.escape(fn_name)}\s*\(", source)
-    if not match:
-        return ""
-    brace_start = source.find("{", match.end())
-    if brace_start == -1:
-        return ""
-    depth = 0
-    in_string = False
-    escaped = False
-    for idx in range(brace_start, len(source)):
-        char = source[idx]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
+def _rust_code_mask(source: str) -> str:
+    """Blank quoted strings and Rust comments without changing source offsets."""
+    masked = list(source)
+    index = 0
+    length = len(source)
+
+    def blank(start: int, end: int) -> None:
+        masked[start:end] = [
+            "\n" if char == "\n" else "\r" if char == "\r" else " "
+            for char in source[start:end]
+        ]
+
+    while index < length:
+        if source.startswith("//", index):
+            end = index + 2
+            while end < length and source[end] not in "\r\n":
+                end += 1
+            blank(index, end)
+            index = end
             continue
-        if char == '"':
-            in_string = True
+        if source.startswith("/*", index):
+            end = index + 2
+            depth = 1
+            while end < length and depth:
+                if source.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif source.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+            blank(index, end)
+            index = end
             continue
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return source[brace_start + 1 : idx]
-    return ""
-
-
-def extract_route_calls(body: str) -> Iterable[tuple[str, str, str]]:
-    cursor = 0
-    while True:
-        start = body.find(".route", cursor)
-        if start == -1:
-            return
-        paren = body.find("(", start)
-        if paren == -1:
-            return
-
-        depth = 0
-        in_string = False
-        escaped = False
-        end = None
-        for idx in range(paren, len(body)):
-            char = body[idx]
-            if in_string:
+        if source[index] == '"':
+            end = index + 1
+            escaped = False
+            while end < length:
+                char = source[end]
+                end += 1
                 if escaped:
                     escaped = False
                 elif char == "\\":
                     escaped = True
                 elif char == '"':
-                    in_string = False
-                continue
-            if char == '"':
-                in_string = True
-            elif char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth == 0:
-                    end = idx
                     break
+            blank(index, end)
+            index = end
+            continue
+        index += 1
+    return "".join(masked)
+
+
+def _matching_delimiter(source: str, opening: int) -> int | None:
+    """Return the matching delimiter while ignoring Rust strings and comments."""
+    code = _rust_code_mask(source)
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    first = code[opening]
+    if first not in pairs:
+        return None
+    stack = [pairs[first]]
+    for index in range(opening + 1, len(code)):
+        char = code[index]
+        if char in pairs:
+            stack.append(pairs[char])
+        elif char in ")]}":
+            if not stack or char != stack.pop():
+                return None
+            if not stack:
+                return index
+    return None
+
+
+def _top_level_comma(source: str) -> int | None:
+    """Find the first comma outside nested Rust delimiters, strings, and comments."""
+    code = _rust_code_mask(source)
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    stack: list[str] = []
+    for index, char in enumerate(code):
+        if char in pairs:
+            stack.append(pairs[char])
+        elif char in ")]}":
+            if stack and char == stack[-1]:
+                stack.pop()
+        elif char == "," and not stack:
+            return index
+    return None
+
+
+def extract_function_body(source: str, fn_name: str) -> str:
+    code = _rust_code_mask(source)
+    match = re.search(rf"\bfn\s+{re.escape(fn_name)}\s*\(", code)
+    if not match:
+        return ""
+    brace_start = code.find("{", match.end())
+    if brace_start == -1:
+        return ""
+    brace_end = _matching_delimiter(source, brace_start)
+    if brace_end is None:
+        return ""
+    return source[brace_start + 1 : brace_end]
+
+
+def extract_route_calls(body: str) -> Iterable[tuple[str, str, str]]:
+    cursor = 0
+    code = _rust_code_mask(body)
+    while True:
+        start = code.find(".route", cursor)
+        if start == -1:
+            return
+        paren = code.find("(", start + len(".route"))
+        if paren == -1:
+            return
+        end = _matching_delimiter(body, paren)
         if end is None:
             return
 
         args = body[paren + 1 : end]
         cursor = end + 1
 
-        comma = None
-        depth = 0
-        in_string = False
-        escaped = False
-        for idx, char in enumerate(args):
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    in_string = False
-                continue
-            if char == '"':
-                in_string = True
-            elif char in "([{":
-                depth += 1
-            elif char in ")]}":
-                depth -= 1
-            elif char == "," and depth == 0:
-                comma = idx
-                break
-
+        comma = _top_level_comma(args)
         if comma is None:
             continue
 
