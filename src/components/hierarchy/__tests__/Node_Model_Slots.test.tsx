@@ -135,11 +135,11 @@ describe('Node_Model_Slots — Tiered Model Layout Verification', () => {
         });
 
         it('falls back to unknown model label when primary slot 1 is missing', () => {
-            const no_model_agent: Agent = {
+            const no_model_agent = {
                 ...base_mock_agent,
                 model: undefined,
                 model_config: undefined,
-            };
+            } as unknown as Agent;
 
             render(<Node_Model_Slots agent={no_model_agent} />);
 
