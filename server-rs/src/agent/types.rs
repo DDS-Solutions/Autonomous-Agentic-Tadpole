@@ -404,7 +404,7 @@ pub struct ConnectorConfig {
 impl ModelConfig {
     pub fn supports_native_tools(&self) -> bool {
         let mid = self.model_id.to_lowercase();
-        if mid.contains("phi3") || mid.contains("phi-3") {
+        if mid.contains("phi3") || mid.contains("phi-3") || mid.contains("gemma") {
             return false;
         }
         true
@@ -1331,7 +1331,16 @@ impl ChatMessage {
         } else if let Some(rest) = trimmed.strip_prefix("SYSTEM: ") {
             Self::system(rest)
         } else if let Some(rest) = trimmed.strip_prefix("OBSERVATION: ") {
-            Self::tool("legacy", "observation", rest)
+            let rest_trimmed = rest.trim();
+            if let Some(after_tool) = rest_trimmed.strip_prefix("Tool ") {
+                if let Some((tool_name, tool_output)) = after_tool.split_once(" Result: ") {
+                    Self::tool("legacy", tool_name.trim(), tool_output)
+                } else {
+                    Self::tool("legacy", "observation", rest_trimmed)
+                }
+            } else {
+                Self::tool("legacy", "observation", rest_trimmed)
+            }
         } else {
             Self::user(trimmed)
         }
@@ -1560,6 +1569,52 @@ mod contract_tests {
         assert_eq!(serialized["id"], "agent-1");
         assert_eq!(serialized["name"], "Test Agent");
         assert_eq!(serialized["budgetUsd"], 100.0);
+    }
+
+    #[test]
+    fn test_supports_native_tools_slm_filtering() {
+        let gemma = ModelConfig {
+            model_id: "gemma4:e4b".to_string(),
+            ..Default::default()
+        };
+        assert!(!gemma.supports_native_tools(), "Gemma should not be marked as native tool supporting");
+
+        let phi = ModelConfig {
+            model_id: "phi3:medium".to_string(),
+            ..Default::default()
+        };
+        assert!(!phi.supports_native_tools(), "Phi-3 should not be marked as native tool supporting");
+
+        let gpt4 = ModelConfig {
+            model_id: "gpt-4o".to_string(),
+            ..Default::default()
+        };
+        assert!(gpt4.supports_native_tools(), "GPT-4o should support native tools");
+    }
+
+    #[test]
+    fn test_from_legacy_turn_observation_parsing() {
+        let legacy_str = "OBSERVATION: Tool read_codebase_file Result: file content here";
+        let msg = ChatMessage::from_legacy_turn(legacy_str);
+        match msg {
+            ChatMessage::Tool { tool_call_id, name, content } => {
+                assert_eq!(tool_call_id, "legacy");
+                assert_eq!(name, "read_codebase_file");
+                assert_eq!(content, "file content here");
+            }
+            other => panic!("Expected ChatMessage::Tool, got {:?}", other),
+        }
+
+        let generic_obs = "OBSERVATION: generic observation text";
+        let msg2 = ChatMessage::from_legacy_turn(generic_obs);
+        match msg2 {
+            ChatMessage::Tool { tool_call_id, name, content } => {
+                assert_eq!(tool_call_id, "legacy");
+                assert_eq!(name, "observation");
+                assert_eq!(content, "generic observation text");
+            }
+            other => panic!("Expected ChatMessage::Tool, got {:?}", other),
+        }
     }
 }
 

@@ -1,12 +1,14 @@
 //! @docs ARCHITECTURE:Agent
 //!
 //! ### AI Assist Note
-//! **Swarm Reaper (Data Lifecycle)**: Orchestrates the permanent deletion
-//! of mission-specific data to prevent disk saturation and database bloat.
-//! Enforces the **48-Hour Retention Policy**: missions older than 48 hours
-//! that are not marked as `is_pinned` are purged. Cleans up **Relational
+//! **Swarm Reaper (Data Lifecycle & Idle Actor Hibernation)**: Orchestrates the
+//! permanent deletion of mission-specific data to prevent disk saturation and
+//! database bloat. Enforces the **48-Hour Retention Policy**: missions older than
+//! 48 hours that are not marked as `is_pinned` are purged. Cleans up **Relational
 //! Records** (Mission Logs, Context, Relationships) and the **Physical
 //! Workspace** on disk (REAP-01).
+//! Incorporates **Idle Actor Hibernation** (Infinity pattern): sweeps and transitions
+//! inactive idle agents into suspended states to reclaim system resources.
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Telemetry Link**: Search `[reaper]` in tracing logs.
@@ -43,7 +45,7 @@ impl SwarmReaper {
         let threshold = Utc::now() - Duration::hours(48);
         tracing::info!("🧹 [Reaper] Starting sweep for missions older than {}", threshold);
 
-        // 0. Sliding-Window Checkpoint Pruning: Retain only the latest 3 turn checkpoints for terminal missions
+        // 0a. Sliding-Window Checkpoint Pruning: Retain only the latest 3 turn checkpoints for terminal missions
         let prune_res = sqlx::query(
             "DELETE FROM mission_checkpoints 
              WHERE mission_id IN (SELECT id FROM mission_history WHERE status IN ('completed', 'failed', 'cancelled'))
@@ -63,15 +65,21 @@ impl SwarmReaper {
             }
         }
 
+        // 0b. Actor Idle Reaping & Hibernation Sweep (Infinity Pattern)
+        // Transitions stale idle agents (>300s inactive) into suspended/hibernating state
+        if let Err(e) = Self::reap_idle_agents(pool, 300).await {
+            tracing::warn!("⚠️ [Reaper] Idle agent hibernation sweep encountered error: {:?}", e);
+        }
+
         // 1. Identify candidate missions for reaping
         let missions: Vec<(String,)> = sqlx::query_as(
             "SELECT id FROM mission_history 
              WHERE updated_at < ? AND is_pinned = 0
                AND id NOT IN (
                    SELECT json_extract(active_mission, '$.id') 
-                   FROM agents 
-                   WHERE status IN ('busy', 'working') AND active_mission IS NOT NULL
-               )"
+                    FROM agents 
+                    WHERE status IN ('busy', 'working') AND active_mission IS NOT NULL
+                )"
         )
         .bind(threshold)
         .fetch_all(pool)
@@ -152,6 +160,42 @@ impl SwarmReaper {
         Ok(())
     }
 
+    /// Reaps inactive idle swarm agents into a suspended/hibernating state,
+    /// reclaiming in-memory resources and Tokio scheduler slots (Infinity pattern).
+    pub async fn reap_idle_agents(pool: &sqlx::SqlitePool, idle_threshold_seconds: i64) -> Result<u64, AppError> {
+        let protected_ids = vec!["1", "2", "alpha", "general"];
+        let mut tx = pool.begin().await.map_err(AppError::Sqlx)?;
+
+        let query = format!(
+            "UPDATE agents 
+             SET status = 'suspended' 
+             WHERE status = 'idle' 
+               AND (tokens_used = 0 OR tokens_used IS NULL)
+               AND id NOT IN ('{}')
+               AND (updated_at IS NULL OR updated_at < datetime('now', '-' || ? || ' seconds'))",
+            protected_ids.join("','")
+        );
+
+        let res = sqlx::query(&query)
+            .bind(idle_threshold_seconds)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::Sqlx)?;
+
+        let suspended_count = res.rows_affected();
+        tx.commit().await.map_err(AppError::Sqlx)?;
+
+        if suspended_count > 0 {
+            tracing::info!(
+                "💤 [Reaper] Reaped and suspended {} idle swarm agents (inactivity > {}s).",
+                suspended_count,
+                idle_threshold_seconds
+            );
+        }
+
+        Ok(suspended_count)
+    }
+
     /// Purges all physical workspace files associated with a reaped mission.
     async fn purge_workspace_files(mission_id: &str) {
         let base_dir = std::path::Path::new("data/workspaces");
@@ -174,9 +218,5 @@ impl SwarmReaper {
         }
     }
 }
-
-
-
-
 
 // Metadata: [reaper]

@@ -62,6 +62,9 @@ This map reflects the current code layout and should be used as the first orient
 | Actors | `server-rs/src/system/actors/` | Audit, memory, security, and skill actor infrastructure supervised under OTP tree. |
 | Security | `server-rs/src/security/`, `server-rs/src/middleware/`, `server-rs/src/secret_redactor.rs` | Auth, zeroized keys, rate limiting, security headers, scanner, permissions, privacy, audit, and redaction. |
 | Conflict Management | `server-rs/src/security/conflict.rs` | 30s TTL file write leases preventing multi-agent race conditions during concurrent workspace edits. |
+| Git Worktree Sandboxing | \server-rs/src/adapter/worktree.rs\ | Lightweight VCS-level worktree isolation under \.tmp/worktrees/\ for zero-collision agent edits, instantaneous rollbacks, and atomic diff reviews. |
+| Actor Idle Reaping | \server-rs/src/agent/reaper.rs\ | Periodic sweep transitioning inactive swarm agents (>300s) from \idle\ to \suspended\ to reclaim in-memory resources. |
+| Decoupled Background Compaction | \server-rs/src/agent/context_manager.rs\ | Non-blocking async background context summarization without pausing interactive turn execution. |
 | Dependency Guard | `server-rs/src/security/dependency_guard.rs` | Thread-safe cached system binary discovery (`git`, `python`, `node`, `docker`, `cargo`). |
 | Dual-Plane Partitioning & FR-11 Firewall | `directives/IDENTITY.md`, `server-rs/src/agent/runner/tools/security.rs`, `server-rs/src/agent/types.rs` | Execution plane segregation (Plane 1 Engine-Maintenance vs Plane 2 SMB-Digital-Twin), strictly denying Plane 2 host shell access and engine codebase writes. |
 | Cognition Spine & 24KB Compactor | `server-rs/src/agent/runner/{turn_compactor,execution_metrics,parser,refinement}.rs` | 24KB threshold observation spill to `.tmp/tool_overflow/` with safe UTF-8 character boundary slicing, pinned-tail retention, and balanced-brace tool recovery. |

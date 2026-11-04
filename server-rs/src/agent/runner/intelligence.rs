@@ -450,6 +450,19 @@ impl AgentRunner {
                             &scrub_mythos_tags(&turn_text),
                             false // not final
                         );
+                    } else if !function_calls.is_empty() {
+                        // When turn_text is empty because tool calls were scrubbed from XML, preserve conversational continuity
+                        let tool_summary = function_calls
+                            .iter()
+                            .map(|fc| format!("Invoking tool '{}'", fc.name))
+                            .collect::<Vec<_>>()
+                            .join("; ");
+                        conversation_history.push(format!("ASSISTANT: {}", tool_summary));
+
+                        let parent_id = ctx.active_node_id.lock().clone();
+                        if let Ok(new_id) = self.append_to_journal(ctx, "assistant", &tool_summary, parent_id, None).await {
+                            *ctx.active_node_id.lock() = Some(new_id);
+                        }
                     }
 
                     if function_calls.is_empty() {

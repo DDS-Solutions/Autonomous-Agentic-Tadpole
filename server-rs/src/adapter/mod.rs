@@ -22,7 +22,6 @@ pub mod filesystem;
 #[cfg(test)]
 mod tests_filesystem;
 pub mod vault;
-
-
+pub mod worktree;
 
 // Metadata: [mod]

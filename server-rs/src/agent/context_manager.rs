@@ -3,8 +3,10 @@
 //! ### AI Assist Note
 //! **Context Density Orchestrator**: Manages context window saturation and
 //! performing **Tiered Compression**. Features heuristic compaction
-//! (Tier 1) for redundancy removal and semantic summarization (Tier 2)
-//! when mission history exceeds token thresholds (80% of max_tokens).
+//! (Tier 1) for redundancy removal, semantic summarization (Tier 2)
+//! when mission history exceeds token thresholds (80% of max_tokens),
+//! and **Decoupled Background Compaction** (Infinity synthetic compaction pattern)
+//! to condense context asynchronously without stalling active operator turns.
 //! Uses `tiktoken-rs` via `TokenizerService` for precise model tokenization.
 //!
 //! ### 🔍 Debugging & Observability
@@ -17,6 +19,7 @@
 use super::tokenizer::TokenizerService;
 use super::runner::{AgentRunner, RunContext};
 use crate::error::AppError;
+use std::sync::Arc;
 
 pub struct ContextManager;
 
@@ -75,7 +78,7 @@ impl ContextManager {
         let heuristically_compacted = Self::compact(history);
 
         tracing::info!(
-            "🧠 [ContextManager] Tier 1 Compaction: {} -> {} tokens for model {}",
+            "🧠 [context_manager] Tier 1 Compaction: {} -> {} tokens for model {}",
             Self::calculate_tokens_for_model(model_id, history),
             Self::calculate_tokens_for_model(model_id, &heuristically_compacted),
             model_id
@@ -100,11 +103,24 @@ impl ContextManager {
             .await?;
 
         tracing::info!(
-            "✅ [ContextManager] Tier 2 Compaction complete. Final length: {} tokens",
+            "✅ [context_manager] Tier 2 Compaction complete. Final length: {} tokens",
             Self::calculate_tokens_for_model(model_id, &summary)
         );
 
         Ok(summary)
+    }
+
+    /// Dispatches Tier 1 & Tier 2 context compaction onto a background Tokio task without blocking the active turn.
+    /// Returns the JoinHandle yielding the compacted summary once completed (Infinity synthetic compaction pattern).
+    pub fn spawn_background_compaction(
+        runner: Arc<AgentRunner>,
+        ctx: RunContext,
+        history: String,
+    ) -> tokio::task::JoinHandle<Result<String, AppError>> {
+        tokio::spawn(async move {
+            tracing::info!("🔄 [context_manager] Background synthetic compaction dispatched off-thread.");
+            Self::summarize_history(&runner, &ctx, &history).await
+        })
     }
 }
 
@@ -130,7 +146,3 @@ mod tests {
         assert!(tokens > 0);
     }
 }
-
-
-
-// Metadata: [context_manager]

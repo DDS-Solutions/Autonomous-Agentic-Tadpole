@@ -100,6 +100,7 @@ describe('INV-007: Release Gate Coverage & Execution Governance Invariant', () =
             'run_dual_missions_tail.py',
             'run_dual_plane_live_mission.py',
             'run_specialized_missions_longtail.py',
+            'run_strategic_command_live_mission.py',
             'seed_continuity_workflows.py',
             'simulate_swarm_stress.py',
             'sync_all_upstream_toolbelts.py',

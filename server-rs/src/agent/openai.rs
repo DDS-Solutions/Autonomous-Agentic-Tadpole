@@ -23,8 +23,8 @@ use regex::Regex;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
-struct OpenAIMessage {
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub(crate) struct OpenAIMessage {
     role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
@@ -143,6 +143,91 @@ impl OpenAIProvider {
     /// 1. **Tool Mapping**: Translating Gemini-style tools to OpenAI's tool-call schema.
     /// 2. **Retry Logic**: Injecting error-correction instructions if previous attempts failed.
     /// 3. **Native vs Bridge**: Detecting if the model supports native tools or needs tag parsing.
+    pub(crate) fn format_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        retry_msg: Option<&str>,
+    ) -> Vec<OpenAIMessage> {
+        let mut req_messages = Vec::new();
+        
+        let has_vectors = self.config.steering_vectors.as_ref().is_some_and(|v| !v.is_empty());
+        
+        if !has_vectors && !system_prompt.trim().is_empty() {
+            req_messages.push(OpenAIMessage {
+                role: "system".to_string(),
+                content: Some(system_prompt.to_string()),
+            });
+        } else if has_vectors {
+            tracing::info!("🧠 [OBLITERATUS] Steering vectors active. Stripping bulky system prompt.");
+        }
+
+        let is_local_or_bridge = self.config.provider == crate::agent::types::ModelProvider::Ollama 
+            || !self.config.supports_native_tools()
+            || self.config.base_url.as_ref().is_some_and(|u| u.contains("127.0.0.1") || u.contains("localhost"));
+
+        for msg in messages {
+            match msg {
+                ChatMessage::System { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "system".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::User { content, .. } => {
+                    req_messages.push(OpenAIMessage {
+                        role: "user".to_string(),
+                        content: Some(content.clone()),
+                    });
+                }
+                ChatMessage::Assistant { content, .. } => {
+                    let effective_content = if content.trim().is_empty() {
+                        "Acknowledged. Executing action.".to_string()
+                    } else {
+                        content.clone()
+                    };
+                    req_messages.push(OpenAIMessage {
+                        role: "assistant".to_string(),
+                        content: Some(effective_content),
+                    });
+                }
+                ChatMessage::Tool { tool_call_id, name, content } => {
+                    if is_local_or_bridge || tool_call_id == "legacy" || tool_call_id.trim().is_empty() {
+                        let obs_text = if name == "observation" || name.is_empty() {
+                            format!("OBSERVATION: {}", content)
+                        } else if content.starts_with("Tool ") && content.contains(" Result: ") {
+                            format!("OBSERVATION: {}", content)
+                        } else {
+                            format!("OBSERVATION: Tool {} Result: {}", name, content)
+                        };
+                        req_messages.push(OpenAIMessage {
+                            role: "user".to_string(),
+                            content: Some(obs_text),
+                        });
+                    } else {
+                        req_messages.push(OpenAIMessage {
+                            role: "tool".to_string(),
+                            content: Some(content.clone()),
+                        });
+                    }
+                }
+            }
+        }
+
+        // If this is a retry, append the failed generation and correction instruction
+        if let Some(r) = retry_msg {
+            req_messages.push(OpenAIMessage {
+                role: "assistant".to_string(),
+                content: Some(r.to_string()),
+            });
+            req_messages.push(OpenAIMessage {
+                role: "user".to_string(),
+                content: Some("CRITICAL ERROR: Your previous tool call was malformed. Please fix the JSON syntax and try again. Ensure all arguments are inside the brackets and there are no stray characters.".to_string()),
+            });
+        }
+
+        req_messages
+    }
     async fn generate_messages_internal(
         &self,
         system_prompt: &str,
@@ -218,59 +303,7 @@ impl OpenAIProvider {
                 .collect::<Vec<OpenAITool>>()
         });
 
-        let mut req_messages = Vec::new();
-        
-        let has_vectors = self.config.steering_vectors.as_ref().is_some_and(|v| !v.is_empty());
-        
-        if !has_vectors && !system_prompt.trim().is_empty() {
-            req_messages.push(OpenAIMessage {
-                role: "system".to_string(),
-                content: Some(system_prompt.to_string()),
-            });
-        } else if has_vectors {
-            tracing::info!("🧠 [OBLITERATUS] Steering vectors active. Stripping bulky system prompt.");
-        }
-
-        for msg in messages {
-            match msg {
-                ChatMessage::System { content, .. } => {
-                    req_messages.push(OpenAIMessage {
-                        role: "system".to_string(),
-                        content: Some(content.clone()),
-                    });
-                }
-                ChatMessage::User { content, .. } => {
-                    req_messages.push(OpenAIMessage {
-                        role: "user".to_string(),
-                        content: Some(content.clone()),
-                    });
-                }
-                ChatMessage::Assistant { content, .. } => {
-                    req_messages.push(OpenAIMessage {
-                        role: "assistant".to_string(),
-                        content: Some(content.clone()),
-                    });
-                }
-                ChatMessage::Tool { content, .. } => {
-                    req_messages.push(OpenAIMessage {
-                        role: "tool".to_string(),
-                        content: Some(content.clone()),
-                    });
-                }
-            }
-        }
-
-        // If this is a retry, append the failed generation and correction instruction
-        if let Some(ref r) = retry_msg {
-            req_messages.push(OpenAIMessage {
-                role: "assistant".to_string(),
-                content: Some(r.clone()),
-            });
-            req_messages.push(OpenAIMessage {
-                role: "user".to_string(),
-                content: Some("CRITICAL ERROR: Your previous tool call was malformed. Please fix the JSON syntax and try again. Ensure all arguments are inside the brackets and there are no stray characters.".to_string()),
-            });
-        }
+        let req_messages = self.format_messages(system_prompt, messages, retry_msg.as_deref());
 
         let request_body = OpenAIRequest {
             model: self.config.model_id.clone(),
@@ -584,5 +617,60 @@ fn is_oom_error(text: &str) -> bool {
 
 
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::types::{ChatMessage, ModelConfig, ModelProvider};
+
+    #[test]
+    fn test_format_messages_local_bridge_maps_tool_to_user() {
+        let client = reqwest::Client::new();
+        let config = ModelConfig {
+            provider: ModelProvider::Ollama,
+            model_id: "gemma4:e4b".to_string(),
+            base_url: Some("http://127.0.0.1:11434".to_string()),
+            ..Default::default()
+        };
+        let provider = OpenAIProvider::new(client, "dummy_key".to_string(), config);
+
+        let messages = vec![
+            ChatMessage::user("Read identity directive"),
+            ChatMessage::assistant(""),
+            ChatMessage::tool("legacy", "read_file", "# Tadpole Identity Content"),
+        ];
+
+        let formatted = provider.format_messages("You are Agent 1", &messages, None);
+        assert_eq!(formatted.len(), 4);
+        assert_eq!(formatted[0].role, "system");
+        assert_eq!(formatted[1].role, "user");
+        assert_eq!(formatted[2].role, "assistant");
+        assert_eq!(formatted[2].content.as_deref(), Some("Acknowledged. Executing action."));
+        // Tool turn mapped to user observation role for Gemma/Ollama compatibility
+        assert_eq!(formatted[3].role, "user");
+        assert!(formatted[3].content.as_ref().unwrap().contains("OBSERVATION: Tool read_file Result: # Tadpole Identity Content"));
+    }
+
+    #[test]
+    fn test_format_messages_cloud_openai_preserves_tool_role() {
+        let client = reqwest::Client::new();
+        let config = ModelConfig {
+            provider: ModelProvider::Openai,
+            model_id: "gpt-4o".to_string(),
+            base_url: Some("https://api.openai.com/v1".to_string()),
+            ..Default::default()
+        };
+        let provider = OpenAIProvider::new(client, "dummy_key".to_string(), config);
+
+        let messages = vec![
+            ChatMessage::user("Read file"),
+            ChatMessage::tool("call_123", "read_file", "file contents"),
+        ];
+
+        let formatted = provider.format_messages("System prompt", &messages, None);
+        assert_eq!(formatted[2].role, "tool");
+        assert_eq!(formatted[2].content.as_deref(), Some("file contents"));
+    }
+}
 
 // Metadata: [openai]

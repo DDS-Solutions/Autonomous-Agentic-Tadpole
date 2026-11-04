@@ -102,6 +102,9 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **SpanWatchdog with Provider-Aware Leaked Span Reaping**: Background telemetry watchdog sweeping open spans with provider-specific TTLs (60s cloud, 300s local Ollama), emitting synthetic timeout events to prevent orphan spans from corrupting mission observability.
 - **Mission Benchmark Harness**: 5-scenario reproducible benchmark test harness (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) asserting tool caching, loop prevention, monologue compression, SSRF security, and span watchdog timeout tracking.
 - **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
+- **Git Worktree Sandboxing**: Lightweight VCS-level disk isolation (server-rs/src/adapter/worktree.rs) spawning temporary worktrees in .tmp/worktrees/<task_id>, ensuring collision-free concurrent agent branch editing, instantaneous rollbacks, and atomic diff-based review before merge.
+- **Actor Idle Reaping & Hibernation**: Automated periodic sweep (server-rs/src/agent/reaper.rs) transitioning inactive swarm agents (>300s) from idle to suspended/hibernating state, reclaiming Tokio scheduler slots and in-memory caches.
+- **Decoupled Background Context Compaction**: Dispatches Tier 1 & Tier 2 context compaction onto background worker tasks (server-rs/src/agent/context_manager.rs), eliminating turn latency spikes during operator sessions.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
 ## System At A Glance
