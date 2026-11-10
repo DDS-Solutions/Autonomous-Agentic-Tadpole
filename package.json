@@ -111,7 +111,7 @@
     "jsdom": "^30.1.1",
     "scheduler": "^0.28.0",
     "search-insights": "^2.17.3",
-    "tailwindcss": "^4.3.4",
+    "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.71.1",
