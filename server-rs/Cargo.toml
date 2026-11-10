@@ -63,7 +63,7 @@ sha2 = "0.11.0"
 hex = "0.4.3"
 unicode-normalization = "0.1"
 base64 = "0.23.1"
-lru = "0.18.0"
+lru = "0.19.0"
 tokio-tungstenite = "0.29.0"
 subtle = "2.6"
 moka = { version = "0.12", features = ["future", "sync"] }
