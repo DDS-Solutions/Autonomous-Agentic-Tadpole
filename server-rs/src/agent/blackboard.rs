@@ -260,6 +260,16 @@ impl SharedBlackboard {
         self.missions.remove(mission_id);
     }
 
+    /// Returns `true` when no mission partitions remain stored in memory.
+    pub fn is_empty(&self) -> bool {
+        self.missions.is_empty()
+    }
+
+    /// Returns the IDs of all mission partitions currently retained on the blackboard.
+    pub fn active_mission_ids(&self) -> Vec<String> {
+        self.missions.iter().map(|kv| kv.key().clone()).collect()
+    }
+
     /// Creates an RAII scoped mission handle that cleans up the mission blackboard when dropped.
     pub fn scoped_mission(self: &Arc<Self>, mission_id: impl Into<String>) -> MissionBlackboardScope {
         MissionBlackboardScope::new(Arc::clone(self), mission_id)

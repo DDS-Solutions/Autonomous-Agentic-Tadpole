@@ -16,7 +16,7 @@
       "name": "Recursion Loop Guard",
       "category": "Reliability",
       "status": "PASS",
-      "detail": "Tool loop guard: warn at 3, abort with RecursionBlocked at 5"
+      "detail": "Tool loop guard: circuit-breaker at 3, warning >3, abort with RecursionBlocked at 5"
     },
     {
       "id": "task_03",

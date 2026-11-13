@@ -138,9 +138,14 @@ async fn execute_job(state: Arc<AppState>, job: super::types::ScheduledJob) -> R
             engine.run_workflow(&workflow_id, serde_json::json!({})).await
         })
     } else {
+        let accept_mode = job.accept_mode();
         let payload = TaskPayload {
-            message: job.prompt.clone(), department: Some(format!("Continuity: {}", job.name)),
-            budget_usd: Some(job.budget_usd), safe_mode: Some(false), analysis: Some(false),
+            message: job.prompt.clone(),
+            department: Some(format!("Continuity: {}", job.name)),
+            budget_usd: Some(job.budget_usd),
+            safe_mode: Some(false),
+            analysis: Some(false),
+            accept_mode: Some(accept_mode),
             ..Default::default()
         };
         crate::routes::agent::spawn_agent_runner(state.clone(), job.agent_id.clone(), payload)
@@ -287,6 +292,7 @@ mod tests {
             name: "Worker regression".to_string(), prompt: "Say hello".to_string(),
             cron_expr: "* * * * *".to_string(), budget_usd: Some(0.1),
             max_failures: None, metadata: None,
+            accept_mode: None,
         }).await.unwrap()
     }
 
@@ -524,6 +530,7 @@ mod tests {
             budget_usd: None,
             max_failures: None,
             metadata: None,
+            accept_mode: None,
         };
         let job = create_job(&pool, req).await?;
 

@@ -24,26 +24,37 @@ allowed-tools: Read, Glob, Grep, Bash
 
 ### Procedures by Ecosystem
 
-#### Node.js / TypeScript
+#### Rust (`server-rs` & `src-tauri`)
+1. **Compilation Check:** `cargo check --workspace` (or `python execution/cargo_fast_check.py`)
+2. **Linter (Clippy):** `cargo clippy --workspace --all-targets --all-features -D warnings`
+3. **Tests & Invariants:** `cargo test`
+
+#### Node.js / TypeScript (`src/`)
 1. **Lint/Fix:** `npm run lint` or `npx eslint "path" --fix`
 2. **Types:** `npx tsc --noEmit`
 3. **Security:** `npm audit --audit-level=high`
 
-#### Python
+#### Python (`execution/`)
 1. **Linter (Ruff):** `ruff check "path" --fix` (Fast & Modern)
 2. **Security (Bandit):** `bandit -r "path" -ll`
 3. **Types (MyPy):** `mypy "path"`
 
+#### Sovereign Layer 3 Integrity Suite
+1. **Parity Guard:** `python execution/parity_guard.py` (Validates 143 routes, env vars, invariants)
+2. **AI Context Alignment:** `python execution/verify_ai_context.py`
+3. **Security & Secrets:** `python execution/security_scan.py`
+
 ## The Quality Loop
 1. **Write/Edit Code**
-2. **Run Audit:** `npm run lint && npx tsc --noEmit`
-3. **Analyze Report:** Check the "FINAL AUDIT REPORT" section.
-4. **Fix & Repeat:** Submitting code with "FINAL AUDIT" failures is NOT allowed.
+2. **Run Linter & Typechecks:** Multi-ecosystem check via `python .agent/skills/lint-and-validate/scripts/lint_runner.py .`
+3. **Run Sovereign Gates:** `python execution/parity_guard.py`
+4. **Fix & Repeat:** Submitting code with failures is NOT allowed.
 
 ## Error Handling
-- If `lint` fails: Fix the style or syntax issues immediately.
+- If `cargo clippy` fails: Resolve borrows, unneeded clones, and lint warnings immediately.
+- If `lint` fails: Fix style or syntax issues immediately.
 - If `tsc` fails: Correct type mismatches before proceeding.
-- If no tool is configured: Check the project root for `.eslintrc`, `tsconfig.json`, `pyproject.toml` and suggest creating one.
+- If `parity_guard` fails: Reconcile router, env-var, or documentation parity mismatches.
 
 ---
 **Strict Rule:** No code should be committed or reported as "done" without passing these checks.
@@ -54,8 +65,8 @@ allowed-tools: Read, Glob, Grep, Bash
 
 | Script | Purpose | Command |
 |--------|---------|---------|
-| `scripts/lint_runner.py` | Unified lint check | `python scripts/lint_runner.py <project_path>` |
-| `scripts/type_coverage.py` | Type coverage analysis | `python scripts/type_coverage.py <project_path>` |
+| `lint_runner.py` | Unified polyglot lint check | `python .agent/skills/lint-and-validate/scripts/lint_runner.py <project_path>` |
+| `type_coverage.py` | Type coverage analysis | `python .agent/skills/lint-and-validate/scripts/type_coverage.py <project_path>` |
 
 
 [//]: # (Metadata: [SKILL])

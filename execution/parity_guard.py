@@ -366,6 +366,74 @@ def check_readme_routes(root, code_routes):
             
     return errors
 
+def check_vitepress_docs(root: Path) -> int:
+    print(f"\nChecking VitePress Documentation Integrity...")
+    errors = 0
+    docs_dir = root / "docs"
+    index_md = docs_dir / "index.md"
+    if not index_md.exists():
+        print_result("VITEPRESS", False, "docs/index.md missing (root site route / would 404)")
+        errors += 1
+    else:
+        print_result("VITEPRESS", True, "docs/index.md present")
+
+    config_ts = docs_dir / ".vitepress" / "config.ts"
+    if not config_ts.exists():
+        print_result("VITEPRESS", False, "docs/.vitepress/config.ts missing")
+        return errors + 1
+
+    config_text = config_ts.read_text(encoding="utf-8")
+    links = re.findall(r"link:\s*['\"]([^'\"]+)['\"]", config_text)
+    if not links:
+        print_result("VITEPRESS", False, "No navigation links found in docs/.vitepress/config.ts")
+        return errors + 1
+
+    for link in sorted(set(links)):
+        if link.startswith("http"):
+            continue
+        clean = link.split("#")[0].strip("/")
+        if not clean:
+            target_exists = index_md.exists()
+        else:
+            target_exists = (docs_dir / f"{clean}.md").exists() or (docs_dir / clean / "index.md").exists()
+        if not target_exists:
+            print_result("VITEPRESS", False, f"VitePress config link '{link}' points to missing doc")
+            errors += 1
+        else:
+            print_result("VITEPRESS", True, f"VitePress link '{link}' resolved")
+    return errors
+
+def check_openapi_schema_parity(openapi_path: Path) -> int:
+    print(f"\nChecking OpenAPI Component Schema Parity...")
+    if not openapi_path.exists():
+        print_result("SCHEMA-PARITY", False, "docs/openapi.yaml missing")
+        return 1
+
+    data = yaml.safe_load(openapi_path.read_text(encoding="utf-8")) or {}
+    schemas = (data.get("components") or {}).get("schemas") or {}
+    required_fields = {
+        "Mandate": {"executionPlane", "acceptMode", "allowedTools", "pathBoundary", "budgetUsd", "deliveryTarget"},
+        "TaskPayload": {"message", "execution_plane", "accept_mode", "mandate"},
+        "CreateJobRequest": {"accept_mode"},
+        "UpdateJobRequest": {"accept_mode"},
+    }
+
+    errors = 0
+    for schema_name, expected_props in required_fields.items():
+        schema_def = schemas.get(schema_name)
+        if not isinstance(schema_def, dict):
+            print_result("SCHEMA-PARITY", False, f"OpenAPI schema '{schema_name}' missing")
+            errors += 1
+            continue
+        props = set((schema_def.get("properties") or {}).keys())
+        missing = sorted(expected_props - props)
+        if missing:
+            print_result("SCHEMA-PARITY", False, f"OpenAPI schema '{schema_name}' missing properties: {', '.join(missing)}")
+            errors += 1
+        else:
+            print_result("SCHEMA-PARITY", True, f"OpenAPI schema '{schema_name}' properties verified")
+    return errors
+
 def check_nexus_invariants(root: Path) -> int:
     guard_script = root / "execution" / "nexus_adversarial_guard.py"
     if not guard_script.exists():
@@ -483,6 +551,8 @@ def check_parity(root_dir=None, fix=False):
     errors += check_doc_file_refs(root)
     errors += check_skills(root)
     errors += check_api_docs_parity(root, fix=fix)
+    errors += check_vitepress_docs(root)
+    errors += check_openapi_schema_parity(openapi_path)
     errors += check_nexus_invariants(root)
 
     print(f"\nAudit Complete. Errors found: {errors}")

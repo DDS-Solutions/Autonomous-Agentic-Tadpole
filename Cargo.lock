@@ -8201,6 +8201,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tadpole-guard"
+version = "1.1.59"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "serde",
+ "serde_json",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "tadpole-os-app"
 version = "1.1.59"
 dependencies = [
@@ -8208,6 +8221,16 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+]
+
+[[package]]
+name = "tadpole-sec"
+version = "1.1.59"
+dependencies = [
+ "anyhow",
+ "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8220,6 +8243,15 @@ dependencies = [
  "serde-wasm-bindgen",
  "wasm-bindgen",
  "wasm-bindgen-test",
+]
+
+[[package]]
+name = "tadpole-wasm-graph-physics"
+version = "1.1.59"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

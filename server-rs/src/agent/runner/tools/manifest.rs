@@ -29,16 +29,34 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
         },
         ToolDefinitionData {
             name: "spawn_subagent".to_string(),
-            description: "Spawns one or more specialized sub-agents to handle tasks in parallel.".to_string(),
+            description: "Spawns one or more specialized sub-agents in parallel or as a dependency-aware DAG (`tasks` with `depends_on`).".to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "agent_id": { "type": "string", "description": "The ID of the specialist agent to recruit." },
                     "agent_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: multiple specialist IDs." },
                     "message": { "type": "string", "description": "Instruction for the sub-agent(s)." },
-                    "role": { "type": "string", "description": "Optional: override role." }
+                    "role": { "type": "string", "description": "Optional: override role." },
+                    "tasks": {
+                        "type": "array",
+                        "description": "Optional dependency-aware task DAG executed wave-by-wave via TaskGraph.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": { "type": "string", "description": "Unique task identifier in this DAG." },
+                                "agent_id": { "type": "string", "description": "Target sub-agent ID for this task." },
+                                "message": { "type": "string", "description": "Task-specific instruction." },
+                                "depends_on": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Upstream task IDs that must complete before this task starts."
+                                }
+                            },
+                            "required": ["id", "agent_id", "message"]
+                        }
+                    }
                 },
-                "required": ["message"]
+                "required": []
             }),
         },
         ToolDefinitionData {
@@ -346,6 +364,31 @@ pub fn load_core_tool_manifest() -> Vec<ToolDefinitionData> {
                     "path": { "type": "string", "description": "Relative file path that was modified." }
                 },
                 "required": ["path"]
+            }),
+        },
+        ToolDefinitionData {
+            name: "blackboard_write".to_string(),
+            description: "Writes a structured key (optionally with `base#facet` notation) to the SharedBlackboard for the current mission swarm.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "key": { "type": "string", "description": "Blackboard key or 'base#facet' composite key." },
+                    "value": { "description": "JSON value or string to store on the shared mission blackboard." },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional filter tags." }
+                },
+                "required": ["key", "value"]
+            }),
+        },
+        ToolDefinitionData {
+            name: "blackboard_read".to_string(),
+            description: "Reads a specific key or lists tagged entries from the SharedBlackboard for the current mission swarm.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "key": { "type": "string", "description": "Optional specific key or 'base#facet' to retrieve." },
+                    "tag": { "type": "string", "description": "Optional tag filter when listing entries." }
+                },
+                "required": []
             }),
         },
     ]

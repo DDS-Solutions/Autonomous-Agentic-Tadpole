@@ -17,30 +17,7 @@ import { Cron_Config_Mini_Panel } from './Cron_Config_Mini_Panel';
 import { describe_cron } from '../../utils/cron_builder';
 import { i18n } from '../../i18n';
 import { get_safe_date } from '../../utils/date_utils';
-
-export function create_empty_job_config(): job_config_state {
-    return {
-        name: '',
-        agent_id: '',
-        workflow_id: null,
-        prompt: '',
-        cron_expr: '0 * * * *',
-        budget_usd: 0.10,
-        max_failures: 3
-    };
-}
-
-// --- TYPE DEFINITIONS ---
-
-export interface job_config_state {
-    name: string;
-    agent_id: string;
-    workflow_id: string | null;
-    prompt: string;
-    cron_expr: string;
-    budget_usd: number;
-    max_failures: number;
-}
+import type { AcceptModeOption, job_config_state } from './job_form_utils';
 
 // --- Component: Job_Form_Manager ---
 
@@ -249,8 +226,8 @@ export const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                     </div>
                 )}
 
-                {/* Budget and Max Failures */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Budget, Max Failures, and Execution Accept Mode */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <Tooltip content={i18n.t('scheduled_jobs.budget_cap_tooltip')} position="top">
                             <label htmlFor="budget_usd" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5 cursor-help">{i18n.t('scheduled_jobs.budget_cap')}</label>
@@ -274,6 +251,18 @@ export const Job_Form_Manager: React.FC<job_form_manager_props> = ({
                             value={current_job_config.max_failures} 
                             onChange={e => handle_input_change('max_failures', parseInt(e.target.value, 10) || 0)} 
                         />
+                    </div>
+                    <div>
+                        <label htmlFor="accept_mode" className="block text-[10px] font-bold font-mono text-zinc-400 uppercase tracking-widest mb-1.5">Execution Mode</label>
+                        <select
+                            id="accept_mode"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-100 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all"
+                            value={current_job_config.accept_mode}
+                            onChange={e => handle_input_change('accept_mode', (e.target.value === 'observe' ? 'observe' : 'auto') as AcceptModeOption)}
+                        >
+                            <option value="auto">Auto (Autonomous)</option>
+                            <option value="observe">Observe (Shadow Read-Only)</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -325,9 +314,21 @@ export const Job_History_View: React.FC<job_history_view_props> = ({ job, runs }
                     {runs.map(run => (
                         <div key={run.id} className="flex items-center justify-between bg-zinc-950 p-2 rounded border border-zinc-800 text-xs font-mono group">
                             <div className="flex items-center gap-4">
-                                {run.status === 'completed' ? <CheckCircle2 size={14} className="text-emerald-500" /> : <AlertCircle size={14} className="text-rose-500" />}
+                                {run.status === 'completed' ? (
+                                    <CheckCircle2 size={14} className="text-emerald-500" />
+                                ) : run.status === 'dropped' || run.status === 'skipped' ? (
+                                    <Clock size={14} className="text-amber-500" />
+                                ) : (
+                                    <AlertCircle size={14} className="text-rose-500" />
+                                )}
                                 <span className="text-zinc-400">{get_safe_date(run)?.toLocaleString() || i18n.t('common.unknown')}</span>
-                                <span className={`${run.status === 'completed' ? 'text-emerald-400' : 'text-rose-400'}`}>{run.status.toUpperCase()}</span>
+                                <span className={
+                                    run.status === 'completed'
+                                        ? 'text-emerald-400'
+                                        : run.status === 'dropped' || run.status === 'skipped'
+                                            ? 'text-amber-400'
+                                            : 'text-rose-400'
+                                }>{run.status.toUpperCase()}</span>
                             </div>
                             <div className="flex items-center gap-4 text-zinc-500">
                                 <span>${run.cost_usd.toFixed(4)}</span>

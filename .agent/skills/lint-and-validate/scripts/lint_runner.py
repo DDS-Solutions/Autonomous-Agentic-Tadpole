@@ -27,20 +27,23 @@ except:
 
 
 def detect_project_type(project_path: Path) -> dict:
-    """Detect project type and available linters."""
+    """Detect project type and available linters across Node, Python, and Rust."""
     result = {
         "type": "unknown",
-        "linters": []
+        "ecosystems": [],
+        "linters": [],
+        "warnings": []
     }
     
     # Node.js project
     package_json = project_path / "package.json"
     if package_json.exists():
-        result["type"] = "node"
         try:
             pkg = json.loads(package_json.read_text(encoding='utf-8'))
             scripts = pkg.get("scripts", {})
             deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+            
+            result["ecosystems"].append("node")
             
             # Check for lint script
             if "lint" in scripts:
@@ -52,20 +55,50 @@ def detect_project_type(project_path: Path) -> dict:
             if "typescript" in deps or (project_path / "tsconfig.json").exists():
                 result["linters"].append({"name": "tsc", "cmd": ["npx", "tsc", "--noEmit"]})
                 
-        except:
-            pass
+        except json.JSONDecodeError as e:
+            result["warnings"].append(f"package.json JSONDecodeError: {e}")
+        except Exception as e:
+            result["warnings"].append(f"package.json read error: {e}")
     
     # Python project
-    if (project_path / "pyproject.toml").exists() or (project_path / "requirements.txt").exists():
-        result["type"] = "python"
+    if (project_path / "pyproject.toml").exists() or (project_path / "requirements.txt").exists() or (project_path / "execution").exists():
+        result["ecosystems"].append("python")
         
         # Check for ruff
-        result["linters"].append({"name": "ruff", "cmd": ["ruff", "check", "."]})
+        if shutil.which("ruff"):
+            result["linters"].append({"name": "ruff", "cmd": ["ruff", "check", "."]})
         
         # Check for mypy
         if (project_path / "mypy.ini").exists() or (project_path / "pyproject.toml").exists():
-            result["linters"].append({"name": "mypy", "cmd": ["mypy", "."]})
+            if shutil.which("mypy"):
+                result["linters"].append({"name": "mypy", "cmd": ["mypy", "."]})
+
+    # Rust project (Root workspace or server-rs)
+    cargo_root = project_path / "Cargo.toml"
+    server_cargo = project_path / "server-rs" / "Cargo.toml"
+    if cargo_root.exists() or server_cargo.exists():
+        result["ecosystems"].append("rust")
+        if shutil.which("cargo"):
+            if cargo_root.exists():
+                result["linters"].append({
+                    "name": "cargo check",
+                    "cmd": ["cargo", "check", "--workspace"],
+                    "cwd": str(project_path)
+                })
+            elif server_cargo.exists():
+                result["linters"].append({
+                    "name": "cargo check (server-rs)",
+                    "cmd": ["cargo", "check"],
+                    "cwd": str(project_path / "server-rs")
+                })
     
+    if not result["ecosystems"]:
+        result["type"] = "unknown"
+    elif len(result["ecosystems"]) == 1:
+        result["type"] = result["ecosystems"][0]
+    else:
+        result["type"] = f"polyglot ({', '.join(result['ecosystems'])})"
+
     return result
 
 
@@ -79,7 +112,8 @@ def run_linter(linter: dict, cwd: Path) -> dict:
     }
     
     try:
-        cmd = linter["cmd"]
+        cmd = list(linter["cmd"])
+        target_cwd = Path(linter.get("cwd", cwd))
         
         # Windows compatibility for npm/npx
         if platform.system() == "Windows":
@@ -90,7 +124,7 @@ def run_linter(linter: dict, cwd: Path) -> dict:
         
         proc = subprocess.run(
             cmd,
-            cwd=str(cwd),
+            cwd=str(target_cwd),
             capture_output=True,
             text=True,
             encoding='utf-8',

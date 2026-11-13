@@ -172,6 +172,40 @@ describe('Swarm_Visualizer with Actionable Quick Command Bar', () => {
         });
     });
 
+    it('supports Observe (shadow) mode toggle when dispatching directives', async () => {
+        render(<Swarm_Visualizer />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('graph-node-agent-alpha')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByTestId('graph-node-agent-alpha'));
+        fireEvent.click(screen.getByTestId('quick-accept-mode-toggle'));
+        fireEvent.change(screen.getByTestId('quick-directive-input'), { target: { value: 'Simulate change' } });
+        fireEvent.click(screen.getByTestId('submit-quick-directive'));
+
+        await waitFor(() => {
+            expect(mock_send_command).toHaveBeenCalledWith(
+                'agent-alpha',
+                'Simulate change',
+                'gemini-1.5-flash',
+                'google',
+                undefined,
+                'Core',
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                '0',
+                true,
+                'observe'
+            );
+        });
+    });
+
     it('displays mission inspection details when a mission hub node is clicked', async () => {
         render(<Swarm_Visualizer />);
 

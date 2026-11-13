@@ -75,6 +75,7 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
     // Interactive Quick Command Bar State
     const [selected_node, set_selected_node] = React.useState<GraphNode | null>(null);
     const [directive_input, set_directive_input] = React.useState('');
+    const [accept_mode, set_accept_mode] = React.useState<'auto' | 'observe'>('auto');
     const [is_dispatching, set_is_dispatching] = React.useState(false);
     const [dispatch_feedback, set_dispatch_feedback] = React.useState<string | null>(null);
 
@@ -89,14 +90,35 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
             const model_id = matched_agent?.model || 'gemini-1.5-flash';
             const provider = tadpole_os_service.resolve_provider(model_id);
 
-            await tadpole_os_service.send_command(
-                selected_node.id,
-                directive_input.trim(),
-                model_id,
-                provider,
-                undefined,
-                matched_agent?.department
-            );
+            if (accept_mode === 'observe') {
+                await tadpole_os_service.send_command(
+                    selected_node.id,
+                    directive_input.trim(),
+                    model_id,
+                    provider,
+                    undefined,
+                    matched_agent?.department,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    '0',
+                    true,
+                    'observe'
+                );
+            } else {
+                await tadpole_os_service.send_command(
+                    selected_node.id,
+                    directive_input.trim(),
+                    model_id,
+                    provider,
+                    undefined,
+                    matched_agent?.department
+                );
+            }
 
             set_dispatch_feedback(`Directive dispatched to ${selected_node.name}`);
             set_directive_input('');
@@ -444,7 +466,20 @@ export const Swarm_Visualizer: React.FC<{ is_detached?: boolean, on_detach?: () 
                             </a>
                         </div>
                     ) : (
-                        <form onSubmit={handle_dispatch_directive} className="flex gap-2">
+                        <form onSubmit={handle_dispatch_directive} className="flex gap-2 items-center">
+                            <button
+                                data-testid="quick-accept-mode-toggle"
+                                type="button"
+                                onClick={() => set_accept_mode(m => (m === 'auto' ? 'observe' : 'auto'))}
+                                title={accept_mode === 'observe' ? 'Shadow Mode (Read-Only)' : 'Auto Mode (Autonomous)'}
+                                className={`px-2 py-1.5 rounded-lg border text-[10px] font-mono uppercase tracking-wider transition-colors shrink-0 ${
+                                    accept_mode === 'observe'
+                                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                        : 'bg-zinc-950/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                                }`}
+                            >
+                                {accept_mode}
+                            </button>
                             <input
                                 data-testid="quick-directive-input"
                                 type="text"

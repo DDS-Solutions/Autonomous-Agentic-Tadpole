@@ -47,7 +47,15 @@ export type McpToolHub = { name: string; description: string; input_schema: Json
  */
 export type McpToolStats = { invocations: number; success_count: number; failure_count: number; avg_latency_ms: number }
 
-export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused" | "suspended"
+export type AcceptMode = "auto" | "observe"
+
+export type ExecutionPlane = "engine-maintenance" | "smb-digital-twin"
+
+export type JobRunStatus = "running" | "completed" | "failed" | "budget_exceeded" | "skipped" | "dropped"
+
+export type Mandate = { executionPlane: ExecutionPlane; acceptMode: AcceptMode; allowedTools?: string[] | null; pathBoundary?: string | null; budgetUsd: number; deliveryTarget?: string | null }
+
+export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused" | "suspended" | "dropped"
 
 export type Modality = "llm" | "vision" | "voice" | "audio" | "reasoning"
 

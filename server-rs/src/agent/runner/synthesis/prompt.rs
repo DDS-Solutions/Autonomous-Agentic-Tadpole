@@ -219,10 +219,21 @@ impl AgentRunner {
             .recent_findings
             .as_deref()
             .unwrap_or("No recent findings inherited.");
-        let compressed_findings = if raw_findings == "No recent findings inherited." {
+        let bb_summary = self.state.comms.blackboard.export_summary(ctx.blackboard_scope());
+        let compressed_findings = if raw_findings == "No recent findings inherited." && bb_summary.is_empty() {
             raw_findings.to_string()
         } else {
-            self.fence_untrusted_data("peer_findings", &self.shorten_system_tokens(raw_findings))
+            let mut combined = String::new();
+            if raw_findings != "No recent findings inherited." {
+                combined.push_str(&self.shorten_system_tokens(raw_findings));
+            }
+            if !bb_summary.is_empty() {
+                if !combined.is_empty() {
+                    combined.push_str("\n\n");
+                }
+                combined.push_str(&self.shorten_system_tokens(&bb_summary));
+            }
+            self.fence_untrusted_data("peer_findings", &combined)
         };
 
         let swarm_str = self.generate_swarm_protocols(ctx);

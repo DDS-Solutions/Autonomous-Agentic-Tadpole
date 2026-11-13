@@ -4,6 +4,9 @@ members = [
     "server-rs",
     "src-tauri",
     "crates/wasm-codec",
+    "crates/tadpole-guard",
+    "crates/tadpole-sec",
+    "crates/wasm-graph-physics",
 ]
 
 [profile.release]

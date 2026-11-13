@@ -95,34 +95,41 @@ impl AgentRunner {
             .build_system_prompt(ctx, &payload.message)
             .await;
 
+        let mut effective_ctx = ctx.clone();
         let mut output_text = String::new();
         let mut usage: Option<crate::agent::types::TokenUsage> = None;
         let mut turn_count = 0;
         let mut conversation_history = Vec::new();
         conversation_history.push(format!("USER: {}", payload.message));
-        let max_turns = ctx.max_turns;
+        let max_turns = effective_ctx.max_turns;
 
-        let mut running_cost: f64 = ctx.current_cost_usd;
+        let mut running_cost: f64 = effective_ctx.current_cost_usd;
         let tool_repetition_tracker: Arc<parking_lot::Mutex<std::collections::HashMap<(String, String), usize>>> =
             Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new()));
         let doom_loop_detector: Arc<parking_lot::Mutex<crate::agent::runner::loop_detector::DoomLoopDetector>> =
             Arc::new(parking_lot::Mutex::new(crate::agent::runner::loop_detector::DoomLoopDetector::new()));
 
         while turn_count < max_turns {
+            if effective_ctx.cancel_handle.is_cancelled() {
+                return Err((
+                    AppError::Conflict("Mission cancelled by parent orchestrator".to_string()),
+                    usage,
+                ));
+            }
             turn_count += 1;
-            ctx.metrics.record_turn();
+            effective_ctx.metrics.record_turn();
             tracing::debug!(
                 "🎯 [Intelligence] Start Turn {}/{} for agent {}",
                 turn_count,
                 max_turns,
-                ctx.agent_id
+                effective_ctx.agent_id
             );
 
             // 🛡️ [Bounded Autonomy] Pre-turn financial gate: halt before LLM call if budget exhausted
-            let effective_budget = if ctx.budget_usd > 0.0 {
-                ctx.budget_usd
-            } else if ctx.budget_limit_usd > 0.0 {
-                ctx.budget_limit_usd
+            let effective_budget = if effective_ctx.budget_usd > 0.0 {
+                effective_ctx.budget_usd
+            } else if effective_ctx.budget_limit_usd > 0.0 {
+                effective_ctx.budget_limit_usd
             } else {
                 crate::agent::constants::DEFAULT_BUDGET_LIMIT_USD
             };
@@ -131,11 +138,11 @@ impl AgentRunner {
                 tracing::warn!(
                     "💰 [Intelligence] Budget limit reached before Turn {} for agent {} (${:.4} >= ${:.4})",
                     turn_count,
-                    ctx.agent_id,
+                    effective_ctx.agent_id,
                     running_cost,
                     effective_budget
                 );
-                self.broadcast_agent(ctx, "Budget limit reached. Quiescing mission.", "warn");
+                self.broadcast_agent(&effective_ctx, "Budget limit reached. Quiescing mission.", "warn");
                 return Ok(IntelligenceOutput {
                     text: format!("{} (Halting: Mission Budget Cap Exceeded)", scrub_mythos_tags(&output_text)),
                     usage,
@@ -143,19 +150,26 @@ impl AgentRunner {
             }
 
             self.state
-                .yield_phase_transition(&ctx.agent_id, &format!("Execution: Turn {}", turn_count))
+                .yield_phase_transition(&effective_ctx.agent_id, &format!("Execution: Turn {}", turn_count))
                 .await;
 
             // Build tools once per turn (P6 optimization)
-            let tools = vec![self.build_tools(ctx).await];
+            let tools = vec![self.build_tools(&effective_ctx).await];
 
             // --- 🧠 [Mythos] Recurrent Reasoning Loop ---
             let mut reasoning_turn = 0;
             let mut resource_guard_attempts: u32 = 0;
+            let mut escalated_this_turn = false;
             let mut reasoning_halted = false;
             let mut internal_monologue = Vec::new();
 
-            while reasoning_turn < ctx.reasoning_depth && !reasoning_halted {
+            while reasoning_turn < effective_ctx.reasoning_depth && !reasoning_halted {
+                if effective_ctx.cancel_handle.is_cancelled() {
+                    return Err((
+                        AppError::Conflict("Mission cancelled by parent orchestrator".to_string()),
+                        usage,
+                    ));
+                }
                 reasoning_turn += 1;
 
                 if ctx.reasoning_depth > 1 {
@@ -308,9 +322,16 @@ impl AgentRunner {
                     ));
                 }
 
-                let provider_res = self
-                    .call_provider_messages(ctx, &system_prompt, &structured_messages, Some(tools.clone()))
-                    .await;
+                let provider_res = tokio::select! {
+                    biased;
+                    _ = effective_ctx.cancel_handle.cancelled() => {
+                        return Err((
+                            AppError::Conflict("Mission cancelled by parent orchestrator".to_string()),
+                            usage,
+                        ));
+                    }
+                    res = self.call_provider_messages(&effective_ctx, &system_prompt, &structured_messages, Some(tools.clone())) => res,
+                };
 
                 let (mut turn_text, mut function_calls, turn_usage) = match provider_res {
                     Ok(data) => {
@@ -322,14 +343,51 @@ impl AgentRunner {
                         if err_str.contains("RESOURCE_GUARD") {
                             resource_guard_attempts += 1;
                             if resource_guard_attempts >= 6 {
-                                tracing::error!("🚨 [Intelligence] Resource Guard timeout: system resources constrained for >60s for agent {}.", ctx.agent_id);
+                                tracing::error!("🚨 [Intelligence] Resource Guard timeout: system resources constrained for >60s for agent {}.", effective_ctx.agent_id);
                                 return Err((AppError::InternalServerError("Resource Guard timeout: system memory remained constrained for 60s".to_string()), usage));
                             }
-                            tracing::warn!("🛡️ [Intelligence] Resource Guard active (attempt {}/6). Pausing intelligence loop for agent {}.", resource_guard_attempts, ctx.agent_id);
-                            self.broadcast_sys("🛡️ System Resources Critical: Local inference paused. Waiting for memory stabilization...", "warning", Some(ctx.mission_id.clone()));
+                            tracing::warn!("🛡️ [Intelligence] Resource Guard active (attempt {}/6). Pausing intelligence loop for agent {}.", resource_guard_attempts, effective_ctx.agent_id);
+                            self.broadcast_sys("🛡️ System Resources Critical: Local inference paused. Waiting for memory stabilization...", "warning", Some(effective_ctx.mission_id.clone()));
                             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                             reasoning_turn = reasoning_turn.saturating_sub(1);
                             continue; // Retry reasoning turn after wait without burning an iteration
+                        }
+
+                        // 🔀 [CascadeRouter Error Escalation] Opt-in capability failure promotion from Tier 1 to Tier 2
+                        if effective_ctx.cascade_routing
+                            && !escalated_this_turn
+                            && !self.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed)
+                        {
+                            let mut policy = crate::agent::cascade_router::CascadePolicy::default();
+                            policy.tier1_provider = effective_ctx.model_config.provider.to_string().to_lowercase();
+                            policy.tier1_model = effective_ctx.model_config.model_id.clone();
+                            let agent_slot2 = self.state.registry.agents.get(&effective_ctx.agent_id).and_then(|a| {
+                                a.models.model_2.clone().filter(|s| !s.trim().is_empty()).map(|m2| (m2, a.models.model_config2.clone()))
+                            });
+                            if let Some((ref m2, _)) = agent_slot2 {
+                                policy.tier2_model = m2.clone();
+                            }
+                            let router = crate::agent::cascade_router::CascadeRouter::new(policy);
+                            if let Some((_, tier2_model)) = router.should_escalate_after_failure(1, &err_str) {
+                                escalated_this_turn = true;
+                                if let Some((m2, cfg2_opt)) = agent_slot2 {
+                                    if let Some(cfg2) = cfg2_opt {
+                                        effective_ctx.model_config = cfg2;
+                                    } else {
+                                        effective_ctx.model_config.model_id = m2;
+                                    }
+                                } else {
+                                    effective_ctx.model_config.model_id = tier2_model;
+                                }
+                                tracing::warn!(
+                                    "🔀 [CascadeRouter] Escalating agent '{}' turn {} to Tier 2 model '{}'",
+                                    effective_ctx.agent_id,
+                                    turn_count,
+                                    effective_ctx.model_config.model_id
+                                );
+                                reasoning_turn = reasoning_turn.saturating_sub(1);
+                                continue;
+                            }
                         }
 
                         // ### 🛠️ [Self-Annealing] Catch parsing failures
@@ -346,7 +404,7 @@ impl AgentRunner {
                             let mut anneal_usage = None;
 
                             self.handle_extraction_failure(
-                                ctx,
+                                &effective_ctx,
                                 &system_prompt,
                                 &current_prompt,
                                 &detail,
@@ -361,9 +419,9 @@ impl AgentRunner {
 
                             let anneal_cost = anneal_usage.as_ref().map(|u| {
                                 crate::agent::rates::calculate_cost_with_custom_rates(
-                                    ctx.model_config.input_cost_per_m,
-                                    ctx.model_config.output_cost_per_m,
-                                    &ctx.model_config.model_id,
+                                    effective_ctx.model_config.input_cost_per_m,
+                                    effective_ctx.model_config.output_cost_per_m,
+                                    &effective_ctx.model_config.model_id,
                                     u.input_tokens,
                                     u.output_tokens,
                                 )
@@ -379,9 +437,9 @@ impl AgentRunner {
                 };
                 let step_cost = turn_usage.as_ref().map(|u| {
                     crate::agent::rates::calculate_cost_with_custom_rates(
-                        ctx.model_config.input_cost_per_m,
-                        ctx.model_config.output_cost_per_m,
-                        &ctx.model_config.model_id,
+                        effective_ctx.model_config.input_cost_per_m,
+                        effective_ctx.model_config.output_cost_per_m,
+                        &effective_ctx.model_config.model_id,
                         u.input_tokens,
                         u.output_tokens,
                     )
@@ -418,7 +476,7 @@ impl AgentRunner {
                     // 🛡️ [Sentinel Gate]
                     let mut sentinel_attempts = 0;
                     self.enforce_sentinel_gate(
-                        ctx,
+                        &effective_ctx,
                         &system_prompt,
                         &current_prompt,
                         &mut turn_text,
@@ -561,7 +619,8 @@ impl AgentRunner {
                             // 🛡️ [Circuit Breaker: AGENTS.md / CLAUDE.md Operating Principle 2]
                             let mut warning_prefix = String::new();
 
-                            if rep_count == 3 {
+                            match evaluate_loop_repetition(rep_count) {
+                                LoopRepetitionAction::CircuitBreakerOversight => {
                                 tracing::warn!(
                                     "🚨 [Circuit Breaker] Trip at attempt 3 for tool '{}' on agent '{}'. Pausing for human guidance.",
                                     fc.name, ctx_clone.agent_id
@@ -613,7 +672,8 @@ impl AgentRunner {
                                         None,
                                     );
                                 }
-                            } else if rep_count >= 5 {
+                                }
+                                LoopRepetitionAction::BlockRecursion => {
                                 tracing::error!(
                                     "🚨 [Loop Guard] Tool loop blocked: '{}' executed {} times with identical parameters for agent {}",
                                     fc.name,
@@ -631,12 +691,15 @@ impl AgentRunner {
                                     format!("[TOOL_ERROR] RecursionBlocked: {}", err_msg),
                                     None,
                                 );
-                            } else if rep_count > 3 {
-                                warning_prefix = format!(
-                                    "[TOOL_WARNING] You have called '{}' {} times with identical parameters. Ensure forward progress or adjust strategy.\n",
-                                    fc.name,
-                                    rep_count
-                                );
+                                }
+                                LoopRepetitionAction::WarnAndContinue => {
+                                    warning_prefix = format!(
+                                        "[TOOL_WARNING] You have called '{}' {} times with identical parameters. Ensure forward progress or adjust strategy.\n",
+                                        fc.name,
+                                        rep_count
+                                    );
+                                }
+                                LoopRepetitionAction::Allow => {}
                             }
 
                             // 🎯 [SharedToolCache / get_tool_result] Only cache strictly idempotent read-only tools with mtime invalidation
@@ -1029,6 +1092,28 @@ impl AgentRunner {
     }
 }
 
+/// Deterministic decision returned by the tool loop guard based on consecutive identical calls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoopRepetitionAction {
+    Allow,
+    CircuitBreakerOversight,
+    WarnAndContinue,
+    BlockRecursion,
+}
+
+/// Evaluates how the intelligence loop should handle `rep_count` consecutive identical tool calls.
+pub(crate) fn evaluate_loop_repetition(rep_count: usize) -> LoopRepetitionAction {
+    if rep_count == 3 {
+        LoopRepetitionAction::CircuitBreakerOversight
+    } else if rep_count >= 5 {
+        LoopRepetitionAction::BlockRecursion
+    } else if rep_count > 3 {
+        LoopRepetitionAction::WarnAndContinue
+    } else {
+        LoopRepetitionAction::Allow
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1187,6 +1272,133 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(output_text.contains("DEGRADED"));
+    }
+
+    #[test]
+    fn test_evaluate_loop_repetition_thresholds() {
+        assert_eq!(evaluate_loop_repetition(1), LoopRepetitionAction::Allow);
+        assert_eq!(evaluate_loop_repetition(2), LoopRepetitionAction::Allow);
+        assert_eq!(evaluate_loop_repetition(3), LoopRepetitionAction::CircuitBreakerOversight);
+        assert_eq!(evaluate_loop_repetition(4), LoopRepetitionAction::WarnAndContinue);
+        assert_eq!(evaluate_loop_repetition(5), LoopRepetitionAction::BlockRecursion);
+        assert_eq!(evaluate_loop_repetition(9), LoopRepetitionAction::BlockRecursion);
+    }
+
+    #[tokio::test]
+    async fn test_cascade_router_opt_in_tier1_escalation_and_guards() {
+        let tier1_cap_fail =
+            crate::test_support::ProviderStub::start(axum::http::StatusCode::BAD_REQUEST, "schema error on tool format", false).await;
+        let tier2_ok =
+            crate::test_support::ProviderStub::start(axum::http::StatusCode::OK, "escalated tier2 success", false).await;
+
+        let state = crate::test_support::state_with_agent("cascade-agent", &tier1_cap_fail.base_url).await;
+        {
+            let mut agent = state.registry.agents.get_mut("cascade-agent").unwrap();
+            agent.runner_policy.cascade_routing = true;
+            agent.models.model.model_id = "tier1-fast".to_string();
+            agent.models.model_2 = Some("tier2-reasoning".to_string());
+            agent.models.model_config2 = Some(crate::agent::types::ModelConfig {
+                provider: crate::agent::types::ModelProvider::Ollama,
+                model_id: "tier2-reasoning".to_string(),
+                base_url: Some(tier2_ok.base_url.clone()),
+                api_key: Some("stub".to_string()),
+                ..Default::default()
+            });
+        }
+        let runner = AgentRunner::new(state.clone());
+
+        // 1. Explicit model_id pin disables CascadeRouter even when policy enables it
+        let pinned_ctx = runner
+            .resolve_agent_context(
+                "cascade-agent",
+                &crate::agent::types::TaskPayload {
+                    message: "ARCHITECTURE_REVIEW analyze system".to_string(),
+                    model_id: Some("tier1-fast".to_string()),
+                    ..Default::default()
+                },
+                "m-pin",
+                0,
+                &[],
+            )
+            .await
+            .unwrap();
+        assert!(!pinned_ctx.cascade_routing);
+        assert_eq!(pinned_ctx.model_config.model_id, "tier1-fast");
+
+        // 2. PRIVACY_MODE disables CascadeRouter
+        state.governance.privacy_mode.store(true, std::sync::atomic::Ordering::SeqCst);
+        let priv_ctx = runner
+            .resolve_agent_context(
+                "cascade-agent",
+                &crate::agent::types::TaskPayload {
+                    message: "ARCHITECTURE_REVIEW analyze system".to_string(),
+                    ..Default::default()
+                },
+                "m-priv",
+                0,
+                &[],
+            )
+            .await
+            .unwrap();
+        assert!(!priv_ctx.cascade_routing);
+        state.governance.privacy_mode.store(false, std::sync::atomic::Ordering::SeqCst);
+
+        // 3. Routine prompt routes to Tier 1 and escalates to Tier 2 on capability error
+        let routine_payload = crate::agent::types::TaskPayload {
+            message: "List files in docs/".to_string(),
+            ..Default::default()
+        };
+        let routine_ctx = runner
+            .resolve_agent_context("cascade-agent", &routine_payload, "m-esc", 0, &[])
+            .await
+            .unwrap();
+        assert!(routine_ctx.cascade_routing);
+        assert_eq!(routine_ctx.model_config.model_id, "tier1-fast");
+
+        let out = runner.execute_intelligence_loop(&routine_ctx, &routine_payload).await.unwrap();
+        assert_eq!(out.text, "escalated tier2 success");
+        assert!(tier1_cap_fail.calls.load(std::sync::atomic::Ordering::SeqCst) >= 1);
+        assert!(tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst) >= 1);
+
+        // 4. Critical keyword routes directly to Tier 2 on initial resolution
+        let critical_ctx = runner
+            .resolve_agent_context(
+                "cascade-agent",
+                &crate::agent::types::TaskPayload {
+                    message: "Run SECURITY_AUDIT on core routes".to_string(),
+                    ..Default::default()
+                },
+                "m-crit",
+                0,
+                &[],
+            )
+            .await
+            .unwrap();
+        assert_eq!(critical_ctx.model_config.model_id, "tier2-reasoning");
+
+        // 5. 401 auth error skips escalation without touching Tier 2 stub
+        let tier1_401 =
+            crate::test_support::ProviderStub::start(axum::http::StatusCode::UNAUTHORIZED, "401 Unauthorized invalid api key", false).await;
+        let tier2_calls_before = tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst);
+        {
+            let mut agent = state.registry.agents.get_mut("cascade-agent").unwrap();
+            agent.models.model.base_url = Some(tier1_401.base_url.clone());
+        }
+        let auth_payload = crate::agent::types::TaskPayload {
+            message: "Simple query".to_string(),
+            ..Default::default()
+        };
+        let auth_ctx = runner
+            .resolve_agent_context("cascade-agent", &auth_payload, "m-401", 0, &[])
+            .await
+            .unwrap();
+        let err = runner.execute_intelligence_loop(&auth_ctx, &auth_payload).await;
+        assert!(err.is_err());
+        assert_eq!(
+            tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst),
+            tier2_calls_before,
+            "401 auth error must NOT escalate to Tier 2"
+        );
     }
 }
 

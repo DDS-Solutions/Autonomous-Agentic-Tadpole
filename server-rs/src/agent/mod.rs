@@ -58,6 +58,7 @@ pub mod skill_manifest;
 pub mod skill_error;
 pub mod types;
 pub mod workflows;
+pub mod swarm_orchestrator;
 
 pub mod knowledge_store;
 pub mod socratic;

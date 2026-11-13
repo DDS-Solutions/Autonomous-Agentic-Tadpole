@@ -71,24 +71,28 @@ impl GraphSynthesizer for GraphSynthesisEngine {
         graph.obfuscated_to_real_path.clear();
 
         // 4. Add nodes and compile Inverted Name Index (with DoS protection)
+        static BPE_CACHE: std::sync::OnceLock<Option<tiktoken_rs::CoreBPE>> = std::sync::OnceLock::new();
         let mut name_to_indices: HashMap<String, Vec<petgraph::graph::NodeIndex>> = HashMap::new();
-        let bpe = tiktoken_rs::cl100k_base().ok();
+        let bpe = BPE_CACHE.get_or_init(|| tiktoken_rs::cl100k_base().ok()).as_ref();
         let count_tokens = |bpe_opt: Option<&tiktoken_rs::CoreBPE>, text: &str| -> usize {
             bpe_opt
                 .map(|bpe| bpe.encode_with_special_tokens(text).len())
-                .unwrap_or_else(|| text.len() / 4)
+                .unwrap_or_else(|| text.len().div_ceil(4))
         };
 
-        for (rel_path, (symbols, _)) in &graph.repository.parse_cache {
+        let mut sorted_entries: Vec<_> = graph.repository.parse_cache.iter().collect();
+        sorted_entries.sort_by(|a, b| a.0.cmp(b.0));
+
+        for (rel_path, (symbols, _)) in &sorted_entries {
             let obf_path = obfuscate_path(rel_path, salt)?;
             graph.obfuscated_to_real_path
                 .insert(obf_path.clone(), rel_path.to_string());
             for sym in symbols {
                 let key = index_key(rel_path, &sym.name);
-                let token_count = count_tokens(bpe.as_ref(), &sym.signature)
-                    + count_tokens(bpe.as_ref(), &sym.name)
-                    + count_tokens(bpe.as_ref(), rel_path)
-                    + count_tokens(bpe.as_ref(), &sym.kind);
+                let token_count = count_tokens(bpe, &sym.signature)
+                    + count_tokens(bpe, &sym.name)
+                    + count_tokens(bpe, rel_path)
+                    + count_tokens(bpe, &sym.kind);
 
                 let node = SymbolNode {
                     name: sym.name.clone(),
@@ -127,7 +131,7 @@ impl GraphSynthesizer for GraphSynthesisEngine {
 
         // 5. Extract references and add edges
         let mut added_edges = std::collections::HashSet::new();
-        for (rel_path, (symbols, refs)) in &graph.repository.parse_cache {
+        for (rel_path, (symbols, refs)) in &sorted_entries {
             if symbols.is_empty() {
                 continue;
             }

@@ -55,6 +55,13 @@ pub fn export_types() -> Result<(), Box<dyn std::error::Error>> {
     types.register::<crate::agent::types::ModelConfig>();
     types.register::<crate::agent::types::ProviderStatus>();
     types.register::<crate::agent::types::MissionStatus>();
+    types.register::<crate::agent::types::ExecutionPlane>();
+    types.register::<crate::agent::types::AcceptMode>();
+    types.register::<crate::agent::types::Mandate>();
+    types.register::<crate::agent::types::TaskPayload>();
+    types.register::<crate::agent::continuity::types::ScheduledJob>();
+    types.register::<crate::agent::continuity::types::ScheduledJobRun>();
+    types.register::<crate::agent::continuity::types::JobRunStatus>();
     types.register::<crate::agent::types::TokenUsage>();
     types.register::<crate::agent::types::RoleAuthorityLevel>();
     types.register::<crate::agent::types::Modality>();

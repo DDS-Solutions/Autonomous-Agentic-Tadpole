@@ -46,15 +46,7 @@ impl SecurityManager for DefaultSecurityManager {
 
             // 2. Prohibit mutating engine codebase (server-rs/, src/, execution/, directives/, .agent/)
             if matches!(fc.name.as_str(), "write_file" | "write_to_file" | "patch_file" | "replace_file_content" | "edit_file" | "create_file" | "delete_file") {
-                let path_arg = fc.args.get("path")
-                    .or_else(|| fc.args.get("file_path"))
-                    .or_else(|| fc.args.get("filename"))
-                    .or_else(|| fc.args.get("file_name"))
-                    .or_else(|| fc.args.get("file"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-
-                let norm_path = path_arg.replace('\\', "/");
+                let norm_path = extract_path_arg(&fc.args).unwrap_or("").replace('\\', "/");
                 let is_engine_codebase = norm_path.starts_with("server-rs")
                     || norm_path.starts_with("src/")
                     || norm_path.starts_with("src-tauri")
@@ -67,6 +59,40 @@ impl SecurityManager for DefaultSecurityManager {
                     return Err(ToolExecutionError::SecurityBlocked(
                         format!("FR-11 Permission Firewall: Plane 2 (SMB-Digital-Twin) agents are prohibited from modifying engine codebase at '{}'", norm_path)
                     ));
+                }
+            }
+        }
+
+        // 🛡️ [Mandate Envelope] Allowed tools & Path boundary enforcement
+        if let Some(ref allowed) = ctx.mandate.allowed_tools {
+            if !allowed.is_empty()
+                && !matches!(fc.name.as_str(), "complete_mission" | "issue_alpha_directive" | "set_confidence")
+                && !allowed.iter().any(|t| t == &fc.name || t == &normalized_name)
+            {
+                tracing::warn!("🛡️ [Mandate] Agent '{}' attempted tool '{}' outside Mandate allowed_tools", ctx.agent_id, fc.name);
+                return Err(ToolExecutionError::SecurityBlocked(format!(
+                    "Mandate violation: tool '{}' is not permitted in the active Mandate envelope",
+                    fc.name
+                )));
+            }
+        }
+
+        if let Some(ref boundary) = ctx.mandate.path_boundary {
+            let trimmed_boundary = boundary.trim();
+            if !trimmed_boundary.is_empty() {
+                if let Some(path_arg) = extract_path_arg(&fc.args) {
+                    if !is_within_path_boundary(path_arg, trimmed_boundary) {
+                        tracing::warn!(
+                            "🛡️ [Mandate] Agent '{}' attempted path '{}' outside Mandate path_boundary '{}'",
+                            ctx.agent_id,
+                            path_arg,
+                            trimmed_boundary
+                        );
+                        return Err(ToolExecutionError::SecurityBlocked(format!(
+                            "Mandate violation: path '{}' escapes boundary '{}'",
+                            path_arg, trimmed_boundary
+                        )));
+                    }
                 }
             }
         }
@@ -100,9 +126,25 @@ impl SecurityManager for DefaultSecurityManager {
                     return Err(ToolExecutionError::HierarchyBlocked("As CEO, you are prohibited from direct worker recruitment. You MUST use 'issue_alpha_directive' to delegate complex missions to the COO.".to_string()));
                 }
                 if ctx.agent_id == crate::agent::constants::AGENT_COO {
-                    let target = fc.args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("");
-                    if target != crate::agent::constants::AGENT_ALPHA {
-                        tracing::warn!("🛡️ [Hierarchy Guard] COO (ID: {}) blocked from spawning specialist '{}' directly.", crate::agent::constants::AGENT_COO, target);
+                    let mut targets: Vec<&str> = Vec::new();
+                    if let Some(single) = fc.args.get("agent_id").and_then(|v| v.as_str()) {
+                        targets.push(single);
+                    }
+                    if let Some(arr) = fc.args.get("agent_ids").and_then(|v| v.as_array()) {
+                        targets.extend(arr.iter().filter_map(|v| v.as_str()));
+                    }
+                    if let Some(tasks) = fc.args.get("tasks").and_then(|v| v.as_array()) {
+                        for task in tasks {
+                            if let Some(aid) = task.get("agent_id").and_then(|v| v.as_str()) {
+                                targets.push(aid);
+                            }
+                        }
+                    }
+                    let has_non_alpha = targets.is_empty()
+                        || targets.iter().any(|t| *t != crate::agent::constants::AGENT_ALPHA);
+                    if has_non_alpha {
+                        let rejected = targets.first().copied().unwrap_or("");
+                        tracing::warn!("🛡️ [Hierarchy Guard] COO (ID: {}) blocked from spawning specialist '{}' directly.", crate::agent::constants::AGENT_COO, rejected);
                         runner.broadcast_sys("🛡️ Hierarchy Guard: COO blocked from direct worker recruitment. Use Alpha Node commander instead.", "warning", Some(ctx.mission_id.clone()));
                         return Err(ToolExecutionError::HierarchyBlocked("As COO, you are prohibited from direct worker recruitment. You MUST recruit an Alpha Node (ID: alpha) to serve as Swarm Mission Commander.".to_string()));
                     }
@@ -208,6 +250,8 @@ fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> boo
             | "calculate"
             | "share_finding"
             | "update_working_memory"
+            | "blackboard_write"
+            | "blackboard_read"
             | "get_file_contents"
             | "get_project_status"
             | "get_agent_metrics"
@@ -242,6 +286,8 @@ fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> boo
             | "calculate"
             | "share_finding"
             | "update_working_memory"
+            | "blackboard_write"
+            | "blackboard_read"
             | "get_file_contents"
             | "get_project_status"
             | "get_agent_metrics"
@@ -285,6 +331,96 @@ fn is_safe_skill(name: &str, normalized_name: &str, runner: &AgentRunner) -> boo
     }
 
     false
+}
+
+fn extract_path_arg(args: &serde_json::Value) -> Option<&str> {
+    args.get("path")
+        .or_else(|| args.get("file_path"))
+        .or_else(|| args.get("filename"))
+        .or_else(|| args.get("file_name"))
+        .or_else(|| args.get("file"))
+        .or_else(|| args.get("target"))
+        .or_else(|| args.get("directory"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+fn normalize_relative_components(raw: &str) -> Option<Vec<String>> {
+    use std::path::{Component, Path};
+    let unified = raw.replace('\\', "/");
+    let mut parts = Vec::new();
+    for comp in Path::new(&unified).components() {
+        match comp {
+            Component::Normal(seg) => parts.push(seg.to_string_lossy().to_string()),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(parts)
+}
+
+fn is_within_path_boundary(path_arg: &str, boundary: &str) -> bool {
+    let Some(path_parts) = normalize_relative_components(path_arg) else {
+        return false;
+    };
+    let Some(boundary_parts) = normalize_relative_components(boundary) else {
+        return false;
+    };
+    !boundary_parts.is_empty()
+        && path_parts.len() >= boundary_parts.len()
+        && path_parts[..boundary_parts.len()] == boundary_parts[..]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::types::{AcceptMode, Mandate};
+
+    #[tokio::test]
+    async fn test_mandate_allowed_tools_and_path_boundary() {
+        let state = std::sync::Arc::new(crate::state::AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state);
+        let ctx = RunContext {
+            agent_id: "specialist-mandate".to_string(),
+            mandate: Mandate {
+                allowed_tools: Some(vec!["read_file".to_string()]),
+                path_boundary: Some("src/components".to_string()),
+                accept_mode: AcceptMode::Observe,
+                ..Default::default()
+            },
+            accept_mode: AcceptMode::Observe,
+            ..Default::default()
+        };
+
+        // Allowed tool within path_boundary passes security pre_validate
+        let ok_call = ToolCall {
+            name: "read_file".to_string(),
+            args: serde_json::json!({"path": "src/components/App.tsx"}),
+        };
+        assert!(DefaultSecurityManager.pre_validate(&runner, &ctx, &ok_call).await.is_ok());
+
+        // Path traversal escaping boundary is blocked
+        let bad_path_call = ToolCall {
+            name: "read_file".to_string(),
+            args: serde_json::json!({"path": "src/components/../../.env"}),
+        };
+        assert!(DefaultSecurityManager.pre_validate(&runner, &ctx, &bad_path_call).await.is_err());
+
+        // Out-of-boundary path is blocked
+        let outside_path_call = ToolCall {
+            name: "read_file".to_string(),
+            args: serde_json::json!({"path": "server-rs/src/main.rs"}),
+        };
+        assert!(DefaultSecurityManager.pre_validate(&runner, &ctx, &outside_path_call).await.is_err());
+
+        // Disallowed tool outside Mandate.allowed_tools is blocked
+        let bad_tool_call = ToolCall {
+            name: "list_files".to_string(),
+            args: serde_json::json!({"directory": "src/components"}),
+        };
+        assert!(DefaultSecurityManager.pre_validate(&runner, &ctx, &bad_tool_call).await.is_err());
+    }
 }
 
 // Metadata: [security]

@@ -476,6 +476,16 @@ pub async fn pause_agent(
         tracing::info!("🛑 [Gateway] Aborting active runner for suspended agent: {}", agent_id);
         abort_handle.abort();
     }
+    if let Some(mission_id) = state
+        .registry
+        .agents
+        .get(&agent_id)
+        .and_then(|a| a.state.active_mission.as_ref().and_then(|m| m.get("id")).and_then(|v| v.as_str()).map(ToString::to_string))
+    {
+        if let Some((_, mh)) = state.comms.mission_handles.remove(&mission_id) {
+            mh.abort();
+        }
+    }
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
@@ -517,6 +527,16 @@ pub async fn reset_agent(
     if let Some((_, abort_handle)) = state.comms.active_runners.remove(&agent_id) {
         tracing::info!("🛑 [Gateway] Aborting specific runner for reset agent: {}", agent_id);
         abort_handle.abort();
+    }
+    if let Some(mission_id) = state
+        .registry
+        .agents
+        .get(&agent_id)
+        .and_then(|a| a.state.active_mission.as_ref().and_then(|m| m.get("id")).and_then(|v| v.as_str()).map(ToString::to_string))
+    {
+        if let Some((_, mh)) = state.comms.mission_handles.remove(&mission_id) {
+            mh.abort();
+        }
     }
 
     Ok(Json(

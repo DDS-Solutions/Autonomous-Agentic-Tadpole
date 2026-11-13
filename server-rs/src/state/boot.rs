@@ -74,6 +74,8 @@ impl AppState {
             oversight_answers: DashMap::new(),
             active_runners: DashMap::new(),
             mission_contexts: DashMap::new(),
+            mission_handles: DashMap::new(),
+            blackboard: Arc::new(crate::agent::blackboard::SharedBlackboard::new()),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -490,6 +492,8 @@ impl AppState {
             oversight_answers: DashMap::new(),
             active_runners: DashMap::new(),
             mission_contexts: DashMap::new(),
+            mission_handles: DashMap::new(),
+            blackboard: Arc::new(crate::agent::blackboard::SharedBlackboard::new()),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -788,6 +792,8 @@ impl Default for AppState {
             oversight_answers: DashMap::new(),
             active_runners: DashMap::new(),
             mission_contexts: DashMap::new(),
+            mission_handles: DashMap::new(),
+            blackboard: Arc::new(crate::agent::blackboard::SharedBlackboard::new()),
             event_sequence: std::sync::atomic::AtomicU64::new(0),
         });
 

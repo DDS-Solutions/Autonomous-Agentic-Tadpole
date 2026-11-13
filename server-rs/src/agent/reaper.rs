@@ -48,7 +48,7 @@ impl SwarmReaper {
         // 0a. Sliding-Window Checkpoint Pruning: Retain only the latest 3 turn checkpoints for terminal missions
         let prune_res = sqlx::query(
             "DELETE FROM mission_checkpoints 
-             WHERE mission_id IN (SELECT id FROM mission_history WHERE status IN ('completed', 'failed', 'cancelled'))
+             WHERE mission_id IN (SELECT id FROM mission_history WHERE status IN ('completed', 'failed', 'cancelled', 'dropped'))
                AND rowid NOT IN (
                    SELECT rowid FROM (
                        SELECT rowid, ROW_NUMBER() OVER (PARTITION BY mission_id ORDER BY turn_index DESC) as rn

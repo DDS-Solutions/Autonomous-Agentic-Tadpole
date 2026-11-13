@@ -207,6 +207,8 @@ mod tests {
                 oversight_answers: dashmap::DashMap::new(),
                 active_runners: dashmap::DashMap::new(),
                 mission_contexts: dashmap::DashMap::new(),
+                mission_handles: dashmap::DashMap::new(),
+                blackboard: Arc::new(crate::agent::blackboard::SharedBlackboard::new()),
                 event_sequence: std::sync::atomic::AtomicU64::new(0),
             }),
             governance: Arc::new(crate::state::hubs::gov::GovernanceHub {
@@ -389,6 +391,14 @@ mod tests {
             .iter()
             .any(|f| f.name == "read_file");
         assert!(has_read, "read_file must be allowed in safe mode");
+
+        // Observe (Shadow) Mode must enforce the same fail-closed allow-list even with safe_mode=false
+        ctx.safe_mode = false;
+        ctx.accept_mode = crate::agent::types::AcceptMode::Observe;
+        let observe_tools = runner.build_tools(&ctx).await;
+        assert!(!observe_tools.function_declarations.iter().any(|f| f.name == "write_file"));
+        assert!(!observe_tools.function_declarations.iter().any(|f| f.name == "execute_shell"));
+        assert!(observe_tools.function_declarations.iter().any(|f| f.name == "read_file"));
     }
 
     #[tokio::test]

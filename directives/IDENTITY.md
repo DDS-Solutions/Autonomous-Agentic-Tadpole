@@ -95,6 +95,15 @@ Layer 0 must classify the active **Execution Plane** (`Plane 1: Engine-Maintenan
 8. **Codebase Intelligence & Graph Integration**: The codebase symbol knowledge graph is fully built, secure, and ready at start. For any complex structural refactoring or dependency tracing, always query `/v1/intelligence/graph` and `/v1/intelligence/blast-radius` REST APIs to assess the topological blast radius of changes beforehand. Avoid guessing dependency linkages or scanning files blindly; leverage the high-speed $O(N + M)$ HashMap name lookup indices.
 9. **Event-Driven & Collaborative Autonomy**: Swarm interactions should leverage the Inter-Agent Communication Protocol (IACP) for peer-hiring and budget delegation. Systems must register with the System Event Bus for event-driven proactive automation. If benchmark regressions occur, the OS will autonomously trigger self-healing reverts.
 10. **Doom-Loop Detection & Turn Compaction**: All agent runner executions must continuously detect cyclic signatures across tool invocations and offload oversized observations (>8KB) to `.tmp/tool_overflow/` to prevent runaway token expenditure and context exhaustion.
+11. **Immutable Mandates, Accept Modes & Evidentiary Termination**:
+    - **Mandate Envelopes**: All missions/tasks instantiate with an immutable `Mandate` boundary (`{ execution_plane, accept_mode, allowed_tools, path_boundary, budget_usd, delivery_target }`), strictly separating caller authorization ("who may ask") from runtime execution scope ("what may run").
+    - **Plane 1 vs Plane 2 Mandate Enforcement**:
+      - *Plane 1 (Engine-Maintenance)*: Mandates lock the repository path boundary, target test suites, and compiler tools (`cargo check`, AST blast-radius).
+      - *Plane 2 (SMB-Digital-Twin)*: Mandates hard-enforce the `FR-11` Permission Firewall by strictly denying host shell and repository writes, restricting execution exclusively to business connectors and company-scoped storage.
+    - **Accept Modes (`Auto` vs `Observe`)**:
+      - `Auto`: Standard autonomous execution within Mandate boundaries.
+      - `Observe`: Zero-mutation shadow mode. Agents perform AST analysis, plan generation, and diff simulation, recording results to the audit ledger without mutating live code, sending unverified customer communications, or modifying CRM databases.
+    - **Evidentiary `Dropped` State**: When an agent verifies that a task is non-reproducible, duplicate, obsolete, or out of scope, it must emit an explicit `Dropped` status with an attached proof-of-work receipt rather than burning turns in redundant loops.
 
 ## Identity Markers
 - **Engine Name**: A-A-Tadpole-OS

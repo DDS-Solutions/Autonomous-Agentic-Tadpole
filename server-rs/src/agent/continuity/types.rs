@@ -23,7 +23,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A scheduled autonomous mission job.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ScheduledJob {
     pub id: String,
     pub agent_id: String,
@@ -41,8 +41,26 @@ pub struct ScheduledJob {
     pub metadata: Option<serde_json::Value>,
 }
 
+impl ScheduledJob {
+    /// Extracts the execution AcceptMode ("observe" vs "auto") from job metadata.
+    pub fn accept_mode(&self) -> crate::agent::types::AcceptMode {
+        self.metadata
+            .as_ref()
+            .and_then(|m| m.get("accept_mode").or_else(|| m.get("acceptMode")))
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                if s.eq_ignore_ascii_case("observe") {
+                    crate::agent::types::AcceptMode::Observe
+                } else {
+                    crate::agent::types::AcceptMode::Auto
+                }
+            })
+            .unwrap_or(crate::agent::types::AcceptMode::Auto)
+    }
+}
+
 /// A single execution record for a `ScheduledJob`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ScheduledJobRun {
     pub id: String,
     pub job_id: String,
@@ -54,7 +72,7 @@ pub struct ScheduledJobRun {
     pub output_summary: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JobRunStatus {
     Running,
@@ -62,6 +80,7 @@ pub enum JobRunStatus {
     Failed,
     BudgetExceeded,
     Skipped,
+    Dropped,
 }
 
 impl JobRunStatus {
@@ -72,6 +91,7 @@ impl JobRunStatus {
             JobRunStatus::Failed => "failed",
             JobRunStatus::BudgetExceeded => "budget_exceeded",
             JobRunStatus::Skipped => "skipped",
+            JobRunStatus::Dropped => "dropped",
         }
     }
 }
@@ -91,9 +111,11 @@ pub struct CreateJobRequest {
     /// Auto-disable after this many consecutive failures. Default: 3.
     pub max_failures: Option<i64>,
     pub metadata: Option<serde_json::Value>,
+    #[serde(default, alias = "acceptMode")]
+    pub accept_mode: Option<crate::agent::types::AcceptMode>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct UpdateJobRequest {
     pub name: Option<String>,
     pub prompt: Option<String>,
@@ -102,6 +124,8 @@ pub struct UpdateJobRequest {
     pub budget_usd: Option<f64>,
     pub enabled: Option<bool>,
     pub max_failures: Option<i64>,
+    #[serde(default, alias = "acceptMode")]
+    pub accept_mode: Option<crate::agent::types::AcceptMode>,
 }
 
 

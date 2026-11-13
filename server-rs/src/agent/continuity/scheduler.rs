@@ -29,10 +29,20 @@ pub async fn create_job(pool: &SqlitePool, req: CreateJobRequest) -> Result<Sche
     let now = Utc::now();
     let budget = req.budget_usd.unwrap_or(0.10);
     let max_failures = req.max_failures.unwrap_or(3);
-    let metadata_json = req
-        .metadata
-        .as_ref()
-        .and_then(|m| serde_json::to_string(m).ok());
+    let mut meta_val = req.metadata.clone().unwrap_or_else(|| serde_json::json!({}));
+    if let Some(mode) = req.accept_mode {
+        if let Some(obj) = meta_val.as_object_mut() {
+            obj.insert(
+                "accept_mode".to_string(),
+                serde_json::to_value(mode).unwrap_or_default(),
+            );
+        }
+    }
+    let metadata_json = if meta_val.as_object().map_or(false, |o| !o.is_empty()) {
+        serde_json::to_string(&meta_val).ok()
+    } else {
+        None
+    };
 
     // Normalize workflow_id: empty or whitespace string is converted to None
     let normalized_workflow_id = req.workflow_id.and_then(|w| {
@@ -137,6 +147,28 @@ pub async fn update_job(
     if let Some(max_f) = req.max_failures {
         sqlx::query("UPDATE scheduled_jobs SET max_failures = ?1 WHERE id = ?2")
             .bind(max_f)
+            .bind(job_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(mode) = req.accept_mode {
+        let existing_meta: Option<String> = sqlx::query_scalar("SELECT metadata FROM scheduled_jobs WHERE id = ?1")
+            .bind(job_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten();
+        let mut meta_val: serde_json::Value = existing_meta
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Some(obj) = meta_val.as_object_mut() {
+            obj.insert(
+                "accept_mode".to_string(),
+                serde_json::to_value(mode).unwrap_or_default(),
+            );
+        }
+        let serialized = serde_json::to_string(&meta_val).ok();
+        sqlx::query("UPDATE scheduled_jobs SET metadata = ?1 WHERE id = ?2")
+            .bind(serialized)
             .bind(job_id)
             .execute(&mut *tx)
             .await?;
@@ -389,6 +421,7 @@ fn row_to_run(row: &sqlx::sqlite::SqliteRow) -> ScheduledJobRun {
             "completed" => JobRunStatus::Completed,
             "failed" => JobRunStatus::Failed,
             "budget_exceeded" => JobRunStatus::BudgetExceeded,
+            "dropped" => JobRunStatus::Dropped,
             _ => JobRunStatus::Skipped,
         },
         cost_usd: row.get("cost_usd"),
@@ -449,6 +482,7 @@ mod tests {
             budget_usd: Some(0.5),
             max_failures: Some(3),
             metadata: None,
+            accept_mode: None,
         };
 
         // 1. Create
@@ -502,6 +536,7 @@ mod tests {
             budget_usd: None,
             max_failures: None,
             metadata: None,
+            accept_mode: None,
         };
         let job = create_job(&pool, req).await.unwrap();
 
@@ -514,6 +549,53 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].status, JobRunStatus::Completed);
         assert_eq!(runs[0].mission_id, Some("mission-123".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_create_job_with_observe_mode() {
+        use crate::db::init_db;
+        use crate::agent::types::AcceptMode;
+        let pool = init_db("sqlite::memory:").await.unwrap();
+
+        let req = CreateJobRequest {
+            agent_id: "agent-obs".to_string(),
+            workflow_id: None,
+            name: "Shadow Job".to_string(),
+            prompt: "Simulate code changes".to_string(),
+            cron_expr: "* * * * *".to_string(),
+            budget_usd: Some(0.20),
+            max_failures: None,
+            metadata: None,
+            accept_mode: Some(AcceptMode::Observe),
+        };
+        let job = create_job(&pool, req).await.unwrap();
+        assert_eq!(job.accept_mode(), AcceptMode::Observe);
+
+        let updated = update_job(
+            &pool,
+            &job.id,
+            UpdateJobRequest {
+                accept_mode: Some(AcceptMode::Auto),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.accept_mode(), AcceptMode::Auto);
+
+        let run = create_job_run(&pool, &job.id).await.unwrap();
+        complete_job_run(
+            &pool,
+            &run.id,
+            Some("mission-dropped"),
+            JobRunStatus::Dropped,
+            0.0,
+            Some("Dropped duplicate trigger"),
+        )
+        .await
+        .unwrap();
+        let runs = list_runs_for_job(&pool, &job.id, 10).await.unwrap();
+        assert_eq!(runs[0].status, JobRunStatus::Dropped);
     }
 }
 

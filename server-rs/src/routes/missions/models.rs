@@ -36,6 +36,7 @@ pub const VALID_MISSION_STATUSES: &[&str] = &[
     "paused",
     "cancelled",
     "aborted",
+    "dropped",
 ];
 
 // ─────────────────────────────────────────────────────────

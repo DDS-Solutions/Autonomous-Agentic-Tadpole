@@ -63,10 +63,10 @@ def run_evals():
                 content = intel_file.read_text(encoding="utf-8")
                 assert "rep_count >= 5" in content
                 assert "RecursionBlocked" in content
-                assert "rep_count >= 3" in content
+                assert "rep_count >= 3" in content or ("rep_count == 3" in content and "rep_count > 3" in content)
                 assert "[TOOL_WARNING]" in content
                 status = "PASS"
-                detail = "Tool loop guard: warn at 3, abort with RecursionBlocked at 5"
+                detail = "Tool loop guard: circuit-breaker at 3, warning >3, abort with RecursionBlocked at 5"
 
             elif tid == "task_03":
                 # Verify pre-turn budget gate

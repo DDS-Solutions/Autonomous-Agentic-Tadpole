@@ -185,6 +185,11 @@ pub(crate) fn spawn_post_mission_analysis(
                 input_cost_per_m: None,
                 output_cost_per_m: None,
                 execution_plane: None,
+                accept_mode: None,
+                mandate: None,
+                workflow_id: None,
+                cascade_routing: None,
+                root_mission_id: None,
             };
 
             // Hardcoded "99" for QA Auditor

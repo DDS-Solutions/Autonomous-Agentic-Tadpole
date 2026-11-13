@@ -338,6 +338,117 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
+
+    // 11. Edge Case Regression: max_nodes=0 with self-loop must return empty nodes AND empty links
+    #[tokio::test]
+    async fn test_get_code_graph_max_nodes_zero_excludes_self_loop_links() {
+        let (app, state) = setup_test_app().await;
+        let mut sym_graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let obf = crate::intelligence::graph::obfuscate_path("src/self_loop.rs", "salt").unwrap();
+        sym_graph.obfuscated_to_real_path.insert(obf.clone(), "src/self_loop.rs".to_string());
+        let idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "recursive_fn".to_string(),
+            path: obf,
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        sym_graph.graph.add_edge(idx, idx, crate::intelligence::graph::SymbolEdge { kind: "call".to_string() });
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/self_loop.rs", "recursive_fn"), idx);
+
+        let swap = state.resources.get_symbol_graph().await.unwrap();
+        swap.store(Arc::new(sym_graph));
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/graph?max_nodes=0")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["nodes"].as_array().unwrap().len(), 0);
+        assert_eq!(json["links"].as_array().unwrap().len(), 0);
+    }
+
+    // 12. Regression: path_prefix filters obfuscated anomalies by real workspace path
+    #[tokio::test]
+    async fn test_get_code_graph_path_prefix_filters_obfuscated_anomalies() {
+        let (app, state) = setup_test_app().await;
+        let mut sym_graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let svc_obf = crate::intelligence::graph::obfuscate_path("src/services/orphan_svc.rs", "salt").unwrap();
+        let rte_obf = crate::intelligence::graph::obfuscate_path("src/routes/orphan_rte.rs", "salt").unwrap();
+        sym_graph.obfuscated_to_real_path.insert(svc_obf.clone(), "src/services/orphan_svc.rs".to_string());
+        sym_graph.obfuscated_to_real_path.insert(rte_obf.clone(), "src/routes/orphan_rte.rs".to_string());
+
+        let svc_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "orphan_svc_fn".to_string(),
+            path: svc_obf.clone(),
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        let rte_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "orphan_rte_fn".to_string(),
+            path: rte_obf.clone(),
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/services/orphan_svc.rs", "orphan_svc_fn"), svc_idx);
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/routes/orphan_rte.rs", "orphan_rte_fn"), rte_idx);
+
+        let swap = state.resources.get_symbol_graph().await.unwrap();
+        swap.store(Arc::new(sym_graph));
+
+        let request = Request::builder()
+            .uri("/v1/intelligence/graph?path_prefix=src/services")
+            .header(header::AUTHORIZATION, format!("Bearer {}", TEST_TOKEN))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let anomalies = json["anomalies"].as_array().unwrap();
+        assert!(anomalies.iter().any(|a| a.as_str().unwrap_or("").contains("orphan_svc_fn")));
+        assert!(!anomalies.iter().any(|a| a.as_str().unwrap_or("").contains("orphan_rte_fn")));
+    }
+
+    // 13. Regression: impacted tests resolves obfuscated nested test directory paths
+    #[tokio::test]
+    async fn test_get_impacted_tests_resolves_obfuscated_nested_test_dir() {
+        let (_app, state) = setup_test_app().await;
+        let mut sym_graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let core_obf = crate::intelligence::graph::obfuscate_path("src/core.rs", "salt").unwrap();
+        let test_obf = crate::intelligence::graph::obfuscate_path("tests/integration/core_suite.rs", "salt").unwrap();
+        sym_graph.obfuscated_to_real_path.insert(core_obf.clone(), "src/core.rs".to_string());
+        sym_graph.obfuscated_to_real_path.insert(test_obf.clone(), "tests/integration/core_suite.rs".to_string());
+
+        let core_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "core_fn".to_string(),
+            path: core_obf,
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        let test_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "verify_behavior".to_string(),
+            path: test_obf,
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        // Caller (test_idx) depends on callee (core_idx)
+        sym_graph.graph.add_edge(test_idx, core_idx, crate::intelligence::graph::SymbolEdge { kind: "call".to_string() });
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/core.rs", "core_fn"), core_idx);
+        sym_graph.index.insert(crate::intelligence::graph::index_key("tests/integration/core_suite.rs", "verify_behavior"), test_idx);
+
+        let swap = state.resources.get_symbol_graph().await.unwrap();
+        swap.store(Arc::new(sym_graph));
+
+        let service = crate::intelligence::service::IntelligenceService::new(state.clone());
+        let impacted = service.get_impacted_tests("core_fn", "src/core.rs").await.unwrap();
+        assert_eq!(impacted, vec!["tests/integration/core_suite.rs".to_string()]);
+    }
 }
 
 // Metadata: [intelligence_tests]

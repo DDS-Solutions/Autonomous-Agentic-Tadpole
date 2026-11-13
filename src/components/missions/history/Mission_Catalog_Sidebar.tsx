@@ -52,6 +52,7 @@ const STATUS_FILTERS = [
     { key: 'failed', label: 'Failed' },
     { key: 'active', label: 'Active' },
     { key: 'paused', label: 'Paused' },
+    { key: 'dropped', label: 'Dropped' },
 ];
 
 export const Mission_Catalog_Sidebar: React.FC<MissionCatalogSidebarProps> = ({
@@ -88,6 +89,14 @@ export const Mission_Catalog_Sidebar: React.FC<MissionCatalogSidebarProps> = ({
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
                     <AlertCircle size={10} />
                     Failed
+                </span>
+            );
+        }
+        if (s === 'dropped') {
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-500/10 text-zinc-400 border border-zinc-500/30">
+                    <Clock size={10} />
+                    Dropped
                 </span>
             );
         }

@@ -222,7 +222,7 @@ The engine boot path starts in `server-rs/src/main.rs`, initializes environment 
 | `directives/` | Governance, identity, orchestration, and provider operating instructions |
 | `docs/` | Architecture, operations, API reference, OpenAPI, and security docs |
 | `data/` | Local runtime data (initialized on first boot with SQLite database `tadpole.db` and agent/model seed configs) |
-| `crates/` | High-efficiency clean-room MIT WASM codecs (`crates/wasm-codec`) |
+| `crates/` | Workspace crates: WASM binary pulse codec (`crates/wasm-codec`), Rust AST guard (`crates/tadpole-guard`), `.gitleaks.toml`-backed secret scanner (`crates/tadpole-sec`), and experimental unwired graph physics prototype (`crates/wasm-graph-physics`) |
 | `starter_kits/` | Ready-to-deploy multi-agent swarms and domain workflows |
 | `scripts/` | Database backup, recovery, and persistence verification utilities |
 | `dist/` | Production dashboard build served by the Rust engine |

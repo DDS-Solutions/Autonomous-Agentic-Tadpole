@@ -20,7 +20,8 @@ import { Tooltip } from '../components/ui';
 import { Confirm_Dialog } from '../components/ui/Confirm_Dialog';
 import { i18n } from '../i18n';
 import { get_safe_date } from '../utils/date_utils';
-import { Job_Form_Manager, Job_History_View, create_empty_job_config, type job_config_state } from '../components/jobs/Scheduled_Job_Components';
+import { Job_Form_Manager, Job_History_View } from '../components/jobs/Scheduled_Job_Components';
+import { create_empty_job_config, type AcceptModeOption, type job_config_state } from '../components/jobs/job_form_utils';
 
 /**
  * Scheduled_Jobs Page
@@ -150,6 +151,10 @@ const Scheduled_Jobs: React.FC = () => {
         set_editing_job_id(job.id);
         const type = job.workflow_id ? 'workflow' : 'agent';
         set_job_type(type);
+        const meta_mode = job.accept_mode
+            ?? (job.metadata?.accept_mode as string | undefined)
+            ?? (job.metadata?.acceptMode as string | undefined);
+        const accept_mode: AcceptModeOption = meta_mode === 'observe' ? 'observe' : 'auto';
         set_job_config({
             name: job.name,
             agent_id: job.agent_id || '',
@@ -157,7 +162,8 @@ const Scheduled_Jobs: React.FC = () => {
             prompt: job.prompt || '',
             cron_expr: job.cron_expr,
             budget_usd: job.budget_usd,
-            max_failures: job.max_failures
+            max_failures: job.max_failures,
+            accept_mode
         });
         set_is_creating(true);
     };

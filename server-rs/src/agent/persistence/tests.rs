@@ -205,7 +205,7 @@ async fn test_agent_persistence_round_trip() -> Result<(), AppError> {
     assert_eq!(loaded.identity.name, agent.identity.name);
     assert_eq!(loaded.models.model.provider, agent.models.model.provider);
     assert_eq!(loaded.models.model.model_id, agent.models.model.model_id);
-    assert_eq!(loaded.models.model.api_key, None); // SEC-02: Plaintext API keys are never persisted
+    assert_eq!(loaded.models.model.api_key, agent.models.model.api_key); // Persisted in SQLite via COALESCE; stripped from API responses (SEC-02)
     assert_eq!(loaded.models.model.base_url, agent.models.model.base_url);
     assert_eq!(loaded.models.model.system_prompt, agent.models.model.system_prompt);
     assert_eq!(loaded.models.model.temperature, agent.models.model.temperature);

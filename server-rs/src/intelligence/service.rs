@@ -113,18 +113,13 @@ impl IntelligenceService {
                     };
 
                     if matches {
-                        node_indices.insert(idx);
-                        nodes.push(node.clone());
                         if nodes.len() >= limit {
                             break;
                         }
+                        node_indices.insert(idx);
+                        nodes.push(node.clone());
                     }
                 }
-            }
-
-            // Apply max_nodes clamp if provided
-            if nodes.len() > limit {
-                nodes.truncate(limit);
             }
 
             // 2. Filter edges: zero string allocations for non-matching edges
@@ -148,15 +143,7 @@ impl IntelligenceService {
                 });
             }
 
-            let anomalies = guard.find_anomalies();
-            let filtered_anomalies = if let Some(ref prefix) = prefix_clean {
-                anomalies
-                    .into_iter()
-                    .filter(|a| a.contains(prefix))
-                    .collect()
-            } else {
-                anomalies
-            };
+            let filtered_anomalies = guard.find_anomalies_filtered(prefix_clean.as_deref());
 
             (nodes, links, filtered_anomalies)
         })
@@ -444,10 +431,13 @@ impl IntelligenceService {
                 help_link: None,
             });
         }
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
+        let guard = graph_swap.load();
         let mut tests = std::collections::BTreeSet::new();
 
         for node in affected {
-            let p = node.path.to_lowercase();
+            let resolved_path = guard.resolve_path(&node.path);
+            let p = resolved_path.to_lowercase();
             let n = node.name.to_lowercase();
             let k = node.kind.to_lowercase();
 
@@ -473,7 +463,7 @@ impl IntelligenceService {
             let is_test = is_in_test_dir || is_test_file || is_test_symbol;
 
             if is_test {
-                tests.insert(node.path);
+                tests.insert(resolved_path);
             }
         }
 

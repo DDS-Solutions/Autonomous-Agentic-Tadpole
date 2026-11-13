@@ -112,6 +112,15 @@ export interface Task {
     logs: string[];
 }
 
+export interface Mandate_Config {
+    executionPlane?: 'engine-maintenance' | 'smb-digital-twin';
+    acceptMode?: 'auto' | 'observe';
+    allowedTools?: string[] | null;
+    pathBoundary?: string | null;
+    budgetUsd: number;
+    deliveryTarget?: string | null;
+}
+
 /**
  * Task_Payload
  * Payload for sending a command/task to an agent.
@@ -143,6 +152,9 @@ export interface Task_Payload {
     enabled_skills?: string[];
     user_id?: string;
     auto_resume?: boolean;
+    execution_plane?: 'engine-maintenance' | 'smb-digital-twin';
+    accept_mode?: 'auto' | 'observe';
+    mandate?: Mandate_Config;
 }
 
 export type AgentPatch = Partial<Agent>;

@@ -36,7 +36,7 @@ export type TokenUsage = { inputTokens?: number; outputTokens?: number; totalTok
  */
 export type ModelProvider = "openai" | "anthropic" | "google" | "gemini" | "ollama" | "groq" | "mistral" | "perplexity" | "fireworks" | "together" | "deepseek" | "xai" | "inception" | "openrouter" | "cerebras" | "sambanova" | "meta" | "alibaba" | "local"
 
-export type RunnerPolicy = { maxConcurrent: number; resumeBlockedFirst: boolean; preflightChecks: string[]; smeAutoWorkflow?: boolean }
+export type RunnerPolicy = { maxConcurrent: number; resumeBlockedFirst: boolean; preflightChecks: string[]; smeAutoWorkflow?: boolean; cascadeRouting?: boolean }
 
 export type RoleBlueprint = { id: string; name: string; department: string; description: string; skills?: string; workflows?: string; mcpTools?: string; requiresOversight?: boolean; modelId?: string | null; createdAt?: string | null }
 
@@ -51,6 +51,41 @@ export type Permission = "network:outbound" | "filesystem:read" | "filesystem:wr
 export type SkillParameter = { type: string; required: boolean | null; default: JsonValue | null }
 
 export type SkillHooks = { before_execute: string | null; after_execute: string | null }
+
+export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused" | "suspended" | "dropped"
+
+/**
+ * ### Protocol: ExecutionPlane
+ * Represents the dual-plane sovereign execution hierarchy governing swarm autonomy.
+ * - Plane 1 (EngineMaintenance): Recursively operates, diagnoses, fixes, and improves the codebase.
+ * - Plane 2 (SmbDigitalTwin): Company-agnostic SMB business twin runtime governed by FR-11 permission firewall.
+ */
+export type ExecutionPlane = "engine-maintenance" | "smb-digital-twin"
+
+/**
+ * ### 📜 Protocol: AcceptMode
+ * Governs operational side-effect permissions:
+ * - Auto: Fully autonomous mutation within Mandate boundaries.
+ * - Observe: Shadow execution mode. Plans, simulates blast radius, and writes audit receipts without mutating external systems.
+ */
+export type AcceptMode = "auto" | "observe"
+
+/**
+ * ### 📜 Protocol: Mandate
+ * Immutable execution envelope decoupling caller authorization ("who may ask")
+ * from runtime execution scope ("what may run").
+ * Strictly bounds Plane 1 (EngineMaintenance) and Plane 2 (SmbDigitalTwin) execution.
+ */
+export type Mandate = { executionPlane: ExecutionPlane; acceptMode: AcceptMode; allowedTools?: string[] | null; pathBoundary?: string | null; budgetUsd: number; deliveryTarget?: string | null }
+
+export type TaskPayload = { message: string; cluster_id: string | null; department: string | null; provider: ModelProvider | null; model_id: string | null; api_key: string | null; base_url: string | null; rpm: number | null; tpm: number | null; rpd: number | null; tpd: number | null; budget_usd: number | null; context_window?: number | null; input_cost_per_m?: number | null; output_cost_per_m?: number | null; swarm_depth: number | null; swarm_lineage: string[] | null; external_id: string | null; safe_mode: boolean | null; analysis: boolean | null; traceparent: string | null; user_id?: string | null; context_files?: string[] | null; recent_findings?: string | null; structured_output?: boolean | null; primary_goal?: string | null; enabled_skills?: string[] | null; auto_resume?: boolean | null; execution_plane?: ExecutionPlane | null; accept_mode?: AcceptMode | null; mandate?: Mandate | null; workflow_id?: string | null; cascade_routing?: boolean | null; root_mission_id?: string | null }
+
+/**
+ * A single execution record for a `ScheduledJob`.
+ */
+export type ScheduledJobRun = { id: string; job_id: string; mission_id: string | null; started_at: string; completed_at: string | null; status: JobRunStatus; cost_usd: number; output_summary: string | null }
+
+export type JobRunStatus = "running" | "completed" | "failed" | "budget_exceeded" | "skipped" | "dropped"
 
 /**
  * A node in the knowledge graph representing a code symbol

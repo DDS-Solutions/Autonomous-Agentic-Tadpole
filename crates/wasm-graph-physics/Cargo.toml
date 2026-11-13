@@ -1,0 +1,15 @@
+[package]
+name = "tadpole-wasm-graph-physics"
+version = "1.1.59"
+edition = "2021"
+license = "MIT"
+description = "Experimental O(N^2) WebAssembly graph physics prototype (unwired; use d3-force Barnes-Hut quadtree for production)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+wasm-bindgen = "0.2"
+

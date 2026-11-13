@@ -11,9 +11,10 @@
 //!
 
 
-use crate::agent::types::*;
+use crate::agent::continuity::types::*;
 use crate::agent::merge::*;
 use crate::agent::skill_manifest::*;
+use crate::agent::types::*;
 
 #[allow(dead_code)]
 pub fn export_bindings() {
@@ -64,6 +65,14 @@ pub fn export_bindings() {
     export_type!(Permission);
     export_type!(SkillParameter);
     export_type!(SkillHooks);
+    export_type!(MissionStatus);
+    export_type!(ExecutionPlane);
+    export_type!(AcceptMode);
+    export_type!(Mandate);
+    export_type!(TaskPayload);
+    export_type!(ScheduledJob);
+    export_type!(ScheduledJobRun);
+    export_type!(JobRunStatus);
     export_type!(crate::intelligence::graph::SymbolNode);
 
     // ── Phase 3: Token Burn & Agent Maintenance Reports ──────────────

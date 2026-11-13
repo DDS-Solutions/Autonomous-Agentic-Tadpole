@@ -63,6 +63,41 @@ impl AgentRunner {
         // 3. Apply Payload Overrides
         self.merge_payload_overrides(&mut resolved_config, payload);
 
+        // 3b. Opt-in CascadeRouter Turn Selection (Decision 1: respects PRIVACY_MODE & explicit model_id pins)
+        let is_privacy = self.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed);
+        let has_explicit_model_pin = payload
+            .model_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty());
+        let cascade_routing_enabled =
+            payload.cascade_routing.unwrap_or(a.runner_policy.cascade_routing)
+                && !is_privacy
+                && !has_explicit_model_pin;
+
+        if cascade_routing_enabled {
+            let mut policy = crate::agent::cascade_router::CascadePolicy::default();
+            policy.tier1_provider = resolved_config.provider.to_string().to_lowercase();
+            policy.tier1_model = resolved_config.model_id.clone();
+            if let Some(ref m2) = a.models.model_2.as_ref().filter(|s| !s.trim().is_empty()) {
+                policy.tier2_model = (*m2).clone();
+                if let Some(ref cfg2) = a.models.model_config2 {
+                    policy.tier2_provider = cfg2.provider.to_string().to_lowercase();
+                } else {
+                    policy.tier2_provider = policy.tier1_provider.clone();
+                }
+            }
+            let router = crate::agent::cascade_router::CascadeRouter::new(policy);
+            let token_est = crate::agent::runner::synthesis::budget::count_tokens_fast(&payload.message);
+            let decision = router.route_turn_semantic(&payload.message, token_est, false, false, None);
+            if let Ok(re_routed) = self.resolve_base_config(a, &decision.model, slot_cfg) {
+                resolved_config = re_routed;
+                self.merge_payload_overrides(&mut resolved_config, payload);
+            } else {
+                resolved_config.model_id = decision.model;
+            }
+        }
+
         // 4. Resolve Workspace Root
         let workspace_root = self.resolve_workspace_paths(payload.cluster_id.as_deref())?;
         let fs_adapter = crate::adapter::filesystem::FilesystemAdapter::new(workspace_root.clone());
@@ -88,8 +123,37 @@ impl AgentRunner {
             }
         }
 
+        let mut mandate = payload.resolved_mandate();
+        let execution_plane = if payload.mandate.is_some() || payload.execution_plane.is_some() {
+            mandate.execution_plane
+        } else if a.identity.department.eq_ignore_ascii_case("smb")
+            || a.identity.department.eq_ignore_ascii_case("business")
+            || a.identity.department.eq_ignore_ascii_case("digital-twin")
+            || payload.department.as_deref().map(|d| d.eq_ignore_ascii_case("smb") || d.eq_ignore_ascii_case("business") || d.eq_ignore_ascii_case("digital-twin")).unwrap_or(false)
+            || a.identity.role.contains("Twin")
+        {
+            crate::agent::types::ExecutionPlane::SmbDigitalTwin
+        } else {
+            crate::agent::types::ExecutionPlane::EngineMaintenance
+        };
+        mandate.execution_plane = execution_plane;
+        let accept_mode = mandate.accept_mode;
+
+        if let Some(ref allowed) = mandate.allowed_tools {
+            if !allowed.is_empty() {
+                skills.retain(|s| {
+                    allowed.contains(s)
+                        || matches!(s.as_str(), "complete_mission" | "issue_alpha_directive" | "set_confidence")
+                });
+            }
+        }
+
         let safe_mode = payload.safe_mode.unwrap_or(false);
-        self.apply_security_gates(safe_mode, &mut skills, &mut workflows);
+        self.apply_security_gates(
+            safe_mode || accept_mode == crate::agent::types::AcceptMode::Observe,
+            &mut skills,
+            &mut workflows,
+        );
 
         // 6. Mission Financials
         let (budget_usd, current_cost_usd) = if mission_id != "system-internal" && !mission_id.is_empty() {
@@ -143,18 +207,9 @@ impl AgentRunner {
                 "network_access": !safe_mode,
                 "fs_sandbox": true
             }),
-            execution_plane: payload.execution_plane.unwrap_or_else(|| {
-                if a.identity.department.eq_ignore_ascii_case("smb")
-                    || a.identity.department.eq_ignore_ascii_case("business")
-                    || a.identity.department.eq_ignore_ascii_case("digital-twin")
-                    || payload.department.as_deref().map(|d| d.eq_ignore_ascii_case("smb") || d.eq_ignore_ascii_case("business") || d.eq_ignore_ascii_case("digital-twin")).unwrap_or(false)
-                    || a.identity.role.contains("Twin")
-                {
-                    crate::agent::types::ExecutionPlane::SmbDigitalTwin
-                } else {
-                    crate::agent::types::ExecutionPlane::EngineMaintenance
-                }
-            }),
+            execution_plane,
+            accept_mode,
+            mandate,
             active_node_id: {
                 let node_id = if mission_id != "system-internal" && !mission_id.is_empty() {
                     match crate::agent::mission::get_mission_by_id(&self.state.resources.pool, mission_id).await {
@@ -168,6 +223,24 @@ impl AgentRunner {
             },
             conflict: self.state.security.conflict.clone(),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
+            root_mission_id: payload
+                .root_mission_id
+                .clone()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| mission_id.to_string()),
+            cascade_routing: cascade_routing_enabled,
+            cancel_handle: {
+                let root_id = payload
+                    .root_mission_id
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or(mission_id);
+                if let Some(parent_handle) = self.state.comms.mission_handles.get(root_id) {
+                    parent_handle.child(mission_id)
+                } else {
+                    crate::agent::swarm_orchestrator::MissionHandle::new(mission_id)
+                }
+            },
         })
     }
 

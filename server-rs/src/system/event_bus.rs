@@ -132,7 +132,7 @@ mod tests {
             agent_id: agent_id.to_string(), workflow_id: None,
             name: agent_id.to_string(), prompt: "Say hello".to_string(),
             cron_expr: "* * * * *".to_string(), budget_usd: Some(0.1),
-            max_failures: None, metadata: None,
+            max_failures: None, metadata: None, accept_mode: None,
         }).await.unwrap().id
     }
 
@@ -234,7 +234,7 @@ mod tests {
             agent_id: "event-agent".to_string(), workflow_id: None,
             name: "Event regression".to_string(), prompt: "Say hello".to_string(),
             cron_expr: "* * * * *".to_string(), budget_usd: None,
-            max_failures: None, metadata: None,
+            max_failures: None, metadata: None, accept_mode: None,
         }).await.unwrap();
         sqlx::query("UPDATE scheduled_jobs SET enabled = ? WHERE id = ?")
             .bind(enabled).bind(&job.id).execute(&state.resources.pool).await.unwrap();

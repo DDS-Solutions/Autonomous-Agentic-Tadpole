@@ -126,6 +126,8 @@ export interface Scheduled_Job {
     consecutive_failures: number;
     max_failures: number;
     created_at: string;
+    metadata?: Record<string, unknown> | null;
+    accept_mode?: 'auto' | 'observe';
 }
 
 export interface Workflow_Entry {

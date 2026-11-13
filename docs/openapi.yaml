@@ -4783,6 +4783,19 @@ components:
           type: array
           items: { type: object }
         metadata: { type: object, additionalProperties: true }
+    Mandate:
+      type: object
+      required: [executionPlane, acceptMode, budgetUsd]
+      properties:
+        executionPlane: { type: string, enum: [engine-maintenance, smb-digital-twin] }
+        acceptMode: { type: string, enum: [auto, observe] }
+        allowedTools:
+          type: array
+          nullable: true
+          items: { type: string }
+        pathBoundary: { type: string, nullable: true }
+        budgetUsd: { type: number }
+        deliveryTarget: { type: string, nullable: true }
     TaskPayload:
       type: object
       required: [message]
@@ -4790,6 +4803,19 @@ components:
         message: { type: string, description: 'Task instruction message (alias: task)' }
         task: { type: string, description: 'Alias for message' }
         traceparent: { type: string, nullable: true }
+        cluster_id: { type: string, nullable: true }
+        department: { type: string, nullable: true }
+        provider: { type: string, nullable: true }
+        model_id: { type: string, nullable: true }
+        budget_usd: { type: number, nullable: true }
+        safe_mode: { type: boolean, nullable: true }
+        enabled_skills:
+          type: array
+          nullable: true
+          items: { type: string }
+        execution_plane: { type: string, enum: [engine-maintenance, smb-digital-twin], nullable: true }
+        accept_mode: { type: string, enum: [auto, observe], nullable: true }
+        mandate: { $ref: '#/components/schemas/Mandate' }
     TaskAcceptedResponse:
       type: object
       required: [status, agent_id]
@@ -4903,6 +4929,7 @@ components:
         budget_usd: { type: number, nullable: true }
         max_failures: { type: integer, nullable: true }
         metadata: { type: object, nullable: true }
+        accept_mode: { type: string, enum: [auto, observe], nullable: true }
     UpdateJobRequest:
       type: object
       properties:
@@ -4913,6 +4940,7 @@ components:
         budget_usd: { type: number, nullable: true }
         enabled: { type: boolean, nullable: true }
         max_failures: { type: integer, nullable: true }
+        accept_mode: { type: string, enum: [auto, observe], nullable: true }
     CreateWorkflowRequest:
       type: object
       required: [name]

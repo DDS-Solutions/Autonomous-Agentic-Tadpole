@@ -343,10 +343,10 @@ impl BudgetGuard {
             ResetPeriod::Never => "never",
         };
         let now = Utc::now();
-        let next_reset_at: Option<chrono::DateTime<Utc>> = match reset_period.unwrap_or(ResetPeriod::Daily) {
-            ResetPeriod::Daily => Some(now + chrono::Duration::days(1)),
-            ResetPeriod::Monthly => Some(now + chrono::Duration::days(30)),
-            ResetPeriod::Never => None,
+        let next_reset_at: chrono::DateTime<Utc> = match reset_period.unwrap_or(ResetPeriod::Daily) {
+            ResetPeriod::Daily => now + chrono::Duration::days(1),
+            ResetPeriod::Monthly => now + chrono::Duration::days(30),
+            ResetPeriod::Never => now + chrono::Duration::days(365 * 100),
         };
 
         if reset_period.is_some() {
@@ -398,10 +398,10 @@ impl BudgetGuard {
             ResetPeriod::Never => "never",
         };
         let now = Utc::now();
-        let next_reset_at: Option<chrono::DateTime<Utc>> = match reset_period.unwrap_or(ResetPeriod::Daily) {
-            ResetPeriod::Daily => Some(now + chrono::Duration::days(1)),
-            ResetPeriod::Monthly => Some(now + chrono::Duration::days(30)),
-            ResetPeriod::Never => None,
+        let next_reset_at: chrono::DateTime<Utc> = match reset_period.unwrap_or(ResetPeriod::Daily) {
+            ResetPeriod::Daily => now + chrono::Duration::days(1),
+            ResetPeriod::Monthly => now + chrono::Duration::days(30),
+            ResetPeriod::Never => now + chrono::Duration::days(365 * 100),
         };
 
         if reset_period.is_some() {

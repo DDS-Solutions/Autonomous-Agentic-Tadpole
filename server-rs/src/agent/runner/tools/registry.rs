@@ -27,6 +27,7 @@ pub const BUILTIN_TOOLS: &[&str] = &[
     "notify_discord", "fetch_url", "read_file", "write_file", "list_files", 
     "delete_file", "search_mission_knowledge", "read_codebase_file", 
     "list_file_symbols", "get_symbol_body", "update_working_memory",
+    "blackboard_write", "blackboard_read",
     "recruit_specialist", "recruit", "get_agent_metrics", "script_builder", "pin_mission"
 ];
 

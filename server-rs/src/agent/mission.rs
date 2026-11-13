@@ -133,6 +133,11 @@ pub async fn update_mission(
                 "Invalid state transition: Completed mission cannot transition back to an active state".to_string(),
             ));
         }
+        (MissionStatus::Dropped, new_st) if *new_st != MissionStatus::Dropped && *new_st != MissionStatus::Pending => {
+            return Err(AppError::BadRequest(
+                "Invalid state transition: Dropped mission can only transition to Pending for restart".to_string(),
+            ));
+        }
         (MissionStatus::Failed, new_st) if *new_st != MissionStatus::Failed && *new_st != MissionStatus::Pending => {
             return Err(AppError::BadRequest(
                 "Invalid state transition: Failed mission can only transition to Pending for restart".to_string(),
@@ -619,6 +624,7 @@ fn status_to_str(status: &MissionStatus) -> &'static str {
         MissionStatus::Failed => "failed",
         MissionStatus::Paused => "paused",
         MissionStatus::Suspended => "suspended",
+        MissionStatus::Dropped => "dropped",
     }
 }
 
@@ -966,6 +972,16 @@ mod tests {
         let completed = get_mission_by_id(pool, &m.id).await?.unwrap();
         assert_eq!(completed.status, MissionStatus::Completed);
         assert!((completed.cost_usd - 6.0).abs() < f64::EPSILON);
+
+        // 6. Test Dropped status transition for obsolete/unreproducible tasks
+        let m_dropped = create_mission(pool, "a-inv", "Obsolete Task", 10.0).await?;
+        update_mission(pool, &m_dropped.id, MissionStatus::Dropped, 0.1).await?;
+        let dropped = get_mission_by_id(pool, &m_dropped.id).await?.unwrap();
+        assert_eq!(dropped.status, MissionStatus::Dropped);
+
+        // Cannot transition from Dropped to Active without Pending restart
+        let invalid_dropped_trans = update_mission(pool, &m_dropped.id, MissionStatus::Active, 0.0).await;
+        assert!(matches!(invalid_dropped_trans, Err(AppError::BadRequest(_))));
 
         Ok(())
     }

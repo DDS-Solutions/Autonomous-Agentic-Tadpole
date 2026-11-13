@@ -94,7 +94,61 @@ function createUser(opts: CreateUserOpts) { }
 | Custom cache for <100 items | Remove cache, measure first |
 | Memoization on cheap functions | Remove memo |
 | Lazy loading for small modules | Use direct import |
-| Complex state machine for 3 states | Use simple if/else or switch |
+| Redundant wrapper around single stdlib function | Inline or call stdlib directly |
+
+---
+
+## Polyglot Simplification Idioms
+
+### Rust (`server-rs` & `src-tauri`)
+```rust
+// ❌ Before: Verbose error matching and manual unwraps
+fn get_user_email(id: &str, db: &Database) -> Result<String, AppError> {
+    match db.find_user(id) {
+        Ok(user_opt) => match user_opt {
+            Some(user) => Ok(user.email),
+            None => Err(AppError::NotFound("User not found".into())),
+        },
+        Err(e) => Err(AppError::Database(e)),
+    }
+}
+
+// ✅ After: Idiomatic combinators and the `?` operator
+fn get_user_email(id: &str, db: &Database) -> Result<String, AppError> {
+    db.find_user(id)?
+        .map(|u| u.email)
+        .ok_or_else(|| AppError::NotFound("User not found".into()))
+}
+```
+
+### Python (`execution/`)
+```python
+# ❌ Before: Imperative accumulation
+def get_active_agent_ids(agents):
+    result = []
+    for agent in agents:
+        if agent.get("status") == "active":
+            result.append(agent.get("id"))
+    return result
+
+# ✅ After: List comprehension with get() guard
+def get_active_agent_ids(agents):
+    return [a["id"] for a in agents if a.get("status") == "active"]
+```
+
+---
+
+## 🛡️ Invariant Protection Gate (NEVER SIMPLIFY)
+
+> [!CAUTION]
+> In Tadpole OS, code that appears complex often enforces critical **Dual-Pass Nexus Invariants**. You must NEVER simplify, inline, or remove code that enforces these gates:
+
+| Invariant Category | What Looks Complex | Why It MUST Be Preserved |
+|-------------------|--------------------|---------------------------|
+| **Scheduler Invariants** | Storing `tokio::task::JoinHandle` in registry tables | Prevents orphaned background tasks and enables structured shutdown. |
+| **Relational Invariants** | Multi-step child-first deletion sequences | Required when SQLite `PRAGMA foreign_keys = ON` to prevent constraint violations. |
+| **Concurrency Invariants** | Version-checking retry loops (OCC) | Prevents silent Last-Write-Wins overwrites under concurrent agent missions. |
+| **Trust Boundaries** | Redundant server-side role and quota checks | Request bodies from clients cannot be trusted; auth context must be re-verified. |
 
 ---
 
@@ -126,8 +180,17 @@ Before simplifying, ensure you understand:
 
 ### Step 4: Verify Behavior Preserved
 ```bash
-npm run test    # All existing tests still pass
-npm run build   # Still compiles
+# Node / Frontend
+npm run test           # All existing tests still pass
+npm run build          # Still compiles
+
+# Rust Backend (server-rs & src-tauri)
+cargo check --workspace
+cargo test
+
+# Sovereign Parity & Invariants
+python execution/parity_guard.py
+python execution/verify_ai_context.py
 ```
 
 ---
@@ -136,10 +199,11 @@ npm run build   # Still compiles
 
 | Situation | Why Keep Complexity |
 |---|---|
-| Performance-critical hot path | Optimization may look complex but is necessary |
-| Required by framework/library | External constraints |
-| Explicitly requested pattern | User chose this architecture |
-| Will need extension soon | Abstraction prepares for known growth |
+| **Dual-Pass Nexus Invariants** | Concurrency, scheduler tracking, relational cascades, trust checks |
+| **Performance-critical hot path** | Optimization may look complex but is necessary |
+| **Required by framework/library** | External constraints (Axum extractors, Tauri IPC, React Error Boundaries) |
+| **Explicitly requested pattern** | User chose this architecture |
+| **Will need extension soon** | Abstraction prepares for known growth |
 
 > **Ask first:** "This pattern seems over-engineered. Should I simplify it, or is there a reason for the abstraction?"
 

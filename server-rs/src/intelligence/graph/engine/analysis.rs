@@ -21,8 +21,22 @@ impl CodeSymbolGraph {
     /// Audits the graph for structural anomalies (dead code — symbols with 0
     /// incoming references, excluding configured exclusion patterns).
     pub fn find_anomalies(&self) -> Vec<String> {
+        self.find_anomalies_filtered(None)
+    }
+
+    /// Audits the graph for structural anomalies, optionally filtered by a real
+    /// workspace-relative path prefix before formatting obfuscated outputs.
+    pub fn find_anomalies_filtered(&self, path_prefix: Option<&str>) -> Vec<String> {
         tracing::debug!("[analysis] Auditing graph anomalies...");
         let mut anomalies = Vec::new();
+        let prefix_dir = path_prefix.map(|prefix| {
+            let clean = prefix.replace('\\', "/");
+            if clean.ends_with('/') {
+                (clean.clone(), clean)
+            } else {
+                (clean.clone(), format!("{}/", clean))
+            }
+        });
 
         for idx in self.graph.node_indices() {
             if let Some(node) = self.graph.node_weight(idx) {
@@ -31,6 +45,16 @@ impl CodeSymbolGraph {
                     .get(&node.path)
                     .map(|p| p.as_str())
                     .unwrap_or(&node.path);
+
+                if let Some((ref exact, ref dir)) = prefix_dir {
+                    if real_path != exact.as_str()
+                        && !real_path.starts_with(dir)
+                        && node.path != *exact
+                        && !node.path.starts_with(dir)
+                    {
+                        continue;
+                    }
+                }
 
                 if self.config.is_path_excluded(real_path) {
                     continue;

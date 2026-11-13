@@ -43,7 +43,7 @@ impl Dispatcher {
         
         // 1. Mission Tools
         let mission_handler = Arc::new(MissionHandler);
-        let mission_tools = &["share_finding", "complete_mission", "pin_mission", "search_mission_knowledge", "read_codebase_file", "propose_capability", "list_file_symbols", "get_symbol_body", "get_symbol_context", "get_impacted_tests", "send_mission_directive", "request_peer_audit", "submit_peer_review", "archive_to_global_vault", "search_global_vault", "update_working_memory", "query_financial_logs"];
+        let mission_tools = &["share_finding", "complete_mission", "pin_mission", "search_mission_knowledge", "read_codebase_file", "propose_capability", "list_file_symbols", "get_symbol_body", "get_symbol_context", "get_impacted_tests", "send_mission_directive", "request_peer_audit", "submit_peer_review", "archive_to_global_vault", "search_global_vault", "update_working_memory", "blackboard_write", "blackboard_read", "query_financial_logs"];
         
         // 2. Filesystem Tools
         let fs_handler = Arc::new(FsHandler);
@@ -140,6 +140,8 @@ impl CategoricalHandler for MissionHandler {
                 runner.handle_update_working_memory(&run_ctx, &fc, &mut output).await?;
                 Ok(output)
             }
+            "blackboard_write" => runner.handle_blackboard_write(&run_ctx, &fc).await,
+            "blackboard_read" => runner.handle_blackboard_read(&run_ctx, &fc).await,
             "query_financial_logs" => runner.handle_query_financial_logs(&run_ctx, &fc, usage).await,
             _ => Err(ToolExecutionError::ExecutionFailed(format!("MissionHandler cannot handle '{}'", name)))
         }
@@ -176,7 +178,7 @@ impl CategoricalHandler for SwarmHandler {
 
         match name {
             "spawn_subagent" => runner.handle_spawn_subagent(&run_ctx, &fc, usage).await,
-            "issue_alpha_directive" => runner.handle_alpha_directive(&run_ctx, &fc).await.map_err(ToolExecutionError::from),
+            "issue_alpha_directive" => runner.handle_alpha_directive(&run_ctx, &fc).await,
             "recruit_specialist" | "recruit" => {
                 // In the current architecture, recruit_specialist is handled by the MCP/SystemDelegate logic in mod.rs,
                 // but we bridge it here for completeness if invoked directly.

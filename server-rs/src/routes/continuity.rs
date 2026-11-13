@@ -249,13 +249,8 @@ pub async fn enable_job_handler(
     Path(job_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     let req = UpdateJobRequest {
-        name: None,
-        prompt: None,
-        workflow_id: None,
-        cron_expr: None,
-        budget_usd: None,
         enabled: Some(true),
-        max_failures: None,
+        ..Default::default()
     };
     let job = update_job(&state.resources.pool, &job_id, req)
         .await
@@ -269,13 +264,8 @@ pub async fn disable_job_handler(
     Path(job_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     let req = UpdateJobRequest {
-        name: None,
-        prompt: None,
-        workflow_id: None,
-        cron_expr: None,
-        budget_usd: None,
         enabled: Some(false),
-        max_failures: None,
+        ..Default::default()
     };
     let job = update_job(&state.resources.pool, &job_id, req).await?;
     Ok(Json(json!(job)))

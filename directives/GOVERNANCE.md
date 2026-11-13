@@ -55,4 +55,10 @@ To eliminate "hallucinated readiness" and narrative-only confirmations, the foll
 *   **Evidence Chain**: A textual affirmation of "Yes, I have tool X" is considered a **FAILED** task unless accompanied by the tool's output in the telemetry log.
 *   **Zero Trust & Loop Breakers**: All agents MUST assume their tools are unavailable until they have successfully triggered them in the current context. If a tool verification fails due to systemic or environment errors, the agent is capped at a maximum of **3 self-healing retry attempts** before pausing operations and escalating a diagnostic dossier to Entity 0.
 
+## 7. The Mandate & Attention Governance Charter
+To preserve human operator bandwidth and enforce strict permission boundaries across the dual-plane swarm:
+*   **Decoupled Authorization**: Caller authentication ("who may ask") is strictly separated from task execution parameters ("what may run"). An immutable `Mandate` is attached at task dispatch, sealing execution plane, toolbelt allowances, path boundaries, and budget caps.
+*   **The Attention Budget Rule**: Agents must adhere to the principle of minimal human attention. No unrequested status spam or raw reasoning monologue may interrupt human workflows. Agents communicate with the human operator strictly when delivering a completed artifact (`Ready`), reporting an irreconcilable blocking requirement (`Blocked`), or dropping an invalid task (`Dropped`).
+*   **Shadow Mode Governance (`Observe`)**: High-impact or exploratory continuous tasks default to `Observe` mode, producing planning artifacts and AST blast-radius evaluations without mutating production repositories or live customer data until explicitly approved.
+
 [//]: # (Metadata: [GOVERNANCE])

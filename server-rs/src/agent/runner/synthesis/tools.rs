@@ -22,6 +22,7 @@ pub const SAFE_MODE_ALLOWED_TOOLS: &[&str] = &[
     "set_confidence",
     "list_graph",
     "get_symbol",
+    "blackboard_read",
 ];
 
 impl AgentRunner {
@@ -37,11 +38,12 @@ impl AgentRunner {
             return false;
         }
 
-        // Strict Membership Filter: Only include the tool if it's in the agent's context skills or is a system core tool.
+        // Strict Membership Filter: Only include the tool if it's in the agent's context skills or is a system core/coordination tool.
         let is_core_tool = tool_name == "complete_mission"
             || tool_name == "issue_alpha_directive"
             || tool_name == "set_confidence";
-        if !is_core_tool && !ctx.skills.iter().any(|s| s == tool_name) {
+        let is_coordination_tool = matches!(tool_name, "blackboard_read" | "blackboard_write");
+        if !is_core_tool && !is_coordination_tool && !ctx.skills.iter().any(|s| s == tool_name) {
             return false;
         }
 
@@ -52,9 +54,16 @@ impl AgentRunner {
             return false;
         }
 
-        // Safe Mode Restrictions (Fail-Closed Deny-by-Default Capability Allow-List)
-        if ctx.safe_mode && !SAFE_MODE_ALLOWED_TOOLS.contains(&tool_name) {
+        // Safe / Observe Mode Restrictions (Fail-Closed Deny-by-Default Capability Allow-List)
+        if ctx.is_read_only() && !SAFE_MODE_ALLOWED_TOOLS.contains(&tool_name) {
             return false;
+        }
+
+        // Mandate Allowed-Tools Envelope Restriction
+        if let Some(ref allowed) = ctx.mandate.allowed_tools {
+            if !allowed.is_empty() && !is_core_tool && !allowed.iter().any(|t| t == tool_name) {
+                return false;
+            }
         }
 
         // Filesystem Capability Check
@@ -111,7 +120,12 @@ impl AgentRunner {
                         .iter()
                         .any(|s| s == "all" || s == "execution" || s == "operations");
                 if has_skill && !function_declarations.iter().any(|t| t.name == skill.name) {
-                    if !ctx.safe_mode || SAFE_MODE_ALLOWED_TOOLS.contains(&skill.name.as_str()) {
+                    let allowed_by_mandate = ctx
+                        .mandate
+                        .allowed_tools
+                        .as_ref()
+                        .map_or(true, |a| a.is_empty() || a.contains(&skill.name));
+                    if allowed_by_mandate && (!ctx.is_read_only() || SAFE_MODE_ALLOWED_TOOLS.contains(&skill.name.as_str())) {
                         function_declarations.push(FunctionDeclaration {
                             name: skill.name.clone(),
                             description: skill.description.clone(),
@@ -140,8 +154,8 @@ impl AgentRunner {
             });
         }
 
-        // 4. Dynamic MCP Tools (Strictly disabled in safe mode; enforced by namespace & ACL)
-        if !ctx.safe_mode {
+        // 4. Dynamic MCP Tools (Strictly disabled in safe/observe mode; enforced by namespace & ACL)
+        if !ctx.is_read_only() {
             let mcp_tools = self
                 .state
                 .registry

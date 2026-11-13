@@ -127,6 +127,7 @@ pub enum MissionStatus {
     Failed,
     Paused,
     Suspended,
+    Dropped,
 }
 
 /// ### 📡 Protocol: RoleAuthorityLevel
@@ -189,6 +190,56 @@ pub enum ExecutionPlane {
 impl Default for ExecutionPlane {
     fn default() -> Self {
         Self::EngineMaintenance
+    }
+}
+
+/// ### 📜 Protocol: AcceptMode
+/// Governs operational side-effect permissions:
+/// - Auto: Fully autonomous mutation within Mandate boundaries.
+/// - Observe: Shadow execution mode. Plans, simulates blast radius, and writes audit receipts without mutating external systems.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum AcceptMode {
+    #[serde(alias = "auto")]
+    Auto,
+    #[serde(alias = "observe")]
+    Observe,
+}
+
+impl Default for AcceptMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+/// ### 📜 Protocol: Mandate
+/// Immutable execution envelope decoupling caller authorization ("who may ask")
+/// from runtime execution scope ("what may run").
+/// Strictly bounds Plane 1 (EngineMaintenance) and Plane 2 (SmbDigitalTwin) execution.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Mandate {
+    pub execution_plane: ExecutionPlane,
+    pub accept_mode: AcceptMode,
+    #[serde(default)]
+    pub allowed_tools: Option<Vec<String>>,
+    #[serde(default)]
+    pub path_boundary: Option<String>,
+    pub budget_usd: f64,
+    #[serde(default)]
+    pub delivery_target: Option<String>,
+}
+
+impl Default for Mandate {
+    fn default() -> Self {
+        Self {
+            execution_plane: ExecutionPlane::default(),
+            accept_mode: AcceptMode::default(),
+            allowed_tools: None,
+            path_boundary: None,
+            budget_usd: 0.10,
+            delivery_target: None,
+        }
     }
 }
 
@@ -686,6 +737,8 @@ pub struct ToolContext {
     pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
     pub accounting: std::sync::Arc<crate::agent::runner::accounting::MissionAccounting>,
     pub execution_plane: ExecutionPlane,
+    pub accept_mode: AcceptMode,
+    pub mandate: Mandate,
 }
 
 impl ToolContext {
@@ -715,6 +768,8 @@ impl ToolContext {
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::default()),
             accounting: std::sync::Arc::new(crate::agent::runner::accounting::MissionAccounting::default()),
             execution_plane: ExecutionPlane::default(),
+            accept_mode: AcceptMode::default(),
+            mandate: Mandate::default(),
         }
     }
 }
@@ -727,6 +782,8 @@ pub struct RunnerPolicy {
     pub preflight_checks: Vec<String>,
     #[serde(default)]
     pub sme_auto_workflow: bool,
+    #[serde(default)]
+    pub cascade_routing: bool,
 }
 
 impl Default for RunnerPolicy {
@@ -736,6 +793,7 @@ impl Default for RunnerPolicy {
             resume_blocked_first: true,
             preflight_checks: vec!["context_version".to_string(), "skill_updates".to_string()],
             sme_auto_workflow: false,
+            cascade_routing: false,
         }
     }
 }
@@ -1091,9 +1149,14 @@ impl EngineAgent {
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
             execution_plane: ExecutionPlane::default(),
+            accept_mode: AcceptMode::default(),
+            mandate: Mandate::default(),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
             conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
+            root_mission_id: "system-internal".to_string(),
+            cascade_routing: self.runner_policy.cascade_routing,
+            cancel_handle: crate::agent::swarm_orchestrator::MissionHandle::new("system-internal"),
         }
     }
 }
@@ -1141,6 +1204,34 @@ pub struct TaskPayload {
     pub auto_resume: Option<bool>,
     #[serde(default, alias = "executionPlane")]
     pub execution_plane: Option<ExecutionPlane>,
+    #[serde(default, alias = "acceptMode")]
+    pub accept_mode: Option<AcceptMode>,
+    #[serde(default)]
+    pub mandate: Option<Mandate>,
+    #[serde(default, alias = "workflowId")]
+    pub workflow_id: Option<String>,
+    #[serde(default, alias = "cascadeRouting")]
+    pub cascade_routing: Option<bool>,
+    #[serde(default, alias = "rootMissionId")]
+    pub root_mission_id: Option<String>,
+}
+
+impl TaskPayload {
+    /// Resolves an immutable Mandate from explicit parameters or synthesizes one safely.
+    pub fn resolved_mandate(&self) -> Mandate {
+        if let Some(ref m) = self.mandate {
+            m.clone()
+        } else {
+            Mandate {
+                execution_plane: self.execution_plane.unwrap_or_default(),
+                accept_mode: self.accept_mode.unwrap_or_default(),
+                allowed_tools: self.enabled_skills.clone(),
+                path_boundary: None,
+                budget_usd: self.budget_usd.unwrap_or(0.10),
+                delivery_target: self.primary_goal.clone(),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]

@@ -61,6 +61,10 @@ pub struct CommunicationHub {
     pub active_runners: DashMap<String, RunnerHandle>,
     /// Retains received usage and owning run identity through cancellation/storage failures.
     pub mission_contexts: DashMap<String, crate::agent::runner::RunContext>,
+    /// Cooperative cancellation handles for active missions and spawned sub-agent trees.
+    pub mission_handles: DashMap<String, crate::agent::swarm_orchestrator::MissionHandle>,
+    /// Mission-partitioned O(1) SharedBlackboard for parallel agent synthesis & handoff.
+    pub blackboard: Arc<crate::agent::blackboard::SharedBlackboard>,
     /// Monotonic sequence counter for outbound engine events.
     pub event_sequence: std::sync::atomic::AtomicU64,
 }

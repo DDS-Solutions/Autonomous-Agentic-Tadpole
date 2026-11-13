@@ -101,9 +101,14 @@ pub struct RunContext {
     pub resource_weights: std::collections::HashMap<String, f32>,
     pub security_policy: serde_json::Value,
     pub execution_plane: crate::agent::types::ExecutionPlane,
+    pub accept_mode: crate::agent::types::AcceptMode,
+    pub mandate: crate::agent::types::Mandate,
     pub active_node_id: std::sync::Arc<parking_lot::Mutex<Option<String>>>,
     pub conflict: std::sync::Arc<crate::security::conflict::ConflictManager>,
     pub metrics: std::sync::Arc<crate::agent::runner::execution_metrics::ExecutionMetrics>,
+    pub root_mission_id: String,
+    pub cascade_routing: bool,
+    pub cancel_handle: crate::agent::swarm_orchestrator::MissionHandle,
 }
 
 impl Default for RunContext {
@@ -148,14 +153,32 @@ impl Default for RunContext {
             resource_weights: std::collections::HashMap::new(),
             security_policy: serde_json::json!({}),
             execution_plane: crate::agent::types::ExecutionPlane::default(),
+            accept_mode: crate::agent::types::AcceptMode::default(),
+            mandate: crate::agent::types::Mandate::default(),
             active_node_id: std::sync::Arc::new(parking_lot::Mutex::new(None)),
             conflict: std::sync::Arc::new(crate::security::conflict::ConflictManager::new()),
             metrics: std::sync::Arc::new(crate::agent::runner::execution_metrics::ExecutionMetrics::new()),
+            root_mission_id: "default-mission".to_string(),
+            cascade_routing: false,
+            cancel_handle: crate::agent::swarm_orchestrator::MissionHandle::new("default-mission"),
         }
     }
 }
 
 impl RunContext {
+    /// Returns true whenever mutations are prohibited (either legacy Safe Mode or Shadow/Observe mode).
+    pub fn is_read_only(&self) -> bool {
+        self.safe_mode || self.accept_mode == crate::agent::types::AcceptMode::Observe
+    }
+
+    /// Returns the shared swarm root mission ID used to partition `SharedBlackboard` entries.
+    pub fn blackboard_scope(&self) -> &str {
+        if self.depth == 0 || self.root_mission_id.trim().is_empty() {
+            &self.mission_id
+        } else {
+            &self.root_mission_id
+        }
+    }
 
     pub fn derive_subtask_payload(&self, message: String) -> TaskPayload {
         TaskPayload {
@@ -191,6 +214,10 @@ impl RunContext {
             structured_output: Some(false),
             primary_goal: self.primary_goal.clone(),
             execution_plane: Some(self.execution_plane),
+            accept_mode: Some(self.accept_mode),
+            mandate: Some(self.mandate.clone()),
+            cascade_routing: Some(self.cascade_routing),
+            root_mission_id: Some(self.blackboard_scope().to_string()),
             ..Default::default()
         }
     }
@@ -198,6 +225,11 @@ impl RunContext {
     /// Creates a partial RunContext from an isolated ToolContext.
     /// Used for bridging between Zero-Trust tools and legacy AgentRunner handlers.
     pub fn from_tool_ctx(ctx: &crate::agent::runner::tools::ToolContext) -> Self {
+        if let Some(live_ctx) = ctx.state.comms.mission_contexts.get(&ctx.mission_id) {
+            if live_ctx.agent_id == ctx.agent_id {
+                return live_ctx.clone();
+            }
+        }
         let agent = ctx
             .state
             .registry
@@ -245,14 +277,9 @@ impl RunContext {
             budget_usd: ctx.budget_usd,
             budget_limit_usd: ctx.budget_limit_usd,
             security_policy: ctx.security_policy.clone(),
-            execution_plane: if department.eq_ignore_ascii_case("smb")
-                || department.eq_ignore_ascii_case("business")
-                || department.eq_ignore_ascii_case("digital-twin")
-            {
-                crate::agent::types::ExecutionPlane::SmbDigitalTwin
-            } else {
-                crate::agent::types::ExecutionPlane::EngineMaintenance
-            },
+            execution_plane: ctx.execution_plane,
+            accept_mode: ctx.accept_mode,
+            mandate: ctx.mandate.clone(),
             trace_id: ctx.trace_id.clone(),
             traceparent: Some(ctx.trace_id.clone()),
             model_config,
@@ -317,7 +344,13 @@ struct MissionCleanupGuard {
 
 impl Drop for MissionCleanupGuard {
     fn drop(&mut self) {
-        if let Some(ctx) = &self.ctx { ctx.accounting.finish(); }
+        if let Some(ctx) = &self.ctx {
+            ctx.accounting.finish();
+            if !self.completed {
+                ctx.cancel_handle.abort();
+            }
+            self.runner.state.comms.mission_handles.remove(&ctx.mission_id);
+        }
         if !self.completed {
             if let Some(ref ctx) = self.ctx {
                 let runner = self.runner.clone();
@@ -559,6 +592,12 @@ impl AgentRunner {
         let ctx = self
             .prepare_run_context(&agent_id, &payload, &mission_id, depth, &lineage)
             .await?;
+        self.state
+            .comms
+            .mission_handles
+            .insert(ctx.mission_id.clone(), ctx.cancel_handle.clone());
+        let _blackboard_scope = (depth == 0)
+            .then(|| self.state.comms.blackboard.scoped_mission(ctx.blackboard_scope()));
         cleanup_guard.ctx = Some(ctx.clone());
 
         // Phase 2: Preflight Checks validation
@@ -784,6 +823,12 @@ mod tests {
             mission_id: "mission-123".to_string(),
             depth: 1,
             lineage: vec!["grandparent".to_string()],
+            accept_mode: crate::agent::types::AcceptMode::Observe,
+            mandate: crate::agent::types::Mandate {
+                accept_mode: crate::agent::types::AcceptMode::Observe,
+                path_boundary: Some("src/".to_string()),
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -793,6 +838,8 @@ mod tests {
         assert_eq!(payload.cluster_id, Some("mission-123".to_string()));
         assert_eq!(payload.swarm_depth, Some(2));
         assert_eq!(payload.swarm_lineage, Some(vec!["grandparent".to_string(), "parent".to_string()]));
+        assert_eq!(payload.accept_mode, Some(crate::agent::types::AcceptMode::Observe));
+        assert_eq!(payload.mandate.as_ref().and_then(|m| m.path_boundary.as_deref()), Some("src/"));
     }
 
     #[tokio::test]

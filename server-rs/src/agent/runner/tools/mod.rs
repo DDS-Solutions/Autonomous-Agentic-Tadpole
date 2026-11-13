@@ -149,16 +149,27 @@ impl AgentRunner {
             )));
         }
 
-        if ctx.safe_mode {
+        if ctx.is_read_only() {
             let is_mutation = fc.name.contains("write")
+                || fc.name.contains("edit")
+                || fc.name.contains("patch")
+                || fc.name.contains("create")
                 || fc.name.contains("delete")
                 || fc.name.contains("execute")
                 || fc.name.contains("run")
-                || fc.name == "spawn_agent";
+                || fc.name == "spawn_agent"
+                || fc.name == "spawn_subagent"
+                || fc.name == "recruit_specialist"
+                || fc.name == "database_migration";
             if is_mutation {
+                let mode_label = if ctx.accept_mode == crate::agent::types::AcceptMode::Observe {
+                    "Observe (Shadow) mode"
+                } else {
+                    "Safe mode"
+                };
                 return Err(ToolExecutionError::SecurityBlocked(format!(
-                    "Safe mode active: mutation tool '{}' is blocked for agent '{}'",
-                    fc.name, ctx.agent_id
+                    "{} active: mutation tool '{}' is blocked for agent '{}'",
+                    mode_label, fc.name, ctx.agent_id
                 )));
             }
         }
@@ -313,6 +324,8 @@ impl AgentRunner {
             metrics: ctx.metrics.clone(),
             accounting: ctx.accounting.clone(),
             execution_plane: ctx.execution_plane,
+            accept_mode: ctx.accept_mode,
+            mandate: ctx.mandate.clone(),
         }
     }
 
@@ -778,6 +791,79 @@ impl AgentRunner {
         Ok(())
     }
 
+    /// Writes a key (supports `base#facet` composite syntax) to the mission-partitioned SharedBlackboard.
+    pub(crate) async fn handle_blackboard_write(
+        &self,
+        ctx: &RunContext,
+        fc: &crate::agent::types::ToolCall,
+    ) -> Result<String, ToolExecutionError> {
+        let key = fc
+            .args
+            .get("key")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| ToolExecutionError::ExecutionFailed("'key' must be a non-empty string".to_string()))?;
+        let value = fc
+            .args
+            .get("value")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let tags: Vec<String> = fc
+            .args
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(ToString::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let scope = ctx.blackboard_scope();
+        let entry = self
+            .state
+            .comms
+            .blackboard
+            .set(scope, key, value, &ctx.agent_id, tags);
+        Ok(format!(
+            "Blackboard key '{}' updated (scope: '{}', version: {})",
+            entry.key, scope, entry.version
+        ))
+    }
+
+    /// Reads a key (`base#facet` supported) or lists entries (optionally filtered by tag) from SharedBlackboard.
+    pub(crate) async fn handle_blackboard_read(
+        &self,
+        ctx: &RunContext,
+        fc: &crate::agent::types::ToolCall,
+    ) -> Result<String, ToolExecutionError> {
+        let scope = ctx.blackboard_scope();
+        if let Some(key) = fc
+            .args
+            .get("key")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return match self.state.comms.blackboard.get(scope, key) {
+                Some(entry) => serde_json::to_string_pretty(&*entry)
+                    .map_err(|e| ToolExecutionError::ExecutionFailed(e.to_string())),
+                None => Ok(format!("Blackboard key '{}' not found in scope '{}'", key, scope)),
+            };
+        }
+
+        let tag_filter = fc.args.get("tag").and_then(|v| v.as_str());
+        let entries = self.state.comms.blackboard.list(scope, tag_filter);
+        if entries.is_empty() {
+            return Ok(format!("No blackboard entries found in scope '{}'", scope));
+        }
+        let values: Vec<&crate::agent::blackboard::BlackboardEntry> =
+            entries.iter().map(|e| e.as_ref()).collect();
+        serde_json::to_string_pretty(&values)
+            .map_err(|e| ToolExecutionError::ExecutionFailed(e.to_string()))
+    }
+
     /// Recursively executes a batch of tool calls provided by the LLM.
     /// 
     /// ### ⏩ Efficiency Engine
@@ -1126,6 +1212,15 @@ mod tests {
             .expect_err("Mutation tool in safe_mode must be blocked");
         assert!(err_safe.to_string().contains("Safe mode active"));
 
+        // Observe mode blocks mutation tools even with safe_mode disabled
+        ctx.safe_mode = false;
+        ctx.accept_mode = crate::agent::types::AcceptMode::Observe;
+        assert!(AgentRunner::validate_pre_execution_guards(&ctx, &read_fc, &valid_token).is_ok());
+        let err_observe = AgentRunner::validate_pre_execution_guards(&ctx, &write_fc, &valid_token)
+            .expect_err("Mutation tool in Observe mode must be blocked");
+        assert!(err_observe.to_string().contains("Observe (Shadow) mode active"));
+        ctx.accept_mode = crate::agent::types::AcceptMode::Auto;
+
         // (c) Edge Case Path: exact budget ceiling boundary (current_cost_usd == budget_limit_usd)
         ctx.safe_mode = false;
         ctx.current_cost_usd = 5.00;
@@ -1191,6 +1286,68 @@ mod tests {
         // In default configuration (no Docker, no Wasm, host fallback false), shell execution is denied
         // Note: Oversight might prompt first if required, or if rejected by Oversight/Sandbox
         assert!(output.contains("REJECTED by Oversight") || output.contains("Unsandboxed shell execution on host is disabled by default") || output.contains("SHELL OUTPUT"));
+    }
+
+    #[tokio::test]
+    async fn test_blackboard_tools_facet_write_read_and_observe_block() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        let runner = AgentRunner::new(state.clone());
+
+        let mut parent_ctx = RunContext::default();
+        parent_ctx.agent_id = "worker-a".to_string();
+        parent_ctx.mission_id = "root-bb-mission".to_string();
+        parent_ctx.root_mission_id = "root-bb-mission".to_string();
+        parent_ctx.depth = 1;
+
+        let mut sibling_ctx = RunContext::default();
+        sibling_ctx.agent_id = "worker-b".to_string();
+        sibling_ctx.mission_id = "child-b-mission".to_string();
+        sibling_ctx.root_mission_id = "root-bb-mission".to_string();
+        sibling_ctx.depth = 1;
+        sibling_ctx.accept_mode = crate::agent::types::AcceptMode::Observe;
+
+        // Scope cleanup verification on drop
+        let scope_guard = state.comms.blackboard.scoped_mission("root-bb-mission");
+
+        let write_fc = ToolCall {
+            name: "blackboard_write".to_string(),
+            args: serde_json::json!({
+                "key": "findings#arch",
+                "value": { "status": "ok", "modules": 4 },
+                "tags": ["architecture"]
+            }),
+        };
+        let mut write_out = String::new();
+        let mut usage = None;
+        runner
+            .execute_tool(&parent_ctx, &write_fc, &mut write_out, &mut usage, "")
+            .await
+            .unwrap();
+        assert!(write_out.contains("version: 1"));
+
+        // Sibling in Observe mode can read the facet written by worker-a...
+        let read_fc = ToolCall {
+            name: "blackboard_read".to_string(),
+            args: serde_json::json!({ "key": "findings#arch" }),
+        };
+        let mut read_out = String::new();
+        runner
+            .execute_tool(&sibling_ctx, &read_fc, &mut read_out, &mut usage, "")
+            .await
+            .unwrap();
+        assert!(read_out.contains("\"modules\": 4"));
+
+        // ...but Observe mode blocks blackboard_write as a mutation tool.
+        let mut blocked_out = String::new();
+        runner
+            .execute_tool(&sibling_ctx, &write_fc, &mut blocked_out, &mut usage, "")
+            .await
+            .unwrap();
+        assert!(blocked_out.contains("Observe (Shadow) mode active: mutation tool 'blackboard_write' is blocked"));
+
+        // Dropping scope guard cleans up the root mission partition
+        drop(scope_guard);
+        assert!(state.comms.blackboard.get("root-bb-mission", "findings").is_none());
     }
 }
 
