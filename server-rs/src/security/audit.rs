@@ -364,7 +364,7 @@ impl MerkleAuditTrail {
             let preceding_hash: Option<String> = sqlx::query_scalar(
                 "SELECT current_hash FROM audit_trail WHERE (timestamp < ?1) OR (timestamp = ?1 AND id != ?2) ORDER BY timestamp DESC, rowid DESC LIMIT 1",
             )
-            .bind(&first.timestamp)
+            .bind(first.timestamp)
             .bind(&first.id)
             .fetch_optional(&self.pool)
             .await?;

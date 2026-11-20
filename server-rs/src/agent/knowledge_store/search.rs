@@ -46,21 +46,17 @@ impl KnowledgeStore {
                     .await?
             };
 
-            // Build the LanceDB WHERE predicate from the request filters.
-            // LanceDB supports SQL-like predicates via `.only_if()`.
+            // Build the LanceDB WHERE predicate using ONLY columns present in VectorMemory::get_schema()
+            // (`id`, `text`, `mission_id`, `timestamp`, `vector`). `confidence`, `ttl`, `cluster_id`,
+            // and `concept_type` live in SQLite `knowledge_store_meta` and are enforced during hydration below.
             let now_unix = chrono::Utc::now().timestamp();
-            let mut predicates: Vec<String> = vec![
-                format!("confidence >= {}", min_confidence),
-                format!("(ttl IS NULL OR ttl > {})", now_unix),
-            ];
+            let mut predicates: Vec<String> = Vec::new();
             if let Some(topic) = &req.topic {
                 // topic is lowercased on write, enforce here too; escape single quotes for predicate safety.
                 let safe_topic = topic.to_lowercase().replace('\'', "''");
                 predicates.push(format!("mission_id = '{}'", safe_topic));
             }
             if let Some(cluster) = &req.cluster_id {
-                // cluster_id is not in LanceDB schema — this filter is applied in SQLite
-                // hydration below. LanceDB only stores id, text, mission_id, timestamp, vector.
                 let _ = cluster;
             }
             let predicate = predicates.join(" AND ");
@@ -68,9 +64,10 @@ impl KnowledgeStore {
             let lance = self.get_lance().await?;
             let _ = lance.ensure_table().await?;
 
-            // Use internal LanceDB filtering to avoid the lossy Rust set intersection.
+            // Over-fetch candidates so SQLite confidence/TTL/cluster filtering still yields up to `limit` rows.
+            let candidate_limit = (limit as usize).saturating_mul(4).clamp(16, 400);
             let hits = lance
-                .search_knowledge_filtered(query_vector, limit as usize, &predicate)
+                .search_knowledge_filtered(query_vector, candidate_limit, &predicate)
                 .await?;
 
             if hits.is_empty() {

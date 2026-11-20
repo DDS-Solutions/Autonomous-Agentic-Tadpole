@@ -10,7 +10,7 @@
 //! - **Trace Scope**: `server-rs::routes::templates::tests`
 
 #[cfg(test)]
-mod tests {
+mod suite {
     use super::super::models::{InstallReceipt, InstallTemplateRequest};
     use super::super::security::{
         parse_expected_skill_hash, redact_url, validate_install_request,

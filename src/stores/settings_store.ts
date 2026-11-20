@@ -98,6 +98,8 @@ export const settings_storage = {
 export type ThemeOption = 'zinc' | 'slate' | 'neutral';
 export type DensityOption = 'compact' | 'comfortable';
 export type BackdropThemeOption = 'cyan' | 'emerald' | 'nebula' | 'slate' | 'amber';
+export type CockpitMode = 'focus' | 'expert';
+export type ModelTierPreset = 'local_sovereign' | 'hybrid_overlord' | 'cloud_max';
 
 export type Tadpole_OS_Settings = Tadpole_Settings;
 
@@ -121,6 +123,9 @@ export interface Tadpole_Settings {
     computer_architect_url: string;
     enable_neural_handoff: boolean;
     sentinel_mode: boolean;
+    cockpit_mode: CockpitMode;
+    onboarding_completed: boolean;
+    active_tier_preset: ModelTierPreset;
 }
 
 interface Settings_State {
@@ -194,6 +199,9 @@ export const get_default_settings = (): Tadpole_Settings => ({
     computer_architect_url: 'http://localhost:11434',
     enable_neural_handoff: true,
     sentinel_mode: false,
+    cockpit_mode: 'focus',
+    onboarding_completed: false,
+    active_tier_preset: 'hybrid_overlord',
 });
 
 /** is_valid_url - Validates a URL string for HTTP/HTTPS protocols. */
@@ -332,15 +340,25 @@ export const use_settings_store = create<Settings_State>()(
                 };
             },
 
-            // Universal Migrations: sanitize settings across all schema versions
-            migrate: (persisted_state: unknown) => {
+            // Universal Migrations: sanitize settings across all schema versions.
+            // Pre-v2 persisted settings belong to existing power users -> preserve 'expert' mode
+            // and skip the fresh-install onboarding wizard.
+            migrate: (persisted_state: unknown, version: number) => {
                 const state = persisted_state as Settings_State;
                 if (state && state.settings) {
-                    state.settings = sanitize_settings(state.settings);
+                    const raw = state.settings as Partial<Tadpole_Settings>;
+                    const is_legacy_existing_user = version < 2 && raw.cockpit_mode === undefined;
+                    state.settings = sanitize_settings({
+                        ...get_default_settings(),
+                        ...raw,
+                        cockpit_mode: raw.cockpit_mode ?? (is_legacy_existing_user ? 'expert' : 'focus'),
+                        onboarding_completed: raw.onboarding_completed ?? is_legacy_existing_user,
+                        active_tier_preset: raw.active_tier_preset ?? 'hybrid_overlord',
+                    });
                 }
                 return state;
             },
-            version: 1,
+            version: 2,
         }
     )
 );

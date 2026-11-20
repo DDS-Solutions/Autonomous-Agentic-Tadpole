@@ -29,6 +29,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import Ops_Dashboard from './Ops_Dashboard';
 import { agents as mock_agents } from '../data/mock_agents';
@@ -194,7 +195,7 @@ describe('Ops_Dashboard', () => {
     });
 
     it('renders dashboard shell with metrics and nodes', async () => {
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
 
         expect(screen.getByText('stats.active_swarm')).toBeInTheDocument();
         expect(screen.getByText('stats.swarm_cost')).toBeInTheDocument();
@@ -202,7 +203,7 @@ describe('Ops_Dashboard', () => {
 
     it('handles skill trigger interaction with multiple slots', async () => {
         const { tadpole_os_service } = await import('../services/tadpoleos_service');
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
 
         await waitFor(() => screen.getByTestId('node-1'));
         
@@ -226,7 +227,7 @@ describe('Ops_Dashboard', () => {
     });
 
     it('handles role changes', async () => {
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
         await waitFor(() => screen.getByTestId('node-1'));
 
         const node_1 = screen.getByTestId('node-1');
@@ -239,7 +240,7 @@ describe('Ops_Dashboard', () => {
     });
 
     it('handles model changes', async () => {
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
         await waitFor(() => screen.getByTestId('node-1'));
 
         const node_1 = screen.getByTestId('node-1');
@@ -251,7 +252,7 @@ describe('Ops_Dashboard', () => {
     });
 
     it('opens and closes config panel', async () => {
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
         await waitFor(() => screen.getByTestId('node-1'));
 
         const node_1 = screen.getByTestId('node-1');
@@ -270,7 +271,7 @@ describe('Ops_Dashboard', () => {
         vi.mocked(tadpole_os_service.send_command).mockRejectedValueOnce(new Error('Skill Error'));
         
         const console_spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        render(<Ops_Dashboard />);
+        render(<MemoryRouter><Ops_Dashboard /></MemoryRouter>);
 
         await waitFor(() => screen.getByTestId('node-1'));
         

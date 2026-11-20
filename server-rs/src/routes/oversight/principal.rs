@@ -13,7 +13,7 @@ use axum::{extract::FromRequestParts, http::request::Parts};
 use std::collections::HashSet;
 
 use crate::error::AppError;
-use crate::middleware::auth::AuthenticatedOperator;
+use crate::middleware::auth::{AuthenticatedOperator, OperatorScope};
 
 /// Number of trailing audit records verified by `GET /v1/oversight/security/integrity`.
 pub const INTEGRITY_VERIFY_WINDOW: usize = 50;
@@ -50,6 +50,8 @@ pub const MAX_IDENTIFIER_LEN: usize = 128;
 pub struct OversightPrincipal {
     /// Verified operator identifier recorded in `oversight_log.decided_by` and `audit_trail.user_id`.
     pub id: String,
+    /// Server-verified privilege tier (`ReadOnly` / `Operator` / `Admin`).
+    pub scope: OperatorScope,
     /// Optional mission/cluster scope whitelist. `None` grants global operator authority.
     pub allowed_missions: Option<HashSet<String>>,
 }
@@ -59,6 +61,16 @@ impl OversightPrincipal {
     pub fn global(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
+            scope: OperatorScope::Admin,
+            allowed_missions: None,
+        }
+    }
+
+    /// Constructs a global principal with an explicit server-verified scope.
+    pub fn with_scope(id: impl Into<String>, scope: OperatorScope) -> Self {
+        Self {
+            id: id.into(),
+            scope,
             allowed_missions: None,
         }
     }
@@ -71,6 +83,7 @@ impl OversightPrincipal {
     {
         Self {
             id: id.into(),
+            scope: OperatorScope::Operator,
             allowed_missions: Some(missions.into_iter().map(Into::into).collect()),
         }
     }
@@ -88,6 +101,12 @@ impl OversightPrincipal {
     /// Verifies that the principal is authorized for global (cluster-wide) settings/policy mutations.
     pub fn authorize_global(&self) -> Result<&str, AppError> {
         let id = self.ensure_authenticated()?;
+        if self.scope < OperatorScope::Admin {
+            return Err(AppError::Forbidden(format!(
+                "Principal '{}' has {:?} scope and cannot mutate global governance policy (Admin required)",
+                id, self.scope
+            )));
+        }
         if let Some(ref allowed) = self.allowed_missions {
             if !allowed.contains("*") {
                 return Err(AppError::Forbidden(format!(
@@ -136,13 +155,18 @@ where
         }
         if let Some(identity) = parts.extensions.get::<crate::middleware::auth::OperatorIdentity>() {
             if let Some(ref allowed) = identity.allowed_missions {
-                return Ok(OversightPrincipal::scoped(&identity.name, allowed.clone()));
+                let mut principal = OversightPrincipal::scoped(&identity.name, allowed.clone());
+                principal.scope = identity.scope;
+                return Ok(principal);
             } else {
-                return Ok(OversightPrincipal::global(&identity.name));
+                return Ok(OversightPrincipal::with_scope(&identity.name, identity.scope));
             }
         }
         if parts.extensions.get::<AuthenticatedOperator>().is_some() {
-            return Ok(OversightPrincipal::global("authenticated_operator"));
+            return Ok(OversightPrincipal::with_scope(
+                "authenticated_operator",
+                OperatorScope::Operator,
+            ));
         }
         Err(AppError::Unauthorized(
             "Authentication required: missing verified operator principal".to_string(),

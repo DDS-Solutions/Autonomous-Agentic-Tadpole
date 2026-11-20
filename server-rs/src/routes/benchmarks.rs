@@ -102,6 +102,76 @@ pub async fn trigger_benchmark(
     Ok(Json(result))
 }
 
+/// POST /v1/benchmarks/readiness
+/// Executes the 4-probe native Overlord Readiness check (DB, Providers, Guardrails, Fleet).
+#[tracing::instrument(skip(state), name = "metrics::readiness_probe")]
+pub async fn run_readiness_probe(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let report = benchmarks::run_readiness_probe(state).await?;
+    Ok(Json(report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::router::create_router;
+    use axum::body::Body;
+    use axum::http::{header, Request};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_readiness_probe_happy_and_auth_paths() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        state.notify_boot_complete();
+        let state_for_assert = Arc::clone(&state);
+        let token = state.security.deploy_token.clone();
+        let app = create_router(state);
+
+        // Failure Path: Unauthenticated request rejected with 401
+        let unauth = Request::builder()
+            .method("POST")
+            .uri("/v1/benchmarks/readiness")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(unauth).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Happy Path: Authenticated request returns structured readiness report
+        let authed = Request::builder()
+            .method("POST")
+            .uri("/v1/benchmarks/readiness")
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(authed).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(res.into_body(), 100_000).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(json["score"].as_u64().is_some());
+        assert_eq!(json["checks"].as_array().unwrap().len(), 4);
+        assert!(json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "guardrail_integrity" && c["status"] == "pass"));
+        // Verify PRAGMA journal_mode is reported in database_integrity check
+        let db_check = json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "database_integrity")
+            .unwrap();
+        assert!(db_check["detail"].as_str().unwrap().contains("journal_mode ="));
+        // Verify readiness probe does not pollute the benchmarks table
+        let bench_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM benchmarks WHERE test_id = 'overlord-readiness'")
+            .fetch_one(&state_for_assert.resources.pool)
+            .await
+            .unwrap_or(-1);
+        assert_eq!(bench_count, 0, "Readiness probe must not pollute benchmarks table");
+    }
+}
+
 
 
 // Metadata: [benchmarks]

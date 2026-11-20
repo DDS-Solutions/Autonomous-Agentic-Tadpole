@@ -134,6 +134,14 @@ The Model Management interface surfaces quota and expenditure boundaries through
 - **Interactive Tooltip Standard**: All rate limit and pricing fields require high-contrast floating `Tooltip` components (`position="top"`, glassmorphic zinc styling `bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-xl`) and dual-bound `title` + `aria-label` tags for screen-reader and keyboard accessibility.
 - **Micro-Animations & Color Accents**: Rate cards utilize `color-mix(in srgb, var(--zinc-900) 80%, transparent)` backgrounds, subtle `hover:border-zinc-700` transitions, and emerald highlight states when customized values diverge from provider defaults.
 
+### 5. Overlord Command & Onboarding Patterns
+To keep Day-1 onboarding effortless and Expert operations keyboard-velocity fast without violating Neural Glass minimalism:
+- **First-Run Setup Wizard (`src/components/onboarding/FirstRun_Wizard.tsx`)**: Floating modal overlay (`bg-zinc-950/80 backdrop-blur-md`) framing a `rounded-xl` `bg-zinc-900/95 border border-zinc-800` 4-step workflow (Connect, Model Tier Preset, Guardrails, Pre-Flight Readiness). Accepts session tokens strictly in memory (`INV-SEC-002`) with emerald focus rings (`focus:ring-emerald-500`).
+- **Progressive Cockpit Toggle (`src/components/layout/Sidebar.tsx`)**: Segmented `Focus` (6 core views) vs `Expert` (all 18 grouped views) toggle inside the fixed `260px` sidebar (`lg:w-[260px]`), bound to `Ctrl+Shift+E` and Command Palette verbs.
+- **Overlord Inbox Bar (`src/components/layout/Overlord_Inbox_Bar.tsx`)**: Pinned right inside the `h-8` `Ticker_Header`, displaying `INBOX N`, active cockpit mode (`focus`/`expert`), and quick wizard launch in `text-[10px] font-mono uppercase tracking-wider` badges.
+- **Overlord Readiness Card (`src/components/model/Readiness_Card.tsx`)**: Sovereign Panel (`color-mix(in srgb, #18181b 65%, transparent)`) surfacing `POST /v1/benchmarks/readiness` composite score (`0–100`), Cyber Green (`#22c55e`) pass indicators, latency telemetry in JetBrains Mono, and inline amber remediation pills.
+- **Oversight Risk Tier Badges & Flight Strip (`src/pages/Oversight_Dashboard.tsx`, `src/pages/Ops_Dashboard.tsx`)**: Pending actions carry explicit `LOW` (emerald), `MEDIUM` (amber), and `HIGH` (rose) risk pills alongside `j/k/a/r/g/Shift+A` keyboard triage cues; blocking browser `confirm`/`prompt`/`alert` dialogs are prohibited in favor of `Confirm_Dialog` and `Toast_Center`.
+
 ## Do's and Don'ts
 - **Do:** Use `color-mix` for sophisticated transparency.
 - **Do:** Maintain high contrast for all telemetry data.

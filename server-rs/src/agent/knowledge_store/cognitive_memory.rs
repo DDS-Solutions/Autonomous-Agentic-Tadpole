@@ -91,7 +91,7 @@ async fn consolidate_agent(
         let rows = sqlx::query(
             "SELECT id, text FROM fallback_memories WHERE agent_id = ? AND mission_id = 'manual' ORDER BY created_at ASC, id LIMIT ?"
         )
-        .bind(&agent_id)
+        .bind(agent_id)
         .bind(MAX_CONSOLIDATION_MEMORIES as i64)
         .fetch_all(&state.resources.pool)
         .await
@@ -116,10 +116,10 @@ async fn consolidate_agent(
             }
 
             // Summarize via default LLM
-            let (consolidated_text, usage, cost) = summarize_memories(state, &agent_id, &memory_texts).await?;
-            state.security.budget_guard.record_usage(&agent_id, cost).await.map_err(|error| AppError::InternalServerError(error.to_string()))?;
+            let (consolidated_text, usage, cost) = summarize_memories(state, agent_id, &memory_texts).await?;
+            state.security.budget_guard.record_usage(agent_id, cost).await.map_err(|error| AppError::InternalServerError(error.to_string()))?;
             let memories: Vec<_> = ids.into_iter().zip(memory_texts).collect();
-            let new_id = persist_consolidation(state, &agent_id, &memories, &consolidated_text, usage, cost).await?;
+            let new_id = persist_consolidation(state, agent_id, &memories, &consolidated_text, usage, cost).await?;
 
             tracing::info!(
                 "🧠 [CognitiveMemory] Consolidating memories completed for agent {}. New entry ID: {}",
@@ -147,8 +147,8 @@ async fn persist_consolidation(
         "INSERT INTO fallback_memories (id, agent_id, text, mission_id) VALUES (?, ?, ?, 'consolidated')"
     )
     .bind(&new_id)
-    .bind(&agent_id)
-    .bind(&consolidated_text)
+    .bind(agent_id)
+    .bind(consolidated_text)
     .execute(&mut *tx)
     .await
     .map_err(AppError::Sqlx)?;
@@ -157,7 +157,7 @@ async fn persist_consolidation(
     // A changed/deleted/already-compressed source rolls back the whole replacement.
     for (id, text) in memories {
         let result = sqlx::query("UPDATE fallback_memories SET mission_id = 'compressed' WHERE id = ? AND agent_id = ? AND mission_id = 'manual' AND text = ?")
-            .bind(id).bind(&agent_id).bind(text).execute(&mut *tx).await?;
+            .bind(id).bind(agent_id).bind(text).execute(&mut *tx).await?;
         if result.rows_affected() != 1 { return Err(AppError::Conflict("Memory sources changed during consolidation".to_string())); }
     }
     agent.economics.cost_usd += cost;

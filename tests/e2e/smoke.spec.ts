@@ -20,7 +20,10 @@ test.describe('E2E Dashboard Smoke Test', () => {
     if (healthRes?.ok()) {
       const body = await healthRes.json();
       expect(body).toHaveProperty('status');
-      expect(['healthy', 'degraded', 'failed']).toContain(body.status);
+      expect(['tadpole_online_rust', 'ok']).toContain(body.status);
+      if (body.database) {
+        expect(['healthy', 'degraded', 'failed']).toContain(body.database.status);
+      }
     }
 
     // 2. Verify dashboard page loads with proper title

@@ -67,7 +67,7 @@ export const mission_api_service = {
      * Saves or updates a dynamic skill script.
      */
     save_skill_script: async (name: string, definition: unknown): Promise<void> => {
-        await api_request(`/v1/skills/scripts/${name}`, {
+        await api_request(`/v1/skills/scripts/${encodeURIComponent(name)}`, {
             method: 'PUT',
             body: JSON.stringify(definition)
         });
@@ -77,14 +77,14 @@ export const mission_api_service = {
      * Deletes a dynamic skill script.
      */
     delete_skill_script: async (name: string): Promise<void> => {
-        await api_request(`/v1/skills/scripts/${name}`, { method: 'DELETE' });
+        await api_request(`/v1/skills/scripts/${encodeURIComponent(name)}`, { method: 'DELETE' });
     },
 
     /**
      * Saves or updates a workflow.
      */
     save_workflow: async (name: string, content: unknown): Promise<void> => {
-        await api_request(`/v1/skills/workflows/${name}`, {
+        await api_request(`/v1/skills/workflows/${encodeURIComponent(name)}`, {
             method: 'PUT',
             body: JSON.stringify(content)
         });
@@ -94,7 +94,7 @@ export const mission_api_service = {
      * Deletes a workflow.
      */
     delete_workflow: async (name: string): Promise<void> => {
-        await api_request(`/v1/skills/workflows/${name}`, { method: 'DELETE' });
+        await api_request(`/v1/skills/workflows/${encodeURIComponent(name)}`, { method: 'DELETE' });
     },
 
     /**

@@ -47,8 +47,10 @@ new WebSocket(url, [`bearer.${NEURAL_TOKEN}`])
 ### Implementation Details
 
 - Token comparison uses the `subtle` crate for **constant-time equality** — prevents timing-based side-channel attacks
+- **Tiered Operator Scopes** (`ReadOnly` / `Operator` / `Admin`): Optional `NEURAL_TOKEN_ADMIN` and `NEURAL_TOKEN_READONLY` separate destructive admin routes (`/v1/engine/deploy`, `/v1/engine/kill`, `/v1/engine/shutdown`, vault/key administration) from standard operator mutations and read-only telemetry. When `NEURAL_TOKEN_ADMIN` is unset, `NEURAL_TOKEN` defaults to `Admin` scope for zero-breaking local development
 - `NEURAL_ENGINE_ACCESS_TOKEN` is accepted as a secondary token for legacy compatibility
-- Missing or malformed tokens return `401 Unauthorized` with RFC 9457 Problem Details
+- Missing or malformed tokens return `401 Unauthorized` with RFC 9457 Problem Details; insufficient scope returns `403 Forbidden`
+- Browser UI stores session bearer tokens strictly in volatile JS memory (never `localStorage`/`sessionStorage`, enforced by `INV-SEC-001` / `INV-SEC-002`)
 
 ---
 

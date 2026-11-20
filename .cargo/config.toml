@@ -1,0 +1,8 @@
+# Workspace developer build tuning for fast incremental compiles & tests.
+# Release builds remain governed by [profile.release] in root Cargo.toml.
+
+[build]
+incremental = true
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "debuginfo=line-tables-only"]

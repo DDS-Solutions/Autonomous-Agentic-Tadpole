@@ -103,7 +103,7 @@ pub struct SpanWatchdog;
 
 impl SpanWatchdog {
     /// Registers a new active span with provider-aware dynamic TTL and monotonic tracking.
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     pub fn register_span(
         span_id: String,
         name: String,

@@ -30,7 +30,8 @@ import { Stat_Metrics } from '../components/dashboard/Stat_Metrics';
 import { Agent_Status_Grid } from '../components/dashboard/Agent_Status_Grid';
 import { KnowledgeGraph } from '../components/intelligence/KnowledgeGraph';
 import { Portal_Window, LD_Json } from '../components/ui';
-import { ExternalLink, Grid, Map } from 'lucide-react';
+import { ExternalLink, Grid, Map, Rocket, ShieldCheck, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Agent } from '../types';
 
 /**
@@ -51,6 +52,61 @@ export default function Ops_Dashboard() {
 
     const close_dropdowns = use_dropdown_store((s: Dropdown_State) => s.close_dropdown);
     const [view_mode, set_view_mode] = useState<'grid' | 'graph'>('grid');
+    const navigate = useNavigate();
+
+    const STARTER_MISSIONS = [
+        {
+            id: 'health-audit',
+            title: 'Workspace Health Audit',
+            subtitle: 'Check parity, tests & fleet readiness',
+            icon: ShieldCheck,
+            prompt: 'Run a full workspace health audit: summarize active agents, pending oversight, and any test or parity drift.',
+        },
+        {
+            id: 'bug-triage',
+            title: 'Targeted Bug Triage',
+            subtitle: 'Trace blast radius & impacted tests',
+            icon: Search,
+            prompt: 'Inspect recent changes using the code symbol graph, compute blast radius, and list impacted tests.',
+        },
+        {
+            id: 'security-sweep',
+            title: 'Security & Budget Sweep',
+            subtitle: 'Verify guardrails, tokens & spend caps',
+            icon: Rocket,
+            prompt: 'Verify security posture, audit chain integrity, and active agent budget utilization.',
+        },
+    ];
+
+    const handle_launch_starter = async (title: string, prompt: string) => {
+        const executive = agents_list.find((a) => a.role.toLowerCase().includes('ceo') || a.role.toLowerCase().includes('coo')) || agents_list[0];
+        if (!executive) {
+            navigate('/missions');
+            return;
+        }
+        event_bus.emit_log({ text: `[OpsDashboard] Launching starter mission: ${title}`, severity: 'info', source: 'System' });
+        try {
+            const model_id = executive.model_config?.modelId || executive.model || 'gemma4:e4b';
+            const provider = executive.model_config?.provider || 'ollama';
+            const exec_cluster = clusters.find((c) => c.collaborators.includes(executive.id));
+            await tadpole_os_service.send_command(
+                executive.id,
+                prompt,
+                model_id,
+                provider,
+                exec_cluster?.id,
+                executive.department,
+                exec_cluster?.budget_usd
+            );
+            navigate('/missions');
+        } catch (err) {
+            event_bus.emit_log({
+                text: `[OpsDashboard] Could not dispatch "${title}": ${err instanceof Error ? err.message : 'Engine unreachable'}`,
+                severity: 'warning',
+                source: 'System',
+            });
+        }
+    };
 
     // ── Handlers ──────────────────────────────────────────────
 
@@ -209,6 +265,28 @@ export default function Ops_Dashboard() {
                             budget_util={budget_util}
                             recruit_velocity={recruit_velocity}
                         />
+
+                        {/* Overlord Flight Strip — 1-Click Starter Missions (docs/design.md Neural Glass) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-2" data-testid="overlord-flight-strip">
+                            {STARTER_MISSIONS.map((m) => (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => void handle_launch_starter(m.title, m.prompt)}
+                                    title={m.prompt}
+                                    aria-label={`Launch ${m.title}`}
+                                    className="text-left p-3 rounded-xl border border-zinc-800/80 hover:border-zinc-700 bg-zinc-900/60 backdrop-blur-md transition-colors flex items-center gap-3 group focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                >
+                                    <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0">
+                                        <m.icon size={15} className="text-[#22c55e] group-hover:scale-110 transition-transform" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-zinc-100 truncate">{m.title}</p>
+                                        <p className="text-[10px] font-mono text-zinc-500 truncate">{m.subtitle}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
 
                         <div className="flex items-center justify-between px-2">
                             <div className="flex items-center gap-2">

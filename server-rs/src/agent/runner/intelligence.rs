@@ -13,9 +13,9 @@
 //!   during a long chain, or tokenizer failure during prompt assembly.
 //! - **Trace Scope**: `server-rs::agent::runner::intelligence`
 
-use crate::agent::types::{TaskPayload, ToolDefinition};
 use super::{AgentRunner, IntelligenceOutput, RunContext};
 use crate::agent::constants::*;
+use crate::agent::types::{TaskPayload, ToolDefinition};
 use crate::error::{AppError, Classify};
 use std::sync::Arc;
 use tracing::Instrument;
@@ -91,9 +91,7 @@ impl AgentRunner {
             Some("Consulting intelligence model..."),
         );
 
-        let system_prompt = self
-            .build_system_prompt(ctx, &payload.message)
-            .await;
+        let system_prompt = self.build_system_prompt(ctx, &payload.message).await;
 
         let mut effective_ctx = ctx.clone();
         let mut output_text = String::new();
@@ -104,10 +102,14 @@ impl AgentRunner {
         let max_turns = effective_ctx.max_turns;
 
         let mut running_cost: f64 = effective_ctx.current_cost_usd;
-        let tool_repetition_tracker: Arc<parking_lot::Mutex<std::collections::HashMap<(String, String), usize>>> =
-            Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new()));
-        let doom_loop_detector: Arc<parking_lot::Mutex<crate::agent::runner::loop_detector::DoomLoopDetector>> =
-            Arc::new(parking_lot::Mutex::new(crate::agent::runner::loop_detector::DoomLoopDetector::new()));
+        let tool_repetition_tracker: Arc<
+            parking_lot::Mutex<std::collections::HashMap<(String, String), usize>>,
+        > = Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new()));
+        let doom_loop_detector: Arc<
+            parking_lot::Mutex<crate::agent::runner::loop_detector::DoomLoopDetector>,
+        > = Arc::new(parking_lot::Mutex::new(
+            crate::agent::runner::loop_detector::DoomLoopDetector::new(),
+        ));
 
         while turn_count < max_turns {
             if effective_ctx.cancel_handle.is_cancelled() {
@@ -142,15 +144,25 @@ impl AgentRunner {
                     running_cost,
                     effective_budget
                 );
-                self.broadcast_agent(&effective_ctx, "Budget limit reached. Quiescing mission.", "warn");
+                self.broadcast_agent(
+                    &effective_ctx,
+                    "Budget limit reached. Quiescing mission.",
+                    "warn",
+                );
                 return Ok(IntelligenceOutput {
-                    text: format!("{} (Halting: Mission Budget Cap Exceeded)", scrub_mythos_tags(&output_text)),
+                    text: format!(
+                        "{} (Halting: Mission Budget Cap Exceeded)",
+                        scrub_mythos_tags(&output_text)
+                    ),
                     usage,
                 });
             }
 
             self.state
-                .yield_phase_transition(&effective_ctx.agent_id, &format!("Execution: Turn {}", turn_count))
+                .yield_phase_transition(
+                    &effective_ctx.agent_id,
+                    &format!("Execution: Turn {}", turn_count),
+                )
                 .await;
 
             // Build tools once per turn (P6 optimization)
@@ -173,22 +185,43 @@ impl AgentRunner {
                 reasoning_turn += 1;
 
                 if ctx.reasoning_depth > 1 {
-                    tracing::info!("🧠 [Mythos] Reasoning Loop {}/{} for agent {}", reasoning_turn, ctx.reasoning_depth, ctx.agent_id);
+                    tracing::info!(
+                        "🧠 [Mythos] Reasoning Loop {}/{} for agent {}",
+                        reasoning_turn,
+                        ctx.reasoning_depth,
+                        ctx.agent_id
+                    );
                     // Synchronize with registry for UI "Pulse" rail
                     if let Some(mut entry) = self.state.registry.agents.get_mut(&ctx.agent_id) {
                         entry.value_mut().state.current_reasoning_turn = reasoning_turn;
                     }
-                    self.broadcast_agent(ctx, &format!("thinking (loop {}/{})...", reasoning_turn, ctx.reasoning_depth), "pulse");
+                    self.broadcast_agent(
+                        ctx,
+                        &format!(
+                            "thinking (loop {}/{})...",
+                            reasoning_turn, ctx.reasoning_depth
+                        ),
+                        "pulse",
+                    );
                 }
 
                 // 🛡️ [Financial Guardrail] Intra-turn budget check
                 match self.check_budget(ctx, &mut running_cost, 0.0, "").await {
-                     Ok(Some(_pause_msg)) => {
-                         tracing::warn!("💰 [Mythos] Budget breach mid-recurrence for agent {}", ctx.agent_id);
-                         return Ok(IntelligenceOutput { text: format!("{} (Halting: Budget Exceeded)", scrub_mythos_tags(&output_text)), usage });
-                     }
-                     Err(e) => return Err((e, usage)),
-                     Ok(None) => {}
+                    Ok(Some(_pause_msg)) => {
+                        tracing::warn!(
+                            "💰 [Mythos] Budget breach mid-recurrence for agent {}",
+                            ctx.agent_id
+                        );
+                        return Ok(IntelligenceOutput {
+                            text: format!(
+                                "{} (Halting: Budget Exceeded)",
+                                scrub_mythos_tags(&output_text)
+                            ),
+                            usage,
+                        });
+                    }
+                    Err(e) => return Err((e, usage)),
+                    Ok(None) => {}
                 }
 
                 self.record_heartbeat(&ctx.agent_id).await;
@@ -196,14 +229,19 @@ impl AgentRunner {
                 // SelfHalting trait if the model supports it.
 
                 // 🪟 [Context Engineering] Apply pinned-tail compaction and failure visibility retention
-                let compacted_history = crate::agent::runner::turn_compactor::compact_conversation_history(
-                    &ctx.role,
-                    &conversation_history,
-                );
+                let compacted_history =
+                    crate::agent::runner::turn_compactor::compact_conversation_history(
+                        &ctx.role,
+                        &conversation_history,
+                    );
                 let current_prompt = if internal_monologue.is_empty() {
                     compacted_history.join("\n\n")
                 } else {
-                    format!("{}\n\nINTERNAL MONOLOGUE:\n{}", compacted_history.join("\n\n"), internal_monologue.join("\n\n"))
+                    format!(
+                        "{}\n\nINTERNAL MONOLOGUE:\n{}",
+                        compacted_history.join("\n\n"),
+                        internal_monologue.join("\n\n")
+                    )
                 };
 
                 // 🕒 [Memory-Aware Throttle] If system memory exceeds 90%, dynamically throttle agent execution speeds.
@@ -256,13 +294,19 @@ impl AgentRunner {
                         );
                         let raw_snippet: String = payload.message.chars().take(80).collect();
                         let redacted_snippet = crate::utils::security::redact_secrets(&raw_snippet);
-                        let _ = self.state.record_audit(
-                            &ctx.agent_id,
-                            Some(&ctx.mission_id),
-                            ctx.user_id.as_deref(),
-                            "[SECURITY_PRE_FLIGHT] Suspicious injection detected",
-                            &format!("Script: {}, RedactedSnippet: {}", script_profile.dominant_script, redacted_snippet),
-                        ).await;
+                        let _ = self
+                            .state
+                            .record_audit(
+                                &ctx.agent_id,
+                                Some(&ctx.mission_id),
+                                ctx.user_id.as_deref(),
+                                "[SECURITY_PRE_FLIGHT] Suspicious injection detected",
+                                &format!(
+                                    "Script: {}, RedactedSnippet: {}",
+                                    script_profile.dominant_script, redacted_snippet
+                                ),
+                            )
+                            .await;
 
                         // Real enqueue into oversight queue for operator discovery
                         let entry_id = uuid::Uuid::new_v4().to_string();
@@ -279,10 +323,11 @@ impl AgentRunner {
                 }
 
                 // 🪟 [Structured Message Dispatch & Prompt Caching]
-                let mut structured_messages: Vec<crate::agent::types::ChatMessage> = compacted_history
-                    .iter()
-                    .map(|t| crate::agent::types::ChatMessage::from_legacy_turn(t))
-                    .collect();
+                let mut structured_messages: Vec<crate::agent::types::ChatMessage> =
+                    compacted_history
+                        .iter()
+                        .map(|t| crate::agent::types::ChatMessage::from_legacy_turn(t))
+                        .collect();
 
                 if !internal_monologue.is_empty() {
                     structured_messages.push(crate::agent::types::ChatMessage::assistant(format!(
@@ -292,19 +337,19 @@ impl AgentRunner {
                 }
 
                 // 🪟 [Context Window Guard] Token-based window limit check
-                let context_limit = ctx
-                    .model_config
+                let context_limit = ctx.model_config.context_window.unwrap_or_else(|| {
+                    crate::agent::capability_matrix::CapabilityMatrix::infer_capabilities(
+                        &ctx.model_config.model_id,
+                    )
                     .context_window
-                    .unwrap_or_else(|| {
-                        crate::agent::capability_matrix::CapabilityMatrix::infer_capabilities(&ctx.model_config.model_id)
-                            .context_window
-                            .unwrap_or(128_000)
-                    }) as usize;
+                    .unwrap_or(128_000)
+                }) as usize;
 
-                let estimated_tokens = crate::agent::runner::provider::estimate_messages_token_count(
-                    &system_prompt,
-                    &structured_messages,
-                );
+                let estimated_tokens =
+                    crate::agent::runner::provider::estimate_messages_token_count(
+                        &system_prompt,
+                        &structured_messages,
+                    );
 
                 if estimated_tokens > context_limit {
                     tracing::error!(
@@ -356,19 +401,40 @@ impl AgentRunner {
                         // 🔀 [CascadeRouter Error Escalation] Opt-in capability failure promotion from Tier 1 to Tier 2
                         if effective_ctx.cascade_routing
                             && !escalated_this_turn
-                            && !self.state.governance.privacy_mode.load(std::sync::atomic::Ordering::Relaxed)
+                            && !self
+                                .state
+                                .governance
+                                .privacy_mode
+                                .load(std::sync::atomic::Ordering::Relaxed)
                         {
-                            let mut policy = crate::agent::cascade_router::CascadePolicy::default();
-                            policy.tier1_provider = effective_ctx.model_config.provider.to_string().to_lowercase();
-                            policy.tier1_model = effective_ctx.model_config.model_id.clone();
-                            let agent_slot2 = self.state.registry.agents.get(&effective_ctx.agent_id).and_then(|a| {
-                                a.models.model_2.clone().filter(|s| !s.trim().is_empty()).map(|m2| (m2, a.models.model_config2.clone()))
-                            });
+                            let mut policy = crate::agent::cascade_router::CascadePolicy {
+                                tier1_provider: effective_ctx
+                                    .model_config
+                                    .provider
+                                    .to_string()
+                                    .to_lowercase(),
+                                tier1_model: effective_ctx.model_config.model_id.clone(),
+                                ..Default::default()
+                            };
+                            let agent_slot2 = self
+                                .state
+                                .registry
+                                .agents
+                                .get(&effective_ctx.agent_id)
+                                .and_then(|a| {
+                                    a.models
+                                        .model_2
+                                        .clone()
+                                        .filter(|s| !s.trim().is_empty())
+                                        .map(|m2| (m2, a.models.model_config2.clone()))
+                                });
                             if let Some((ref m2, _)) = agent_slot2 {
                                 policy.tier2_model = m2.clone();
                             }
                             let router = crate::agent::cascade_router::CascadeRouter::new(policy);
-                            if let Some((_, tier2_model)) = router.should_escalate_after_failure(1, &err_str) {
+                            if let Some((_, tier2_model)) =
+                                router.should_escalate_after_failure(1, &err_str)
+                            {
                                 escalated_this_turn = true;
                                 if let Some((m2, cfg2_opt)) = agent_slot2 {
                                     if let Some(cfg2) = cfg2_opt {
@@ -395,7 +461,12 @@ impl AgentRunner {
                             return Err((e, usage));
                         }
 
-                        if e.is_repairable() && matches!(e, AppError::BadRequest(_) | AppError::InternalServerError(_)) {
+                        if e.is_repairable()
+                            && matches!(
+                                e,
+                                AppError::BadRequest(_) | AppError::InternalServerError(_)
+                            )
+                        {
                             let detail = e.to_string();
 
                             let mut anneal_attempts = 0;
@@ -417,15 +488,18 @@ impl AgentRunner {
                             .await
                             .map_err(|e| (e, usage.clone()))?;
 
-                            let anneal_cost = anneal_usage.as_ref().map(|u| {
-                                crate::agent::rates::calculate_cost_with_custom_rates(
-                                    effective_ctx.model_config.input_cost_per_m,
-                                    effective_ctx.model_config.output_cost_per_m,
-                                    &effective_ctx.model_config.model_id,
-                                    u.input_tokens,
-                                    u.output_tokens,
-                                )
-                            }).unwrap_or(0.0);
+                            let anneal_cost = anneal_usage
+                                .as_ref()
+                                .map(|u| {
+                                    crate::agent::rates::calculate_cost_with_custom_rates(
+                                        effective_ctx.model_config.input_cost_per_m,
+                                        effective_ctx.model_config.output_cost_per_m,
+                                        &effective_ctx.model_config.model_id,
+                                        u.input_tokens,
+                                        u.output_tokens,
+                                    )
+                                })
+                                .unwrap_or(0.0);
                             running_cost += anneal_cost;
 
                             self.accumulate_usage(&mut usage, anneal_usage);
@@ -435,30 +509,42 @@ impl AgentRunner {
                         }
                     }
                 };
-                let step_cost = turn_usage.as_ref().map(|u| {
-                    crate::agent::rates::calculate_cost_with_custom_rates(
-                        effective_ctx.model_config.input_cost_per_m,
-                        effective_ctx.model_config.output_cost_per_m,
-                        &effective_ctx.model_config.model_id,
-                        u.input_tokens,
-                        u.output_tokens,
-                    )
-                }).unwrap_or(0.0);
+                let step_cost = turn_usage
+                    .as_ref()
+                    .map(|u| {
+                        crate::agent::rates::calculate_cost_with_custom_rates(
+                            effective_ctx.model_config.input_cost_per_m,
+                            effective_ctx.model_config.output_cost_per_m,
+                            &effective_ctx.model_config.model_id,
+                            u.input_tokens,
+                            u.output_tokens,
+                        )
+                    })
+                    .unwrap_or(0.0);
                 running_cost += step_cost;
                 self.accumulate_usage(&mut usage, turn_usage);
 
                 // Check for Halting Signal (Tag Fallback)
                 if turn_text.contains("<halting_signal/>") || turn_text.contains("<halt/>") {
-                    tracing::info!("🛑 [Mythos] Halting signal detected for agent {}", ctx.agent_id);
+                    tracing::info!(
+                        "🛑 [Mythos] Halting signal detected for agent {}",
+                        ctx.agent_id
+                    );
                     reasoning_halted = true;
                 }
 
                 // Check for Halting Signal (Tool Call)
                 for fc in &function_calls {
                     if fc.name == "set_confidence" {
-                        let score = fc.args.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                        let score =
+                            fc.args.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                         if score >= ctx.act_threshold {
-                            tracing::info!("🛑 [Mythos] Confidence-based halt for agent {}: {:.2} >= {:.2}", ctx.agent_id, score, ctx.act_threshold);
+                            tracing::info!(
+                                "🛑 [Mythos] Confidence-based halt for agent {}: {:.2} >= {:.2}",
+                                ctx.agent_id,
+                                score,
+                                ctx.act_threshold
+                            );
                             reasoning_halted = true;
                         }
                     }
@@ -498,7 +584,10 @@ impl AgentRunner {
 
                         // --- 📔 Journaling: Record Assistant node ---
                         let parent_id = ctx.active_node_id.lock().clone();
-                        if let Ok(new_id) = self.append_to_journal(ctx, "assistant", &turn_text, parent_id, None).await {
+                        if let Ok(new_id) = self
+                            .append_to_journal(ctx, "assistant", &turn_text, parent_id, None)
+                            .await
+                        {
                             *ctx.active_node_id.lock() = Some(new_id);
                         }
 
@@ -506,7 +595,7 @@ impl AgentRunner {
                         self.broadcast_agent_stream(
                             ctx,
                             &scrub_mythos_tags(&turn_text),
-                            false // not final
+                            false, // not final
                         );
                     } else if !function_calls.is_empty() {
                         // When turn_text is empty because tool calls were scrubbed from XML, preserve conversational continuity
@@ -518,13 +607,19 @@ impl AgentRunner {
                         conversation_history.push(format!("ASSISTANT: {}", tool_summary));
 
                         let parent_id = ctx.active_node_id.lock().clone();
-                        if let Ok(new_id) = self.append_to_journal(ctx, "assistant", &tool_summary, parent_id, None).await {
+                        if let Ok(new_id) = self
+                            .append_to_journal(ctx, "assistant", &tool_summary, parent_id, None)
+                            .await
+                        {
                             *ctx.active_node_id.lock() = Some(new_id);
                         }
                     }
 
                     if function_calls.is_empty() {
-                        tracing::debug!("🏁 [Intelligence] No tool calls for agent {}, breaking loop.", ctx.agent_id);
+                        tracing::debug!(
+                            "🏁 [Intelligence] No tool calls for agent {}, breaking loop.",
+                            ctx.agent_id
+                        );
                         let mut final_text = scrub_mythos_tags(&output_text);
 
                         // ### 🛡️ [Resilience] Mission Closure Fallback
@@ -537,7 +632,10 @@ impl AgentRunner {
                                                   PROVIDE A CONCISE SUMMARY OF YOUR FINDINGS AND ACTIONS TO THE USER NOW. \
                                                   DO NOT EXECUTE ANY MORE TOOLS.";
 
-                            if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, closure_prompt, None).await {
+                            if let Ok((summary, _, s_usage)) = self
+                                .call_provider(ctx, &system_prompt, closure_prompt, None)
+                                .await
+                            {
                                 final_text = summary;
                                 self.accumulate_usage(&mut usage, s_usage);
                             }
@@ -548,7 +646,7 @@ impl AgentRunner {
 
                         return Ok(IntelligenceOutput {
                             text: final_text,
-                            usage
+                            usage,
                         });
                     }
 
@@ -569,8 +667,14 @@ impl AgentRunner {
 
                     for mut fc in function_calls.into_iter().take(MAX_CONCURRENT_TOOLS) {
                         // 🔄 [Delegation Filter] Intercept COO direct recruitment and redirect to Alpha Node
-                        if ctx.agent_id == crate::agent::constants::AGENT_COO && (fc.name == "spawn_subagent" || fc.name == "recruit_specialist") {
-                            let target_opt = fc.args.get("agent_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        if ctx.agent_id == crate::agent::constants::AGENT_COO
+                            && (fc.name == "spawn_subagent" || fc.name == "recruit_specialist")
+                        {
+                            let target_opt = fc
+                                .args
+                                .get("agent_id")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
                             if let Some(target) = target_opt {
                                 if target != crate::agent::constants::AGENT_ALPHA {
                                     tracing::warn!("🔄 [Hierarchy Intercept] COO (ID: {}) attempted direct recruitment of '{}'. Redirecting to Alpha Node (ID: {}).", ctx.agent_id, target, crate::agent::constants::AGENT_ALPHA);
@@ -580,9 +684,22 @@ impl AgentRunner {
                                         Some(ctx.mission_id.clone()),
                                     );
                                     if let Some(map) = fc.args.as_object_mut() {
-                                        map.insert("agent_id".to_string(), serde_json::json!(crate::agent::constants::AGENT_ALPHA));
-                                        if let Some(msg) = map.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()) {
-                                            map.insert("message".to_string(), serde_json::json!(format!("Delegate complex task for worker '{}': {}", target, msg)));
+                                        map.insert(
+                                            "agent_id".to_string(),
+                                            serde_json::json!(crate::agent::constants::AGENT_ALPHA),
+                                        );
+                                        if let Some(msg) = map
+                                            .get("message")
+                                            .and_then(|m| m.as_str())
+                                            .map(|s| s.to_string())
+                                        {
+                                            map.insert(
+                                                "message".to_string(),
+                                                serde_json::json!(format!(
+                                                    "Delegate complex task for worker '{}': {}",
+                                                    target, msg
+                                                )),
+                                            );
                                         }
                                     }
                                 }
@@ -862,16 +979,21 @@ impl AgentRunner {
 
                     if !observation_buffer.is_empty() {
                         // 🪟 [Context Engineering] Offload bulky tool outputs (>300 chars) to .tmp/tool_overflow/
-                        let (compacted_obs, _) = crate::agent::runner::turn_compactor::compact_and_offload_observation(
-                            "execution",
-                            &observation_buffer,
-                            &ctx.workspace_root,
-                        ).await;
+                        let (compacted_obs, _) =
+                            crate::agent::runner::turn_compactor::compact_and_offload_observation(
+                                "execution",
+                                &observation_buffer,
+                                &ctx.workspace_root,
+                            )
+                            .await;
                         conversation_history.push(format!("OBSERVATION: {}", compacted_obs));
 
                         // --- 📔 Journaling: Record Tool node ---
                         let parent_id = ctx.active_node_id.lock().clone();
-                        if let Ok(new_id) = self.append_to_journal(ctx, "tool", &observation_buffer, parent_id, None).await {
+                        if let Ok(new_id) = self
+                            .append_to_journal(ctx, "tool", &observation_buffer, parent_id, None)
+                            .await
+                        {
                             *ctx.active_node_id.lock() = Some(new_id);
                         }
                     }
@@ -885,7 +1007,8 @@ impl AgentRunner {
                             reasoning_turn as i64,
                             &state_json,
                             parent_id_ref.as_deref(),
-                        ).await;
+                        )
+                        .await;
                     }
 
                     if let Some(e) = first_fatal_error {
@@ -903,7 +1026,10 @@ impl AgentRunner {
                         if scrub_mythos_tags(&output_text).trim().is_empty() {
                             tracing::info!("🔄 [Intelligence] Mission completed silently. Enforcing report synthesis...");
                             let synthesis_prompt = "You have completed your technical tasks. Provide a CONCISE and TECHNICAL summary of your findings and the current state of the workspace.";
-                            if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, synthesis_prompt, None).await {
+                            if let Ok((summary, _, s_usage)) = self
+                                .call_provider(ctx, &system_prompt, synthesis_prompt, None)
+                                .await
+                            {
                                 output_text.push_str(&summary);
                                 self.accumulate_usage(&mut usage, s_usage);
                             }
@@ -915,7 +1041,7 @@ impl AgentRunner {
 
                         return Ok(IntelligenceOutput {
                             text: final_text,
-                            usage
+                            usage,
                         });
                     }
 
@@ -932,7 +1058,10 @@ impl AgentRunner {
             tracing::info!("🔄 [Intelligence] Post-turn silent completion detected for {}. Enforcing report synthesis...", ctx.agent_id);
             let synthesis_prompt = "You have completed your technical tasks. Provide a CONCISE and TECHNICAL summary of your findings and the current state of the workspace. If you performed a discovery tool (like list_files), summarize the results now.";
 
-            if let Ok((summary, _, s_usage)) = self.call_provider(ctx, &system_prompt, synthesis_prompt, None).await {
+            if let Ok((summary, _, s_usage)) = self
+                .call_provider(ctx, &system_prompt, synthesis_prompt, None)
+                .await
+            {
                 output_text = summary;
                 self.accumulate_usage(&mut usage, s_usage);
             }
@@ -948,8 +1077,6 @@ impl AgentRunner {
         })
     }
 
-
-
     /// Enforces the Sentinel Gate protocol: Specialist agents are forbidden from text-only turns.
     #[allow(clippy::too_many_arguments)]
     async fn enforce_sentinel_gate(
@@ -964,8 +1091,14 @@ impl AgentRunner {
         tools: &[ToolDefinition],
     ) -> Result<(), AppError> {
         if *attempt_count >= 2 {
-            tracing::error!("🚨 [Sentinel] Patience limit reached for {}. Agent is stuck in narrative mode.", ctx.agent_id);
-            return Err(AppError::InternalServerError("Sentinel Gate: Model failed to transition to tool-use after 2 attempts.".to_string()));
+            tracing::error!(
+                "🚨 [Sentinel] Patience limit reached for {}. Agent is stuck in narrative mode.",
+                ctx.agent_id
+            );
+            return Err(AppError::InternalServerError(
+                "Sentinel Gate: Model failed to transition to tool-use after 2 attempts."
+                    .to_string(),
+            ));
         }
 
         let is_orchestrator = ctx.agent_id == AGENT_CEO
@@ -1015,7 +1148,9 @@ impl AgentRunner {
             && function_calls.is_empty()
             && !output_text.contains("complete_mission")
         {
-            let is_stalled = crate::agent::cascade_router::CascadeRouter::detect_stall_pattern(output_text).is_some();
+            let is_stalled =
+                crate::agent::cascade_router::CascadeRouter::detect_stall_pattern(output_text)
+                    .is_some();
 
             if is_stalled {
                 tracing::warn!(
@@ -1066,11 +1201,21 @@ impl AgentRunner {
         tools: &[ToolDefinition],
     ) -> Result<(), AppError> {
         if *attempt_count >= 2 {
-            tracing::error!("🚨 [Self-Annealing] Max attempts reached for {}. Giving up on malformed JSON.", ctx.agent_id);
-            return Err(AppError::BadRequest(format!("Self-Annealing failed after 2 attempts: {}", error_detail)));
+            tracing::error!(
+                "🚨 [Self-Annealing] Max attempts reached for {}. Giving up on malformed JSON.",
+                ctx.agent_id
+            );
+            return Err(AppError::BadRequest(format!(
+                "Self-Annealing failed after 2 attempts: {}",
+                error_detail
+            )));
         }
 
-        tracing::warn!("🛠️ [Self-Annealing] Model {} produced malformed tool call: {}. Re-prompting...", ctx.agent_id, error_detail);
+        tracing::warn!(
+            "🛠️ [Self-Annealing] Model {} produced malformed tool call: {}. Re-prompting...",
+            ctx.agent_id,
+            error_detail
+        );
 
         let correction_prompt = format!(
             "SYSTEM_ANNEAL: Your previous tool call was MALFORMED. \
@@ -1080,8 +1225,10 @@ impl AgentRunner {
             error_detail, user_directive
         );
 
-        let result = self.call_provider(ctx, system_prompt, &correction_prompt, Some(tools.to_vec())).await?;
-        
+        let result = self
+            .call_provider(ctx, system_prompt, &correction_prompt, Some(tools.to_vec()))
+            .await?;
+
         *attempt_count += 1;
         let (sent_text, sent_calls, sent_usage) = result;
         *output_text = sent_text;
@@ -1114,17 +1261,17 @@ pub(crate) fn evaluate_loop_repetition(rep_count: usize) -> LoopRepetitionAction
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::AppState;
     use crate::agent::runner::{AgentRunner, RunContext};
+    use crate::state::AppState;
     use std::sync::Arc;
 
     #[test]
     fn test_scrub_mythos_tags() {
-        let input = "Thinking... <thinking>I should search</thinking> <halting_signal/> Done. <halt/>";
+        let input =
+            "Thinking... <thinking>I should search</thinking> <halting_signal/> Done. <halt/>";
         let expected = "Thinking... I should search  Done.";
         assert_eq!(scrub_mythos_tags(input), expected);
 
@@ -1134,16 +1281,23 @@ mod tests {
 
     #[test]
     fn test_hierarchy_labeling() {
-        let mut ctx = RunContext::default();
-
-        ctx.agent_id = AGENT_CEO.to_string();
-        assert_eq!(get_hierarchy_label(&ctx), "CEO (Strategic Intelligence Lead)");
+        let mut ctx = RunContext {
+            agent_id: AGENT_CEO.to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            get_hierarchy_label(&ctx),
+            "CEO (Strategic Intelligence Lead)"
+        );
 
         ctx.agent_id = AGENT_COO.to_string();
         assert_eq!(get_hierarchy_label(&ctx), "COO (Operations Director)");
 
         ctx.agent_id = AGENT_ALPHA.to_string();
-        assert_eq!(get_hierarchy_label(&ctx), "ALPHA NODE (Swarm Mission Commander)");
+        assert_eq!(
+            get_hierarchy_label(&ctx),
+            "ALPHA NODE (Swarm Mission Commander)"
+        );
 
         ctx.agent_id = "specialist-worker".to_string();
         ctx.role = "Task Specialist".to_string();
@@ -1164,8 +1318,16 @@ mod tests {
             total_tokens: 35,
         };
 
-        metrics.record_tokens(delta_1.input_tokens as u64, delta_1.output_tokens as u64, delta_1.total_tokens as u64);
-        metrics.record_tokens(delta_2.input_tokens as u64, delta_2.output_tokens as u64, delta_2.total_tokens as u64);
+        metrics.record_tokens(
+            delta_1.input_tokens as u64,
+            delta_1.output_tokens as u64,
+            delta_1.total_tokens as u64,
+        );
+        metrics.record_tokens(
+            delta_2.input_tokens as u64,
+            delta_2.output_tokens as u64,
+            delta_2.total_tokens as u64,
+        );
 
         let snap = metrics.snapshot("test_mission", "test_agent");
         assert_eq!(snap.total_input_tokens, 40);
@@ -1177,12 +1339,26 @@ mod tests {
         use futures::stream::{FuturesUnordered, StreamExt};
         use std::time::Duration;
 
-        async fn mock_tool(name: &'static str, success: bool, delay_ms: u64) -> (&'static str, Result<(), AppError>, String, Option<crate::agent::types::TokenUsage>) {
+        async fn mock_tool(
+            name: &'static str,
+            success: bool,
+            delay_ms: u64,
+        ) -> (
+            &'static str,
+            Result<(), AppError>,
+            String,
+            Option<crate::agent::types::TokenUsage>,
+        ) {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             if success {
                 (name, Ok(()), "Completed".to_string(), None)
             } else {
-                (name, Err(AppError::BadRequest("Syntax error".into())), "Failed".to_string(), None)
+                (
+                    name,
+                    Err(AppError::BadRequest("Syntax error".into())),
+                    "Failed".to_string(),
+                    None,
+                )
             }
         }
 
@@ -1202,14 +1378,21 @@ mod tests {
             completed.push((name, text));
         }
 
-        assert_eq!(completed.len(), 2, "All sibling futures must drain before error return");
+        assert_eq!(
+            completed.len(),
+            2,
+            "All sibling futures must drain before error return"
+        );
         assert!(first_error.is_some(), "Failure must be recorded");
     }
 
     #[test]
     fn test_synthesis_fallback_disallows_tool_calls() {
         let tools: Option<Vec<crate::agent::types::ToolDefinition>> = None;
-        assert!(tools.is_none(), "Synthesis prompt must enforce tool suppression to guarantee narrative return");
+        assert!(
+            tools.is_none(),
+            "Synthesis prompt must enforce tool suppression to guarantee narrative return"
+        );
     }
 
     #[tokio::test]
@@ -1217,8 +1400,10 @@ mod tests {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
 
-        let mut ctx = RunContext::default();
-        ctx.agent_id = AGENT_CEO.to_string(); // Orchestrator
+        let ctx = RunContext {
+            agent_id: AGENT_CEO.to_string(), // Orchestrator
+            ..Default::default()
+        };
 
         let mut output_text = "I am the CEO".to_string();
         let mut function_calls = vec![];
@@ -1226,16 +1411,18 @@ mod tests {
 
         // Should NOT enforce (do nothing) because it's an orchestrator
         let mut attempts = 0;
-        let result = runner.enforce_sentinel_gate(
-            &ctx,
-            "system",
-            "user",
-            &mut output_text,
-            &mut function_calls,
-            &mut usage,
-            &mut attempts,
-            &[],
-        ).await;
+        let result = runner
+            .enforce_sentinel_gate(
+                &ctx,
+                "system",
+                "user",
+                &mut output_text,
+                &mut function_calls,
+                &mut usage,
+                &mut attempts,
+                &[],
+            )
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(output_text, "I am the CEO");
@@ -1247,10 +1434,12 @@ mod tests {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
 
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "specialist-1".to_string();
-        ctx.role = "Specialist".to_string();
-        ctx.safe_mode = false;
+        let ctx = RunContext {
+            agent_id: "specialist-1".to_string(),
+            role: "Specialist".to_string(),
+            safe_mode: false,
+            ..Default::default()
+        };
 
         let mut output_text = "I am just talking".to_string();
         let mut function_calls = vec![];
@@ -1258,16 +1447,18 @@ mod tests {
 
         std::env::set_var("TADPOLE_NULL_PROVIDERS", "true");
         let mut attempts = 0;
-        let result = runner.enforce_sentinel_gate(
-            &ctx,
-            "system",
-            "user",
-            &mut output_text,
-            &mut function_calls,
-            &mut usage,
-            &mut attempts,
-            &[],
-        ).await;
+        let result = runner
+            .enforce_sentinel_gate(
+                &ctx,
+                "system",
+                "user",
+                &mut output_text,
+                &mut function_calls,
+                &mut usage,
+                &mut attempts,
+                &[],
+            )
+            .await;
         std::env::remove_var("TADPOLE_NULL_PROVIDERS");
 
         assert!(result.is_ok());
@@ -1278,20 +1469,41 @@ mod tests {
     fn test_evaluate_loop_repetition_thresholds() {
         assert_eq!(evaluate_loop_repetition(1), LoopRepetitionAction::Allow);
         assert_eq!(evaluate_loop_repetition(2), LoopRepetitionAction::Allow);
-        assert_eq!(evaluate_loop_repetition(3), LoopRepetitionAction::CircuitBreakerOversight);
-        assert_eq!(evaluate_loop_repetition(4), LoopRepetitionAction::WarnAndContinue);
-        assert_eq!(evaluate_loop_repetition(5), LoopRepetitionAction::BlockRecursion);
-        assert_eq!(evaluate_loop_repetition(9), LoopRepetitionAction::BlockRecursion);
+        assert_eq!(
+            evaluate_loop_repetition(3),
+            LoopRepetitionAction::CircuitBreakerOversight
+        );
+        assert_eq!(
+            evaluate_loop_repetition(4),
+            LoopRepetitionAction::WarnAndContinue
+        );
+        assert_eq!(
+            evaluate_loop_repetition(5),
+            LoopRepetitionAction::BlockRecursion
+        );
+        assert_eq!(
+            evaluate_loop_repetition(9),
+            LoopRepetitionAction::BlockRecursion
+        );
     }
 
     #[tokio::test]
     async fn test_cascade_router_opt_in_tier1_escalation_and_guards() {
-        let tier1_cap_fail =
-            crate::test_support::ProviderStub::start(axum::http::StatusCode::BAD_REQUEST, "schema error on tool format", false).await;
-        let tier2_ok =
-            crate::test_support::ProviderStub::start(axum::http::StatusCode::OK, "escalated tier2 success", false).await;
+        let tier1_cap_fail = crate::test_support::ProviderStub::start(
+            axum::http::StatusCode::BAD_REQUEST,
+            "schema error on tool format",
+            false,
+        )
+        .await;
+        let tier2_ok = crate::test_support::ProviderStub::start(
+            axum::http::StatusCode::OK,
+            "escalated tier2 success",
+            false,
+        )
+        .await;
 
-        let state = crate::test_support::state_with_agent("cascade-agent", &tier1_cap_fail.base_url).await;
+        let state =
+            crate::test_support::state_with_agent("cascade-agent", &tier1_cap_fail.base_url).await;
         {
             let mut agent = state.registry.agents.get_mut("cascade-agent").unwrap();
             agent.runner_policy.cascade_routing = true;
@@ -1326,7 +1538,10 @@ mod tests {
         assert_eq!(pinned_ctx.model_config.model_id, "tier1-fast");
 
         // 2. PRIVACY_MODE disables CascadeRouter
-        state.governance.privacy_mode.store(true, std::sync::atomic::Ordering::SeqCst);
+        state
+            .governance
+            .privacy_mode
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         let priv_ctx = runner
             .resolve_agent_context(
                 "cascade-agent",
@@ -1341,7 +1556,10 @@ mod tests {
             .await
             .unwrap();
         assert!(!priv_ctx.cascade_routing);
-        state.governance.privacy_mode.store(false, std::sync::atomic::Ordering::SeqCst);
+        state
+            .governance
+            .privacy_mode
+            .store(false, std::sync::atomic::Ordering::SeqCst);
 
         // 3. Routine prompt routes to Tier 1 and escalates to Tier 2 on capability error
         let routine_payload = crate::agent::types::TaskPayload {
@@ -1355,9 +1573,17 @@ mod tests {
         assert!(routine_ctx.cascade_routing);
         assert_eq!(routine_ctx.model_config.model_id, "tier1-fast");
 
-        let out = runner.execute_intelligence_loop(&routine_ctx, &routine_payload).await.unwrap();
+        let out = runner
+            .execute_intelligence_loop(&routine_ctx, &routine_payload)
+            .await
+            .unwrap();
         assert_eq!(out.text, "escalated tier2 success");
-        assert!(tier1_cap_fail.calls.load(std::sync::atomic::Ordering::SeqCst) >= 1);
+        assert!(
+            tier1_cap_fail
+                .calls
+                .load(std::sync::atomic::Ordering::SeqCst)
+                >= 1
+        );
         assert!(tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst) >= 1);
 
         // 4. Critical keyword routes directly to Tier 2 on initial resolution
@@ -1377,8 +1603,12 @@ mod tests {
         assert_eq!(critical_ctx.model_config.model_id, "tier2-reasoning");
 
         // 5. 401 auth error skips escalation without touching Tier 2 stub
-        let tier1_401 =
-            crate::test_support::ProviderStub::start(axum::http::StatusCode::UNAUTHORIZED, "401 Unauthorized invalid api key", false).await;
+        let tier1_401 = crate::test_support::ProviderStub::start(
+            axum::http::StatusCode::UNAUTHORIZED,
+            "401 Unauthorized invalid api key",
+            false,
+        )
+        .await;
         let tier2_calls_before = tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst);
         {
             let mut agent = state.registry.agents.get_mut("cascade-agent").unwrap();
@@ -1392,7 +1622,9 @@ mod tests {
             .resolve_agent_context("cascade-agent", &auth_payload, "m-401", 0, &[])
             .await
             .unwrap();
-        let err = runner.execute_intelligence_loop(&auth_ctx, &auth_payload).await;
+        let err = runner
+            .execute_intelligence_loop(&auth_ctx, &auth_payload)
+            .await;
         assert!(err.is_err());
         assert_eq!(
             tier2_ok.calls.load(std::sync::atomic::Ordering::SeqCst),
@@ -1401,9 +1633,5 @@ mod tests {
         );
     }
 }
-
-
-
-
 
 // Metadata: [intelligence]

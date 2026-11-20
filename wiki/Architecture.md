@@ -129,14 +129,14 @@ AgentRunner::run()
 
 ## Intelligence / Knowledge Graph
 
-The `intelligence/graph/` module implements a **force-directed symbol graph**:
+The `crates/tadpole-intelligence` workspace crate (re-exported via `server-rs/src/intelligence/graph.rs` and `server-rs/src/utils/parser.rs`) implements a **force-directed symbol graph** alongside shared domain DTOs in `crates/tadpole-types`:
 
-- **Discovery** (`discover/`) — Walks the workspace file tree
-- **Parsing** (`parse/`) — Extracts Rust/TypeScript symbols via Tree-sitter AST
-- **Indexing** (`key/`) — Obfuscated-path registry for traversal-safe lookups
-- **Caching** (`cache/`) — Lock-protected in-memory cache with LRU eviction
-- **Engine** (`engine.rs`) — `CodeSymbolGraph` orchestrates the full pipeline
-- **API** (`routes/intelligence.rs`) — `/v1/intelligence/graph`, `/v1/intelligence/blast-radius`, `/v1/intelligence/resolve`, `/v1/intelligence/impacted-tests`
+- **Discovery** (`crates/tadpole-intelligence/src/graph/discover.rs`) — Walks the workspace file tree
+- **Parsing** (`crates/tadpole-intelligence/src/parser.rs` & `graph/parse.rs`) — Extracts Rust/TypeScript symbols via Tree-sitter AST
+- **Indexing** (`crates/tadpole-intelligence/src/graph/key.rs`) — Obfuscated-path registry for traversal-safe lookups
+- **Caching** (`crates/tadpole-intelligence/src/graph/cache.rs`) — Lock-protected in-memory cache with incremental mtime/size checking
+- **Engine** (`crates/tadpole-intelligence/src/graph/engine.rs`) — `CodeSymbolGraph` orchestrates the full pipeline with cooperative `AtomicBool` cancellation
+- **API** (`server-rs/src/routes/intelligence.rs`) — `/v1/intelligence/graph`, `/v1/intelligence/blast-radius`, `/v1/intelligence/resolve`, `/v1/intelligence/impacted-tests`
 
 ---
 

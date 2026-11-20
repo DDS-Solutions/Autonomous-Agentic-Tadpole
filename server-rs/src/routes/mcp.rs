@@ -67,15 +67,14 @@ pub async fn execute_mcp_tool(
         let _ = std::fs::create_dir_all(&workspace_root);
     }
 
-    // 1. Governance: Check Privacy Shield
-    if state.governance.privacy_mode.load(std::sync::atomic::Ordering::SeqCst) {
-        // High-risk: block known external or potentially leaky tools in privacy mode
-        if name.contains("google") || name.contains("openai") || name.contains("anthropic") {
-            return Err(AppError::Forbidden(format!(
-                "Tool '{}' is blocked while Privacy Shield (Local-First) is active.",
-                name
-            )));
-        }
+    // 1. Governance: Check Privacy Shield via shared network-capable MCP tool classifier
+    if state.governance.privacy_mode.load(std::sync::atomic::Ordering::SeqCst)
+        && crate::utils::security::is_network_capable_mcp_tool(&name)
+    {
+        return Err(AppError::Forbidden(format!(
+            "Tool '{}' is blocked while Privacy Shield (Local-First) is active.",
+            name
+        )));
     }
 
     // 2. Governance: Check Permission Policy

@@ -35,6 +35,8 @@ mod tests {
             permission_policy: app_state.security.permission_policy.clone(),
             verification_gate: app_state.security.verification_gate.clone(),
             deploy_token: TEST_TOKEN.to_string(),
+            admin_token: None,
+            readonly_token: None,
             deploy_token_old: None,
             deploy_token_new: None,
             token_rotated_at: None,
@@ -448,6 +450,76 @@ mod tests {
         let service = crate::intelligence::service::IntelligenceService::new(state.clone());
         let impacted = service.get_impacted_tests("core_fn", "src/core.rs").await.unwrap();
         assert_eq!(impacted, vec!["tests/integration/core_suite.rs".to_string()]);
+    }
+
+    // 14. Happy Path: impacted tests detects `tests_*.rs` naming convention (e.g. tests_governance.rs)
+    #[tokio::test]
+    async fn test_get_impacted_tests_matches_tests_prefix_files() {
+        let (_app, state) = setup_test_app().await;
+        let mut sym_graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let core_path = "server-rs/src/agent/policy.rs";
+        let test_path = "server-rs/src/agent/tests_governance.rs";
+        let core_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "enforce_policy".to_string(),
+            path: core_path.to_string(),
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        let test_idx = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "governance_suite_helper".to_string(),
+            path: test_path.to_string(),
+            kind: "function".to_string(),
+            ..Default::default()
+        });
+        sym_graph.graph.add_edge(test_idx, core_idx, crate::intelligence::graph::SymbolEdge { kind: "call".to_string() });
+        sym_graph.index.insert(crate::intelligence::graph::index_key(core_path, "enforce_policy"), core_idx);
+        sym_graph.index.insert(crate::intelligence::graph::index_key(test_path, "governance_suite_helper"), test_idx);
+
+        let swap = state.resources.get_symbol_graph().await.unwrap();
+        swap.store(Arc::new(sym_graph));
+
+        let service = crate::intelligence::service::IntelligenceService::new(state.clone());
+        let impacted = service.get_impacted_tests("enforce_policy", core_path).await.unwrap();
+        assert_eq!(impacted, vec![test_path.to_string()]);
+    }
+
+    // 15. Failure/Edge Path: cooperative AtomicBool cancellation halts BFS immediately and marks truncated
+    #[tokio::test]
+    async fn test_blast_radius_and_resolve_cooperative_cancellation_and_cycles() {
+        let (_app, state) = setup_test_app().await;
+        let mut sym_graph = crate::intelligence::graph::CodeSymbolGraph::new(state.resources.base_dir.clone());
+        let a = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "sym_a".to_string(),
+            path: "src/cycle.rs".to_string(),
+            kind: "function".to_string(),
+            signature: "fn sym_a()".to_string(),
+            ..Default::default()
+        });
+        let b = sym_graph.graph.add_node(crate::intelligence::graph::SymbolNode {
+            name: "sym_b".to_string(),
+            path: "src/cycle.rs".to_string(),
+            kind: "function".to_string(),
+            signature: "fn sym_b()".to_string(),
+            ..Default::default()
+        });
+        sym_graph.graph.add_edge(a, b, crate::intelligence::graph::SymbolEdge { kind: "call".to_string() });
+        sym_graph.graph.add_edge(b, a, crate::intelligence::graph::SymbolEdge { kind: "call".to_string() });
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/cycle.rs", "sym_a"), a);
+        sym_graph.index.insert(crate::intelligence::graph::index_key("src/cycle.rs", "sym_b"), b);
+
+        // Uncancelled cycle terminates cleanly with both nodes
+        let (nodes, truncated) = sym_graph.calculate_blast_radius_cancellable("sym_a", "src/cycle.rs", Some(10), None);
+        assert!(!truncated);
+        assert_eq!(nodes.len(), 2);
+
+        // Pre-set cancellation flag exits immediately and flags truncated=true
+        let cancel = std::sync::atomic::AtomicBool::new(true);
+        let (cancelled_nodes, cancelled_truncated) = sym_graph.calculate_blast_radius_cancellable("sym_a", "src/cycle.rs", Some(10), Some(&cancel));
+        assert!(cancelled_truncated);
+        assert!(cancelled_nodes.is_empty());
+
+        let resolved = sym_graph.resolve_context_cancellable("sym_a", "src/cycle.rs", 2048, None, Some(&cancel));
+        assert!(resolved.is_empty());
     }
 }
 

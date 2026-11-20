@@ -10,8 +10,8 @@
  * - **Telemetry Link**: Search `[constants]` in observability traces.
  */
 
-export const DEFAULT_TIMEOUT = 30000; // 30 seconds default
-export const DEPLOY_TIMEOUT = 7200000; // 2 hours for deployment
+export const DEFAULT_TIMEOUT = 110000; // 110s aligned with server handler envelope
+export const DEPLOY_TIMEOUT = 110000; // 110s server hard cap
 export const MAX_RETRIES = 3;
 export const INITIAL_RETRY_DELAY = 1000;
 

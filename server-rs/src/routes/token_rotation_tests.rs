@@ -49,6 +49,8 @@ mod tests {
             permission_policy: app_state.security.permission_policy.clone(),
             verification_gate: app_state.security.verification_gate.clone(),
             deploy_token: current.to_string(),
+            admin_token: None,
+            readonly_token: None,
             deploy_token_old: old.map(|s| s.to_string()),
             deploy_token_new: new.map(|s| s.to_string()),
             token_rotated_at: rotated_at,

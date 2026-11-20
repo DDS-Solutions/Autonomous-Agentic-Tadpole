@@ -193,9 +193,10 @@ impl OpenAIProvider {
                 }
                 ChatMessage::Tool { tool_call_id, name, content } => {
                     if is_local_or_bridge || tool_call_id == "legacy" || tool_call_id.trim().is_empty() {
-                        let obs_text = if name == "observation" || name.is_empty() {
-                            format!("OBSERVATION: {}", content)
-                        } else if content.starts_with("Tool ") && content.contains(" Result: ") {
+                        let obs_text = if name == "observation"
+                            || name.is_empty()
+                            || (content.starts_with("Tool ") && content.contains(" Result: "))
+                        {
                             format!("OBSERVATION: {}", content)
                         } else {
                             format!("OBSERVATION: Tool {} Result: {}", name, content)

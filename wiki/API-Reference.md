@@ -223,6 +223,7 @@
 |--------|----------|-------------|
 | `GET` | `/v1/benchmarks` | List benchmark definitions |
 | `POST` | `/v1/benchmarks` | Create benchmark run definition |
+| `POST` | `/v1/benchmarks/readiness` | Run native 4-probe Overlord Readiness check (DB, Providers/Tier, Guardrails, Fleet) |
 | `POST` | `/v1/benchmarks/run/{id}` | Execute benchmark run |
 | `GET` | `/v1/benchmarks/{id}` | Historical benchmark results |
 

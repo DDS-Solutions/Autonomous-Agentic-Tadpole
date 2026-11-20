@@ -34,7 +34,7 @@ export const oversight_api_service = {
             return Array.isArray(res) ? res : ((res as { data?: unknown[] }).data || []);
         } catch (error) {
             console.error('[oversight_api_service] Failed to fetch pending oversight actions:', error);
-            return [];
+            throw error;
         }
     },
 
@@ -49,7 +49,7 @@ export const oversight_api_service = {
             return Array.isArray(res) ? res : ((res as { data?: unknown[] }).data || []);
         } catch (error) {
             console.error('[oversight_api_service] Failed to fetch oversight ledger:', error);
-            return [];
+            throw error;
         }
     },
 

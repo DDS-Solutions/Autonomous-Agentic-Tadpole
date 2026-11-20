@@ -54,6 +54,9 @@ describe('INV-SEC-001: Settings Store Storage Partialize Invariant', () => {
             computer_architect_url: 'http://localhost:9000',
             enable_neural_handoff: true,
             sentinel_mode: true,
+            cockpit_mode: 'expert',
+            onboarding_completed: true,
+            active_tier_preset: 'local_sovereign',
         };
 
         const stateToPersist = {

@@ -163,7 +163,7 @@ impl SwarmReaper {
     /// Reaps inactive idle swarm agents into a suspended/hibernating state,
     /// reclaiming in-memory resources and Tokio scheduler slots (Infinity pattern).
     pub async fn reap_idle_agents(pool: &sqlx::SqlitePool, idle_threshold_seconds: i64) -> Result<u64, AppError> {
-        let protected_ids = vec!["1", "2", "alpha", "general"];
+        let protected_ids = ["1", "2", "alpha", "general"];
         let mut tx = pool.begin().await.map_err(AppError::Sqlx)?;
 
         let query = format!(

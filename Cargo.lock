@@ -7424,6 +7424,8 @@ dependencies = [
  "subtle",
  "syn 3.0.9",
  "sysinfo",
+ "tadpole-intelligence",
+ "tadpole-types",
  "tempfile",
  "thiserror 2.0.21",
  "tiktoken-rs",
@@ -8214,6 +8216,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "tadpole-intelligence"
+version = "1.1.59"
+dependencies = [
+ "anyhow",
+ "hex",
+ "ignore",
+ "md5",
+ "petgraph",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "specta",
+ "streaming-iterator",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tiktoken-rs",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "tadpole-os-app"
 version = "1.1.59"
 dependencies = [
@@ -8231,6 +8259,21 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tadpole-types"
+version = "1.1.59"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "specta",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tracing",
 ]
 
 [[package]]

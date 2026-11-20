@@ -7,11 +7,9 @@
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
 //! - **Telemetry Link**: Search `[lib]` in tracing logs.
+//!
 //! @docs STANDARDS:SovereignTooling
 //!
-//! ### 🔍 Debugging & Observability
-//! - **Failure Path**: Runtime logic error, state desynchronization, or resource exhaustion.
-//! - **Telemetry Link**: Search `[lib]` in tracing logs.
 //! Tadpole OS Procedural Macro Library
 //!
 //! This crate provides the `#[agent_tool]` attribute macro, which acts as the
@@ -128,7 +126,7 @@ fn extract_docs(attrs: &[Attribute]) -> String {
             if let syn::Meta::NameValue(nv) = &attr.meta {
                 if let syn::Expr::Lit(expr_lit) = &nv.value {
                     if let syn::Lit::Str(lit_str) = &expr_lit.lit {
-                        docs.push_str(&lit_str.value().trim());
+                        docs.push_str(lit_str.value().trim());
                         docs.push(' ');
                     }
                 }

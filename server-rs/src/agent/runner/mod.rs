@@ -546,7 +546,7 @@ impl AgentRunner {
         }
 
         self.state
-            .yield_phase_transition(&agent_id, "ContextResolution")
+            .yield_phase_transition(agent_id, "ContextResolution")
             .await;
         let agent_data = self
             .state
@@ -562,7 +562,7 @@ impl AgentRunner {
             let blocked_row = sqlx::query(
                 "SELECT id, title, description FROM agent_tasks WHERE agent_id = ?1 AND status = 'needs_input' ORDER BY updated_at ASC LIMIT 1"
             )
-            .bind(&agent_id)
+            .bind(agent_id)
             .fetch_optional(&self.state.resources.pool)
             .await
             .unwrap_or(None);
@@ -582,7 +582,7 @@ impl AgentRunner {
         let lineage = payload.swarm_lineage.clone().unwrap_or_default();
 
         // ♻️ [SSCP] Rehydrate BEFORE context preparation to ensure prompt has state
-        if let Some(restored) = self.state.resources.continuity_arbiter.rehydrate(&agent_id).await {
+        if let Some(restored) = self.state.resources.continuity_arbiter.rehydrate(agent_id).await {
             if let Some(mut agent) = self.state.registry.agents.get_mut(agent_id) {
                 agent.state.working_memory = restored;
                 tracing::info!("♻️ [SSCP] Rehydrated working memory for agent {} before context resolution", agent_id);
@@ -590,7 +590,7 @@ impl AgentRunner {
         }
 
         let ctx = self
-            .prepare_run_context(&agent_id, &payload, &mission_id, depth, &lineage)
+            .prepare_run_context(agent_id, &payload, mission_id, depth, &lineage)
             .await?;
         self.state
             .comms
@@ -615,7 +615,7 @@ impl AgentRunner {
         }
 
         self.state
-            .yield_phase_transition(&agent_id, "IntelligenceLoop")
+            .yield_phase_transition(agent_id, "IntelligenceLoop")
             .await;
         self.record_heartbeat(&ctx.agent_id).await;
         let output_res = self.execute_intelligence_loop(&ctx, &payload).await;
@@ -623,7 +623,7 @@ impl AgentRunner {
         match output_res {
             Ok(output) => {
                 self.state
-                    .yield_phase_transition(&agent_id, "Finalization")
+                    .yield_phase_transition(agent_id, "Finalization")
                     .await;
                 self.record_heartbeat(&ctx.agent_id).await;
                 cleanup_guard.usage = output.usage.clone();
@@ -737,10 +737,10 @@ impl AgentRunner {
             .map_err(AppError::Sqlx)?;
 
             for skill_id in &agent_data.capabilities.skills {
-                let norm_skill = skill_id.trim().to_lowercase().replace(' ', "_").replace('-', "_");
+                let norm_skill = skill_id.trim().to_lowercase().replace([' ', '-'], "_");
                 let sub = subs.iter().find(|row| {
                     if let Ok(db_skill) = row.try_get::<String, _>("skill_id") {
-                        let norm_db = db_skill.trim().to_lowercase().replace(' ', "_").replace('-', "_");
+                        let norm_db = db_skill.trim().to_lowercase().replace([' ', '-'], "_");
                         norm_db == norm_skill
                     } else {
                         false

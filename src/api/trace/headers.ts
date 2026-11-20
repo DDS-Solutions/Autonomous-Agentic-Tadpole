@@ -11,18 +11,25 @@
  */
 
 import type { HttpClientAdapter } from '../types/ports';
+import { AuthError } from '../errors/auth-error';
 
 export function mint_headers(
     crypto: Crypto | HttpClientAdapter['crypto'],
     token: string,
-    custom_request_id?: string
+    custom_request_id?: string,
+    skip_auth: boolean = false
 ): { 
     headers: Record<string, string>; 
     context: { span_id: string; trace_id: string; traceparent: string; request_id: string } 
 } {
-    const cleanToken = token.trim();
-    if (!cleanToken) {
-        throw new Error('Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.');
+    const cleanToken = skip_auth ? '' : token.trim();
+    if (!skip_auth && !cleanToken) {
+        throw new AuthError(
+            'Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.',
+            'about:blank',
+            401,
+            'AUTH_TOKEN_MISSING'
+        );
     }
 
     const request_id = custom_request_id || 
@@ -43,13 +50,17 @@ export function mint_headers(
 
     const traceparent = `00-${trace_id}-${span_id}-01`;
 
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Request-Id': request_id,
+        'traceparent': traceparent
+    };
+    if (cleanToken) {
+        headers['Authorization'] = `Bearer ${cleanToken}`;
+    }
+
     return {
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cleanToken}`,
-            'X-Request-Id': request_id,
-            'traceparent': traceparent
-        },
+        headers,
         context: { span_id, trace_id, traceparent, request_id }
     };
 }

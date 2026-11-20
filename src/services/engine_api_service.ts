@@ -55,6 +55,7 @@ export const engine_api_service = {
             return await api_request<EngineStatus>('/v1/engine/health', {
                 method: 'GET',
                 timeout: 5000,
+                skip_auth: true,
                 ...options
             });
         } catch (error) {

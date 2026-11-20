@@ -130,13 +130,9 @@ This utility performs the following operations:
 
 The dashboard boot logic lives in `src/App.tsx`. During startup it:
 
-- syncs provider defaults
-- syncs providers with the backend
-- initializes visual monitoring
-- syncs provider defaults
-- syncs providers with the backend
-- initializes visual monitoring
-- starts VRAM/memory pressure polling
+- syncs provider defaults and backend provider registrations
+- initializes visual monitoring and memory/VRAM pressure polling
+- runs optional First-Run Overlord onboarding (`src/components/onboarding/FirstRun_Wizard.tsx`) when `onboarding_completed` is false and pre-verifies `NEURAL_TOKEN` before storing it strictly in RAM (`INV-SEC-002`)
 - starts the autonomous Browser Sentinel background daemon if `sentinel_mode` is enabled (`src/services/sentinel_daemon.ts`)
 - fetches the current agent registry
 - pre-loads route chunks in background idle time
@@ -597,6 +593,19 @@ When an agent repeats identical tool calls:
 - At 3 consecutive executions with identical parameter hashes, a `[TOOL_WARNING]` is injected into the observation stream.
 - At 5 repetitions, the mission is halted with `RunnerError::RecursionBlocked`.
 - Operators can review the mission transcript in `/missions`, identify the missing dependency or parameter mismatch, and issue a clarifying directive from the UI.
+
+### Tiered Operator Authentication (`OperatorScope`)
+The engine enforces server-authoritative token scopes in `server-rs/src/middleware/auth.rs`:
+- **`NEURAL_TOKEN_ADMIN` (`Admin`)**: Required for destructive host/deploy/script mutation routes (`/v1/engine/deploy`, `/v1/engine/pre-pr`, `/v1/engine/kill`, `/v1/engine/shutdown`, `PUT`/`DELETE` `/v1/skills/{scripts,workflows,hooks}/*`, `POST /v1/skills/register`) when configured.
+- **`NEURAL_TOKEN` (`Operator`, or `Admin` when `NEURAL_TOKEN_ADMIN` is unset)**: Standard swarm, agent, mission, and oversight operations; preserves zero-breaking local development when only `NEURAL_TOKEN` is set.
+- **`NEURAL_TOKEN_READONLY` (`ReadOnly`)**: Restricted to safe `GET`/`HEAD`/`OPTIONS` observability endpoints; mutating requests and WebSocket upgrades return HTTP 403 (`Insufficient Scope`).
+
+### Day-1 Bootstrap & Progressive Cockpit Operations
+- **Automated Bootstrap (`npm run init`)**: Runs `execution/tadpole_init.py` to generate a 64-hex `NEURAL_TOKEN` (plus optional Admin/ReadOnly tokens), detect Ollama/Docker availability, and write a hardened `.env` without echoing raw credentials. `start_AA_tadpole.bat` invokes it automatically when `.env` is missing.
+- **First-Run Setup Wizard**: Launches automatically for fresh installs (and anytime via `Cmd/Ctrl+K` → *Open Day-1 Overlord Setup Wizard* or the header sparkle button) to verify engine handshake, apply a Model Tier Preset (`Local Sovereign`, `Hybrid Overlord`, `Full Cloud Max`), configure guardrails, and run a live pre-flight readiness check.
+- **Focus vs Expert Cockpit (`Ctrl+Shift+E`)**: Fresh installs open in **Focus Mode** (6 core views: Operations, Missions, Oversight, Agents, Models, Settings). Existing upgraded users stay in **Expert Mode** (all 18 grouped views). Toggle anytime via the sidebar switch, header pill, or Command Palette.
+- **Keyboard-First Oversight Triage (`/oversight`)**: Navigate pending approvals with `j`/`k` (or arrow keys), press `a` to approve, `r` to reject, `g` to add inline guidance, or `Shift+A` to batch-approve **low-risk read-only actions only** (high- and medium-risk mutations always require explicit individual approval).
+- **Pre-Flight Readiness Check (`POST /v1/benchmarks/readiness`)**: Run from `/models`, `/benchmarks`, or the Setup Wizard to score SQLite integrity, active model tier, runtime security guardrails, and fleet governance (`0–100`) with concrete remediation hints.
 
 [//]: # (Metadata: [OPERATIONS_MANUAL])
 

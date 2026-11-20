@@ -6,21 +6,22 @@
 > - **Telemetry Link**: Search `[RUNBOOK_INDEX]` in audit logs.
 >
 > ### AI Assist Note
-> Core technical resource for the Tadpole OS Sovereign infrastructure.
+> Core technical resource for the A-A-Tadpole OS Sovereign infrastructure.
 >
 > ### 🔍 Debugging & Observability
 > Traceability via `parity_guard.py`.
 
 # Runbook Index — Symptom ➔ Script Mapping
 
-This runbook directory guides engineers and automated agents in resolving common operational failure modes of Tadpole OS using the appropriate diagnostic and repair scripts.
+This runbook directory guides engineers and automated agents in resolving common operational failure modes of A-A-Tadpole OS using the appropriate diagnostic and repair scripts.
 
 ## Engine & Database Issues
 
 | Symptom | Script / Command | Description |
 |---------|------------------|-------------|
 | **Port 8000 in use** | `taskkill /F /IM server-rs.exe` | Kills stale engine processes holding the Axum socket. |
-| **Missing NEURAL_TOKEN** | `python execution/rotate_token.py` | Generates a new secure token and updates `.env`. |
+| **Missing NEURAL_TOKEN / Fresh Setup** | `npm run init` (`python execution/tadpole_init.py`) or `python execution/rotate_token.py` | Generates a 64-hex `NEURAL_TOKEN`, detects Ollama/Docker, and initializes `.env`. |
+| **Unverified Model / Engine Readiness** | `POST /v1/benchmarks/readiness` (or UI **Run Readiness Probe**) | Executes 4 native Rust probes (SQLite WAL/FK, Provider Tier, Guardrail Self-Test, Fleet/Governance). |
 | **SQLite Locked** | `python execution/db_health_check.py` | Diagnoses current database connection locks. |
 | **SQLite DB Corrupt** | `python execution/restore_sqlite.py <backup>` | Restores the database from a verified backup copy. |
 | **Migration Failure** | `cargo sqlx migrate run` | Forces database migrations to re-run and sync. |

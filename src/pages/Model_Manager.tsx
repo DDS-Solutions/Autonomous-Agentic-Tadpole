@@ -24,6 +24,7 @@ import {
     Add_Provider_Dialog,
     Add_Node_Dialog
 } from '../components/model';
+import { Readiness_Card } from '../components/model/Readiness_Card';
 
 export default function Model_Manager() {
     const { is_locked } = use_vault_store();
@@ -95,6 +96,8 @@ export default function Model_Manager() {
 
             <div className="flex-1 overflow-auto custom-scrollbar relative">
                 <div className="max-w-7xl mx-auto p-8 space-y-12">
+                    <Readiness_Card />
+
                     <Provider_Grid
                         providers={providers}
                         models={models}

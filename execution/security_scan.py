@@ -71,7 +71,7 @@ DANGEROUS_PATTERNS = [
     (re.compile(r'(?<![\w\.\$])exec\s*\('), "exec() usage", "critical", "Code Injection risk"),
     (re.compile(r'\bnew\s+Function\s*\('), "Function constructor", "high", "Code Injection risk"),
     (re.compile(r'\bchild_process\.exec\s*\('), "child_process.exec", "high", "Command Injection risk"),
-    (re.compile(r'\bsubprocess\.call\s*\([^)]*shell\s*=\s*True'), "subprocess with shell=True", "high", "Command Injection risk"),
+    (re.compile(r'\bsubprocess\.(?:call|run|Popen|check_output|check_call)\s*\([^)]*shell\s*=\s*True'), "subprocess with shell=True", "high", "Command Injection risk"),
     
     # XSS Risks
     (re.compile(r'\bdangerouslySetInnerHTML'), "dangerouslySetInnerHTML", "high", "XSS risk"),

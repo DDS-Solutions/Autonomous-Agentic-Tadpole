@@ -18,6 +18,7 @@ Core test suite verifying ledger classification, auto-approval filters, and pare
 import { describe, it, expect } from 'vitest';
 import {
     check_is_auto,
+    classify_skill_risk,
     get_entry_time,
     is_parent_delegation_directive
 } from './oversight_utils';
@@ -79,6 +80,31 @@ describe('oversight_utils', () => {
             const time = get_entry_time({} as LedgerEntry);
             expect(typeof time).toBe('number');
             expect(time).toBeGreaterThan(0);
+        });
+    });
+
+    describe('classify_skill_risk', () => {
+        it('allows only exact read-only safe skills with non-sensitive params as low risk', () => {
+            expect(classify_skill_risk('read_file', { path: 'README.md' })).toBe('low');
+            expect(classify_skill_risk('list_files', { dir: 'src' })).toBe('low');
+            expect(classify_skill_risk('grep_search', { query: 'TODO' })).toBe('low');
+        });
+
+        it('escalates mutating, sensitive, or unknown prefixed skills out of low risk', () => {
+            expect(classify_skill_risk('search_and_replace', { path: 'src/a.ts' })).toBe('high');
+            expect(classify_skill_risk('query_database', { sql: 'DELETE FROM agents' })).toBe('high');
+            expect(classify_skill_risk('get_credentials')).toBe('high');
+            expect(classify_skill_risk('execute_shell')).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '.env' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '.env_local' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '/home/user/.ssh/id_rsa' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '.ssh/id_ed25519' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '/home/user/.aws/credentials' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '.npmrc' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: 'tls/server.pem' })).toBe('high');
+            expect(classify_skill_risk('read_file', { path: '/proc/self/environ' })).toBe('high');
+            expect(classify_skill_risk('custom_unlisted_tool')).toBe('medium');
+            expect(classify_skill_risk(undefined)).toBe('high');
         });
     });
 });

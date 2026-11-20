@@ -38,7 +38,7 @@ pub fn normalize_alias(name: &str) -> String {
     name.trim().to_lowercase().replace([' ', '-'], "_")
 }
 
-/// Validates that a capability name is non-empty, within bounds, and contains no null bytes.
+/// Validates that a capability name is non-empty, within bounds, and safe for filenames/YAML frontmatter.
 pub fn validate_capability_name(name: &str) -> Result<(), AppError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -50,8 +50,18 @@ pub fn validate_capability_name(name: &str) -> Result<(), AppError> {
             MAX_CAPABILITY_NAME_LEN
         )));
     }
-    if name.contains('\0') {
-        return Err(AppError::BadRequest("Capability name cannot contain null bytes".to_string()));
+    if name.contains('\0')
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains("..")
+        || name.starts_with('.')
+        || name.contains('"')
+        || name.contains('\'')
+        || name.chars().any(|c| c.is_control())
+    {
+        return Err(AppError::BadRequest(
+            "Capability name contains prohibited path traversal, quote, or control characters".to_string(),
+        ));
     }
     Ok(())
 }

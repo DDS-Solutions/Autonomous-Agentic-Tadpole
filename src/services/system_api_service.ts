@@ -30,6 +30,25 @@ import { continuity_api_service } from './continuity_api_service';
 import type { Quota_Details } from '../contracts/governance';
 export type { Quota_Details };
 
+export interface Readiness_Check {
+    id: string;
+    label: string;
+    status: 'pass' | 'warn' | 'fail';
+    latency_ms: number;
+    detail: string;
+    remediation?: string | null;
+}
+
+export interface Readiness_Report {
+    score: number;
+    verdict: 'ready' | 'degraded' | 'not_ready';
+    recommended_max_depth: number;
+    detected_tier: 'local_sovereign' | 'hybrid_overlord' | 'cloud_max' | 'unconfigured';
+    total_latency_ms: number;
+    checks: Readiness_Check[];
+    checked_at: string;
+}
+
 export interface System_Defense {
     memory_pressure: number;
     cpu_load: number;
@@ -242,6 +261,14 @@ export const system_api_service = {
      */
     run_benchmark: async (test_id: string): Promise<Benchmark_Record> => {
         return api_request<Benchmark_Record>(`/v1/benchmarks/run/${test_id}`, { method: 'POST' });
+    },
+
+    /**
+     * run_readiness_probe
+     * Executes the native 4-probe Overlord Readiness check against the live engine.
+     */
+    run_readiness_probe: async (): Promise<Readiness_Report> => {
+        return api_request<Readiness_Report>('/v1/benchmarks/readiness', { method: 'POST' });
     },
 
     /**

@@ -48,4 +48,55 @@ export const is_parent_delegation_directive = (skill_or_tool?: string): boolean 
     );
 };
 
+const SAFE_READ_ONLY_SKILLS = new Set([
+    'read_file',
+    'read_codebase_file',
+    'list_dir',
+    'list_files',
+    'search_codebase',
+    'grep_search',
+    'get_symbol_graph',
+    'get_blast_radius',
+    'inspect_status',
+    'check_health',
+    'stat_file',
+    'find_files',
+]);
+
+const HIGH_RISK_SKILL_KEYWORDS = [
+    'shell', 'exec', 'command', 'terminal', 'deploy', 'shutdown', 'kill', 'delete',
+    'remove', 'rm_', 'hook', 'script', 'spawn_subagent', 'alpha_directive',
+    'replace', 'write', 'update', 'insert', 'drop', 'truncate', 'database', 'sql',
+    'credential', 'secret', 'token', 'password', 'key', 'env',
+];
+
+const SENSITIVE_PARAM_PATTERN =
+    /(?:\.env(?:$|[._/\\"'`\s])|\.ssh|id_rsa|id_ed25519|id_ecdsa|credentials\.json|token\.json|\.aws[/\\]credentials|\.npmrc|\.netrc|\.pem\b|\.key\b|\/proc\/self\/environ|\/etc\/|c:[/\\]windows|secret|password|private_key)/i;
+
+/**
+ * Classifies an oversight skill/tool call into low/medium/high operational risk.
+ * Uses a strict exact-name read-only allowlist plus parameter inspection so mutating
+ * tools (`search_and_replace`, `query_database`) and secret reads (`read_file(.env)`)
+ * are NEVER eligible for low-risk batch approval.
+ */
+export function classify_skill_risk(
+    skill_name?: string,
+    params?: unknown
+): 'low' | 'medium' | 'high' {
+    const s = (skill_name || '').toLowerCase().trim();
+    if (!s || HIGH_RISK_SKILL_KEYWORDS.some((kw) => s.includes(kw))) return 'high';
+    if (params !== undefined && params !== null) {
+        try {
+            const serialized = typeof params === 'string' ? params : JSON.stringify(params);
+            if (SENSITIVE_PARAM_PATTERN.test(serialized)) {
+                return 'high';
+            }
+        } catch {
+            return 'high';
+        }
+    }
+    if (SAFE_READ_ONLY_SKILLS.has(s)) return 'low';
+    return 'medium';
+}
+
 // Metadata: [oversight_utils]

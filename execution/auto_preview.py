@@ -27,6 +27,7 @@ import time
 import json
 import signal
 import io
+import shutil
 import argparse
 import subprocess
 from pathlib import Path
@@ -88,6 +89,10 @@ def start_server(port=3000):
     
     print(f"🚀 [OK] Starting preview on port {port}...")
     
+    resolved = shutil.which(cmd[0])
+    if resolved:
+        cmd = [resolved, *cmd[1:]]
+
     with open(LOG_FILE, "w") as log:
         process = subprocess.Popen(
             cmd,
@@ -95,7 +100,7 @@ def start_server(port=3000):
             stdout=log,
             stderr=log,
             env=env,
-            shell=True # Required for npm on windows often, or consistent path handling
+            shell=False
         )
     
     PID_FILE.write_text(str(process.pid))

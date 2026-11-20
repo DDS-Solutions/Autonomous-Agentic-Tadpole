@@ -161,7 +161,7 @@ flowchart TD
    - **Target Files**:
      - [`server-rs/src/agent/runner/mod.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/mod.rs#L160, #L201)
      - [`server-rs/src/agent/runner/tools/dispatcher.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/tools/dispatcher.rs#L152)
-     - [`server-rs/src/agent/runner/swarm.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/swarm.rs#L75)
+     - [`server-rs/src/agent/runner/swarm/mod.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/swarm/sanitize.rs)
    - **Remediation**:
      - Refactor `ToolContext` to carry `depth`, `ancestor_chain`, `safe_mode`, `primary_goal`, and `accounting_receipt`.
      - Eliminate `..Default::default()` resets in `RunContext::from_tool_ctx`.
@@ -281,7 +281,7 @@ flowchart TD
 2. **A02 (P2): Graph Discovery Exclusions**
    - **Target Files**:
      - [`server-rs/src/intelligence/graph_store.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/intelligence/graph_store.rs#L378)
-     - [`server-rs/src/intelligence/graph/discover.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/intelligence/graph/discover.rs#L42)
+     - [`server-rs/src/intelligence/graph/discover.rs`](file:///G:/Autonomous-Agentic-Tadpole/crates/tadpole-intelligence/src/graph/discover.rs#L42)
    - **Remediation**:
      - Exclude pattern `target*` (including `target_check`, `target_clippy`, `target_test`).
      - Align exclusion lists between persisted and live graph discovery.

@@ -68,7 +68,10 @@ pub struct ProviderResponse {
 
 impl From<&ProviderConfig> for ProviderResponse {
     fn from(config: &ProviderConfig) -> Self {
-        let has_key = config.api_key.as_ref().is_some_and(|s| !s.trim().is_empty());
+        let has_key = config
+            .api_key
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty());
         Self {
             id: config.id.clone(),
             name: config.name.clone(),
@@ -92,15 +95,19 @@ pub fn is_secure_local(url_str: &str) -> bool {
     let Ok(parsed) = reqwest::Url::parse(url_str) else {
         return false;
     };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
     if let Some(host) = parsed.host_str() {
-        if host.eq_ignore_ascii_case("localhost")
-            || host == "127.0.0.1"
-            || host == "::1"
-            || host.eq_ignore_ascii_case("host.docker.internal")
+        let stripped = host.trim_start_matches('[').trim_end_matches(']');
+        if stripped.eq_ignore_ascii_case("localhost")
+            || stripped == "127.0.0.1"
+            || stripped == "::1"
+            || stripped.eq_ignore_ascii_case("host.docker.internal")
         {
             return true;
         }
-        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        if let Ok(ip) = stripped.parse::<std::net::IpAddr>() {
             return match ip {
                 std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
                 std::net::IpAddr::V6(v6) => v6.is_loopback(),
@@ -334,7 +341,10 @@ pub async fn delete_provider(
 
         // Also remove all models associated with this provider
         let initial_count = state.registry.models.len();
-        state.registry.models.retain(|_, model| model.provider_id != id);
+        state
+            .registry
+            .models
+            .retain(|_, model| model.provider_id != id);
         let removed_count = initial_count - state.registry.models.len();
         if removed_count > 0 {
             tracing::info!(
@@ -443,18 +453,24 @@ pub async fn test_provider(
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("🔍 [Test Trace] Initiating handshake for provider: {}", id);
 
-    let api_key = config
-        .api_key
-        .filter(|k| !k.is_empty())
-        .or_else(|| {
-            state
-                .registry
-                .providers
-                .get(&id)
-                .and_then(|p| p.api_key.clone())
-        })
+    let stored_provider = state.registry.providers.get(&id).map(|p| p.clone());
+    let supplied_key = config.api_key.filter(|k| !k.is_empty());
+    let using_stored_key = supplied_key.is_none();
+    let api_key = supplied_key
+        .or_else(|| stored_provider.as_ref().and_then(|p| p.api_key.clone()))
         .unwrap_or_default();
-    let base_url = config.base_url.as_deref().unwrap_or("");
+    let stored_base = stored_provider
+        .as_ref()
+        .and_then(|p| p.base_url.as_deref())
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('/');
+    let requested_base = config
+        .base_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('/');
     let protocol = config.protocol.to_string().to_lowercase();
 
     if api_key.is_empty() {
@@ -463,11 +479,42 @@ pub async fn test_provider(
         ));
     }
 
+    // SEC-EXFIL: Never transmit a stored server-side API key to a caller-modified base_url.
+    // When testing with a stored key and an omitted base_url, fall back to the stored provider's
+    // configured base_url so self-hosted/custom keys are never redirected to a public default host.
+    let effective_base_url = if using_stored_key {
+        if !requested_base.is_empty() && !requested_base.eq_ignore_ascii_case(stored_base) {
+            return Err(AppError::Forbidden(
+                "Refusing to send stored provider credentials to a modified base_url. Supply an explicit api_key or update the provider configuration first.".to_string(),
+            ));
+        }
+        if requested_base.is_empty() {
+            stored_base
+        } else {
+            requested_base
+        }
+    } else {
+        requested_base
+    };
+
     let router = ProtocolRouter::from_protocol(&protocol);
-    let url = router.build_models_url(&protocol, base_url, false);
+    let url = router.build_models_url(&protocol, effective_base_url, false);
 
     // SEC-01: Prevent transmission of API keys over unencrypted HTTP for external endpoints.
     validate_provider_transport_url(&url, true)?;
+
+    // SEC-PRIVACY: Respect cluster privacy_mode using parsed URL host validation (not raw prefix matching).
+    if state
+        .governance
+        .privacy_mode
+        .load(std::sync::atomic::Ordering::SeqCst)
+        && !is_secure_local(&url)
+    {
+        return Err(AppError::Forbidden(
+            "Privacy Mode is active: outbound external provider handshakes are blocked."
+                .to_string(),
+        ));
+    }
 
     let request = state.resources.http_client.get(&url);
     let request = router.authenticate_request(request, &api_key);
@@ -693,6 +740,67 @@ pub struct PullModelPayload {
     pub tag: String,
 }
 
+/// Validates whether a peer URL is trusted to receive Admin-scoped cluster pull credentials.
+/// Only loopback targets (`localhost`, `127.0.0.1`, `[::1]`, or IPv4/IPv6 loopback) are trusted
+/// by default; non-loopback peers (including unauthenticated mDNS-discovered or simulated LAN nodes)
+/// MUST be explicitly allowlisted in `SWARM_TRUSTED_PEERS` and satisfy either `https` or `is_secure_local`.
+pub fn is_trusted_pull_peer_url(url_str: &str, trusted_peers_csv: Option<&str>) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url_str) else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    let Some(raw_host) = parsed.host_str() else {
+        return false;
+    };
+    let stripped_host = raw_host.trim_start_matches('[').trim_end_matches(']');
+
+    if stripped_host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if let Ok(ip) = stripped_host.parse::<std::net::IpAddr>() {
+        if ip.is_loopback() {
+            return true;
+        }
+    }
+
+    let Some(csv) = trusted_peers_csv else {
+        return false;
+    };
+    let host_port = match parsed.port() {
+        Some(port) => format!("{}:{}", raw_host, port),
+        None => raw_host.to_string(),
+    };
+    let host_port_stripped = match parsed.port() {
+        Some(port) => format!("{}:{}", stripped_host, port),
+        None => stripped_host.to_string(),
+    };
+    let explicitly_trusted = csv
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .any(|entry| {
+            let normalized = entry
+                .trim_start_matches("http://")
+                .trim_start_matches("https://")
+                .trim_end_matches('/');
+            normalized.eq_ignore_ascii_case(raw_host)
+                || normalized.eq_ignore_ascii_case(stripped_host)
+                || normalized.eq_ignore_ascii_case(&host_port)
+                || normalized.eq_ignore_ascii_case(&host_port_stripped)
+        });
+
+    if !explicitly_trusted {
+        return false;
+    }
+
+    parsed.scheme() == "https" || is_secure_local(url_str)
+}
+
 /// Proxies a model pull request to a specific swarm node.
 pub async fn pull_model(
     State(state): State<Arc<AppState>>,
@@ -712,22 +820,39 @@ pub async fn pull_model(
         (node.name.clone(), node.address.clone())
     };
 
-    // 2. Prepare the Ollama pull request
-    let ollama_url = format!("http://{}/v1/api/pull", node_address);
+    // 2. Prepare and validate the peer pull URL before attaching any credentials
+    let trimmed_addr = node_address.trim().trim_end_matches('/');
+    let ollama_url = if trimmed_addr.starts_with("http://") || trimmed_addr.starts_with("https://") {
+        format!("{}/v1/api/pull", trimmed_addr)
+    } else {
+        format!("http://{}/v1/api/pull", trimmed_addr)
+    };
+
+    let trusted_peers = std::env::var("SWARM_TRUSTED_PEERS").ok();
+    if !is_trusted_pull_peer_url(&ollama_url, trusted_peers.as_deref()) {
+        return Err(AppError::Forbidden(format!(
+            "Refusing to forward Admin pull credentials to untrusted peer node '{}' ({}). Only loopback peers or hosts explicitly allowlisted in SWARM_TRUSTED_PEERS are permitted.",
+            node_name, node_address
+        )));
+    }
+
     let ollama_payload = serde_json::json!({
         "name": payload.tag,
         "stream": false
     });
 
-    // 3. Dispatch the request with Swarm Authentication (NEURAL_TOKEN)
+    // 3. Dispatch using Admin-capable token (matches POST /v1/api/pull Admin scope under tiered RBAC)
+    let peer_token = state
+        .security
+        .admin_token
+        .as_deref()
+        .unwrap_or(&state.security.deploy_token);
+
     let resp = state
         .resources
         .http_client
         .post(&ollama_url)
-        .header(
-            "Authorization",
-            format!("Bearer {}", state.security.deploy_token),
-        )
+        .header("Authorization", format!("Bearer {}", peer_token))
         .json(&ollama_payload)
         .send()
         .await
@@ -830,7 +955,10 @@ mod tests {
             ]
         });
         assert_eq!(
-            google_router.parse_discovery_response(&google_body, "https://generativelanguage.googleapis.com/v1/models"),
+            google_router.parse_discovery_response(
+                &google_body,
+                "https://generativelanguage.googleapis.com/v1/models"
+            ),
             vec!["gemini-2.5-pro".to_string(), "gemini-2.5-flash".to_string()]
         );
 
@@ -841,16 +969,22 @@ mod tests {
         );
         assert!(validate_provider_transport_url("https://api.openai.com/v1/models", true).is_ok());
         assert!(validate_provider_transport_url("http://127.0.0.1:11434/api/tags", true).is_ok());
-        assert!(validate_provider_transport_url("http://192.168.1.50:11434/api/tags", true).is_ok());
+        assert!(
+            validate_provider_transport_url("http://192.168.1.50:11434/api/tags", true).is_ok()
+        );
 
         // (b) Failure Path (Input Validation & SEC-01): External unencrypted HTTP with API key and malformed URLs
         let insecure_err = validate_provider_transport_url("http://api.openai.com/v1/models", true)
             .expect_err("External HTTP with API key must be blocked by SEC-01");
-        assert!(matches!(insecure_err, AppError::BadRequest(msg) if msg.contains("Insecure transmission blocked")));
+        assert!(
+            matches!(insecure_err, AppError::BadRequest(msg) if msg.contains("Insecure transmission blocked"))
+        );
 
         let malformed_err = validate_provider_transport_url("not a valid url", true)
             .expect_err("Malformed URL must return BadRequest");
-        assert!(matches!(malformed_err, AppError::BadRequest(msg) if msg.contains("Malformed provider URL")));
+        assert!(
+            matches!(malformed_err, AppError::BadRequest(msg) if msg.contains("Malformed provider URL"))
+        );
 
         // (c) Edge Case Path: Trailing slashes, cloud vs. local 0.0 pricing normalization, and Anthropic fallback list
         let openai_router = ProtocolRouter::from_protocol("openai");
@@ -879,6 +1013,239 @@ mod tests {
         enrich_and_normalize_model_entry(&mut local_entry, "qwen2.5-coder:7b");
         assert_eq!(local_entry.input_cost_per_m, Some(0.0));
         assert_eq!(local_entry.output_cost_per_m, Some(0.0));
+    }
+
+    #[tokio::test]
+    async fn test_provider_privacy_mode_and_stored_key_exfil_guards() {
+        // URL-parsed local host validation rejects prefix/userinfo spoof domains and accepts IPv4/IPv6 loopback
+        assert!(is_secure_local("http://127.0.0.1:11434/api/tags"));
+        assert!(is_secure_local("http://localhost:11434/api/tags"));
+        assert!(is_secure_local("http://[::1]:11434/api/tags"));
+        assert!(is_secure_local("https://[::1]:8443/v1/models"));
+        assert!(!is_secure_local(
+            "https://localhost.attacker.example/v1/models"
+        ));
+        assert!(!is_secure_local(
+            "https://localhost@attacker.example/v1/models"
+        ));
+        assert!(!is_secure_local(
+            "http://127.0.0.1.attacker.example/v1/models"
+        ));
+        assert!(!is_secure_local("file://localhost/etc/passwd"));
+
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        state
+            .governance
+            .privacy_mode
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        // Register a stored custom-endpoint provider with a server-side secret key
+        let stored = ProviderConfig {
+            id: "custom-openai".to_string(),
+            name: "Custom OpenAI".to_string(),
+            icon: None,
+            base_url: Some("https://internal.corp.example/v1".to_string()),
+            protocol: crate::agent::types::ModelProvider::Openai,
+            external_id: None,
+            custom_headers: None,
+            default_config: None,
+            supports_steering_vectors: false,
+            audio_model: None,
+            api_key: Some("sk-stored-secret-do-not-exfil".to_string()),
+        };
+        state
+            .registry
+            .providers
+            .insert(stored.id.clone(), stored.clone());
+
+        // (1) Privacy Mode MUST block spoofed https://localhost.attacker.example prefix bypass
+        let spoof_cfg = ProviderConfig {
+            id: "spoof".to_string(),
+            name: "Spoof".to_string(),
+            icon: None,
+            base_url: Some("https://localhost.attacker.example/v1".to_string()),
+            protocol: crate::agent::types::ModelProvider::Openai,
+            external_id: None,
+            custom_headers: None,
+            default_config: None,
+            supports_steering_vectors: false,
+            audio_model: None,
+            api_key: Some("sk-explicit-key".to_string()),
+        };
+        let spoof_res = test_provider(
+            axum::extract::State(state.clone()),
+            axum::extract::Path("spoof".to_string()),
+            Json(spoof_cfg),
+        )
+        .await;
+        assert!(
+            matches!(spoof_res, Err(AppError::Forbidden(ref msg)) if msg.contains("Privacy Mode")),
+            "Spoofed localhost.attacker.example must be blocked by Privacy Mode"
+        );
+
+        // (2) Stored-key exfiltration guard: caller-modified base_url MUST be rejected with 403
+        let exfil_cfg = ProviderConfig {
+            api_key: None,
+            base_url: Some("https://attacker.example/v1".to_string()),
+            ..stored.clone()
+        };
+        let exfil_res = test_provider(
+            axum::extract::State(state.clone()),
+            axum::extract::Path(stored.id.clone()),
+            Json(exfil_cfg),
+        )
+        .await;
+        assert!(
+            matches!(exfil_res, Err(AppError::Forbidden(ref msg)) if msg.contains("modified base_url")),
+            "Modified base_url with stored API key must return Forbidden"
+        );
+
+        // (3) Stored-key omitted base_url falls back to stored_provider.base_url (never public default host)
+        // Here stored_provider has a non-local HTTPS URL, so Privacy Mode blocks it deterministically.
+        let omitted_base_cfg = ProviderConfig {
+            api_key: None,
+            base_url: None,
+            ..stored.clone()
+        };
+        let omitted_res = test_provider(
+            axum::extract::State(state.clone()),
+            axum::extract::Path(stored.id.clone()),
+            Json(omitted_base_cfg),
+        )
+        .await;
+        assert!(
+            matches!(omitted_res, Err(AppError::Forbidden(ref msg)) if msg.contains("Privacy Mode")),
+            "Omitted base_url with stored key must fall back to stored base_url and obey Privacy Mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pull_model_peer_trust_and_tiered_admin_auth() {
+        use axum::{middleware::from_fn_with_state, routing::post, Router};
+
+        // Pure peer-trust validation across loopback, IPv6, userinfo spoof, unverified LAN, and explicit allowlist
+        assert!(is_trusted_pull_peer_url("http://127.0.0.1:8000/v1/api/pull", None));
+        assert!(is_trusted_pull_peer_url("http://localhost:8000/v1/api/pull", None));
+        assert!(is_trusted_pull_peer_url("http://[::1]:8000/v1/api/pull", None));
+        assert!(!is_trusted_pull_peer_url("http://192.168.50.42:8000/v1/api/pull", None));
+        assert!(!is_trusted_pull_peer_url("http://attacker.example:8000/v1/api/pull", None));
+        assert!(!is_trusted_pull_peer_url("http://127.0.0.1@attacker.example:8000/v1/api/pull", None));
+        assert!(is_trusted_pull_peer_url(
+            "http://192.168.50.42:8000/v1/api/pull",
+            Some("192.168.50.42:8000")
+        ));
+        assert!(!is_trusted_pull_peer_url(
+            "http://192.168.50.99:8000/v1/api/pull",
+            Some("192.168.50.42:8000")
+        ));
+        // External allowlisted peer MUST use HTTPS (never cleartext HTTP)
+        assert!(!is_trusted_pull_peer_url(
+            "http://bunker.corp.example/v1/api/pull",
+            Some("bunker.corp.example")
+        ));
+        assert!(is_trusted_pull_peer_url(
+            "https://bunker.corp.example/v1/api/pull",
+            Some("bunker.corp.example")
+        ));
+
+        // Build AppState with tiered RBAC: Operator deploy_token != Admin admin_token
+        let mut base_state = AppState::new_minimal_mock().await;
+        base_state.security = Arc::new(crate::state::hubs::sec::SecurityHub {
+            audit_trail: base_state.security.audit_trail.clone(),
+            budget_guard: base_state.security.budget_guard.clone(),
+            shell_scanner: base_state.security.shell_scanner.clone(),
+            secret_redactor: base_state.security.secret_redactor.clone(),
+            system_monitor: base_state.security.system_monitor.clone(),
+            permission_policy: base_state.security.permission_policy.clone(),
+            verification_gate: base_state.security.verification_gate.clone(),
+            deploy_token: "operator-only-token-123456".to_string(),
+            admin_token: Some("admin-super-token-987654".to_string()),
+            readonly_token: None,
+            deploy_token_old: None,
+            deploy_token_new: None,
+            token_rotated_at: None,
+            token_grace_secs: None,
+            conflict: base_state.security.conflict.clone(),
+        });
+        let state = Arc::new(base_state);
+
+        // (a) Happy Path: loopback peer enforcing real validate_token middleware on POST /v1/api/pull
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let peer_addr = listener.local_addr().unwrap();
+        let peer_app = Router::new()
+            .route(
+                "/v1/api/pull",
+                post(|| async { (StatusCode::OK, Json(serde_json::json!({ "status": "pulling" }))) }),
+            )
+            .layer(from_fn_with_state(
+                state.clone(),
+                crate::middleware::auth::validate_token,
+            ));
+        let server_handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, peer_app).await;
+        });
+
+        state.registry.nodes.insert(
+            "local-loopback".to_string(),
+            crate::agent::types::SwarmNode {
+                id: "local-loopback".to_string(),
+                name: "Local Bunker".to_string(),
+                address: peer_addr.to_string(),
+                status: "online".to_string(),
+                last_seen: chrono::Utc::now(),
+                metadata: std::collections::HashMap::new(),
+            },
+        );
+        let happy_res = pull_model(
+            axum::extract::State(state.clone()),
+            Json(PullModelPayload {
+                node_id: "local-loopback".to_string(),
+                tag: "qwen2.5-coder:7b".to_string(),
+            }),
+        )
+        .await;
+        server_handle.abort();
+        assert!(
+            happy_res.is_ok(),
+            "Loopback peer pull_model must succeed under tiered RBAC using Admin token, got: {:?}",
+            happy_res.err()
+        );
+
+        // (b) Failure Path: unverified LAN/mDNS node MUST fail closed with 403 Forbidden (zero credentials leaked)
+        state.registry.nodes.insert(
+            "rogue-mdns".to_string(),
+            crate::agent::types::SwarmNode {
+                id: "rogue-mdns".to_string(),
+                name: "Unverified Edge".to_string(),
+                address: "192.168.50.42:8000".to_string(),
+                status: "online".to_string(),
+                last_seen: chrono::Utc::now(),
+                metadata: std::collections::HashMap::new(),
+            },
+        );
+        let rogue_res = pull_model(
+            axum::extract::State(state.clone()),
+            Json(PullModelPayload {
+                node_id: "rogue-mdns".to_string(),
+                tag: "qwen2.5-coder:7b".to_string(),
+            }),
+        )
+        .await;
+        assert!(
+            matches!(rogue_res, Err(AppError::Forbidden(ref msg)) if msg.contains("SWARM_TRUSTED_PEERS")),
+            "Unverified LAN peer must be rejected with 403 Forbidden"
+        );
+
+        // (c) Edge Case Path: nonexistent node_id returns 404 NotFound cleanly
+        let missing_res = pull_model(
+            axum::extract::State(state),
+            Json(PullModelPayload {
+                node_id: "missing-node-xyz".to_string(),
+                tag: "qwen2.5-coder:7b".to_string(),
+            }),
+        )
+        .await;
+        assert!(matches!(missing_res, Err(AppError::NotFound(_))));
     }
 }
 

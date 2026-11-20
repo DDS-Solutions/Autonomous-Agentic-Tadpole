@@ -42,7 +42,7 @@ The current `ModelEntry` struct and `ProviderConfig` system in Tadpole OS requir
 
 ### Layer 1 — New Type: `ModelCapabilities`
 
-Add to `server-rs/src/agent/types.rs`. This is the core truth object all downstream logic will consume.
+Add to `crates/tadpole-types/src/model.rs` (re-exported via `server-rs/src/agent/types/mod.rs`). This is the core truth object all downstream logic will consume.
 
 ```rust
 /// Describes the functional capabilities of a specific AI model.
@@ -378,7 +378,7 @@ When a user selects a model for an agent:
 ## 🔧 Implementation Plan
 
 ### Sprint 1: Core Types & Matrix (Backend)
-- [ ] Add `ModelCapabilities` struct to `types.rs`
+- [ ] Add `ModelCapabilities` struct to `crates/tadpole-types/src/model.rs` (re-exported via `server-rs/src/agent/types/mod.rs`)
 - [ ] Extend `ModelEntry` with `capabilities` and `last_synced_at`
 - [ ] Create `server-rs/src/agent/capability_matrix.rs` with full match logic for all providers and local models listed above
 - [ ] Wire `ModelConfig::supports_native_tools()` to delegate to `ModelCapabilities.supports_tools` for consistency
@@ -413,7 +413,7 @@ When a user selects a model for an agent:
 
 | File | Change |
 |---|---|
-| `server-rs/src/agent/types.rs` | ADD `ModelCapabilities` struct, EXTEND `ModelEntry` |
+| `crates/tadpole-types/src/model.rs` (facade: `server-rs/src/agent/types/mod.rs`) | ADD `ModelCapabilities` struct, EXTEND `ModelEntry` |
 | `server-rs/src/agent/capability_matrix.rs` | NEW FILE |
 | `server-rs/src/routes/model_sync.rs` | NEW FILE |
 | `server-rs/src/routes/model_manager.rs` | ADD sync route handler call |

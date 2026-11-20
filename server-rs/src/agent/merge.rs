@@ -185,7 +185,7 @@ impl AgentConfigUpdate {
         if let Some(skills) = &self.skills {
             agent.capabilities.skills = skills
                 .iter()
-                .map(|s| s.trim().to_lowercase().replace(' ', "_").replace('-', "_"))
+                .map(|s| s.trim().to_lowercase().replace([' ', '-'], "_"))
                 .collect();
             changed = true;
         }

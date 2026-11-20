@@ -13,6 +13,7 @@ use crate::error::AppError;
 use crate::intelligence::graph::{CodeSymbolGraph, SymbolNode};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -266,20 +267,30 @@ impl IntelligenceService {
         path: &str,
         max_nodes: Option<usize>,
     ) -> Result<Vec<SymbolNode>, AppError> {
-        Ok(self.blast_radius_result(name, path, max_nodes).await?.0)
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
+        let snapshot = graph_swap.load_full();
+        Ok(self.blast_radius_on_snapshot(snapshot, name, path, max_nodes).await?.0)
     }
 
-    async fn blast_radius_result(
+    async fn blast_radius_on_snapshot(
         &self,
+        snapshot: Arc<CodeSymbolGraph>,
         name: &str,
         path: &str,
         max_nodes: Option<usize>,
     ) -> Result<(Vec<SymbolNode>, bool), AppError> {
         let workspace_root = self.state.resources.base_dir.clone();
-        let graph_swap = self.state.resources.get_symbol_graph().await?;
-        let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
         let query_path = path.replace('\\', "/");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_worker = Arc::clone(&cancel);
+        struct CancelOnDrop(Arc<AtomicBool>);
+        impl Drop for CancelOnDrop {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let _cancel_guard = CancelOnDrop(Arc::clone(&cancel));
 
         let task_future = tokio::task::spawn_blocking(move || {
             // Verify input path boundary unconditionally first
@@ -293,10 +304,9 @@ impl IntelligenceService {
                 "[intelligence] Calculating blast radius for symbol: {}",
                 query_name
             );
-            let guard = swap_clone.load();
 
             // Reverse-resolve the physical raw path from the obfuscated path, or use directly if valid
-            let raw_path = guard
+            let raw_path = snapshot
                 .obfuscated_to_real_path
                 .get(&query_path)
                 .map(|p| p.as_str())
@@ -309,10 +319,11 @@ impl IntelligenceService {
                 ));
             }
 
-            Ok::<_, AppError>(guard.calculate_blast_radius_bounded(
+            Ok::<_, AppError>(snapshot.calculate_blast_radius_cancellable(
                 &query_name,
                 raw_path,
                 max_nodes,
+                Some(cancel_worker.as_ref()),
             ))
         });
 
@@ -324,6 +335,7 @@ impl IntelligenceService {
                 ))
             })??,
             Err(_) => {
+                cancel.store(true, Ordering::Relaxed);
                 return Err(AppError::DomainError {
                     code: "BR_TIMEOUT".to_string(),
                     detail: "Blast radius computation timed out after 5 seconds".to_string(),
@@ -347,6 +359,15 @@ impl IntelligenceService {
         let swap_clone = Arc::clone(&graph_swap);
         let query_name = name.to_string();
         let query_path = path.replace('\\', "/");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_worker = Arc::clone(&cancel);
+        struct CancelOnDrop(Arc<AtomicBool>);
+        impl Drop for CancelOnDrop {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let _cancel_guard = CancelOnDrop(Arc::clone(&cancel));
 
         let bpe_arc = self.state.resources.get_tokenizer_bpe().await;
         let truncation_estimate = bpe_arc.is_none();
@@ -380,7 +401,13 @@ impl IntelligenceService {
             }
 
             let bpe_ref = bpe_arc.as_deref();
-            let symbols = guard.resolve_context(&query_name, raw_path, budget, bpe_ref);
+            let symbols = guard.resolve_context_cancellable(
+                &query_name,
+                raw_path,
+                budget,
+                bpe_ref,
+                Some(cancel_worker.as_ref()),
+            );
 
             // Calculate accumulated tokens
             let accumulated_tokens = symbols.iter().map(|s| s.tokens).sum();
@@ -394,6 +421,7 @@ impl IntelligenceService {
                 AppError::InternalServerError(format!("Context resolution thread panicked: {}", e))
             })??,
             Err(_) => {
+                cancel.store(true, Ordering::Relaxed);
                 return Err(AppError::DomainError {
                     code: "BR_TIMEOUT".to_string(),
                     detail: "Context resolution computation timed out after 5 seconds".to_string(),
@@ -416,8 +444,11 @@ impl IntelligenceService {
         name: &str,
         path: &str,
     ) -> Result<Vec<String>, AppError> {
+        let graph_swap = self.state.resources.get_symbol_graph().await?;
+        let snapshot = graph_swap.load_full();
         let (affected, truncated) = self
-            .blast_radius_result(
+            .blast_radius_on_snapshot(
+                Arc::clone(&snapshot),
                 name,
                 path,
                 Some(crate::intelligence::graph::constants::MAX_NODES),
@@ -431,12 +462,10 @@ impl IntelligenceService {
                 help_link: None,
             });
         }
-        let graph_swap = self.state.resources.get_symbol_graph().await?;
-        let guard = graph_swap.load();
         let mut tests = std::collections::BTreeSet::new();
 
         for node in affected {
-            let resolved_path = guard.resolve_path(&node.path);
+            let resolved_path = snapshot.resolve_path(&node.path);
             let p = resolved_path.to_lowercase();
             let n = node.name.to_lowercase();
             let k = node.kind.to_lowercase();
@@ -457,7 +486,8 @@ impl IntelligenceService {
                 || file_name.ends_with("_test.rs")
                 || file_name.ends_with("_tests.rs")
                 || file_name.ends_with("_test.py")
-                || file_name.starts_with("test_");
+                || file_name.starts_with("test_")
+                || file_name.starts_with("tests_");
             let is_test_symbol = n.starts_with("test_") || n.ends_with("_test") || k == "test";
 
             let is_test = is_in_test_dir || is_test_file || is_test_symbol;

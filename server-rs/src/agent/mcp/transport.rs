@@ -140,7 +140,21 @@ pub async fn mcp_message_handler(
         "tools/call" => {
             let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
-            
+
+            // 🛡️ [Privacy Mode] Block external/network MCP tools via shared security classifier
+            if state.governance.privacy_mode.load(std::sync::atomic::Ordering::SeqCst)
+                && crate::utils::security::is_network_capable_mcp_tool(tool_name)
+            {
+                return Ok(Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32601,
+                        "message": format!("Privacy Mode active: network-capable MCP tool '{}' is blocked.", tool_name)
+                    }
+                })));
+            }
+
             // 🛡️ [Governance] Enforce Permission Policy for External MCP Clients
             let mode = state.security.permission_policy.get_mode(tool_name, "mcp-client").await;
             if mode != crate::security::permissions::PermissionMode::Allow {

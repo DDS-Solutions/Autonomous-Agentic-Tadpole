@@ -27,6 +27,7 @@ import {
 import { tadpole_os_service } from '../services/tadpoleos_service';
 import { event_bus } from '../services/event_bus';
 import { Tooltip } from '../components/ui';
+import { Readiness_Card } from '../components/model/Readiness_Card';
 import { i18n } from '../i18n';
 
 interface BenchmarkResult {
@@ -191,6 +192,9 @@ const Benchmark_Analytics: React.FC = () => {
                     </div>
                 </div>
             </header>
+
+            {/* Native Overlord 4-Probe Readiness Check */}
+            <Readiness_Card on_complete={() => void fetchBenchmarks()} />
 
             {/* Comparison Tool */}
             <AnimatePresence>

@@ -647,8 +647,12 @@ impl McpHost {
         let server_config = config.mcp_servers.get(server_name)
             .ok_or_else(|| AppError::NotFound(format!("MCP server '{}' not found in config", server_name)))?;
 
-        // Validate command safety
+        // Validate command binary and all configured arguments against zero-trust policy
         crate::utils::security::validate_shell_command(&server_config.command)?;
+        crate::utils::security::validate_tokenized_command(
+            &server_config.command,
+            &server_config.args,
+        )?;
 
         let resolved_env = server_config.env.as_ref().map(resolve_mcp_env).transpose()?;
 

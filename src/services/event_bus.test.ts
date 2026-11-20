@@ -1,120 +1,124 @@
 /**
  * @docs ARCHITECTURE:TestSuites
- * 
+ *
  * ### AI Assist Note
- * **Verification Suite**: Infrastructure Event Bus. 
- * Validates the core Pub/Sub logic, circular buffer management (1,000 log limit), and cross-tab synchronization via `BroadcastChannel`. 
- * Ensures high-velocity telemetry pulses do not block the UI thread.
- * 
+ * **Event Bus Service Tests**: Exercises circular history buffer, ID deduplication & cache purge,
+ * BroadcastChannel cross-tab relay (`LOG`, `TRACE`, `PULSE`, `SYNC_REQUEST`, `SYNC_RESPONSE`),
+ * listener exception isolation, and trace/pulse pub-sub channels.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: Memory leak if subscriptions aren't cleaned up or BroadcastChannel deadlock in multi-tab environments.
- * - **Telemetry Link**: Search `[event_bus_test]` in console logs.
+ * - **Failure Path**: Duplicate cross-tab events, uncaught listener errors breaking delivery, or dropped sync responses.
+ * - **Telemetry Link**: Search `[event_bus_test]` in test logs.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
-// ✅ FIX: Stub global BEFORE importing the service
-vi.hoisted(() => {
-    class MockBroadcastChannel {
-        onmessage: any = null;
-        postMessage() {} // Placeholder for spying
-        close() {}
-    }
-    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
-});
+vi.mock('./telemetry_buffer', () => ({
+    telemetry_buffer: {
+        append_event: vi.fn().mockResolvedValue(undefined),
+    },
+}));
 
-import { event_bus } from './event_bus';
-
-describe('event_bus', () => {
-    let mockPostMessage: any;
-
-    beforeEach(() => {
-        event_bus.destroy();
-        vi.clearAllMocks();
-        // Spy on the prototype of our stubbed global
-        mockPostMessage = vi.spyOn(BroadcastChannel.prototype, 'postMessage');
+describe('event_bus service', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.resetModules();
+        vi.useRealTimers();
     });
 
-    it('emits and stores logs', () => {
-        const listener = vi.fn();
-        event_bus.subscribe_logs(listener);
+    it('emits logs, deduplicates IDs, isolates throwing listeners, and supports trace/pulse pub-sub', async () => {
+        const posted: unknown[] = [];
+        const channels: Array<{ onmessage: ((ev: { data: unknown }) => void) | null; postMessage: (msg: unknown) => void }> = [];
 
-        event_bus.emit_log({
-            source: 'System',
-            text: 'Test message',
-            severity: 'info'
-        });
-
-        expect(listener).toHaveBeenCalled();
-        const history = event_bus.get_history();
-        expect(history.length).toBe(1);
-        expect(history[0].text).toBe('Test message');
-    });
-
-    it('manages subscriptions and cleanup', () => {
-        const listener = vi.fn();
-        const unsubscribe = event_bus.subscribe_logs(listener);
-
-        event_bus.emit_log({ source: 'System', text: 'Msg 1', severity: 'info' });
-        expect(listener).toHaveBeenCalledTimes(1);
-
-        unsubscribe();
-        event_bus.emit_log({ source: 'System', text: 'Msg 2', severity: 'info' });
-        expect(listener).toHaveBeenCalledTimes(1);
-    });
-
-    it('maintains a circular buffer', () => {
-        for (let i = 0; i < 1100; i++) {
-            event_bus.emit_log({
-                source: 'System',
-                text: `Message ${i}`,
-                severity: 'info',
-                id: `id-${i}`
+        class MockBroadcastChannel {
+            onmessage: ((ev: { data: unknown }) => void) | null = null;
+            postMessage = vi.fn((msg: unknown) => {
+                posted.push(msg);
             });
+            constructor() {
+                channels.push(this);
+            }
         }
 
-        const history = event_bus.get_history();
-        expect(history.length).toBe(1000);
-        expect(history[0].text).toBe('Message 100');
-        expect(history[999].text).toBe('Message 1099');
-    });
+        vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
+        vi.useFakeTimers();
 
-    it('deduplicates events with the same ID', () => {
-        const listener = vi.fn();
-        event_bus.subscribe_logs(listener);
+        const { event_bus } = await import('./event_bus');
 
-        event_bus.emit_log({ id: 'dup-1', source: 'System', text: 'Msg', severity: 'info' });
-        event_bus.emit_log({ id: 'dup-1', source: 'System', text: 'Msg', severity: 'info' });
+        const received_logs: string[] = [];
+        const unsub_bad = event_bus.subscribe_logs(() => {
+            throw new Error('listener boom');
+        });
+        const unsub_good = event_bus.subscribe_logs((entry) => {
+            received_logs.push(entry.text);
+        });
 
-        expect(listener).toHaveBeenCalledTimes(1);
-        expect(event_bus.get_history().length).toBe(1);
-    });
+        event_bus.emit_log({ id: 'dup-1', source: 'System', text: 'First', severity: 'info', mission_id: 'm-1' });
+        event_bus.emit_log({ id: 'dup-1', source: 'System', text: 'Duplicate ignored', severity: 'info' });
+        expect(received_logs).toEqual(['First']);
+        expect(event_bus.get_history().some((l) => l.id === 'dup-1')).toBe(true);
 
-    it('broadcasts events to other tabs', () => {
-        event_bus.emit_log({ source: 'System', text: 'Sync this', severity: 'info' });
-        expect(mockPostMessage).toHaveBeenCalledWith(expect.objectContaining({
-            topic: 'LOG',
-            payload: expect.objectContaining({ text: 'Sync this' })
-        }));
-    });
+        // Trace & pulse channels + error isolation
+        const traces: unknown[] = [];
+        const pulses: unknown[] = [];
+        const unsub_trace_bad = event_bus.subscribe_trace(() => { throw new Error('trace boom'); });
+        const unsub_trace = event_bus.subscribe_trace((s) => traces.push(s));
+        const unsub_pulse_bad = event_bus.subscribe_pulse(() => { throw new Error('pulse boom'); });
+        const unsub_pulse = event_bus.subscribe_pulse((p) => pulses.push(p));
 
-    it('clears history correctly', () => {
-        event_bus.emit_log({ source: 'System', text: 'Clear me', severity: 'info' });
-        expect(event_bus.get_history().length).toBe(1);
+        event_bus.emit_trace({ mission_id: 'm-1', span: 's-1' });
+        event_bus.emit_pulse({ missionId: 'm-2', bpm: 60 });
+        expect(traces).toHaveLength(1);
+        expect(pulses).toHaveLength(1);
 
-        event_bus.clear_history();
-        expect(event_bus.get_history().length).toBe(0);
-    });
+        // Cross-tab BroadcastChannel dispatch for LOG, TRACE, PULSE, SYNC_REQUEST, SYNC_RESPONSE
+        const channel_instance = channels[0] ?? null;
+        expect(channel_instance).not.toBeNull();
+        channel_instance!.onmessage?.({
+            data: {
+                topic: 'LOG',
+                sender_id: 'other-tab',
+                timestamp: Date.now(),
+                payload: { id: 'remote-log-1', timestamp: new Date(), source: 'Agent', text: 'From tab 2', severity: 'success' },
+            },
+        });
+        channel_instance!.onmessage?.({
+            data: { topic: 'TRACE', sender_id: 'other-tab', timestamp: Date.now(), payload: { span: 'remote' } },
+        });
+        channel_instance!.onmessage?.({
+            data: { topic: 'PULSE', sender_id: 'other-tab', timestamp: Date.now(), payload: { bpm: 90 } },
+        });
+        channel_instance!.onmessage?.({
+            data: { topic: 'SYNC_REQUEST', sender_id: 'other-tab', timestamp: Date.now(), payload: null },
+        });
+        vi.advanceTimersByTime(300);
+        expect(posted.some((m) => (m as { topic?: string }).topic === 'SYNC_RESPONSE')).toBe(true);
 
-    it('handles listener errors gracefully', () => {
-        const console_spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        event_bus.subscribe_logs(() => { throw new Error('Boom'); });
-        event_bus.emit_log({ source: 'System', text: 'Safe', severity: 'info' });
-        expect(console_spy).toHaveBeenCalled();
-        console_spy.mockRestore();
+        channel_instance!.onmessage?.({
+            data: {
+                topic: 'SYNC_RESPONSE',
+                sender_id: 'other-tab',
+                timestamp: Date.now(),
+                payload: {
+                    logs: [
+                        { id: 'sync-log-1', timestamp: new Date(Date.now() - 100), source: 'System', text: 'Synced 1', severity: 'info' },
+                        { id: 'sync-log-2', timestamp: new Date(), source: 'System', text: 'Synced 2', severity: 'warning' },
+                    ],
+                },
+            },
+        });
+        vi.advanceTimersByTime(50);
+        expect(received_logs).toContain('From tab 2');
+        expect(received_logs).toContain('Synced 1');
+        expect(received_logs).toContain('Synced 2');
+
+        unsub_bad();
+        unsub_good();
+        unsub_trace_bad();
+        unsub_trace();
+        unsub_pulse_bad();
+        unsub_pulse();
     });
 });
-
-
 
 // Metadata: [event_bus_test]

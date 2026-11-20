@@ -30,6 +30,8 @@ use axum::{
     Json,
 };
 #[cfg(feature = "vector-memory")]
+use futures::StreamExt;
+#[cfg(feature = "vector-memory")]
 use lancedb::query::{ExecutableQuery, QueryBase};
 use serde::Serialize;
 use std::sync::Arc;

@@ -172,11 +172,11 @@ Before submitting a Pull Request, you must run the verification scripts located 
    ```bash
    python execution/awaken.py
    ```
-3. **Rust Integrity**: Compile and test the workspace.
+3. **Rust Integrity**: Compile and test the workspace (`tadpole-types`, `tadpole-intelligence`, `server-rs`).
    ```bash
-   cd server-rs
-   cargo check
-   cargo test --all
+   cargo check -p tadpole-types -p tadpole-intelligence -p server-rs --all-targets
+   cargo test -p tadpole-types -p tadpole-intelligence
+   cargo test -p server-rs --lib
    ```
 
 ---

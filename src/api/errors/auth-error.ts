@@ -13,7 +13,13 @@
 import { ApiError } from './api-error';
 
 export class AuthError extends ApiError {
-    constructor(message: string, type: string, status: number, error_code: string | null = null, help_link: string | null = null) {
+    constructor(
+        message: string,
+        type: string = 'about:blank',
+        status: number = 401,
+        error_code: string | null = null,
+        help_link: string | null = null
+    ) {
         super(message, type, status, error_code, help_link);
         this.name = 'AuthError';
         Object.setPrototypeOf(this, AuthError.prototype);

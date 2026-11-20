@@ -759,9 +759,11 @@ mod tests {
     async fn test_check_budget_exceeded() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.budget_usd = 1.0;
-        ctx.current_cost_usd = 1.06; // Over 105%
+        let ctx = RunContext {
+            budget_usd: 1.0,
+            current_cost_usd: 1.06, // Over 105%
+            ..Default::default()
+        };
 
         let mut cost = ctx.current_cost_usd;
         let res = runner.check_budget(&ctx, &mut cost, 0.0, "Result text").await.unwrap();
@@ -773,9 +775,11 @@ mod tests {
     async fn test_check_budget_safe() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.budget_usd = 1.0;
-        ctx.current_cost_usd = 0.5;
+        let ctx = RunContext {
+            budget_usd: 1.0,
+            current_cost_usd: 0.5,
+            ..Default::default()
+        };
 
         let mut cost = ctx.current_cost_usd;
         let res = runner.check_budget(&ctx, &mut cost, 0.1, "Result text").await.unwrap();
@@ -787,9 +791,11 @@ mod tests {
     async fn test_check_budget_accumulates_across_calls() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.budget_usd = 1.0;
-        ctx.current_cost_usd = 0.0;
+        let ctx = RunContext {
+            budget_usd: 1.0,
+            current_cost_usd: 0.0,
+            ..Default::default()
+        };
 
         let mut running = 0.0f64;
         // 5 turns of $0.22 each = $1.10 > $1.05 threshold (5% buffer)
@@ -810,8 +816,10 @@ mod tests {
     #[test]
     fn test_resolve_api_key() {
         let _guard = env_lock();
-        let mut config = crate::agent::types::ModelConfig::default();
-        config.api_key = Some("config-key".to_string());
+        let mut config = crate::agent::types::ModelConfig {
+            api_key: Some("config-key".to_string()),
+            ..Default::default()
+        };
 
         // Priority should be config
         let key = resolve_api_key(&config, "UNUSED_ENV_VAR");
@@ -843,6 +851,8 @@ mod tests {
             permission_policy: app_state.security.permission_policy.clone(),
             verification_gate: app_state.security.verification_gate.clone(),
             deploy_token: app_state.security.deploy_token.clone(),
+            admin_token: app_state.security.admin_token.clone(),
+            readonly_token: app_state.security.readonly_token.clone(),
             deploy_token_old: None,
             deploy_token_new: None,
             token_rotated_at: None,
@@ -854,13 +864,17 @@ mod tests {
         let state = Arc::new(app_state);
         let runner = AgentRunner::new(state.clone());
 
-        let mut config = crate::agent::types::ModelConfig::default();
-        config.provider = crate::agent::types::ModelProvider::Ollama; // Local provider requires check
+        let config = crate::agent::types::ModelConfig {
+            provider: crate::agent::types::ModelProvider::Ollama, // Local provider requires check
+            ..Default::default()
+        };
 
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "test_agent".to_string();
-        ctx.mission_id = "test_mission".to_string();
-        ctx.model_config = config;
+        let ctx = RunContext {
+            agent_id: "test_agent".to_string(),
+            mission_id: "test_mission".to_string(),
+            model_config: config,
+            ..Default::default()
+        };
 
         let result = runner.dispatch_to_provider(&ctx, "System Prompt", "User Msg", None).await;
         

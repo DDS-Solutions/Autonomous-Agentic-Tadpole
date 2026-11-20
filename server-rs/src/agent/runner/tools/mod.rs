@@ -129,7 +129,7 @@ impl AgentRunner {
     /// Validates synchronous pre-execution security guards:
     /// 0. Fast-path budget ceiling
     /// 1. CapabilityToken ownership and expiration
-    /// 1b. Safe-mode mutation blocking (SEC-02)
+    ///    1b. Safe-mode mutation blocking (SEC-02)
     pub(crate) fn validate_pre_execution_guards(
         ctx: &RunContext,
         fc: &crate::agent::types::ToolCall,
@@ -938,18 +938,9 @@ impl AgentRunner {
 
         tracing::info!("💻 [System] Agent {} requesting shell execution: {}", ctx.agent_id, command_str);
 
-        // 1. Tokenize & Validate
-        let parts: Vec<String> = command_str.split_whitespace().map(|s| s.to_string()).collect();
-        if parts.is_empty() {
-            *output_text = "(SHELL FAILED: Command is empty)".to_string();
-            return Ok(());
-        }
-
-        let bin = &parts[0];
-        let args = &parts[1..];
-
-        if let Err(e) = crate::utils::security::validate_tokenized_command(bin, args) {
-            tracing::warn!("🛡️ [Security] Shell execution BLOCKED by tokenized scanner: {}", e);
+        // 1. Quote-aware zero-trust command validation (blocks quoted/escaped interpreter flags & chaining)
+        if let Err(e) = crate::utils::security::validate_shell_command(command_str) {
+            tracing::warn!("🛡️ [Security] Shell execution BLOCKED by zero-trust validator: {}", e);
             *output_text = format!("(SECURITY BLOCKED: {})", e);
             return Ok(());
         }
@@ -969,17 +960,9 @@ impl AgentRunner {
             "error", // Use error color for Sapphire Gate
         );
 
-        // 2. Sapphire Gate Oversight
-        let auto_approved = self
-            .state
-            .governance
-            .auto_approve_safe_skills
-            .load(std::sync::atomic::Ordering::SeqCst);
-
-        let approved = if auto_approved {
-            true
-        } else {
-            self.submit_oversight(
+        // 2. Sapphire Gate Oversight — execute_shell is NEVER auto-approved via auto_approve_safe_skills
+        let approved = self
+            .submit_oversight(
                 crate::agent::types::ToolCallAudit {
                     id: uuid::Uuid::new_v4().to_string(),
                     agent_id: ctx.agent_id.clone(),
@@ -992,8 +975,7 @@ impl AgentRunner {
                 },
                 Some(ctx.mission_id.clone()),
             )
-            .await?
-        };
+            .await?;
 
         if !approved {
             *output_text = format!("(Shell execution REJECTED by Oversight) {}", output_text);
@@ -1035,8 +1017,10 @@ mod tests {
     async fn test_execute_tool_cbs_block() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "worker-1".to_string();
+        let ctx = RunContext {
+            agent_id: "worker-1".to_string(),
+            ..Default::default()
+        };
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
@@ -1061,8 +1045,10 @@ mod tests {
     async fn test_execute_tool_hierarchy_block() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = AGENT_CEO.to_string();
+        let ctx = RunContext {
+            agent_id: AGENT_CEO.to_string(),
+            ..Default::default()
+        };
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
@@ -1109,8 +1095,10 @@ mod tests {
     async fn test_update_working_memory() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "memory-agent".to_string();
+        let ctx = RunContext {
+            agent_id: "memory-agent".to_string(),
+            ..Default::default()
+        };
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
@@ -1176,12 +1164,14 @@ mod tests {
 
     #[test]
     fn test_pre_execution_guards_happy_failure_and_edge() {
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "guard-tester".to_string();
-        ctx.mission_id = "mission-guard-1".to_string();
-        ctx.current_cost_usd = 1.25;
-        ctx.budget_limit_usd = 5.00;
-        ctx.safe_mode = false;
+        let mut ctx = RunContext {
+            agent_id: "guard-tester".to_string(),
+            mission_id: "mission-guard-1".to_string(),
+            current_cost_usd: 1.25,
+            budget_limit_usd: 5.00,
+            safe_mode: false,
+            ..Default::default()
+        };
 
         let valid_token = ZeroTrustGuard::mint_token(&ctx.agent_id, &ctx.mission_id, ctx.authority_level);
         let read_fc = ToolCall {
@@ -1234,8 +1224,10 @@ mod tests {
     async fn test_execute_tool_aletheia_gate_rejection() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "worker-mutator".to_string();
+        let ctx = RunContext {
+            agent_id: "worker-mutator".to_string(),
+            ..Default::default()
+        };
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
@@ -1262,16 +1254,82 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_execute_shell_sandboxed_default_deny() {
+    async fn test_handle_execute_shell_blocks_quote_and_escape_bypasses() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "worker-shell".to_string();
+        let ctx = RunContext {
+            agent_id: "worker-shell-bypass".to_string(),
+            ..Default::default()
+        };
+
+        for malicious in [
+            r#"python "-c" "__import__('os').system('id')""#,
+            r#"python \-c "__import__('os').system('id')""#,
+            r#"python ^-c "print(1)""#,
+            r#"node "--eval=process.exit(1)""#,
+            r#"cat .ssh/id_ed25519"#,
+            r#"node --env-file=.env app.js"#,
+        ] {
+            let fc = ToolCall {
+                name: "execute_shell".to_string(),
+                args: serde_json::json!({ "command": malicious }),
+            };
+            let mut output = String::new();
+            runner.handle_execute_shell(&ctx, &fc, &mut output).await.unwrap();
+            assert!(
+                output.contains("SECURITY BLOCKED"),
+                "Live handle_execute_shell failed to block bypass '{}': got '{}'",
+                malicious,
+                output
+            );
+            assert!(
+                state.comms.oversight_queue.is_empty(),
+                "Blocked shell command must never enqueue oversight"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_execute_shell_sandboxed_default_deny() {
+        let state = Arc::new(AppState::new_minimal_mock().await);
+        // Even with auto_approve_safe_skills=true, execute_shell MUST enqueue oversight (never auto-approve)
+        state
+            .governance
+            .auto_approve_safe_skills
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let runner = AgentRunner::new(state.clone());
+        let ctx = RunContext {
+            agent_id: "worker-shell".to_string(),
+            ..Default::default()
+        };
 
         let mut agent = EngineAgent::default();
         agent.identity.id = ctx.agent_id.clone();
         agent.capabilities.skills = vec!["execute_shell".to_string()];
         state.registry.agents.insert(ctx.agent_id.clone(), agent);
+
+        // Background operator resolves the queued Sapphire Gate oversight item so the test never blocks on timeout
+        let state_resolver = state.clone();
+        let saw_oversight = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let saw_oversight_clone = saw_oversight.clone();
+        let resolver_task = tokio::spawn(async move {
+            for _ in 0..100 {
+                let pending_id = state_resolver
+                    .comms
+                    .oversight_resolvers
+                    .iter()
+                    .next()
+                    .map(|e| e.key().clone());
+                if let Some(id) = pending_id {
+                    saw_oversight_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+                    if let Some((_, tx)) = state_resolver.comms.oversight_resolvers.remove(&id) {
+                        let _ = tx.send(true);
+                    }
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        });
 
         let fc = ToolCall {
             name: "execute_shell".to_string(),
@@ -1283,9 +1341,19 @@ mod tests {
         let mut output = String::new();
         let mut usage = None;
         let _ = runner.execute_tool(&ctx, &fc, &mut output, &mut usage, "").await;
-        // In default configuration (no Docker, no Wasm, host fallback false), shell execution is denied
-        // Note: Oversight might prompt first if required, or if rejected by Oversight/Sandbox
-        assert!(output.contains("REJECTED by Oversight") || output.contains("Unsandboxed shell execution on host is disabled by default") || output.contains("SHELL OUTPUT"));
+        let _ = resolver_task.await;
+
+        assert!(
+            saw_oversight.load(std::sync::atomic::Ordering::SeqCst),
+            "execute_shell must ALWAYS enqueue Sapphire Gate oversight even when auto_approve_safe_skills=true"
+        );
+        assert!(
+            output.contains("REJECTED by Oversight")
+                || output.contains("Unsandboxed shell execution on host is disabled by default")
+                || output.contains("SHELL OUTPUT"),
+            "Unexpected output: {}",
+            output
+        );
     }
 
     #[tokio::test]
@@ -1293,18 +1361,22 @@ mod tests {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
 
-        let mut parent_ctx = RunContext::default();
-        parent_ctx.agent_id = "worker-a".to_string();
-        parent_ctx.mission_id = "root-bb-mission".to_string();
-        parent_ctx.root_mission_id = "root-bb-mission".to_string();
-        parent_ctx.depth = 1;
+        let parent_ctx = RunContext {
+            agent_id: "worker-a".to_string(),
+            mission_id: "root-bb-mission".to_string(),
+            root_mission_id: "root-bb-mission".to_string(),
+            depth: 1,
+            ..Default::default()
+        };
 
-        let mut sibling_ctx = RunContext::default();
-        sibling_ctx.agent_id = "worker-b".to_string();
-        sibling_ctx.mission_id = "child-b-mission".to_string();
-        sibling_ctx.root_mission_id = "root-bb-mission".to_string();
-        sibling_ctx.depth = 1;
-        sibling_ctx.accept_mode = crate::agent::types::AcceptMode::Observe;
+        let sibling_ctx = RunContext {
+            agent_id: "worker-b".to_string(),
+            mission_id: "child-b-mission".to_string(),
+            root_mission_id: "root-bb-mission".to_string(),
+            depth: 1,
+            accept_mode: crate::agent::types::AcceptMode::Observe,
+            ..Default::default()
+        };
 
         // Scope cleanup verification on drop
         let scope_guard = state.comms.blackboard.scoped_mission("root-bb-mission");

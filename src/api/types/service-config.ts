@@ -48,6 +48,7 @@ export interface RequestOptions extends RequestInit {
     response_type?: 'json' | 'blob' | 'text';
     timeout?: number;
     idempotent?: boolean;
+    skip_auth?: boolean;
 }
 
 // Metadata: [service_config]

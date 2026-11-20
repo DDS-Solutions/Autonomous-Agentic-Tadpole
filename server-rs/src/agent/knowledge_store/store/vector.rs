@@ -56,17 +56,19 @@ pub async fn get_peers(
                     "knowledge_store",
                 )
                 .await?;
-                Ok(Arc::new(v))
+                Ok::<Arc<crate::agent::memory::VectorMemory>, AppError>(Arc::new(v))
             })
             .await?;
 
         let _ = lance.ensure_table().await?;
 
-        // Retrieve top peers (limit + 1 to account for self-exclusion)
+        // Retrieve top peers (over-fetch slightly so SQLite TTL filtering still returns `limit` peers).
+        // LanceDB schema contains only `id`, `text`, `mission_id`, `timestamp`, `vector`.
         let safe_id = sanitize_predicate_id(id);
-        let predicate = format!("id != '{}' AND confidence >= 0.0 AND (ttl IS NULL OR ttl > {})", safe_id, chrono::Utc::now().timestamp());
+        let predicate = format!("id != '{}'", safe_id);
+        let fetch_limit = limit.saturating_mul(2).saturating_add(1).min(400);
         let hits = lance
-            .search_knowledge_filtered(query_vector, limit + 1, &predicate)
+            .search_knowledge_filtered(query_vector, fetch_limit, &predicate)
             .await?;
 
         if hits.is_empty() {
@@ -75,6 +77,7 @@ pub async fn get_peers(
 
         let hit_ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
         let placeholders = hit_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let now_unix = chrono::Utc::now().timestamp();
         let hydrate_sql = format!(
             r#"SELECT id, text, content_hash, topic, cluster_id, source_node_id,
                       source_agent_id, confidence, ttl, human_confirmed,
@@ -82,13 +85,15 @@ pub async fn get_peers(
                       concept_type, title, description, resource_uri, tags,
                       constraints_json, provenance_chain
                FROM knowledge_store_meta
-               WHERE id IN ({})"#,
+               WHERE id IN ({})
+                 AND (ttl IS NULL OR ttl > ?)"#,
             placeholders
         );
         let mut q = sqlx::query(&hydrate_sql);
         for hit_id in &hit_ids {
             q = q.bind(hit_id);
         }
+        q = q.bind(now_unix);
         let rows = q.fetch_all(pool).await.map_err(|e| {
             AppError::InternalServerError(format!("[IKS] peer hydration failed: {}", e))
         })?;

@@ -13,11 +13,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Agent_Memory_Entry } from '../contracts/agent';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Command, User, Users, FileText, Settings, Zap, Database, Store, ShoppingBag, Lock } from 'lucide-react';
+import { Search, Command, User, Users, FileText, Settings, Zap, Database, Store, ShoppingBag, Lock, Shield, SlidersHorizontal, Sparkles, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { use_agent_store } from '../stores/agent_store';
 import { use_sovereign_store } from '../stores/sovereign_store';
+import { use_settings_store } from '../stores/settings_store';
 import { agent_api_service } from '../services/agent_api_service';
+import { APP_ROUTES } from '../constants/routes';
 import clsx from 'clsx';
 import { i18n } from '../i18n';
 
@@ -42,13 +44,23 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
     const [is_searching, set_is_searching] = useState(false);
     const { agents } = use_agent_store();
     const { set_selected_agent_id, set_scope } = use_sovereign_store();
+    const cockpit_mode = use_settings_store((s) => s.settings.cockpit_mode);
+    const update_setting = use_settings_store((s) => s.update_setting);
     const navigate = useNavigate();
     const input_ref = useRef<HTMLInputElement>(null);
 
-    // Debounced memory search
+    const handle_close = React.useCallback(() => {
+        set_query('');
+        set_selected_index(0);
+        set_memory_results([]);
+        on_close();
+    }, [on_close]);
+
+    // Debounced memory search (skip when unauthenticated to avoid console error spam)
     useEffect(() => {
         let is_active = true;
-        if (!query || query.length < 3) {
+        const api_key = (use_settings_store.getState().settings.tadpole_os_api_key || '').trim();
+        if (!is_open || !api_key || !query || query.length < 3) {
             void Promise.resolve().then(() => set_memory_results([]));
             return;
         }
@@ -65,7 +77,8 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                         icon: Database,
                         category: 'Memory',
                         action: () => {
-                            on_close();
+                            navigate('/missions');
+                            handle_close();
                         }
                     }));
                     set_memory_results(results);
@@ -81,9 +94,64 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
             is_active = false;
             clearTimeout(timeout);
         };
-    }, [query, on_close]);
+    }, [is_open, navigate, query, handle_close]);
+
+    const route_icon_map: Record<string, React.ElementType> = {
+        '/dashboard': Zap,
+        '/org-chart': Users,
+        '/skills': Settings,
+        '/infra/model-store': Store,
+        '/store': ShoppingBag,
+        '/security': Lock,
+        '/oversight': Shield,
+        '/benchmarks': Activity,
+    };
 
     const static_items: Command_Item[] = [
+        {
+            id: 'action-toggle-cockpit',
+            title: cockpit_mode === 'focus' ? 'Switch to Expert Cockpit Mode (18 Views)' : 'Switch to Focus Cockpit Mode (6 Core Views)',
+            description: 'Toggle progressive sidebar disclosure [Ctrl+Shift+E]',
+            icon: SlidersHorizontal,
+            category: 'Action',
+            action: () => {
+                update_setting('cockpit_mode', cockpit_mode === 'focus' ? 'expert' : 'focus');
+                handle_close();
+            },
+        },
+        {
+            id: 'action-open-wizard',
+            title: 'Open Day-1 Overlord Setup Wizard',
+            description: 'Configure session token, model tier preset, guardrails, and pre-flight check',
+            icon: Sparkles,
+            category: 'Action',
+            action: () => {
+                window.dispatchEvent(new CustomEvent('app:open-setup-wizard'));
+                handle_close();
+            },
+        },
+        {
+            id: 'action-oversight-inbox',
+            title: 'Open Oversight Approval Inbox',
+            description: 'Triage pending agent actions with keyboard shortcuts (j/k/a/r/Shift+A)',
+            icon: Shield,
+            category: 'Action',
+            action: () => {
+                navigate('/oversight');
+                handle_close();
+            },
+        },
+        {
+            id: 'action-readiness-check',
+            title: 'Run 30s Overlord Readiness Check',
+            description: 'Verify SQLite, provider tiers, security guardrails, and fleet health',
+            icon: Activity,
+            category: 'Action',
+            action: () => {
+                navigate('/benchmarks');
+                handle_close();
+            },
+        },
         ...(agents || []).map((agent): Command_Item => ({
             id: `agent-${agent.id}`,
             title: agent.name,
@@ -93,16 +161,21 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
             action: () => {
                 set_selected_agent_id(agent.id);
                 set_scope('agent');
-                on_close();
+                handle_close();
             }
         })),
-        { id: 'page-ops', title: i18n.t('command.ops_center'), description: i18n.t('command.main_dashboard'), icon: Zap, category: 'Page', action: () => { navigate('/'); on_close(); } },
-        { id: 'page-org', title: i18n.t('command.agent_hierarchy'), description: i18n.t('command.org_chart'), icon: Users, category: 'Page', action: () => { navigate('/org-chart'); on_close(); } },
-        { id: 'page-caps', title: i18n.t('command.skills_workflows'), description: i18n.t('command.skills_hub'), icon: Settings, category: 'Page', action: () => { navigate('/skills'); on_close(); } },
-        { id: 'page-model-store', title: i18n.t('command.model_store'), description: i18n.t('command.model_store_desc'), icon: Store, category: 'Page', action: () => { navigate('/infra/model-store'); on_close(); } },
-        { id: 'page-template-store', title: i18n.t('command.template_store'), description: i18n.t('command.template_store_desc'), icon: ShoppingBag, category: 'Page', action: () => { navigate('/store'); on_close(); } },
-        { id: 'page-security', title: i18n.t('command.security_dashboard'), description: i18n.t('command.security_dashboard_desc'), icon: Lock, category: 'Page', action: () => { navigate('/security'); on_close(); } },
-        { id: 'action-clear', title: i18n.t('command.clear_history'), description: i18n.t('command.reset_chat'), icon: FileText, category: 'Action', action: () => { use_sovereign_store.getState().clear_history(); on_close(); } },
+        ...APP_ROUTES.map((route): Command_Item => ({
+            id: `page-${route.path}`,
+            title: route.label,
+            description: `Navigate to ${route.path}`,
+            icon: route_icon_map[route.path] || Zap,
+            category: 'Page',
+            action: () => {
+                navigate(route.path);
+                handle_close();
+            },
+        })),
+        { id: 'action-clear', title: i18n.t('command.clear_history'), description: i18n.t('command.reset_chat'), icon: FileText, category: 'Action', action: () => { use_sovereign_store.getState().clear_history(); handle_close(); } },
     ];
 
     const filtered_static = static_items.filter((item): boolean =>
@@ -111,6 +184,7 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
     );
 
     const all_items = [...filtered_static, ...(memory_results || [])].slice(0, 10);
+    const active_index = all_items.length > 0 ? Math.min(selected_index, all_items.length - 1) : 0;
 
     useEffect(() => {
         if (is_open) {
@@ -119,6 +193,12 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
     }, [is_open]);
 
     const handle_key_down = (e: React.KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+            handle_close();
+            return;
+        }
+        if (all_items.length === 0) return;
+
         if (e.key === 'ArrowDown') {
             set_selected_index(prev => (prev + 1) % all_items.length);
             e.preventDefault();
@@ -126,10 +206,8 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
             set_selected_index(prev => (prev - 1 + all_items.length) % all_items.length);
             e.preventDefault();
         } else if (e.key === 'Enter') {
-            all_items[selected_index]?.action();
+            all_items[active_index]?.action();
             e.preventDefault();
-        } else if (e.key === 'Escape') {
-            on_close();
         } else if (e.key === 'Tab') {
             // Focus Trap / Cycle results
             if (e.shiftKey) {
@@ -150,14 +228,17 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-0"
-                        onClick={on_close}
-                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && on_close()}
+                        onClick={handle_close}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handle_close()}
                         role="button"
                         tabIndex={-1}
                         aria-hidden="true"
                     />
 
                     <motion.div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Command Palette"
                         initial={{ opacity: 0, scale: 0.95, y: -20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: -20 }}
@@ -169,7 +250,10 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                                 ref={input_ref}
                                 type="text"
                                 value={query}
-                                onChange={e => set_query(e.target.value)}
+                                onChange={e => {
+                                    set_query(e.target.value);
+                                    set_selected_index(0);
+                                }}
                                 onKeyDown={handle_key_down}
                                 placeholder={i18n.t('command.search_placeholder')}
                                 aria-label={i18n.t('command.search_aria')}
@@ -190,15 +274,15 @@ export const Command_Palette: React.FC<{ is_open: boolean; on_close: () => void 
                                         onClick={item.action}
                                         className={clsx(
                                             "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group",
-                                            index === selected_index ? "bg-zinc-800/80 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
+                                            index === active_index ? "bg-zinc-800/80 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
                                         )}
                                         role="option"
-                                        aria-selected={index === selected_index}
+                                        aria-selected={index === active_index}
                                         id={`command-item-${item.id}`}
                                     >
                                         <div className={clsx(
                                             "p-2 rounded-lg transition-colors",
-                                            index === selected_index ? "bg-zinc-700 text-green-400" : "bg-zinc-950 text-zinc-600"
+                                            index === active_index ? "bg-zinc-700 text-green-400" : "bg-zinc-950 text-zinc-600"
                                         )}>
                                             <Icon size={18} aria-hidden="true" />
                                         </div>

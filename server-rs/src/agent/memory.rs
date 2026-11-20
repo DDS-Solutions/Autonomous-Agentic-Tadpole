@@ -333,6 +333,72 @@ impl VectorMemory {
         Ok(entries)
     }
 
+    /// Filtered vector k-NN search applying a LanceDB SQL predicate (`only_if`) prior to returning detailed entries.
+    pub async fn search_knowledge_filtered(
+        &self,
+        query_vector: Vec<f32>,
+        limit: usize,
+        predicate: &str,
+    ) -> Result<Vec<crate::agent::types::MemoryEntryDetailed>, AppError> {
+        self.ensure_table().await?;
+        let table = self
+            .conn
+            .open_table(&self.table_name)
+            .execute()
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("LanceDB open_table failed: {}", e)))?;
+
+        let mut query = table
+            .vector_search(query_vector)
+            .map_err(|e| AppError::InternalServerError(format!("LanceDB vector_search failed: {}", e)))?;
+        if !predicate.trim().is_empty() {
+            query = query.only_if(predicate);
+        }
+        let mut results = query
+            .limit(limit)
+            .execute()
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("LanceDB filtered query failed: {}", e)))?;
+
+        let mut entries = Vec::new();
+        while let Some(batch_result) = results.next().await {
+            let batch = batch_result
+                .map_err(|e| AppError::InternalServerError(format!("LanceDB result stream error: {}", e)))?;
+            let id_col = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| AppError::InternalServerError("Missing id column".to_string()))?;
+            let text_col = batch
+                .column_by_name("text")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| AppError::InternalServerError("Missing text column".to_string()))?;
+            let mission_col = batch
+                .column_by_name("mission_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| AppError::InternalServerError("Missing mission_id column".to_string()))?;
+            let ts_col = batch
+                .column_by_name("timestamp")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| AppError::InternalServerError("Missing timestamp column".to_string()))?;
+            let dist_col = batch
+                .column_by_name("_distance")
+                .and_then(|c| c.as_any().downcast_ref::<Float32Array>())
+                .ok_or_else(|| AppError::InternalServerError("Missing _distance column".to_string()))?;
+
+            for i in 0..batch.num_rows() {
+                entries.push(crate::agent::types::MemoryEntryDetailed {
+                    id: id_col.value(i).to_string(),
+                    text: text_col.value(i).to_string(),
+                    mission_id: mission_col.value(i).to_string(),
+                    timestamp: ts_col.value(i),
+                    distance: dist_col.value(i),
+                    score: None,
+                });
+            }
+        }
+        Ok(entries)
+    }
+
     /// Fetches the exhaustive list of memory IDs and raw text for a specific mission.
     pub async fn get_all_memories(&self, mission_id: &str) -> Result<Vec<(String, String)>, AppError> {
         self.ensure_table().await?;
@@ -366,12 +432,26 @@ impl VectorMemory {
         Ok(memories)
     }
 
-    /// Deletes specific memories by ID.
+    /// Deletes specific memories by ID with strict predicate escaping.
     pub async fn delete_memories(&self, ids: Vec<String>) -> Result<(), AppError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        for id in &ids {
+            if id.is_empty() || id.chars().any(|c| c.is_control()) {
+                return Err(AppError::BadRequest(
+                    "Invalid memory ID in delete predicate".to_string(),
+                ));
+            }
+        }
         self.ensure_table().await?;
         let table = self.conn.open_table(&self.table_name).execute().await
             .map_err(|e| AppError::InternalServerError(format!("LanceDB open_table failed: {}", e)))?;
-        let filter = format!("id IN ({})", ids.iter().map(|id| format!("'{}'", id)).collect::<Vec<_>>().join(", "));
+        let escaped: Vec<String> = ids
+            .iter()
+            .map(|id| format!("'{}'", id.replace('\'', "''")))
+            .collect();
+        let filter = format!("id IN ({})", escaped.join(", "));
         table.delete(&filter).await
             .map_err(|e| AppError::InternalServerError(format!("LanceDB table.delete failed: {}", e)))?;
         Ok(())

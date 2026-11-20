@@ -264,12 +264,12 @@ class Tadpole_OS_Socket_Client {
     }
 
     /**
-     * Probes `/v1/engine/health` on abnormal WebSocket closure (1006) to halt reconnection
+     * Probes protected `/v1/agents` on abnormal WebSocket closure (1006) to halt reconnection
      * loops if the backend explicitly rejects the current Bearer token (401/403).
      */
     private probe_auth_on_abnormal_close(raw_http_url: string, token: string): void {
-        const health_url = `${raw_http_url || 'http://localhost:8000'}`.trim().replace(/\/$/, '') + '/v1/engine/health';
-        fetch(health_url, {
+        const auth_probe_url = `${raw_http_url || 'http://localhost:8000'}`.trim().replace(/\/$/, '') + '/v1/agents';
+        fetch(auth_probe_url, {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(res => {
             if (res.status === 401 || res.status === 403) {

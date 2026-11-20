@@ -124,5 +124,20 @@ class TestSecurityScan(unittest.TestCase):
         self.assertEqual(res["status"], "PASS")
         self.assertEqual(res["total_findings"], 0)
 
+    def test_subprocess_shell_true_variants_detected(self):
+        """Regression: subprocess.run/Popen/check_output/check_call with shell=True must be flagged."""
+        bad_script = self.root / "runner.py"
+        bad_script.write_text(
+            'import subprocess\n'
+            'subprocess.run("echo hi", shell=True)\n'
+            'subprocess.Popen("echo hi", shell=True)\n'
+            'subprocess.check_output("echo hi", shell=True)\n'
+            'subprocess.check_call("echo hi", shell=True)\n',
+            encoding="utf-8",
+        )
+        res = run_security_scan(str(self.root))
+        self.assertEqual(res["status"], "FAIL")
+        self.assertEqual(res["high"], 4)
+
 if __name__ == "__main__":
     unittest.main()

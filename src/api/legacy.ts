@@ -56,8 +56,8 @@ export function api_request<T = unknown>(
  * Backward compatible trace header context generator.
  * @deprecated Use createApiService() or DI instead.
  */
-export function get_headers(custom_request_id?: string) {
-    return base_api_service_instance.get_headers(custom_request_id);
+export function get_headers(custom_request_id?: string, skip_auth: boolean = false) {
+    return base_api_service_instance.get_headers(custom_request_id, undefined, skip_auth);
 }
 
 // Metadata: [legacy]

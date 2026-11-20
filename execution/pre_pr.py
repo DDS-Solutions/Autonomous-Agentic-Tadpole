@@ -13,6 +13,7 @@ Quality verification gate for testing and code validation.
 import sys
 import os
 import io
+import shutil
 import subprocess
 import json
 from datetime import datetime
@@ -46,7 +47,11 @@ def log_warn(msg):
 
 def run_command(cmd, cwd=None):
     try:
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=cwd)
+        argv = list(cmd)
+        resolved = shutil.which(argv[0])
+        if resolved:
+            argv[0] = resolved
+        res = subprocess.run(argv, shell=False, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=cwd)
         stdout = res.stdout if res.stdout is not None else ""
         stderr = res.stderr if res.stderr is not None else ""
         return res.returncode == 0, stdout, stderr
@@ -66,7 +71,7 @@ def main():
     
     # 1. Backend Cargo Check
     log_info("Running Cargo Check (server-rs)...")
-    cargo_ok, stdout, stderr = run_command("cargo check", cwd=str(workspace / "server-rs"))
+    cargo_ok, stdout, stderr = run_command(["cargo", "check"], cwd=str(workspace / "server-rs"))
     report["checks"]["cargo_check"] = {
         "passed": cargo_ok,
         "error": stderr if not cargo_ok else ""
@@ -79,7 +84,7 @@ def main():
 
     # 2. Backend Cargo Clippy
     log_info("Running Cargo Clippy (server-rs)...")
-    clippy_ok, stdout, stderr = run_command("cargo clippy --all-targets", cwd=str(workspace / "server-rs"))
+    clippy_ok, stdout, stderr = run_command(["cargo", "clippy", "--all-targets"], cwd=str(workspace / "server-rs"))
     report["checks"]["cargo_clippy"] = {
         "passed": clippy_ok,
         "error": stderr if not clippy_ok else ""
@@ -93,7 +98,7 @@ def main():
 
     # 3. Frontend Linting
     log_info("Running Frontend Linting...")
-    lint_ok, stdout, stderr = run_command("npm run lint", cwd=str(workspace))
+    lint_ok, stdout, stderr = run_command(["npm", "run", "lint"], cwd=str(workspace))
     report["checks"]["frontend_lint"] = {
         "passed": lint_ok,
         "error": stderr if not lint_ok else ""
@@ -107,7 +112,7 @@ def main():
 
     # 4. Frontend Vitest Runs
     log_info("Running Frontend Tests...")
-    test_ok, stdout, stderr = run_command("npm run test", cwd=str(workspace))
+    test_ok, stdout, stderr = run_command(["npm", "run", "test"], cwd=str(workspace))
     report["checks"]["frontend_tests"] = {
         "passed": test_ok,
         "error": stderr if not test_ok else ""
@@ -121,7 +126,7 @@ def main():
         
     # 5. Documentation & Version Parity Check
     log_info("Running Parity Guard...")
-    parity_ok, stdout, stderr = run_command("python execution/parity_guard.py")
+    parity_ok, stdout, stderr = run_command([sys.executable, "execution/parity_guard.py"])
     report["checks"]["parity_guard"] = {
         "passed": parity_ok,
         "error": stderr if not parity_ok else ""
@@ -134,7 +139,7 @@ def main():
 
     # 6. Python Static Analysis (Ruff — syntax errors and logic bugs)
     log_info("Running Ruff Python Linter (execution/)...")
-    ruff_ok, stdout, stderr = run_command("python -m ruff check execution/ --select E9,F63,F7,F82,F --ignore F401,F541,F841")
+    ruff_ok, stdout, stderr = run_command([sys.executable, "-m", "ruff", "check", "execution/", "--select", "E9,F63,F7,F82,F", "--ignore", "F401,F541,F841"])
     report["checks"]["ruff_python"] = {
         "passed": ruff_ok,
         "error": (stdout or stderr)[:500] if not ruff_ok else ""
@@ -147,7 +152,7 @@ def main():
 
     # 7. UI Quality Guard (static design tokens, contrast & accessibility)
     log_info("Running UI Quality Guard (execution/ui_quality_guard.py)...")
-    ui_ok, stdout, stderr = run_command("python execution/ui_quality_guard.py")
+    ui_ok, stdout, stderr = run_command([sys.executable, "execution/ui_quality_guard.py"])
     report["checks"]["ui_quality_guard"] = {
         "passed": ui_ok,
         "error": (stdout or stderr)[:500] if not ui_ok else ""

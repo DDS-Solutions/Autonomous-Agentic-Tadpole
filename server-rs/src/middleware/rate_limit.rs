@@ -30,11 +30,14 @@ use crate::middleware::extract_client_ip;
 /// Static fallback values to prevent repeated allocations
 static FALLBACK_LIMIT: HeaderValue = HeaderValue::from_static("0");
 
+type RateBucketEntry = Arc<Mutex<(f64, Instant)>>;
+type RateBucketCache = moka::sync::Cache<String, RateBucketEntry>;
+
 /// Tracks rate limit buckets by IP.
 /// Key: IP address (as string)
 /// Value: Arc<Mutex<(tokens, last_refill_timestamp)>>
 /// Utilizing `moka::sync::Cache` with thread-safe Mutex for atomic check-and-consume.
-static RATE_BUCKETS: Lazy<moka::sync::Cache<String, Arc<Mutex<(f64, Instant)>>>> = Lazy::new(|| {
+static RATE_BUCKETS: Lazy<RateBucketCache> = Lazy::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(20000)
         .time_to_idle(Duration::from_secs(600)) // 10 minute idle eviction

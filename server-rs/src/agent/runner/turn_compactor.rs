@@ -25,21 +25,23 @@ static LAST_SWEEP_EPOCH_SECS: AtomicI64 = AtomicI64::new(0);
 pub fn trigger_lazy_overflow_cleanup(workspace_root: PathBuf) {
     let now = chrono::Utc::now().timestamp();
     let last = LAST_SWEEP_EPOCH_SECS.load(Ordering::Relaxed);
-    if now - last > 3600 {
-        if LAST_SWEEP_EPOCH_SECS.compare_exchange(last, now, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
-            tokio::spawn(async move {
-                let max_age = std::time::Duration::from_secs(DEFAULT_OVERFLOW_MAX_AGE_HOURS * 3600);
-                match cleanup_overflow_directory(&workspace_root, max_age).await {
-                    Ok(removed) if removed > 0 => {
-                        tracing::info!("🧹 [TurnCompactor] Cleaned up {} expired tool overflow files (>{}h)", removed, DEFAULT_OVERFLOW_MAX_AGE_HOURS);
-                    }
-                    Err(e) => {
-                        tracing::warn!("⚠️ [TurnCompactor] Tool overflow sweep error: {}", e);
-                    }
-                    _ => {}
+    if now - last > 3600
+        && LAST_SWEEP_EPOCH_SECS
+            .compare_exchange(last, now, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+    {
+        tokio::spawn(async move {
+            let max_age = std::time::Duration::from_secs(DEFAULT_OVERFLOW_MAX_AGE_HOURS * 3600);
+            match cleanup_overflow_directory(&workspace_root, max_age).await {
+                Ok(removed) if removed > 0 => {
+                    tracing::info!("🧹 [TurnCompactor] Cleaned up {} expired tool overflow files (>{}h)", removed, DEFAULT_OVERFLOW_MAX_AGE_HOURS);
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::warn!("⚠️ [TurnCompactor] Tool overflow sweep error: {}", e);
+                }
+                _ => {}
+            }
+        });
     }
 }
 

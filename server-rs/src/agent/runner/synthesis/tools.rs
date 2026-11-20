@@ -124,7 +124,7 @@ impl AgentRunner {
                         .mandate
                         .allowed_tools
                         .as_ref()
-                        .map_or(true, |a| a.is_empty() || a.contains(&skill.name));
+                        .is_none_or(|a| a.is_empty() || a.contains(&skill.name));
                     if allowed_by_mandate && (!ctx.is_read_only() || SAFE_MODE_ALLOWED_TOOLS.contains(&skill.name.as_str())) {
                         function_declarations.push(FunctionDeclaration {
                             name: skill.name.clone(),

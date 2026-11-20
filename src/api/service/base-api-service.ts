@@ -35,11 +35,11 @@ export class BaseApiService {
 
     constructor(config: ApiServiceConfig) {
         this.config = config;
-        this.error_listeners = config.errorListeners 
-            ? (config.errorListeners instanceof ErrorBus ? config.errorListeners : new ErrorBus(config.errorListeners)) 
+        this.error_listeners = config.errorListeners
+            ? (config.errorListeners instanceof ErrorBus ? config.errorListeners : new ErrorBus(config.errorListeners))
             : api_error_listeners;
-        this.request_interceptors = config.requestInterceptors 
-            ? (config.requestInterceptors instanceof InterceptorChain ? config.requestInterceptors : new InterceptorChain(config.requestInterceptors)) 
+        this.request_interceptors = config.requestInterceptors
+            ? (config.requestInterceptors instanceof InterceptorChain ? config.requestInterceptors : new InterceptorChain(config.requestInterceptors))
             : request_interceptors;
     }
 
@@ -55,13 +55,19 @@ export class BaseApiService {
         this.error_listeners.emit(error);
     }
 
-    public get_headers(custom_request_id?: string, pre_fetched_token?: string): { 
-        headers: Record<string, string>; 
-        context: { span_id: string; trace_id: string; traceparent: string; request_id: string } 
+    public get_headers(
+        custom_request_id?: string,
+        pre_fetched_token?: string,
+        skip_auth: boolean = false
+    ): {
+        headers: Record<string, string>;
+        context: { span_id: string; trace_id: string; traceparent: string; request_id: string }
     } {
         const { httpAdapter, settingsPort } = this.config;
-        const token = (pre_fetched_token !== undefined ? pre_fetched_token : (settingsPort.getSettings().tadpole_os_api_key || '')).trim();
-        return mint_headers(httpAdapter.crypto, token, custom_request_id);
+        const token = skip_auth
+            ? ''
+            : (pre_fetched_token !== undefined ? pre_fetched_token : (settingsPort.getSettings().tadpole_os_api_key || '')).trim();
+        return mint_headers(httpAdapter.crypto, token, custom_request_id, skip_auth);
     }
 
     /**
@@ -113,9 +119,16 @@ export class BaseApiService {
             const timeout_ms = options.timeout ?? DEFAULT_TIMEOUT;
             const deadline = Date.now() + timeout_ms;
 
+            const custom_request_id = options.headers
+                ? Object.entries(options.headers as Record<string, string>).find(
+                    ([k]) => k.toLowerCase() === 'x-request-id'
+                )?.[1]
+                : undefined;
+
             const { headers: base_headers, context } = this.get_headers(
-                (options.headers as Record<string, string>)?.['X-Request-Id'],
-                settings.tadpole_os_api_key
+                custom_request_id,
+                settings.tadpole_os_api_key,
+                options.skip_auth === true
             );
             active_span_id = context.span_id;
 
@@ -177,7 +190,7 @@ export class BaseApiService {
                     });
                 } catch (err) {
                     const method = (options.method || 'GET').toUpperCase();
-                    const is_retryable = method === 'GET' || method === 'HEAD' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
+                    const is_retryable = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
                     const is_timeout = (combined_signal && combined_signal.aborted && combined_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT') || Date.now() >= deadline;
                     if (is_timeout && is_retryable && attempt < MAX_RETRIES && (deadline - Date.now() > 50)) {
                         const backoff = this.compute_backoff(attempt);
@@ -206,9 +219,9 @@ export class BaseApiService {
                     clearTimeoutFn(timeout_id);
                 }
 
-                if (!response.ok && response.status >= 500) {
+                if (!response.ok && (response.status === 429 || response.status === 503)) {
                     const method = (options.method || 'GET').toUpperCase();
-                    const is_retryable = method === 'GET' || method === 'HEAD' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
+                    const is_retryable = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || (options.idempotent === true && (method === 'PUT' || method === 'DELETE'));
                     if (is_retryable && attempt < MAX_RETRIES && (deadline - Date.now() > 50)) {
                         try {
                             if (response.body) {
@@ -246,11 +259,15 @@ export class BaseApiService {
 
                 if (response.status === 401) {
                     const is_local = url.includes('127.0.0.1') || url.includes('localhost');
-                    detail = is_local 
+                    detail = is_local
                         ? 'Unauthorized. Your Neural Token does not match the engine configuration. Please verify the NEURAL_TOKEN in Settings.'
                         : 'Unauthorized. Invalid API token.';
+                } else if (response.status === 501) {
+                    detail = 'This capability is disabled in the current engine build. Enable the required Rust feature and restart the engine.';
                 } else if (response.status === 429) {
                     detail = 'Too many requests. Local security protocols have triggered a temporary cooling-down period. Please wait a moment and try again.';
+                } else if (response.status === 422) {
+                    detail = `Unprocessable Entity: The payload schema does not match the backend expectations. Raw detail: ${detail}`;
                 }
 
                 const sanitized_title = sanitize_error_detail(title);
@@ -298,7 +315,20 @@ export class BaseApiService {
                 if (text.length > MAX_RESPONSE_SIZE) {
                     throw new Error(`Response payload exceeded maximum allowed size of 10MB (${text.length} characters).`);
                 }
-                result = text ? JSON.parse(text) : null;
+                if (!text) {
+                    result = null;
+                } else {
+                    try {
+                        result = JSON.parse(text);
+                    } catch (parse_err) {
+                        throw new ApiError(
+                            `Failed to parse response JSON: ${(parse_err as Error).message}`,
+                            'about:blank',
+                            response.status,
+                            'INVALID_JSON'
+                        );
+                    }
+                }
             }
 
             telemetryPort.updateSpan(context.span_id, {

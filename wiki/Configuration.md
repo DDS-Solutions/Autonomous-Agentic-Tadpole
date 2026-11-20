@@ -42,9 +42,13 @@ All configuration is loaded from `.env` in the workspace root. Schema is validat
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NEURAL_TOKEN` | **Required** | Primary auth token |
-| `NEURAL_TOKEN_OLD` | *(optional)* | Previous token — valid during rotation grace window |
+| `NEURAL_TOKEN` | **Required** | Primary auth token (`Operator` scope when `NEURAL_TOKEN_ADMIN` is set; `Admin` fallback otherwise for zero-friction local dev) |
+| `NEURAL_TOKEN_ADMIN` | *(optional)* | Dedicated high-privilege Admin token for destructive lifecycle/deploy/vault/key-management endpoints |
+| `NEURAL_TOKEN_READONLY` | *(optional)* | Dedicated read-only observer token restricted to safe `GET`/`HEAD` telemetry endpoints |
+| `NEURAL_TOKEN_OLD` | *(optional)* | Previous token — valid only during bounded rotation grace window |
 | `NEURAL_TOKEN_NEW` | *(optional)* | Replacement token — valid to pre-validate before rotation |
+| `NEURAL_TOKEN_ROTATED_AT` | *(optional)* | Unix epoch timestamp in seconds (`u64`) marking rotation start (fail-closed if unset/expired) |
+| `NEURAL_TOKEN_GRACE_SECS` | `3600` | Grace window length in seconds during which `NEURAL_TOKEN_OLD` remains valid |
 | `NEURAL_ENGINE_ACCESS_TOKEN` | *(optional)* | Legacy secondary token accepted alongside NEURAL_TOKEN |
 | `ALLOWED_ORIGINS` | Local dev origins | Comma-separated CORS allow-list |
 | `PRIVACY_MODE` | `true` | `true` = restrict to local-only providers (zero-trust sovereign mode) |

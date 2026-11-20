@@ -202,6 +202,7 @@ pub async fn update_mission_quota(
     Json(payload): Json<UpdateQuotaPayload>,
 ) -> Result<impl IntoResponse, AppError> {
     let validated_cluster_id = validate_identifier(&cluster_id, "cluster_id")?;
+    principal.authorize_global()?;
     let actor = principal
         .authorize_mission(Some(&validated_cluster_id))?
         .to_string();

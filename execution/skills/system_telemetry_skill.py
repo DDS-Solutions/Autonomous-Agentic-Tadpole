@@ -64,16 +64,26 @@ class SystemTelemetrySkill(BaseSkill):
     def _get_cpu_usage(self) -> str:
         try:
             if platform.system() == "Windows":
-                # Use WMIC for Windows CPU load
-                cmd = "wmic cpu get loadpercentage"
-                output = subprocess.check_output(cmd, shell=True).decode()
-                lines = [l.strip() for l in output.split('\n') if l.strip()]
-                if len(lines) > 1:
-                    return f"{lines[1]}%"
+                ps = shutil.which("powershell.exe") or shutil.which("pwsh")
+                if ps:
+                    output = subprocess.check_output(
+                        [
+                            ps,
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            "(Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average",
+                        ],
+                        shell=False,
+                        text=True,
+                        timeout=10,
+                    ).strip()
+                    if output:
+                        return f"{output}%"
             else:
                 # Use loadavg for Unix
                 load1, load5, load15 = os.getloadavg()
-                return f"{load1 * 100 / os.cpu_count():.1f}% (1min avg)"
+                return f"{load1 * 100 / (os.cpu_count() or 1):.1f}% (1min avg)"
         except Exception:
             return "Unknown"
         return "Unknown"
@@ -81,24 +91,34 @@ class SystemTelemetrySkill(BaseSkill):
     def _get_memory_info(self) -> Dict[str, str]:
         try:
             if platform.system() == "Windows":
-                # Use WMIC for Windows memory
-                cmd = "wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /Value"
-                output = subprocess.check_output(cmd, shell=True).decode()
-                data = {}
-                for line in output.split('\n'):
-                    if '=' in line:
-                        k, v = line.split('=')
-                        data[k.strip()] = int(v.strip())
-                
-                total = data.get("TotalVisibleMemorySize", 0) * 1024 # KB to Bytes
-                free = data.get("FreePhysicalMemory", 0) * 1024
-                used = total - free
-                return {
-                    "total": f"{total / (1024**3):.2f} GB",
-                    "used": f"{used / (1024**3):.2f} GB",
-                    "free": f"{free / (1024**3):.2f} GB",
-                    "usage_pct": f"{(used/total)*100:.1f}%"
-                }
+                ps = shutil.which("powershell.exe") or shutil.which("pwsh")
+                if not ps:
+                    return {"error": "PowerShell unavailable for CIM memory query"}
+                output = subprocess.check_output(
+                    [
+                        ps,
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "$o=Get-CimInstance Win32_OperatingSystem; \"$($o.TotalVisibleMemorySize),$($o.FreePhysicalMemory)\"",
+                    ],
+                    shell=False,
+                    text=True,
+                    timeout=10,
+                ).strip()
+                parts = [p.strip() for p in output.split(",") if p.strip()]
+                if len(parts) == 2:
+                    total = int(parts[0]) * 1024  # KB to Bytes
+                    free = int(parts[1]) * 1024
+                    used = max(0, total - free)
+                    pct = (used / total) * 100 if total > 0 else 0.0
+                    return {
+                        "total": f"{total / (1024**3):.2f} GB",
+                        "used": f"{used / (1024**3):.2f} GB",
+                        "free": f"{free / (1024**3):.2f} GB",
+                        "usage_pct": f"{pct:.1f}%",
+                    }
+                return {"error": "Unexpected CIM memory output"}
             else:
                 # Fallback or /proc/meminfo
                 return {"status": "Manual retrieval required for non-Windows"}
@@ -106,19 +126,23 @@ class SystemTelemetrySkill(BaseSkill):
             return {"error": "Failed to retrieve memory info"}
 
     def _get_storage_info(self, path_str: str) -> Dict[str, Any]:
-        path = Path(path_str).absolute()
+        workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
         try:
-            usage = shutil.disk_usage(path)
+            candidate = Path(path_str)
+            resolved = (workspace_root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+            if not resolved.is_relative_to(workspace_root):
+                return {"error": "Forbidden: target_path must reside within workspace root"}
+            usage = shutil.disk_usage(resolved)
             info = {
-                "path": str(path),
+                "path": str(resolved),
                 "total": f"{usage.total / (1024**3):.2f} GB",
                 "used": f"{usage.used / (1024**3):.2f} GB",
                 "free": f"{usage.free / (1024**3):.2f} GB",
                 "usage_pct": f"{(usage.used / usage.total) * 100:.1f}%"
             }
-            if path.is_file():
-                info["file_size_bytes"] = path.stat().st_size
-                info["last_modified"] = time.ctime(path.stat().st_mtime)
+            if resolved.is_file():
+                info["file_size_bytes"] = resolved.stat().st_size
+                info["last_modified"] = time.ctime(resolved.stat().st_mtime)
             return info
         except Exception as e:
             return {"error": str(e)}
@@ -126,8 +150,13 @@ class SystemTelemetrySkill(BaseSkill):
     def _get_process_snapshot(self) -> List[str]:
         try:
             if platform.system() == "Windows":
-                cmd = "tasklist /FI \"STATUS eq running\" /FO CSV /NH"
-                output = subprocess.check_output(cmd, shell=True).decode()
+                tasklist = shutil.which("tasklist.exe") or "tasklist"
+                output = subprocess.check_output(
+                    [tasklist, "/FI", "STATUS eq running", "/FO", "CSV", "/NH"],
+                    shell=False,
+                    text=True,
+                    timeout=10,
+                )
                 return output.splitlines()[:10] # Top 10
             return ["Snapshot only available on Windows"]
         except Exception:

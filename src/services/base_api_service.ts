@@ -1,321 +1,59 @@
 /**
  * @docs ARCHITECTURE:Services
- * 
+ *
  * ### AI Assist Note
- * **Infrastructure Service**: Standardized HTTP client and OpenTelemetry pipeline. 
- * Orchestrates trace propagation (W3C TraceContext), automatic retries with exponential backoff, and Maturity Level 3 HATEOAS error handling.
- * 
+ * **Unified HTTP Client Facade**: Single-source-of-truth transport facade delegating directly
+ * to `src/api` (`BaseApiService`), enforcing loopback/desktop origin allowlisting (`is_allowed_origin`),
+ * W3C TraceContext propagation, telemetry secret scrubbing (`scrub_secrets`), 10MB payload caps,
+ * RFC 9457 typed errors, and bounded exponential backoff retries.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: 401/403 Auth Failure (invalid bearer token), 408/504 Timeout (exceeding `DEFAULT_TIMEOUT`), or traceparent corruption.
+ * - **Failure Path**: Origin policy refusal, 401/403 Auth Failure, 408/504 Timeout, or invalid JSON.
  * - **Telemetry Link**: Search `[base_api_service]` in console logs.
- * 
+ *
  * @aiContext
- * - **Dependencies**: `settings_store`, `trace_store`.
- * - **Side Effects**: Unified telemetry emission (Add Span/Update Span). Performs automatic retries.
- * - **Mocking**: Mock global `fetch` for unit tests.
+ * - **Dependencies**: `src/api/service`, `src/api/legacy`, `src/api/errors`, `src/api/utils/signal`.
+ * - **Side Effects**: Delegates all HTTP/retry/tracing execution to `base_api_service_instance`.
+ * - **Mocking**: Mock `api_request` or global `fetch` for unit tests.
  */
 
+import { base_api_service_instance } from '../api/legacy';
+import type { RequestOptions } from '../api/types';
 
-import { get_settings } from '../stores/settings_store';
-import { use_trace_store } from '../stores/trace_store';
+export {
+    DEFAULT_TIMEOUT,
+    DEPLOY_TIMEOUT,
+    MAX_RETRIES,
+    INITIAL_RETRY_DELAY,
+} from '../api/constants';
 
-export const DEFAULT_TIMEOUT = 110000; // 110s aligned with server handler envelope
-export const DEPLOY_TIMEOUT = 110000; // 110s server hard cap
-export const MAX_RETRIES = 3;
-export const INITIAL_RETRY_DELAY = 1000;
+export { ApiError, AuthError } from '../api/errors';
+export { with_timeout } from '../api/utils/signal';
+export { is_allowed_origin } from '../api/service/origin-policy';
+export { base_api_service_instance } from '../api/legacy';
 
 /**
- * Represents a standard RFC 9457 Problem Details error returned by the Sovereign engine.
+ * Generates standardized headers and W3C TraceContext metadata via the unified `src/api` client.
  */
-export class ApiError extends Error {
-    public type: string;
-    public status: number;
-    public error_code: string | null;
-    public help_link: string | null;
-
-    constructor(
-        message: string,
-        type: string,
-        status: number,
-        error_code: string | null = null,
-        help_link: string | null = null
-    ) {
-        super(message);
-        this.type = type;
-        this.status = status;
-        this.error_code = error_code;
-        this.help_link = help_link;
-        this.name = 'ApiError';
-        // Ensure the prototype is set correctly for stack traces
-        Object.setPrototypeOf(this, ApiError.prototype);
-    }
+export function get_headers(
+    custom_request_id?: string,
+    skip_auth: boolean = false
+): {
+    headers: Record<string, string>;
+    context: { span_id: string; trace_id: string; traceparent: string; request_id: string };
+} {
+    return base_api_service_instance.get_headers(custom_request_id, undefined, skip_auth);
 }
 
 /**
- * Represents a failure to retrieve or validate the required API credentials.
+ * Executes an authenticated (or explicitly public `skip_auth: true`) HTTP request
+ * through the consolidated `BaseApiService` security & observability pipeline.
  */
-export class AuthError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'AuthError';
-        Object.setPrototypeOf(this, AuthError.prototype);
-    }
-}
-
-export function with_timeout(timeout_ms: number = DEFAULT_TIMEOUT): { signal: AbortSignal; clear: () => void } {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort('TIMEOUT'), timeout_ms);
-    return { signal: controller.signal, clear: () => clearTimeout(id) };
-}
-
-function require_api_token(): string {
-    const { tadpole_os_api_key } = get_settings();
-    const token = (tadpole_os_api_key || '').trim();
-    if (!token) {
-        throw new AuthError('Tadpole OS API token is missing. Configure NEURAL_TOKEN in Settings before making requests.');
-    }
-    return token;
-}
-
-/**
- * Generates standardized headers and context for distributed tracing.
- * 
- * ### 🔦 Observability: W3C TraceContext
- * Generates a unique `trace_id` (32 hex chars) and `span_id` (16 hex chars). 
- * These are combined into a `traceparent` header (version-00) to ensure 
- * that the front-end request is correctly recognized as the "Parent" of any 
- * subsequent Rust/Sidecar spans (OTEL-01).
- */
-export function get_headers(custom_request_id?: string): { headers: HeadersInit, context: { span_id: string, trace_id: string, traceparent: string, request_id: string } } {
-    const token = require_api_token();
-
-    const request_id = custom_request_id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `tr-${Date.now()}`);
-    const trace_id = request_id.replace(/-/g, '').padEnd(32, '0').slice(0, 32);
-
-    // Generate a random span ID for the frontend request (16 hex chars)
-    let span_id: string;
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-        span_id = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-    } else {
-        span_id = Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
-    }
-
-    const traceparent = `00-${trace_id}-${span_id}-01`;
-
-    return {
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Request-Id': request_id,
-            'traceparent': traceparent
-        },
-        context: { span_id, trace_id, traceparent, request_id }
-    };
-}
-
-const get_response_header = (response: Response, name: string): string | undefined => {
-    return response.headers?.get?.(name) || undefined;
-};
-
-const build_trace_attributes = (
-    response: Response,
-    extra: Record<string, string | number | boolean> = {},
-): Record<string, string | number | boolean> => {
-    const attributes: Record<string, string | number | boolean> = {
-        'http.status_code': response.status,
-        ...extra,
-    };
-    const request_id = get_response_header(response, 'x-request-id');
-    const traceparent = get_response_header(response, 'traceparent');
-    if (request_id) attributes['resp.x_request_id'] = request_id;
-    if (traceparent) attributes['resp.traceparent'] = traceparent;
-    return attributes;
-};
-
 export async function api_request<T = unknown>(
     path: string,
-    options: RequestInit & { response_type?: 'json' | 'blob' | 'text'; timeout?: number } = {}
+    options: RequestOptions = {}
 ): Promise<T> {
-    const { tadpole_os_url } = get_settings();
-
-    if (!tadpole_os_url) {
-        throw new Error('Neural Link Configuration Missing: tadpole_os_url is undefined.');
-    }
-
-    const base_url = tadpole_os_url.replace(/\/$/, '');
-    const clean_path = path.startsWith('/') ? path : `/${path}`;
-    const url = `${base_url}${clean_path}`;
-
-    const custom_request_id = options.headers
-        ? Object.entries(options.headers as Record<string, string>).find(
-            ([k]) => k.toLowerCase() === 'x-request-id'
-          )?.[1]
-        : undefined;
-
-    const { headers: base_headers, context } = get_headers(custom_request_id);
-
-    // Multipart/FormData support: if the body is FormData, we must Let the browser set the Content-Type (with boundary)
-    const is_form_data = options.body instanceof FormData;
-    const final_headers = { ...base_headers };
-    if (is_form_data) {
-        delete (final_headers as Record<string, string>)['Content-Type'];
-    }
-
-    // Emit start span
-    use_trace_store.getState().add_span({
-        id: context.span_id,
-        trace_id: context.trace_id,
-        name: `ui_request: ${path.split('?')[0]}`,
-        agent_id: 'frontend',
-        mission_id: 'system',
-        start_time: Date.now(),
-        status: 'running',
-        attributes: {}
-    });
-
-    try {
-        const execute_fetch = async (attempt: number): Promise<Response> => {
-            const per_attempt_timeout = options.signal ? null : with_timeout(options.timeout);
-            const active_signal = options.signal || per_attempt_timeout?.signal;
-
-            try {
-                const res = await fetch(url, {
-                    ...options,
-                    headers: {
-                        ...final_headers,
-                        ...options.headers
-                    },
-                    signal: active_signal
-                });
-
-                per_attempt_timeout?.clear();
-
-                // Hardened Retry Logic: Handle 429 and 503 with exponential backoff for safe methods
-                const is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
-                if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES && is_safe_method) {
-                    const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                    console.warn(`[BaseAPI] ${res.status} detected at ${path}. Retrying in ${backoff}ms (Attempt ${attempt + 1})...`);
-                    await new Promise(resolve => setTimeout(resolve, backoff));
-                    return execute_fetch(attempt + 1);
-                }
-
-                return res;
-            } catch (err) {
-                const timed_out = (active_signal?.aborted && active_signal.reason === 'TIMEOUT') || (err instanceof Error && err.message === 'TIMEOUT');
-                per_attempt_timeout?.clear();
-
-                // Only retry safe, idempotent methods. POST/PUT/DELETE/PATCH
-                // must NOT be retried to avoid duplicate side effects (unless it's a network failure).
-                const is_safe_method = ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
-                
-                if (attempt >= MAX_RETRIES || (err instanceof Error && err.name === 'AbortError') || !is_safe_method) {
-                    if (timed_out) {
-                        throw new Error(`Request timed out after ${options.timeout || DEFAULT_TIMEOUT}ms for: ${url}`, { cause: err });
-                    }
-                    if (err instanceof TypeError && err.message === 'Failed to fetch') {
-                        throw new Error(`Failed to fetch from ${url}. Please ensure the sidecar is running at this address and CORS allows this origin.`, { cause: err });
-                    }
-                    throw err;
-                }
-
-                const backoff = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                await new Promise(resolve => setTimeout(resolve, backoff));
-                return execute_fetch(attempt + 1);
-            }
-        };
-
-        const response = await execute_fetch(0);
-
-        if (!response.ok) {
-            const error_text = await response.text();
-            let error_json: Record<string, unknown> | null = null;
-            try { error_json = JSON.parse(error_text); } catch { /* ignore */ }
-
-            // ### 🛡️ Defense: RFC 9457 Problem Details
-            // The engine returns structured error objects. We map these into 
-            // a standardized `ApiError` to ensure the UI can provide 
-            // actionable "help_links" or "error_codes" to the user (ERR-01).
-            const type = (error_json?.type as string) || 'about:blank';
-            const title = (error_json?.title as string) || response.statusText;
-            const error_code = (error_json?.error_code as string) || null;
-            const help_link = (error_json?.help_link as string) || null;
-            let detail = (error_json?.detail as string) || (error_json?.message as string) || (error_text && error_text.length < 1000 ? error_text : 'Unknown Infrastructure Error');
-            
-            if (response.status === 401) {
-                const is_local = url.includes('127.0.0.1') || url.includes('localhost');
-                detail = is_local 
-                    ? 'Unauthorized. Your Neural Token does not match the engine configuration. Please verify the NEURAL_TOKEN in Settings.'
-                    : 'Unauthorized. Invalid API token.';
-            } else if (response.status === 501) {
-                detail = 'This capability is disabled in the current engine build. Enable the required Rust feature and restart the engine.';
-            } else if (response.status === 429) {
-                detail = 'Too many requests. Local security protocols have triggered a temporary cooling-down period. Please wait a moment and try again.';
-            } else if (response.status === 422) {
-                detail = `Unprocessable Entity: The payload schema does not match the backend expectations. Raw detail: ${detail}`;
-            }
-            
-            const message = `${title}: ${detail}`;
-
-            use_trace_store.getState().update_span(context.span_id, {
-                end_time: Date.now(),
-                status: 'error',
-                attributes: build_trace_attributes(
-                    response,
-                    error_code ? { 'error.code': error_code } : {},
-                )
-            });
-
-
-            const error = new ApiError(message, type, response.status, error_code, help_link);
-            throw error;
-        }
-
-        let result: unknown;
-        if (response.status === 204) {
-            result = null;
-        } else if (options.response_type === 'blob') {
-            result = await response.blob();
-        } else if (options.response_type === 'text') {
-            result = await response.text();
-        } else {
-            const text = await response.text();
-            if (!text) {
-                result = null;
-            } else {
-                try {
-                    result = JSON.parse(text);
-                } catch (parse_err) {
-                    throw new ApiError(
-                        `Failed to parse response JSON: ${(parse_err as Error).message}`,
-                        'about:blank',
-                        response.status,
-                        'INVALID_JSON'
-                    );
-                }
-            }
-        }
-
-        use_trace_store.getState().update_span(context.span_id, {
-            end_time: Date.now(),
-            status: 'success',
-            attributes: build_trace_attributes(response)
-        });
-
-        return result as T;
-    } catch (err) {
-        use_trace_store.getState().update_span(context.span_id, {
-            end_time: Date.now(),
-            status: 'error',
-            attributes: {
-                error: err instanceof Error ? err.message : String(err)
-            }
-        });
-        throw err;
-    }
+    return base_api_service_instance.request<T>(path, options);
 }
-
-
 
 // Metadata: [base_api_service]

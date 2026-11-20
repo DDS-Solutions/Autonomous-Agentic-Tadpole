@@ -29,6 +29,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "init": "python execution/tadpole_init.py",
     "dev": "vite",
     "engine": "node scripts/cargo_runner.cjs run --manifest-path server-rs/Cargo.toml",
     "build": "tsc -b && vite build",

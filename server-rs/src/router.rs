@@ -437,6 +437,7 @@ fn build_benchmark_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(routes::benchmarks::get_benchmarks))
         .route("/", post(routes::benchmarks::create_benchmark))
+        .route("/readiness", post(routes::benchmarks::run_readiness_probe))
         .route(
             "/run/{id}",
             post(routes::benchmarks::trigger_benchmark),

@@ -63,23 +63,19 @@ pub async fn trigger_deploy(
     Query(params): Query<DeployParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let target = params.target.unwrap_or(1);
-    let script_file = match target {
-        1 => "deploy-bunker-1.ps1",
-        2 => "deploy-bunker-2.ps1",
-        _ => {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(DeployResponse {
-                    status: "error".to_string(),
-                    output: None,
-                    error: Some(format!(
-                        "Invalid deployment target: {}. Must be 1 or 2.",
-                        target
-                    )),
-                }),
-            ));
-        }
-    };
+    if !matches!(target, 1 | 2) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(DeployResponse {
+                status: "error".to_string(),
+                output: None,
+                error: Some(format!(
+                    "Invalid deployment target: {}. Must be 1 or 2.",
+                    target
+                )),
+            }),
+        ));
+    }
 
     let (script_name, is_powershell) = if cfg!(windows) {
         (format!("deploy-bunker-{}.ps1", target), true)
@@ -190,7 +186,7 @@ pub async fn trigger_deploy(
                 let error_msg = if combined.is_empty() {
                     format!(
                         "{} exited with code {:?}",
-                        script_file,
+                        script_name,
                         output.status.code()
                     )
                 } else {

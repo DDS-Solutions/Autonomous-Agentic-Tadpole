@@ -68,7 +68,7 @@ impl KnowledgeStore {
                     "knowledge_store",
                 )
                 .await?;
-                Ok(Arc::new(v))
+                Ok::<Arc<crate::agent::memory::VectorMemory>, AppError>(Arc::new(v))
             })
             .await?;
         Ok(lance.clone())
@@ -282,8 +282,18 @@ impl KnowledgeStore {
         Ok(())
     }
 
-    /// Alias for delete for route handler compatibility.
-    pub async fn remove(&self, id: &str, _force: bool) -> Result<(), AppError> {
+    /// Deletes a knowledge entry while protecting human-confirmed entries unless `force = true`.
+    pub async fn remove(&self, id: &str, force: bool) -> Result<(), AppError> {
+        if !force {
+            if let Some(existing) = metadata::get_by_id(&self.pool, id).await? {
+                if existing.human_confirmed {
+                    return Err(AppError::Conflict(format!(
+                        "Knowledge entry '{}' is human-confirmed; pass force=true to delete.",
+                        id
+                    )));
+                }
+            }
+        }
         self.delete(id).await
     }
 

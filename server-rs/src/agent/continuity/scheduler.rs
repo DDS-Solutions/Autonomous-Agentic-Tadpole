@@ -38,7 +38,7 @@ pub async fn create_job(pool: &SqlitePool, req: CreateJobRequest) -> Result<Sche
             );
         }
     }
-    let metadata_json = if meta_val.as_object().map_or(false, |o| !o.is_empty()) {
+    let metadata_json = if meta_val.as_object().is_some_and(|o| !o.is_empty()) {
         serde_json::to_string(&meta_val).ok()
     } else {
         None

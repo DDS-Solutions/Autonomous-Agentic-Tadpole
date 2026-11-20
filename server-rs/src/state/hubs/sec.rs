@@ -41,6 +41,11 @@ pub struct SecurityHub {
     pub verification_gate: Arc<VerificationGate>,
     /// Authentication token for administrative/deploy requests.
     pub deploy_token: String,
+    /// Optional dedicated high-privilege token for destructive host/script/deploy routes.
+    /// When set, `deploy_token` is scoped to `Operator` and admin routes require this token.
+    pub admin_token: Option<String>,
+    /// Optional read-only observability token restricted to GET/HEAD endpoints.
+    pub readonly_token: Option<String>,
     /// Old token kept valid during grace period.
     pub deploy_token_old: Option<String>,
     /// New token generated during grace period.

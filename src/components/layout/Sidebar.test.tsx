@@ -10,10 +10,11 @@
  * - **Telemetry Link**: Search `[Sidebar_test]` in console logs.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { use_settings_store } from '../../stores/settings_store';
 
 vi.mock('../ui', () => ({
     Tooltip: ({ children, content }: any) => <div title={content}>{children}</div>
@@ -23,7 +24,11 @@ describe('Sidebar Component', () => {
     const mockNavItemClass = ({ isActive }: { isActive: boolean }) => 
         isActive ? 'active-class' : 'inactive-class';
 
-    it('renders navigation links and core sections', () => {
+    beforeEach(() => {
+        use_settings_store.getState().update_setting('cockpit_mode', 'focus');
+    });
+
+    it('renders 6 core destinations in Focus Mode by default and hides Expert routes', () => {
         render(
             <MemoryRouter>
                 <Sidebar nav_item_class={mockNavItemClass} />
@@ -32,12 +37,25 @@ describe('Sidebar Component', () => {
 
         expect(screen.getByText('A-A-Tadpole-OS')).toBeInTheDocument();
         expect(screen.getByText('Operations')).toBeInTheDocument();
-        expect(screen.getByText('Hierarchy')).toBeInTheDocument();
         expect(screen.getByText('Missions')).toBeInTheDocument();
-        expect(screen.getByText('Scheduled Jobs')).toBeInTheDocument();
         expect(screen.getByText('Oversight')).toBeInTheDocument();
-        expect(screen.getByText('System Docs')).toBeInTheDocument();
         expect(screen.getByText('Settings')).toBeInTheDocument();
+        expect(screen.queryByText('Hierarchy')).not.toBeInTheDocument();
+        expect(screen.queryByText('Scheduled Jobs')).not.toBeInTheDocument();
+    });
+
+    it('reveals all 18 Expert routes when switched to Expert Mode', () => {
+        render(
+            <MemoryRouter>
+                <Sidebar nav_item_class={mockNavItemClass} />
+            </MemoryRouter>
+        );
+
+        fireEvent.click(screen.getByTestId('sidebar-mode-expert'));
+
+        expect(screen.getByText('Hierarchy')).toBeInTheDocument();
+        expect(screen.getByText('Scheduled Jobs')).toBeInTheDocument();
+        expect(screen.getByText('System Docs')).toBeInTheDocument();
     });
 
     it('displays the certification badge', () => {

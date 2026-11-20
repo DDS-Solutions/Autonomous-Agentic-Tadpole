@@ -10,7 +10,7 @@
 //! - **Trace Scope**: `server-rs::agent::runner::synthesis::tests`
 
 #[cfg(test)]
-mod tests {
+mod suite {
     use super::super::budget::format_budgeted_items;
     use super::super::prompt::is_orchestrator_identity;
     use crate::agent::constants::*;
@@ -50,9 +50,11 @@ mod tests {
     async fn test_context_pruning_basic() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.model_config = ModelConfig {
-            tpm: Some(100), // Tiny limit
+        let ctx = RunContext {
+            model_config: ModelConfig {
+                tpm: Some(100), // Tiny limit
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -73,9 +75,11 @@ mod tests {
     async fn test_build_tools_ceo_restriction() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.agent_id = AGENT_CEO.to_string();
-        ctx.skills = vec!["read_file".to_string()];
+        let mut ctx = RunContext {
+            agent_id: AGENT_CEO.to_string(),
+            skills: vec!["read_file".to_string()],
+            ..Default::default()
+        };
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
 
         let tools = runner.build_tools(&ctx).await;
@@ -99,9 +103,11 @@ mod tests {
     async fn test_build_tools_specialist_tools() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "specialist-1".to_string();
-        ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        let mut ctx = RunContext {
+            agent_id: "specialist-1".to_string(),
+            skills: vec!["read_file".to_string(), "write_file".to_string()],
+            ..Default::default()
+        };
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini; // Enable native tools
 
         let tools = runner.build_tools(&ctx).await;
@@ -130,10 +136,11 @@ mod tests {
     async fn test_context_pruning_token_boundary() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-
-        ctx.model_config = ModelConfig {
-            tpm: Some(20), // Extremely tight
+        let ctx = RunContext {
+            model_config: ModelConfig {
+                tpm: Some(20), // Extremely tight
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -154,10 +161,12 @@ mod tests {
     async fn test_build_tools_observer_restriction() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "observer-1".to_string();
-        ctx.authority_level = crate::agent::types::RoleAuthorityLevel::Observer;
-        ctx.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        let mut ctx = RunContext {
+            agent_id: "observer-1".to_string(),
+            authority_level: crate::agent::types::RoleAuthorityLevel::Observer,
+            skills: vec!["read_file".to_string(), "write_file".to_string()],
+            ..Default::default()
+        };
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
 
         let tools = runner.build_tools(&ctx).await;
@@ -258,6 +267,8 @@ mod tests {
                     crate::agent::verification_gate::VerificationGate::default(),
                 ),
                 deploy_token: "test".to_string(),
+                admin_token: None,
+                readonly_token: None,
                 deploy_token_old: None,
                 deploy_token_new: None,
                 token_rotated_at: None,
@@ -361,14 +372,16 @@ mod tests {
     async fn test_safe_mode_deny_by_default() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state);
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "specialist-safe".to_string();
-        ctx.safe_mode = true;
-        ctx.skills = vec![
-            "read_file".to_string(),
-            "write_file".to_string(),
-            "execute_shell".to_string(),
-        ];
+        let mut ctx = RunContext {
+            agent_id: "specialist-safe".to_string(),
+            safe_mode: true,
+            skills: vec![
+                "read_file".to_string(),
+                "write_file".to_string(),
+                "execute_shell".to_string(),
+            ],
+            ..Default::default()
+        };
         ctx.model_config.provider = crate::agent::types::ModelProvider::Gemini;
 
         let tools = runner.build_tools(&ctx).await;
@@ -407,16 +420,20 @@ mod tests {
         let runner = AgentRunner::new(state);
 
         // Specialist A: allowed read_file only
-        let mut ctx_a = RunContext::default();
-        ctx_a.agent_id = "specialist-a".to_string();
-        ctx_a.skills = vec!["read_file".to_string()];
+        let mut ctx_a = RunContext {
+            agent_id: "specialist-a".to_string(),
+            skills: vec!["read_file".to_string()],
+            ..Default::default()
+        };
         ctx_a.model_config.provider = crate::agent::types::ModelProvider::Gemini;
         let tools_a = runner.build_tools(&ctx_a).await;
 
         // Specialist B: allowed read_file AND write_file
-        let mut ctx_b = RunContext::default();
-        ctx_b.agent_id = "specialist-b".to_string();
-        ctx_b.skills = vec!["read_file".to_string(), "write_file".to_string()];
+        let mut ctx_b = RunContext {
+            agent_id: "specialist-b".to_string(),
+            skills: vec!["read_file".to_string(), "write_file".to_string()],
+            ..Default::default()
+        };
         ctx_b.model_config.provider = crate::agent::types::ModelProvider::Gemini;
         let tools_b = runner.build_tools(&ctx_b).await;
 

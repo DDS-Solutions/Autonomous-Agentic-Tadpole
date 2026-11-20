@@ -16,6 +16,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useSwarmMetrics, type SwarmMetric } from '../../hooks/use_swarm_metrics';
 import { Tooltip } from '../ui';
+import { Overlord_Inbox_Bar } from './Overlord_Inbox_Bar';
 
 /**
  * Ticker_Header
@@ -56,25 +57,28 @@ export const Ticker_Header: React.FC = React.memo(() => {
 
     return (
         <div className="w-full relative flex items-center overflow-hidden pointer-events-auto border-b border-zinc-800/80 bg-zinc-950 h-8 shrink-0 z-20">
-            {/* Edge Fading for high-fidelity look */}
-            <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-zinc-950 via-zinc-950/90 to-transparent z-10 pointer-events-none" />
-            <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-zinc-950 via-zinc-950/90 to-transparent z-10 pointer-events-none" />
+            <div className="flex-1 relative flex items-center overflow-hidden h-full">
+                {/* Edge Fading for high-fidelity look */}
+                <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-zinc-950 via-zinc-950/90 to-transparent z-10 pointer-events-none" />
+                <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-zinc-950 via-zinc-950/90 to-transparent z-10 pointer-events-none" />
 
-            <motion.div
-                className="inline-flex items-center whitespace-nowrap flex-nowrap h-full"
-                initial={{ x: "0%" }}
-                animate={{ x: "-33.333%" }}
-                transition={{
-                    duration: calculated_duration,
-                    ease: "linear",
-                    repeat: Infinity
-                }}
-            >
-                {/* Triple Loop for seamless continuity */}
-                {content}
-                {content}
-                {content}
-            </motion.div>
+                <motion.div
+                    className="inline-flex items-center whitespace-nowrap flex-nowrap h-full"
+                    initial={{ x: "0%" }}
+                    animate={{ x: "-33.333%" }}
+                    transition={{
+                        duration: calculated_duration,
+                        ease: "linear",
+                        repeat: Infinity
+                    }}
+                >
+                    {/* Triple Loop for seamless continuity */}
+                    {content}
+                    {content}
+                    {content}
+                </motion.div>
+            </div>
+            <Overlord_Inbox_Bar />
         </div>
     );
 });

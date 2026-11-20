@@ -47,7 +47,7 @@ describe('system_api_service', () => {
             vi.mocked(api_request).mockResolvedValueOnce({});
             const res = await system_api_service.check_health();
             expect(res).toBe(true);
-            expect(api_request).toHaveBeenCalledWith('/v1/engine/health', { method: 'GET', timeout: 5000 });
+            expect(api_request).toHaveBeenCalledWith('/v1/engine/health', { method: 'GET', timeout: 5000, skip_auth: true });
         });
 
         it('should return false if api_request fails', async () => {
@@ -181,6 +181,16 @@ describe('system_api_service', () => {
             vi.mocked(api_request).mockResolvedValueOnce({ data: [{ id: '1' }] });
             const res = await system_api_service.get_oversight_ledger();
             expect(res).toEqual([{ id: '1' }]);
+        });
+
+        it('get_pending_oversight propagates errors instead of returning fake empty arrays', async () => {
+            vi.mocked(api_request).mockRejectedValueOnce(new Error('401 Unauthorized'));
+            await expect(system_api_service.get_pending_oversight()).rejects.toThrow('401 Unauthorized');
+        });
+
+        it('get_oversight_ledger propagates errors instead of returning fake empty arrays', async () => {
+            vi.mocked(api_request).mockRejectedValueOnce(new Error('Network offline'));
+            await expect(system_api_service.get_oversight_ledger()).rejects.toThrow('Network offline');
         });
 
         it('decide_oversight', async () => {

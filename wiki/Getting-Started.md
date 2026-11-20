@@ -17,9 +17,9 @@
 
 | Requirement | Version | Purpose |
 |-------------|---------|---------|
-| **Rust toolchain** | 1.75+ (2021 edition) | Compile `server-rs` engine |
-| **Node.js + npm** | LTS (≥20) | React dashboard + tooling |
-| **Python** | 3.10+ | Execution scripts in `execution/` |
+| **Rust toolchain** | 1.99.0+ (2021 edition) | Compile `server-rs` engine & workspace crates |
+| **Node.js + npm** | LTS (≥22) | React dashboard + tooling |
+| **Python** | 3.10+ | Execution scripts & Day-1 bootstrap (`execution/`) |
 | **SQLite** | 3.35+ | Local database (bundled via sqlx) |
 | **Ollama** *(optional)* | Latest | Local model inference |
 
@@ -40,28 +40,15 @@ cd Autonomous-Agentic-Tadpole
 npm install
 ```
 
-### 3. Create your environment config
+### 3. Bootstrap your environment config (Recommended: < 15s)
 
 ```bash
-cp .env.example .env
+npm run init
+# Non-interactive option:
+python execution/tadpole_init.py --non-interactive --preset hybrid
 ```
 
-Edit `.env` and set the required values:
-
-```ini
-# Required — master bearer token for all protected API routes
-NEURAL_TOKEN=your-secret-token-here
-
-# Optional — Ollama local inference
-OLLAMA_HOST=http://localhost:11434
-
-# Optional — Cloud provider keys
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza...
-```
-
-> **Security note:** Never commit `.env` to git. It is already listed in `.gitignore`.
+This generates a cryptographically secure 64-hex `NEURAL_TOKEN`, probes local Ollama and Docker sandbox availability, and writes a hardened `.env` (never committed to git). To enable tiered RBAC (`Operator` vs `Admin` vs `ReadOnly`), pass `--tiered-tokens` or set `NEURAL_TOKEN_ADMIN` and `NEURAL_TOKEN_READONLY` in `.env`.
 
 ### 4. Start the Rust engine
 
@@ -72,7 +59,7 @@ npm run engine
 
 Engine starts on `http://127.0.0.1:8000` by default.
 
-### 5. Start the React dashboard
+### 5. Start the React dashboard & complete the First-Run Wizard
 
 Open a **second terminal**:
 
@@ -80,7 +67,7 @@ Open a **second terminal**:
 npm run dev
 ```
 
-Dashboard opens at `http://localhost:5173`.
+Dashboard opens at `http://localhost:5173` in **Focus Mode** (6 core views) with the 4-step **First-Run Overlord Wizard** to verify your memory-only session token, choose a Model Tier Preset, confirm safety guardrails, and run the native 4-probe Overlord Readiness Check (`POST /v1/benchmarks/readiness`). Press `Ctrl+Shift+E` anytime to switch to **Expert Mode** (all 18 views).
 
 ---
 

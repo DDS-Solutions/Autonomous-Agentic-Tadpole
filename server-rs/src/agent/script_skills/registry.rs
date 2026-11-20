@@ -262,6 +262,7 @@ impl ScriptSkillsRegistry {
         agent_dir: &Path,
         built_in_dir: &Path,
     ) -> Result<(), AppError> {
+        super::parse::validate_capability_name(name)?;
         let _lock = self.op_lock.lock().await;
 
         // Guard against deleting built-in capabilities
@@ -278,8 +279,11 @@ impl ScriptSkillsRegistry {
         }
 
         // Delete from user and agent directories with verified remove
-        verified_remove::<T>(user_dir, name).await?;
-        verified_remove::<T>(agent_dir, name).await?;
+        let removed_user = verified_remove::<T>(user_dir, name).await?;
+        let removed_agent = verified_remove::<T>(agent_dir, name).await?;
+        if !removed_user && !removed_agent {
+            return Err(AppError::NotFound(format!("Capability '{}' not found", name)));
+        }
         Ok(())
     }
 

@@ -51,23 +51,12 @@ cargo test --manifest-path server-rs/Cargo.toml -- --nocapture
 
 ### Test Modules (v1.1.59)
 
-| Module | Tests | Coverage |
-|--------|-------|----------|
-| `routes::agent_tests` | 5 | Agent CRUD, pagination, error cases |
-| `routes::auth_tests` | 4 | Bearer + WebSocket auth paths |
-| `routes::backup_restore_tests` | 1 | Hot backup + integrity_check |
-| `routes::health_endpoint_tests` | 1 | Extended health schema |
-| `routes::shutdown_orchestrator_tests` | 2 | Graceful shutdown + emergency kill |
-| `routes::token_rotation_tests` | 5 | All token rotation scenarios |
-| `middleware::auth::tests` | 5 | Constant-time comparison, edge cases |
-| `middleware::auth_rate_limit::tests` | 1 | Brute-force blocking |
-| `middleware::cors::tests` | 4 | Origin validation |
-| `security::audit::tests` | 3 | Merkle chaining + tamper detection |
-| `security::metering::tests` | 2 | Budget enforcement + debounce |
-| `security::scanner::tests` | 1 | Shell pattern blocking |
-| `intelligence::graph::engine::tests` | 6 | AST parsing, incremental cache |
-| `intelligence::graph_store::tests` | 4 | Symbol graph DB operations |
-| **Total** | **488** | All passing |
+| Crate / Module | Scope |
+|----------------|-------|
+| `crates/tadpole-types` (`cargo test -p tadpole-types`) | Core enums, model capabilities, mission DTOs, MFS RAG scoring |
+| `crates/tadpole-intelligence` (`cargo test -p tadpole-intelligence`) | Tree-sitter Rust/TS parser, `CodeSymbolGraph`, blast-radius & incremental caching |
+| `server-rs` (`cargo test -p server-rs --lib`) | Routes (`agent`, `auth`, `benchmarks` readiness probe, `intelligence`, `deploy`, `skills`, `shutdown`, `token_rotation`), middleware (`auth` tiered scopes, rate limit, CORS), security (Merkle audit, budget metering, shell scanner, `validate_tokenized_command`), swarm decomposition |
+| `crates/wasm-codec` (`npm run test:wasm`) | Binary MessagePack / WASM telemetry framing |
 
 ### Writing a New Route Test
 

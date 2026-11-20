@@ -14,7 +14,7 @@ Core system module providing specialized functionality for the agent swarm.
  * @file Oversight_Dashboard.test.tsx
  * @description Suite for the High-Level Governance and Proposal Oversight dashboard.
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import Oversight_Dashboard from './Oversight_Dashboard';
@@ -255,6 +255,138 @@ describe('Oversight_Dashboard Page', () => {
 
         await waitFor(() => {
             expect(tadpole_os_service.decide_oversight).toHaveBeenCalledWith('p-breaker-1', 'approved', 'Verify file path or provide alternative parameter.');
+        });
+    });
+
+    it('shows honest connection banner instead of silent fake data on fetch failure', async () => {
+        (tadpole_os_service.get_pending_oversight as Mock).mockRejectedValue(new Error('401 Unauthorized'));
+        (tadpole_os_service.get_oversight_ledger as Mock).mockRejectedValue(new Error('401 Unauthorized'));
+
+        render(<MemoryRouter><Oversight_Dashboard /></MemoryRouter>);
+
+        const banner = await screen.findByTestId('oversight-connection-banner');
+        expect(banner).toBeInTheDocument();
+        expect(banner).toHaveTextContent(/Live Oversight Disconnected/i);
+        expect(banner).toHaveTextContent(/Preview Demo Data/i);
+    });
+
+    it('batch approves ONLY low-risk skills and skips high/medium risk and .env reads', async () => {
+        (tadpole_os_service.get_pending_oversight as Mock).mockResolvedValue([
+            {
+                id: 'p-read',
+                agent_id: 'a1',
+                role: 'Worker',
+                skill: 'read_file',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: { name: 'read_file', params: { path: 'README.md' }, agent_id: 'a1', skill: 'read_file' },
+            },
+            {
+                id: 'p-env',
+                agent_id: 'a1',
+                role: 'Worker',
+                skill: 'read_file',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: { name: 'read_file', params: { path: '.env' }, agent_id: 'a1', skill: 'read_file' },
+            },
+            {
+                id: 'p-shell',
+                agent_id: 'a1',
+                role: 'Worker',
+                skill: 'execute_shell',
+                created_at: new Date().toISOString(),
+                timestamp: new Date().toISOString(),
+                tool_call: { name: 'execute_shell', params: {}, agent_id: 'a1', skill: 'execute_shell' },
+            },
+        ]);
+        (tadpole_os_service.decide_oversight as Mock).mockResolvedValue({ status: 'success' });
+
+        render(<MemoryRouter initialEntries={['/oversight']}><Oversight_Dashboard /></MemoryRouter>);
+
+        const batchBtn = await screen.findByTestId('batch-approve-low-risk-btn');
+        expect(batchBtn).toHaveTextContent(/Approve Low-Risk \(1\)/i);
+        fireEvent.click(batchBtn);
+
+        const dialog = await screen.findByRole('dialog');
+        const confirmBtn = within(dialog).getByRole('button', { name: /Approve 1 Low-Risk/i });
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+            expect(tadpole_os_service.decide_oversight).toHaveBeenCalledTimes(1);
+            expect(tadpole_os_service.decide_oversight).toHaveBeenCalledWith('p-read', 'approved');
+        });
+    });
+
+    it('supports keyboard-first triage ONLY when /oversight is the active route (C3 regression)', async () => {
+        (tadpole_os_service.decide_oversight as Mock).mockResolvedValue({ status: 'success' });
+
+        // Mounted invisibly while user is on /dashboard: pressing 'a' MUST NOT approve anything
+        const { unmount } = render(<MemoryRouter initialEntries={['/dashboard']}><Oversight_Dashboard /></MemoryRouter>);
+        await screen.findByTestId('risk-badge-p1');
+        fireEvent.keyDown(window, { key: 'a' });
+        fireEvent.keyDown(window, { key: 'r' });
+        expect(tadpole_os_service.decide_oversight).not.toHaveBeenCalled();
+        unmount();
+
+        // Active on /oversight: pressing 'a' approves focused item
+        render(<MemoryRouter initialEntries={['/oversight']}><Oversight_Dashboard /></MemoryRouter>);
+        await screen.findByTestId('risk-badge-p1');
+        fireEvent.keyDown(window, { key: 'a' });
+
+        await waitFor(() => {
+            expect(tadpole_os_service.decide_oversight).toHaveBeenCalledWith('p1', 'approved');
+        });
+    });
+
+    it('passes { confirm: true } to kill_agents and shutdown_engine via Confirm_Dialog (C4 regression)', async () => {
+        (tadpole_os_service.kill_agents as Mock).mockResolvedValue({ success: true });
+        (tadpole_os_service.shutdown_engine as Mock).mockResolvedValue({ success: true });
+
+        render(<MemoryRouter initialEntries={['/oversight']}><Oversight_Dashboard /></MemoryRouter>);
+        await screen.findByTestId('risk-badge-p1');
+
+        // Halt Agents flow
+        fireEvent.click(screen.getByRole('button', { name: /Halt Agents/i }));
+        const haltDialog = await screen.findByRole('dialog');
+        fireEvent.click(within(haltDialog).getByRole('button', { name: /^Confirm$/i }));
+        await waitFor(() => {
+            expect(tadpole_os_service.kill_agents).toHaveBeenCalledWith({ confirm: true });
+        });
+
+        // Shutdown Engine flow
+        fireEvent.click(screen.getByRole('button', { name: /Kill Engine/i }));
+        const killDialog = await screen.findByRole('dialog');
+        fireEvent.click(within(killDialog).getByRole('button', { name: /^Confirm$/i }));
+        await waitFor(() => {
+            expect(tadpole_os_service.shutdown_engine).toHaveBeenCalledWith({ confirm: true });
+        });
+    });
+
+    it('inspects top-level entry.params for secrets and emits warning toast on partial batch failure (H5 regression)', async () => {
+        (tadpole_os_service.get_pending_oversight as Mock).mockResolvedValue([
+            { id: 'p-safe-1', skill: 'read_file', params: { path: 'README.md' }, agent_id: 'a1', status: 'pending', created_at: new Date().toISOString() },
+            { id: 'p-safe-2', skill: 'list_files', params: { dir: 'src' }, agent_id: 'a1', status: 'pending', created_at: new Date().toISOString() },
+            { id: 'p-top-secret', skill: 'read_file', params: { path: '.env_local' }, agent_id: 'a1', status: 'pending', created_at: new Date().toISOString() },
+        ]);
+        (tadpole_os_service.decide_oversight as Mock)
+            .mockResolvedValueOnce({ status: 'success' })
+            .mockRejectedValueOnce(new Error('503 Unavailable'));
+
+        render(<MemoryRouter initialEntries={['/oversight']}><Oversight_Dashboard /></MemoryRouter>);
+
+        // Top-level .env_local read MUST be classified HIGH (not included in 2 safe low-risk items)
+        expect(await screen.findByTestId('risk-badge-p-top-secret')).toHaveTextContent(/HIGH/i);
+        const batchBtn = await screen.findByTestId('batch-approve-low-risk-btn');
+        expect(batchBtn).toHaveTextContent('Approve Low-Risk (2)');
+
+        fireEvent.click(batchBtn);
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: /Approve 2 Low-Risk/i }));
+
+        await waitFor(() => {
+            expect(tadpole_os_service.decide_oversight).toHaveBeenCalledTimes(2);
+            expect(tadpole_os_service.decide_oversight).not.toHaveBeenCalledWith('p-top-secret', 'approved');
         });
     });
 });

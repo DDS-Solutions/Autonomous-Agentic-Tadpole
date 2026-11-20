@@ -76,6 +76,7 @@ Successful agent deletion commits dependent database cleanup before removing the
 | --- | --- | --- | --- |
 | `GET` | `/v1/benchmarks` | `routes::benchmarks::get_benchmarks` | Protected |
 | `POST` | `/v1/benchmarks` | `routes::benchmarks::create_benchmark` | Protected |
+| `POST` | `/v1/benchmarks/readiness` | `routes::benchmarks::run_readiness_probe` | Protected; live 4-probe Overlord Readiness check (WAL+FK, Ollama/cloud providers, live GovernanceHub guardrails, fleet RBAC) |
 | `POST` | `/v1/benchmarks/run/{id}` | `routes::benchmarks::trigger_benchmark` | Protected |
 | `GET` | `/v1/benchmarks/{id}` | `routes::benchmarks::get_benchmark_history` | Protected |
 

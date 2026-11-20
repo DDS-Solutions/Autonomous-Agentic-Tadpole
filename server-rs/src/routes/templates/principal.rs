@@ -11,7 +11,7 @@
 
 use axum::{extract::FromRequestParts, http::request::Parts};
 use crate::error::AppError;
-use crate::middleware::auth::AuthenticatedOperator;
+use crate::middleware::auth::{OperatorIdentity, OperatorScope};
 
 /// Verified operator principal authorized to install or uninstall swarm templates.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,21 +35,17 @@ where
         if let Some(principal) = parts.extensions.get::<TemplatePrincipal>() {
             return Ok(principal.clone());
         }
-        if parts.extensions.get::<AuthenticatedOperator>().is_some() {
-            let op_id = parts
-                .headers
-                .get("x-operator-id")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("operator");
-            return Ok(TemplatePrincipal::new(op_id));
-        }
-        if let Some(op_id) = parts.headers.get("x-operator-id").and_then(|v| v.to_str().ok()) {
-            if !op_id.trim().is_empty() {
-                return Ok(TemplatePrincipal::new(op_id.trim()));
+        if let Some(identity) = parts.extensions.get::<OperatorIdentity>() {
+            if identity.scope < OperatorScope::Admin {
+                return Err(AppError::Forbidden(format!(
+                    "Token '{}' has {:?} scope, but template mutations require Admin scope",
+                    identity.name, identity.scope
+                )));
             }
+            return Ok(TemplatePrincipal::new(&identity.name));
         }
         Err(AppError::Unauthorized(
-            "Authentication required: missing valid operator token or principal".to_string(),
+            "Authentication required: missing valid Admin operator identity or principal".to_string(),
         ))
     }
 }

@@ -76,11 +76,13 @@ impl AgentRunner {
                 && !has_explicit_model_pin;
 
         if cascade_routing_enabled {
-            let mut policy = crate::agent::cascade_router::CascadePolicy::default();
-            policy.tier1_provider = resolved_config.provider.to_string().to_lowercase();
-            policy.tier1_model = resolved_config.model_id.clone();
-            if let Some(ref m2) = a.models.model_2.as_ref().filter(|s| !s.trim().is_empty()) {
-                policy.tier2_model = (*m2).clone();
+            let mut policy = crate::agent::cascade_router::CascadePolicy {
+                tier1_provider: resolved_config.provider.to_string().to_lowercase(),
+                tier1_model: resolved_config.model_id.clone(),
+                ..Default::default()
+            };
+            if let Some(m2) = a.models.model_2.as_ref().filter(|s| !s.trim().is_empty()) {
+                policy.tier2_model = m2.clone();
                 if let Some(ref cfg2) = a.models.model_config2 {
                     policy.tier2_provider = cfg2.provider.to_string().to_lowercase();
                 } else {

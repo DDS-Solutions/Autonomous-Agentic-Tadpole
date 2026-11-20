@@ -29,6 +29,8 @@ use crate::state::AppState;
 /// Validated neural authentication token bundle loaded at boot.
 pub(crate) struct BootAuthTokens {
     pub(crate) deploy_token: String,
+    pub(crate) admin_token: Option<String>,
+    pub(crate) readonly_token: Option<String>,
     pub(crate) deploy_token_old: Option<String>,
     pub(crate) deploy_token_new: Option<String>,
     pub(crate) token_rotated_at: Option<u64>,
@@ -166,6 +168,8 @@ impl AppState {
                 crate::agent::verification_gate::VerificationGate::default(),
             ),
             deploy_token: "test-token".to_string(),
+            admin_token: None,
+            readonly_token: None,
             deploy_token_old: None,
             deploy_token_new: None,
             token_rotated_at: None,
@@ -309,6 +313,28 @@ impl AppState {
             }
         };
 
+        let admin_token = match std::env::var("NEURAL_TOKEN_ADMIN")
+            .ok()
+            .map(|s| s.trim().to_string())
+        {
+            Some(t) if !t.is_empty() => {
+                Self::validate_boot_token(&t, "NEURAL_TOKEN_ADMIN")?;
+                Some(t)
+            }
+            _ => None,
+        };
+
+        let readonly_token = match std::env::var("NEURAL_TOKEN_READONLY")
+            .ok()
+            .map(|s| s.trim().to_string())
+        {
+            Some(t) if !t.is_empty() => {
+                Self::validate_boot_token(&t, "NEURAL_TOKEN_READONLY")?;
+                Some(t)
+            }
+            _ => None,
+        };
+
         let deploy_token_old = match std::env::var("NEURAL_TOKEN_OLD")
             .ok()
             .map(|s| s.trim().to_string())
@@ -340,6 +366,8 @@ impl AppState {
 
         Ok(BootAuthTokens {
             deploy_token,
+            admin_token,
+            readonly_token,
             deploy_token_old,
             deploy_token_new,
             token_rotated_at,
@@ -540,7 +568,7 @@ impl AppState {
                     }
                 }
                 if let Ok(val) = row.try_get::<f64, _>("default_budget_usd") {
-                    if val.is_finite() && val >= 0.0 && val <= crate::routes::oversight::MAX_DEFAULT_BUDGET_USD_CEILING {
+                    if val.is_finite() && (0.0..=crate::routes::oversight::MAX_DEFAULT_BUDGET_USD_CEILING).contains(&val) {
                         *governance.default_budget_usd.write() = val;
                     }
                 }
@@ -635,6 +663,8 @@ impl AppState {
                 crate::agent::verification_gate::VerificationGate::default(),
             ),
             deploy_token: auth_tokens.deploy_token,
+            admin_token: auth_tokens.admin_token,
+            readonly_token: auth_tokens.readonly_token,
             deploy_token_old: auth_tokens.deploy_token_old,
             deploy_token_new: auth_tokens.deploy_token_new,
             token_rotated_at: auth_tokens.token_rotated_at,
@@ -852,6 +882,8 @@ impl Default for AppState {
                 crate::agent::verification_gate::VerificationGate::default(),
             ),
             deploy_token: format!("mock-{}", uuid::Uuid::new_v4()),
+            admin_token: None,
+            readonly_token: None,
             deploy_token_old: None,
             deploy_token_new: None,
             token_rotated_at: None,

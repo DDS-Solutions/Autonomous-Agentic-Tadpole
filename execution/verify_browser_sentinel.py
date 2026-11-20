@@ -18,8 +18,10 @@ Validates Browser Sentinel logic, VRAM monitor thresholds, and WebGPU fallback p
 
 import sys
 import subprocess
+import shutil
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -27,7 +29,11 @@ sys.stdout.reconfigure(encoding='utf-8')
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 
 def run_command(cmd, cwd=ROOT_DIR):
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=cwd)
+    argv = list(cmd)
+    resolved = shutil.which(argv[0])
+    if resolved:
+        argv[0] = resolved
+    result = subprocess.run(argv, shell=False, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=cwd)
     return result.returncode == 0, result.stdout, result.stderr
 
 def main():
@@ -35,7 +41,7 @@ def main():
 
     # 1. Run Vitest on Sentinel components
     print("🔄 [1/3] Running Vitest suite for Browser Sentinel tactical routing...")
-    ok, stdout, stderr = run_command("npx vitest run src/logic/command_processor.test.ts src/pages/Settings_Handoff.test.tsx")
+    ok, stdout, stderr = run_command(["npx", "vitest", "run", "src/logic/command_processor.test.ts", "src/pages/Settings_Handoff.test.tsx"])
     if ok:
         print("  ✅ Tactical Routing & Sentinel Toggles: PASSED (12/12 tests)")
     else:
@@ -44,7 +50,7 @@ def main():
 
     # 2. Check TypeScript & Lint cleanliness on Browser Inference service
     print("🔄 [2/3] Verifying ESLint & TypeScript types for browser_inference.ts & vram_monitor.ts...")
-    ok, stdout, stderr = run_command("npx eslint src/services/browser_inference.ts src/services/vram_monitor.ts")
+    ok, stdout, stderr = run_command(["npx", "eslint", "src/services/browser_inference.ts", "src/services/vram_monitor.ts"])
     if ok:
         print("  ✅ ESLint & Type Diagnostics: PASSED (0 errors, 0 warnings)")
     else:
@@ -53,9 +59,9 @@ def main():
 
     # 3. Verify AI Context Alignment
     print("🔄 [3/3] Running AI Context Alignment check...")
-    ok, stdout, stderr = run_command("python execution/verify_ai_context.py")
+    ok, stdout, stderr = run_command([sys.executable, "execution/verify_ai_context.py"])
     if ok:
-        print("  ✅ AI Context Alignment: PASSED (1066/1066 files)")
+        print("  ✅ AI Context Alignment: PASSED")
     else:
         print("  ❌ AI Context Check FAILED:\n", stderr)
         sys.exit(1)
@@ -64,7 +70,7 @@ def main():
     report_path = ROOT_DIR / "reports" / "MISSION_DEBRIEF_BROWSER_SENTINEL.md"
     report_content = f"""# 🧠 Mission Debrief: Browser Sentinel & WebGPU Specialist Core
 
-**Execution Timestamp**: {subprocess.check_output("date /t", shell=True, text=True).strip()}  
+**Execution Timestamp**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  
 **Target Core**: Browser Specialist (`src/services/browser_inference.ts`) & VRAM Monitor (`src/services/vram_monitor.ts`)  
 **Status**: ✅ **100% VERIFIED OPERATIONAL**
 

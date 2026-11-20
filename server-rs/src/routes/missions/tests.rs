@@ -10,7 +10,7 @@
 //! - **Trace Scope**: `server-rs::routes::missions::tests`
 
 #[cfg(test)]
-mod tests {
+mod suite {
     use axum::{
         extract::{Path, Query, State},
         Json,

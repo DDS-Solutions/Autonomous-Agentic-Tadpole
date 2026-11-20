@@ -15,14 +15,16 @@
 
 ## Local Dev Setup
 
-### 1. Rust Engine (hot-reload)
+### 1. Rust Engine (workspace & hot-reload)
+
+The Rust workspace splits shared DTOs (`crates/tadpole-types`) and Tree-sitter AST/graph intelligence (`crates/tadpole-intelligence`) from `server-rs`, with `[profile.dev] opt-level = 0` and `.cargo/config.toml` fast debuginfo for rapid incremental builds:
 
 ```bash
 # Install cargo-watch for auto-rebuild on save
 cargo install cargo-watch
 
 # Auto-recompile on change
-cargo watch -x "run --manifest-path server-rs/Cargo.toml" -w server-rs/src
+cargo watch -x "run --manifest-path server-rs/Cargo.toml" -w server-rs/src -w crates
 ```
 
 ### 2. React Dashboard (hot-reload)

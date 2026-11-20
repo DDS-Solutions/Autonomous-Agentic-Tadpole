@@ -6,6 +6,8 @@ members = [
     "crates/wasm-codec",
     "crates/tadpole-guard",
     "crates/tadpole-sec",
+    "crates/tadpole-types",
+    "crates/tadpole-intelligence",
     "crates/wasm-graph-physics",
 ]
 
@@ -22,7 +24,11 @@ lto = "thin"
 codegen-units = 1
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
+debug = "line-tables-only"
+
+[profile.test]
+opt-level = 0
 
 [profile.dev.package."*"]
 opt-level = 2

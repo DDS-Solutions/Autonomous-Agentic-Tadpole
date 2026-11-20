@@ -255,15 +255,9 @@ pub async fn metrics_handler(
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|val| val.to_str().ok());
 
-    let is_authorized = if let Some(auth_str) = auth_header {
-        if let Some(token) = auth_str.strip_prefix("Bearer ") {
-            crate::middleware::auth::match_token(token, &state).is_some()
-        } else {
-            false
-        }
-    } else {
-        false
-    };
+    let is_authorized = auth_header
+        .and_then(crate::middleware::auth::extract_bearer_token)
+        .is_some_and(|token| crate::middleware::auth::match_token(token, &state).is_some());
 
     if !is_authorized {
         tracing::warn!("🚫 [Telemetry] Unauthorized attempt to access /metrics");

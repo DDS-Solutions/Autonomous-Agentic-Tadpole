@@ -33,10 +33,9 @@ impl VaultAdapter {
     /// Verifies that the path is within the vault and contains no traversal attempts.
     async fn get_safe_path(&self, filename: &str) -> Result<PathBuf> {
         let mut cleaned = filename.replace('\\', "/");
-        if cleaned.len() >= 2 {
-            let first_char = cleaned.chars().next().unwrap();
-            let second_char = cleaned.chars().nth(1).unwrap();
-            if first_char.is_ascii_alphabetic() && second_char == ':' {
+        let mut chars = cleaned.chars();
+        if let (Some(first_char), Some(':')) = (chars.next(), chars.next()) {
+            if first_char.is_ascii_alphabetic() {
                 cleaned = cleaned[2..].to_string();
             }
         }
@@ -89,6 +88,20 @@ impl VaultAdapter {
     pub async fn read_file(&self, filename: &str) -> Result<String> {
         let path = self.get_safe_path(filename).await?;
         Ok(fs::read_to_string(path).await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_vault_single_multibyte_utf8_char_does_not_panic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let adapter = VaultAdapter::new(tmp.path().to_path_buf());
+        // Single 2-byte UTF-8 character ("é") has len()==2 but only 1 char; must never panic.
+        let safe = adapter.get_safe_path("é").await;
+        assert!(safe.is_ok(), "UTF-8 filename should resolve safely: {:?}", safe);
     }
 }
 

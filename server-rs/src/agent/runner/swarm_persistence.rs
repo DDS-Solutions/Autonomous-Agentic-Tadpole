@@ -282,9 +282,11 @@ mod tests {
             .execute(pool).await?;
 
         // Context for ag-alpha
-        let mut ctx_alpha = crate::agent::runner::RunContext::default();
-        ctx_alpha.agent_id = "ag-alpha".to_string();
-        ctx_alpha.mission_id = "ms-test-cycle".to_string();
+        let ctx_alpha = crate::agent::runner::RunContext {
+            agent_id: "ag-alpha".to_string(),
+            mission_id: "ms-test-cycle".to_string(),
+            ..Default::default()
+        };
 
         // 1. Direct self-delegation should fail immediately
         let self_err = save_directive(pool, &ctx_alpha, "ag-alpha", "loop").await;
@@ -295,9 +297,11 @@ mod tests {
         assert!(d1.is_ok(), "Alpha -> Beta should succeed");
 
         // Context for ag-beta
-        let mut ctx_beta = crate::agent::runner::RunContext::default();
-        ctx_beta.agent_id = "ag-beta".to_string();
-        ctx_beta.mission_id = "ms-test-cycle".to_string();
+        let ctx_beta = crate::agent::runner::RunContext {
+            agent_id: "ag-beta".to_string(),
+            mission_id: "ms-test-cycle".to_string(),
+            ..Default::default()
+        };
 
         // 3. Beta delegates back to Alpha (2-hop cycle: Alpha -> Beta -> Alpha) should be rejected!
         let cycle_err = save_directive(pool, &ctx_beta, "ag-alpha", "task 2").await;
@@ -311,9 +315,11 @@ mod tests {
         assert!(d2.is_ok(), "Beta -> Gamma should succeed");
 
         // Context for ag-gamma
-        let mut ctx_gamma = crate::agent::runner::RunContext::default();
-        ctx_gamma.agent_id = "ag-gamma".to_string();
-        ctx_gamma.mission_id = "ms-test-cycle".to_string();
+        let ctx_gamma = crate::agent::runner::RunContext {
+            agent_id: "ag-gamma".to_string(),
+            mission_id: "ms-test-cycle".to_string(),
+            ..Default::default()
+        };
 
         // 5. Gamma delegates to Alpha (3-hop cycle: Alpha -> Beta -> Gamma -> Alpha) should be rejected!
         let cycle3_err = save_directive(pool, &ctx_gamma, "ag-alpha", "task 4").await;

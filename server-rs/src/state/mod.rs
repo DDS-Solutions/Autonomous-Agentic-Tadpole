@@ -176,8 +176,8 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "PII check in fallback must fail closed (Ok(false))"
         );
     }

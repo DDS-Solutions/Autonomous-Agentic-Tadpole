@@ -20,7 +20,28 @@ use tracing::info;
 use crate::error::AppError;
 
 #[cfg(feature = "neural-audio")]
-use ort::session::Session;
+use ort::{environment::Environment, session::Session};
+#[cfg(feature = "neural-audio")]
+use std::sync::OnceLock;
+
+#[cfg(feature = "neural-audio")]
+fn ort_environment() -> Result<Arc<Environment>, AppError> {
+    static ORT_ENV: OnceLock<Arc<Environment>> = OnceLock::new();
+    if let Some(env) = ORT_ENV.get() {
+        return Ok(env.clone());
+    }
+    let env = Arc::new(
+        ort::init()
+            .with_name("tadpole_neural_audio")
+            .build()
+            .map_err(|e| AppError::InfrastructureError {
+                provider_id: "ort".to_string(),
+                detail: format!("Failed to initialize ORT environment: {}", e),
+                help_link: None,
+            })?,
+    );
+    Ok(ORT_ENV.get_or_init(|| env).clone())
+}
 
 /// Engine responsible for high-performance, local-first audio processing.
 #[cfg(feature = "neural-audio")]
@@ -88,7 +109,8 @@ impl NeuralAudioEngine {
 
     /// Load the Piper TTS model.
     pub async fn load_piper(&mut self, model_path: &str) -> Result<(), AppError> {
-        let session = match Session::builder() {
+        let env = ort_environment()?;
+        let session = match Session::builder(&env) {
             Ok(builder) => builder
                 .with_intra_threads(4)
                 .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?
@@ -118,7 +140,8 @@ impl NeuralAudioEngine {
 
     /// Load the Whisper STT model.
     pub async fn load_whisper(&mut self, model_path: &str) -> Result<(), AppError> {
-        let session = match Session::builder() {
+        let env = ort_environment()?;
+        let session = match Session::builder(&env) {
             Ok(builder) => builder
                 .with_intra_threads(4)
                 .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?
@@ -148,7 +171,8 @@ impl NeuralAudioEngine {
 
     /// Load the Silero VAD model.
     pub async fn load_vad(&mut self, model_path: &str) -> Result<(), AppError> {
-        let session = match Session::builder() {
+        let env = ort_environment()?;
+        let session = match Session::builder(&env) {
             Ok(builder) => builder
                 .with_intra_threads(1)
                 .map_err(|e| AppError::InternalServerError(format!("Failed to set threads: {}", e)))?

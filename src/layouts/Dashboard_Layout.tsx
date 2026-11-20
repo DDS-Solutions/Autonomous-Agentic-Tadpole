@@ -29,11 +29,13 @@ import { i18n } from '../i18n';
 import { use_notification_store } from '../stores/notification_store';
 import { event_bus } from '../services/event_bus';
 import { use_agent_registry_store } from '../stores/agent_store';
+import { use_settings_store } from '../stores/settings_store';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
 const Command_Palette = lazy(() => import('../components/Command_Palette').then(module => ({ default: module.Command_Palette })));
 const Observability_Sidebar = lazy(() => import('../components/layout/Observability_Sidebar').then(module => ({ default: module.Observability_Sidebar })));
 const Toast_Center = lazy(() => import('../components/ui/Toast_Center').then(module => ({ default: module.Toast_Center })));
+const FirstRun_Wizard = lazy(() => import('../components/onboarding/FirstRun_Wizard').then(module => ({ default: module.FirstRun_Wizard })));
 
 /**
  * Dashboard_Layout
@@ -56,8 +58,12 @@ export default function Dashboard_Layout() {
     const toggle_lineage_stream_detachment = use_tab_store(s => s.toggle_lineage_stream_detachment);
 
     const visited_tab_ids = use_tab_store(s => s.visited_tab_ids);
+    const onboarding_completed = use_settings_store(s => s.settings.onboarding_completed);
 
     const [is_command_palette_open, set_is_command_palette_open] = useState(false);
+    const [is_wizard_open, set_is_wizard_open] = useState(
+        () => !onboarding_completed && import.meta.env.MODE !== 'test'
+    );
 
     const tab_snapshot = (
         tabs &&
@@ -179,8 +185,16 @@ export default function Dashboard_Layout() {
     // ── Keyboard Shortcuts ──────────────────────────────────
     useEffect(() => {
         const handle_key_down = (e: KeyboardEvent) => {
-            const tag = (e.target as HTMLElement)?.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            const target = e.target as HTMLElement | null;
+            const tag = target?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+                e.preventDefault();
+                const curr = use_settings_store.getState().settings.cockpit_mode;
+                use_settings_store.getState().update_setting('cockpit_mode', curr === 'focus' ? 'expert' : 'focus');
+                return;
+            }
 
             if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === '/')) {
                 e.preventDefault();
@@ -189,14 +203,27 @@ export default function Dashboard_Layout() {
             }
 
             if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-                const routes: Record<string, string> = {
-                    '1': '/',
-                    '2': '/org-chart',
-                    '3': '/standups',
-                    '4': '/workspaces',
-                    '5': '/docs',
-                    '6': '/settings',
-                };
+                if (is_wizard_open || is_command_palette_open || document.querySelector('[role="dialog"]') !== null) {
+                    return;
+                }
+                const mode = use_settings_store.getState().settings.cockpit_mode;
+                const routes: Record<string, string> = mode === 'focus'
+                    ? {
+                        '1': '/dashboard',
+                        '2': '/missions',
+                        '3': '/oversight',
+                        '4': '/agents',
+                        '5': '/models',
+                        '6': '/settings',
+                    }
+                    : {
+                        '1': '/',
+                        '2': '/org-chart',
+                        '3': '/standups',
+                        '4': '/workspaces',
+                        '5': '/docs',
+                        '6': '/settings',
+                    };
                 if (routes[e.key]) {
                     navigate(routes[e.key]);
                     return;
@@ -205,7 +232,13 @@ export default function Dashboard_Layout() {
         };
         window.addEventListener('keydown', handle_key_down);
         return () => window.removeEventListener('keydown', handle_key_down);
-    }, [navigate]);
+    }, [is_command_palette_open, is_wizard_open, navigate]);
+
+    useEffect(() => {
+        const handle_open_wizard = () => set_is_wizard_open(true);
+        window.addEventListener('app:open-setup-wizard', handle_open_wizard);
+        return () => window.removeEventListener('app:open-setup-wizard', handle_open_wizard);
+    }, []);
 
     const nav_item_class = ({ isActive: is_active }: { isActive: boolean }) => clsx(
         "flex items-center gap-3 p-2 rounded-md font-medium cursor-pointer transition-all duration-200 text-sm",
@@ -315,9 +348,16 @@ export default function Dashboard_Layout() {
 
                     <Suspense fallback={null}>
                         <SovereignChat />
-                        <Command_Palette
-                            is_open={is_command_palette_open}
-                            on_close={() => set_is_command_palette_open(false)}
+                        {is_command_palette_open && (
+                            <Command_Palette
+                                is_open
+                                on_close={() => set_is_command_palette_open(false)}
+                            />
+                        )}
+                        <FirstRun_Wizard
+                            is_open={is_wizard_open}
+                            on_close={() => set_is_wizard_open(false)}
+                            on_launch_starter_mission={() => navigate('/missions')}
                         />
                     </Suspense>
 

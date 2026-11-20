@@ -40,12 +40,12 @@ A-A Tadpole is a **local-first operating system for autonomous AI agent swarms**
 
 ```bash
 npm install
-cp .env.example .env          # set NEURAL_TOKEN=your-secret-token
+npm run init                  # one-command bootstrap: generates 64-hex NEURAL_TOKEN + detects Ollama/Docker
 npm run engine                # terminal 1 — Rust engine on :8000
 npm run dev                   # terminal 2 — React dashboard on :5173
 ```
 
-Open `http://localhost:5173` · Health: `http://127.0.0.1:8000/v1/engine/health`
+Open `http://localhost:5173` (fresh installs open the 4-step **First-Run Setup Wizard** in clean 6-view **Focus Mode**; press `Ctrl+Shift+E` anytime for all 18 **Expert Mode** views) · Health: `http://127.0.0.1:8000/v1/engine/health` · Readiness Probe: `POST /v1/benchmarks/readiness`
 
 ## 🗺️ System At A Glance
 

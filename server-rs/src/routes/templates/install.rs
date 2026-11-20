@@ -27,7 +27,7 @@ use super::security::{
 };
 
 pub const GIT_CLONE_TIMEOUT: Duration = Duration::from_secs(60);
-pub const MAX_AGENT_CONFIG_BYTES: u64 = 1 * 1024 * 1024; // 1 MiB
+pub const MAX_AGENT_CONFIG_BYTES: u64 = 1024 * 1024; // 1 MiB
 pub const MAX_SKILL_SCRIPT_BYTES: u64 = 5 * 1024 * 1024; // 5 MiB
 
 /// Concurrency limiter for repository clones to prevent resource exhaustion attacks.
@@ -387,10 +387,10 @@ pub async fn merge_template_mcp_config(
                 let _ = tokio::fs::create_dir_all(parent).await;
             }
             let tmp_mcp = mcp_config_path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
-            if tokio::fs::write(&tmp_mcp, merged_json).await.is_ok() {
-                if tokio::fs::rename(&tmp_mcp, mcp_config_path).await.is_ok() {
-                    return true;
-                }
+            if tokio::fs::write(&tmp_mcp, merged_json).await.is_ok()
+                && tokio::fs::rename(&tmp_mcp, mcp_config_path).await.is_ok()
+            {
+                return true;
             }
         }
     }

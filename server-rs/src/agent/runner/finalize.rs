@@ -220,8 +220,10 @@ mod tests {
     async fn test_finalize_run_metrics() {
         let state = Arc::new(AppState::new_minimal_mock().await);
         let runner = AgentRunner::new(state.clone());
-        let mut ctx = RunContext::default();
-        ctx.agent_id = "test-agent".to_string();
+        let mut ctx = RunContext {
+            agent_id: "test-agent".to_string(),
+            ..Default::default()
+        };
         
         // Setup mock agent
         let mut agent = EngineAgent::default();
