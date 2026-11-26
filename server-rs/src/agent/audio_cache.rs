@@ -2,24 +2,23 @@
 //!
 //! ### AI Assist Note
 //! **Voice Cache**: Optimized low-latency storage for synthesized engine
-//! speech. Uses **MD5 Hashing** of text prompts as primary keys to
-//! avoid redundant neural inference. Backed by a dedicated **SQLite**
-//! database (`audio_cache.db`) with automatic table initialization.
+//! speech. Uses **SHA-256 Hashing** of scoped `(engine, voice, text)` keys to
+//! avoid collisions and redundant neural inference. Backed by a dedicated
+//! **SQLite** database (`audio_cache.db`) with automatic table initialization.
 //! Supports **No-op Emergency Fallback** for environments with disk
 //! write restrictions.
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Telemetry Link**: Search `[audio_cache]` in tracing logs.
 //! - **Failure Path**: SQLite IO errors (e.g., "database is locked"),
-//!   hash collisions (extremely rare), or BLOB size limits on extremely
-//!   long synthesis outputs.
+//!   or BLOB size limits on extremely long synthesis outputs.
 //! - **Trace Scope**: `server-rs::agent::audio_cache`
 
-use md5;
+use crate::error::AppError;
+use sha2::{Digest, Sha256};
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 use std::path::PathBuf;
 use tracing::info;
-use crate::error::AppError;
 
 /// Service for caching synthesized audio chunks to avoid redundant neural inference.
 pub struct BunkerCache {
@@ -50,10 +49,22 @@ impl BunkerCache {
         Ok(Self { pool })
     }
 
-    /// Retrieve audio data for a given text prompt.
+    /// Computes a collision-resistant SHA-256 hex key scoped to engine, voice, and text.
     #[allow(dead_code)]
-    pub async fn get(&self, text: &str) -> Result<Option<Vec<u8>>, AppError> {
-        let hash = format!("{:x}", md5::compute(text));
+    pub fn scoped_key(engine: &str, voice: &str, text: &str) -> String {
+        format!("{engine}:{voice}:{text}")
+    }
+
+    fn hash_key(key: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
+    /// Retrieve audio data for a given cache key.
+    #[allow(dead_code)]
+    pub async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, AppError> {
+        let hash = Self::hash_key(key);
         let row: Option<(Vec<u8>,)> = sqlx::query_as::<sqlx::Sqlite, (Vec<u8>,)>(
             "SELECT audio_data FROM audio_cache WHERE hash = ?",
         )
@@ -64,10 +75,10 @@ impl BunkerCache {
         Ok(row.map(|r| r.0))
     }
 
-    /// Store audio data for a given text prompt.
+    /// Store audio data for a given cache key.
     #[allow(dead_code)]
-    pub async fn set(&self, text: &str, audio_data: Vec<u8>) -> Result<(), AppError> {
-        let hash = format!("{:x}", md5::compute(text));
+    pub async fn set(&self, key: &str, audio_data: Vec<u8>) -> Result<(), AppError> {
+        let hash = Self::hash_key(key);
         sqlx::query::<sqlx::Sqlite>(
             "INSERT OR REPLACE INTO audio_cache (hash, audio_data) VALUES (?, ?)",
         )

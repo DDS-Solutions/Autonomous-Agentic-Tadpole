@@ -55,6 +55,14 @@ export type SkillHooks = { before_execute: string | null; after_execute: string 
 export type MissionStatus = "pending" | "active" | "completed" | "failed" | "paused" | "suspended" | "dropped"
 
 /**
+ * Three-tier execution authority mode for Neural Chat Command and Voice Standups.
+ * - `Chat`: Lightweight conversational brainstorming (zero tools, no mission record).
+ * - `Plan`: Read-only codebase/knowledge research (read-only tools only, no mutations, no mission record).
+ * - `Swarm`: Full tracked Mission lifecycle with planning, delegation, and Oversight Gate.
+ */
+export type ExecutionMode = "chat" | "plan" | "swarm"
+
+/**
  * ### Protocol: ExecutionPlane
  * Represents the dual-plane sovereign execution hierarchy governing swarm autonomy.
  * - Plane 1 (EngineMaintenance): Recursively operates, diagnoses, fixes, and improves the codebase.
@@ -78,7 +86,7 @@ export type AcceptMode = "auto" | "observe"
  */
 export type Mandate = { executionPlane: ExecutionPlane; acceptMode: AcceptMode; allowedTools?: string[] | null; pathBoundary?: string | null; budgetUsd: number; deliveryTarget?: string | null }
 
-export type TaskPayload = { message: string; cluster_id: string | null; department: string | null; provider: ModelProvider | null; model_id: string | null; api_key: string | null; base_url: string | null; rpm: number | null; tpm: number | null; rpd: number | null; tpd: number | null; budget_usd: number | null; context_window?: number | null; input_cost_per_m?: number | null; output_cost_per_m?: number | null; swarm_depth: number | null; swarm_lineage: string[] | null; external_id: string | null; safe_mode: boolean | null; analysis: boolean | null; traceparent: string | null; user_id?: string | null; context_files?: string[] | null; recent_findings?: string | null; structured_output?: boolean | null; primary_goal?: string | null; enabled_skills?: string[] | null; auto_resume?: boolean | null; execution_plane?: ExecutionPlane | null; accept_mode?: AcceptMode | null; mandate?: Mandate | null; workflow_id?: string | null; cascade_routing?: boolean | null; root_mission_id?: string | null }
+export type TaskPayload = { message: string; cluster_id: string | null; department: string | null; provider: ModelProvider | null; model_id: string | null; api_key: string | null; base_url: string | null; rpm: number | null; tpm: number | null; rpd: number | null; tpd: number | null; budget_usd: number | null; context_window?: number | null; input_cost_per_m?: number | null; output_cost_per_m?: number | null; swarm_depth: number | null; swarm_lineage: string[] | null; external_id: string | null; safe_mode: boolean | null; execution_mode?: ExecutionMode | null; analysis: boolean | null; traceparent: string | null; user_id?: string | null; context_files?: string[] | null; recent_findings?: string | null; structured_output?: boolean | null; primary_goal?: string | null; enabled_skills?: string[] | null; auto_resume?: boolean | null; execution_plane?: ExecutionPlane | null; accept_mode?: AcceptMode | null; mandate?: Mandate | null; workflow_id?: string | null; cascade_routing?: boolean | null; root_mission_id?: string | null }
 
 /**
  * A single execution record for a `ScheduledJob`.

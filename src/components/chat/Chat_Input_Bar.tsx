@@ -1,14 +1,14 @@
 /**
  * @docs ARCHITECTURE:Interface
- * 
+ *
  * ### AI Assist Note
- * **UI Sub-Component**: Extracted input bar for the Sovereign Chat.
- * Isolates voice controls, safety mode toggle, and text submission
- * from the parent message rendering pipeline to prevent cascading re-renders.
- * 
+ * **UI Sub-Component**: Extracted input bar for Sovereign Chat handling text input,
+ * compact 3-mode execution switching (`Chat` / `Plan` / `Swarm` + `Launch Swarm`),
+ * dismissible voice error alerts, and accessible mic/speaker/safety controls.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: Voice client initialization stall, or input focus loss after scope switch.
- * - **Telemetry Link**: Search for `[Chat_Input_Bar]` in browser logs.
+ * - **Failure Path**: Voice capture error surfaced via `voice_error` alert banner.
+ * - **Telemetry Link**: Search `[Chat_Input_Bar]` in browser logs.
  */
 
 import React from 'react';
@@ -21,12 +21,17 @@ import {
     VolumeX
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Tooltip } from '../ui';
+import { Tooltip, Execution_Mode_Selector } from '../ui';
 import { i18n } from '../../i18n';
+import type { Execution_Mode } from '../../contracts/agent';
 
 interface Chat_Input_Bar_Props {
     active_scope: string;
     is_safe_mode: boolean;
+    execution_mode?: Execution_Mode;
+    on_change_execution_mode?: (mode: Execution_Mode) => void;
+    can_launch_swarm?: boolean;
+    on_launch_swarm?: () => void;
     is_speech_enabled: boolean;
     is_speaking: boolean;
     input_value: string;
@@ -36,16 +41,17 @@ interface Chat_Input_Bar_Props {
     on_toggle_speech: () => void;
     on_toggle_safety: () => void;
     is_listening: boolean;
+    voice_error?: string | null;
+    on_clear_voice_error?: () => void;
 }
 
-/**
- * Chat_Input_Bar
- * Handles text input, voice controls, and message submission.
- * Memoized to avoid re-rendering when messages change.
- */
 export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
     active_scope,
     is_safe_mode,
+    execution_mode,
+    on_change_execution_mode,
+    can_launch_swarm = false,
+    on_launch_swarm,
     is_speech_enabled,
     is_speaking,
     input_value,
@@ -55,7 +61,17 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
     on_toggle_speech,
     on_toggle_safety,
     is_listening,
+    voice_error,
+    on_clear_voice_error,
 }) => {
+    const resolved_mode: Execution_Mode = execution_mode ?? (is_safe_mode ? 'chat' : 'swarm');
+    const handle_mode_change = (next_mode: Execution_Mode) => {
+        if (on_change_execution_mode) {
+            on_change_execution_mode(next_mode);
+        } else if ((next_mode !== 'swarm') !== is_safe_mode) {
+            on_toggle_safety();
+        }
+    };
     const handle_send = async () => {
         if (!input_value.trim()) return;
         await on_send();
@@ -63,14 +79,44 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
 
     return (
         <div className="relative z-10 p-4 bg-[color:color-mix(in_srgb,var(--color-background)_50%,transparent)] backdrop-blur-xl border-t border-[color:var(--color-border)]/50">
-            <div className="flex items-center gap-2 bg-black/40 border border-[color:var(--color-border)]/60 rounded-xl p-1 focus-within:border-zinc-500/50 transition-all shadow-inner relative">
+            <div className="mb-2">
+                <Execution_Mode_Selector
+                    mode={resolved_mode}
+                    on_change={handle_mode_change}
+                    compact
+                    can_launch_swarm={can_launch_swarm}
+                    on_launch_swarm={on_launch_swarm}
+                />
+            </div>
+            {voice_error && (
+                <div
+                    role="alert"
+                    className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-1.5 text-[11px] text-red-300"
+                >
+                    <span>{voice_error}</span>
+                    {on_clear_voice_error && (
+                        <button
+                            type="button"
+                            onClick={on_clear_voice_error}
+                            aria-label="Dismiss voice error"
+                            className="text-red-400 hover:text-red-200 font-bold px-1"
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
+            )}
+            <div className="flex items-center gap-2 bg-zinc-950/40 border border-[color:var(--color-border)]/60 rounded-xl p-1 focus-within:border-zinc-500/50 transition-all shadow-inner relative">
                 {is_listening && (
                     <div className="absolute inset-0 bg-green-500/10 animate-pulse pointer-events-none rounded-xl" />
                 )}
 
                 <Tooltip content={is_listening ? i18n.t('chat.stop_listening_tooltip') : i18n.t('chat.start_listening_tooltip')} position="top">
                     <button
+                        type="button"
                         onClick={on_toggle_voice}
+                        aria-label={is_listening ? i18n.t('chat.stop_listening_tooltip') : i18n.t('chat.start_listening_tooltip')}
+                        aria-pressed={is_listening}
                         className={clsx(
                             "p-2.5 rounded-lg transition-all active:scale-90",
                             is_listening ? "bg-red-500 text-white animate-pulse" : "text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800"
@@ -82,7 +128,10 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
 
                 <Tooltip content={is_speech_enabled ? i18n.t('chat.mute_output_tooltip') : i18n.t('chat.enable_output_tooltip')} position="top">
                     <button
+                        type="button"
                         onClick={on_toggle_speech}
+                        aria-label={is_speech_enabled ? i18n.t('chat.mute_output_tooltip') : i18n.t('chat.enable_output_tooltip')}
+                        aria-pressed={is_speech_enabled}
                         className={clsx(
                             "p-2.5 rounded-lg transition-all active:scale-90",
                             is_speech_enabled ? "text-green-400 bg-green-500/10" : "text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800"
@@ -100,7 +149,7 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                             e.preventDefault();
-                            handle_send();
+                            void handle_send();
                         }
                     }}
                     placeholder={is_listening ? i18n.t('chat.listening_placeholder') : i18n.t('chat.input_placeholder', { scope: i18n.t(`chat.scope_${active_scope}`) })}
@@ -110,7 +159,9 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
 
                 <Tooltip content={is_safe_mode ? i18n.t('chat.safety_on_tooltip') : i18n.t('chat.safety_off_tooltip')} position="top">
                     <button
+                        type="button"
                         onClick={on_toggle_safety}
+                        aria-label={is_safe_mode ? i18n.t('chat.safety_on_tooltip') : i18n.t('chat.safety_off_tooltip')}
                         className={clsx(
                             "p-2.5 rounded-lg transition-all active:scale-90",
                             is_safe_mode ? "bg-green-500/20 text-green-400 border border-green-500/30" : "text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800"
@@ -122,8 +173,10 @@ export const Chat_Input_Bar = React.memo<Chat_Input_Bar_Props>(({
 
                 <Tooltip content={i18n.t('chat.send_tooltip')} position="top">
                     <button
+                        type="button"
                         onClick={handle_send}
-                        className="p-2.5 bg-zinc-100 text-black rounded-lg hover:bg-white hover:scale-105 active:scale-95 transition-all shadow-lg"
+                        aria-label={i18n.t('chat.send_tooltip', { defaultValue: 'Send message' })}
+                        className="p-2.5 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-white hover:scale-105 active:scale-95 transition-all shadow-lg"
                     >
                         <Send size={16} />
                     </button>

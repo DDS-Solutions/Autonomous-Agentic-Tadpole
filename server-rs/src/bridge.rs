@@ -66,6 +66,7 @@ pub fn export_bindings() {
     export_type!(SkillParameter);
     export_type!(SkillHooks);
     export_type!(MissionStatus);
+    export_type!(ExecutionMode);
     export_type!(ExecutionPlane);
     export_type!(AcceptMode);
     export_type!(Mandate);

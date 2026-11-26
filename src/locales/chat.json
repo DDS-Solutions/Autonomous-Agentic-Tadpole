@@ -1,5 +1,6 @@
 {
   "restore_tooltip": "Restore Neural Chat",
+  "popup_blocked_warning": "Pop-up blocked. Please allow pop-ups for detached chat windows.",
   "title": "Neural Chat Command",
   "overlord_name": "OVERLORD",
   "system_name": "Neural System",

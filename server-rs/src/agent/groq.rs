@@ -400,13 +400,18 @@ impl GroqProvider {
         Ok((output_text, function_calls, token_usage))
     }
 
-    pub async fn transcribe(&self, audio_data: Vec<u8>, filename: &str) -> Result<String, AppError> {
+    pub async fn transcribe(
+        &self,
+        audio_data: Vec<u8>,
+        filename: &str,
+        mime_type: &str,
+    ) -> Result<String, AppError> {
         use reqwest::multipart;
         let url = "https://api.groq.com/openai/v1/audio/transcriptions";
 
         let part = multipart::Part::bytes(audio_data)
             .file_name(filename.to_string())
-            .mime_str("audio/wav")
+            .mime_str(mime_type)
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
         let form = multipart::Form::new()

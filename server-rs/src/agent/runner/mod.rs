@@ -81,6 +81,7 @@ pub struct RunContext {
     pub workspace_root: std::path::PathBuf,
     pub fs_adapter: crate::adapter::filesystem::FilesystemAdapter,
     pub safe_mode: bool,
+    pub execution_mode: crate::agent::types::ExecutionMode,
     pub analysis: bool,
     pub traceparent: Option<String>,
     pub trace_id: String,
@@ -133,6 +134,7 @@ impl Default for RunContext {
                 std::path::PathBuf::from("."),
             ),
             safe_mode: false,
+            execution_mode: crate::agent::types::ExecutionMode::Swarm,
             analysis: false,
             traceparent: None,
             trace_id: "default-trace".to_string(),
@@ -166,9 +168,11 @@ impl Default for RunContext {
 }
 
 impl RunContext {
-    /// Returns true whenever mutations are prohibited (either legacy Safe Mode or Shadow/Observe mode).
+    /// Returns true whenever mutations are prohibited (`Chat`, `Plan`, legacy Safe Mode, or Shadow/Observe mode).
     pub fn is_read_only(&self) -> bool {
-        self.safe_mode || self.accept_mode == crate::agent::types::AcceptMode::Observe
+        self.safe_mode
+            || self.execution_mode.is_safe_mode()
+            || self.accept_mode == crate::agent::types::AcceptMode::Observe
     }
 
     /// Returns the shared swarm root mission ID used to partition `SharedBlackboard` entries.
@@ -207,6 +211,11 @@ impl RunContext {
             }),
             external_id: self.model_config.external_id.clone(),
             safe_mode: Some(self.safe_mode),
+            execution_mode: if self.execution_mode != crate::agent::types::ExecutionMode::Swarm {
+                Some(self.execution_mode)
+            } else {
+                None
+            },
             traceparent: self.traceparent.clone(),
             user_id: self.user_id.clone(),
             context_files: Some(self.last_accessed_files.lock().clone()),
@@ -422,6 +431,9 @@ impl AgentRunner {
         parent_id: Option<String>,
         metadata: Option<serde_json::Value>,
     ) -> Result<String, AppError> {
+        if !ctx.execution_mode.creates_mission() {
+            return Ok(String::new());
+        }
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         let msg = crate::system::actors::SystemMessage::MemoryAppend {
             mission_id: ctx.mission_id.clone(),
@@ -540,7 +552,8 @@ impl AgentRunner {
         cleanup_guard: &mut MissionCleanupGuard,
     ) -> Result<String, AppError> {
         // Every fallible step below is covered by the initialized mission guard.
-        if self.state.actors.get().is_some() {
+        let execution_mode = payload.resolved_execution_mode();
+        if self.state.actors.get().is_some() && execution_mode.creates_mission() {
             let ctx = cleanup_guard.ctx.as_ref().expect("Initialized cleanup context");
             self.append_to_journal(ctx, "user", &payload.message, None, None).await?;
         }
@@ -557,7 +570,7 @@ impl AgentRunner {
             .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", agent_id)))?;
 
         // Phase 2: Resume blocked first check (swapping payload message if a blocked task exists)
-        if agent_data.runner_policy.resume_blocked_first {
+        if agent_data.runner_policy.resume_blocked_first && execution_mode.creates_mission() {
             use sqlx::Row;
             let blocked_row = sqlx::query(
                 "SELECT id, title, description FROM agent_tasks WHERE agent_id = ?1 AND status = 'needs_input' ORDER BY updated_at ASC LIMIT 1"
@@ -603,13 +616,15 @@ impl AgentRunner {
         // Phase 2: Preflight Checks validation
         self.execute_preflight_checks(agent_id, &agent_data).await?;
 
-        if let Some(workflow_name) = agent_data.capabilities.workflows.first() {
-            let msg_lower = payload.message.to_lowercase();
-            let requested = msg_lower.contains(&workflow_name.to_lowercase().replace('_', " "))
-                || msg_lower.starts_with("/workflow") || msg_lower.starts_with("/sop");
-            if requested || agent_data.runner_policy.sme_auto_workflow {
-                if let Ok(mut workflow) = crate::agent::workflows::load_workflow(self.state.base_dir.as_path(), workflow_name).await {
-                    return self.run_deterministic_workflow(&ctx, payload, &mut workflow, &mut cleanup_guard.usage).await;
+        if ctx.execution_mode.creates_mission() {
+            if let Some(workflow_name) = agent_data.capabilities.workflows.first() {
+                let msg_lower = payload.message.to_lowercase();
+                let requested = msg_lower.contains(&workflow_name.to_lowercase().replace('_', " "))
+                    || msg_lower.starts_with("/workflow") || msg_lower.starts_with("/sop");
+                if requested || agent_data.runner_policy.sme_auto_workflow {
+                    if let Ok(mut workflow) = crate::agent::workflows::load_workflow(self.state.base_dir.as_path(), workflow_name).await {
+                        return self.run_deterministic_workflow(&ctx, payload, &mut workflow, &mut cleanup_guard.usage).await;
+                    }
                 }
             }
         }

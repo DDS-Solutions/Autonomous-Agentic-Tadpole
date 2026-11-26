@@ -14,6 +14,36 @@ fn default_category() -> String {
 }
 use serde::{Deserialize, Serialize};
 
+/// Three-tier execution authority mode for Neural Chat Command and Voice Standups.
+/// - `Chat`: Lightweight conversational brainstorming (zero tools, no mission record).
+/// - `Plan`: Read-only codebase/knowledge research (read-only tools only, no mutations, no mission record).
+/// - `Swarm`: Full tracked Mission lifecycle with planning, delegation, and Oversight Gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    Chat,
+    Plan,
+    #[default]
+    Swarm,
+}
+
+impl ExecutionMode {
+    /// Returns true only when this mode creates and persists a tracked `mission_history` record.
+    pub fn creates_mission(self) -> bool {
+        matches!(self, Self::Swarm)
+    }
+
+    /// Returns true when tool declarations may be exposed to the model.
+    pub fn allows_tools(self) -> bool {
+        !matches!(self, Self::Chat)
+    }
+
+    /// Returns true when mutating/delegation tools must be blocked (`Chat` and `Plan`).
+    pub fn is_safe_mode(self) -> bool {
+        !matches!(self, Self::Swarm)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct TaskPayload {
     #[serde(alias = "task")]
@@ -39,6 +69,8 @@ pub struct TaskPayload {
     pub swarm_lineage: Option<Vec<String>>,
     pub external_id: Option<String>,
     pub safe_mode: Option<bool>,
+    #[serde(default, alias = "executionMode")]
+    pub execution_mode: Option<ExecutionMode>,
     pub analysis: Option<bool>,
     pub traceparent: Option<String>,
     #[serde(default, alias = "userId")]
@@ -70,6 +102,21 @@ pub struct TaskPayload {
 }
 
 impl TaskPayload {
+    /// Resolves the effective `ExecutionMode` with full backward compatibility for legacy `safe_mode`.
+    pub fn resolved_execution_mode(&self) -> ExecutionMode {
+        if let Some(mode) = self.execution_mode {
+            return mode;
+        }
+        if self
+            .safe_mode
+            .unwrap_or_else(|| self.analysis.unwrap_or(false))
+        {
+            ExecutionMode::Plan
+        } else {
+            ExecutionMode::Swarm
+        }
+    }
+
     /// Resolves an immutable Mandate from explicit parameters or synthesizes one safely.
     pub fn resolved_mandate(&self) -> Mandate {
         if let Some(ref m) = self.mandate {

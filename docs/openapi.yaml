@@ -1785,6 +1785,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /v1/engine/audio/capabilities:
+    get:
+      tags: [engine]
+      summary: "Audio capabilities"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/engine/deploy:
     post:
       tags: [engine]
@@ -1924,6 +1947,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/engine/audio/capabilities:
+    get:
+      tags: [engine]
+      summary: "Get live audio engine capabilities (TTS & STT)"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioCapabilitiesResponse'
         "401":
           description: Unauthorized
           content:
@@ -4838,6 +4884,8 @@ components:
         model_id: { type: string, nullable: true }
         budget_usd: { type: number, nullable: true }
         safe_mode: { type: boolean, nullable: true }
+        execution_mode: { type: string, enum: [chat, plan, swarm], nullable: true }
+        recent_findings: { type: string, nullable: true }
         enabled_skills:
           type: array
           nullable: true
@@ -4858,6 +4906,25 @@ components:
         text: { type: string }
         voice: { type: string, nullable: true }
         engine: { type: string, nullable: true }
+    AudioEngineCapability:
+      type: object
+      required: [available]
+      properties:
+        available: { type: boolean }
+        reason: { type: string, nullable: true }
+    AudioCapabilitiesResponse:
+      type: object
+      required: [privacy_mode, tts, stt]
+      properties:
+        privacy_mode: { type: boolean }
+        tts:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AudioEngineCapability'
+        stt:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AudioEngineCapability'
     SpeechResponse:
       type: object
       required: [status, message]

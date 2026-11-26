@@ -204,8 +204,8 @@ impl NeuralAudioEngine {
     pub async fn speak_stream(
         &self,
         text: &str,
-        sender: tokio::sync::broadcast::Sender<Vec<u8>>,
-        cache: Arc<crate::agent::audio_cache::BunkerCache>,
+        _sender: tokio::sync::broadcast::Sender<Vec<u8>>,
+        _cache: Arc<crate::agent::audio_cache::BunkerCache>,
     ) -> Result<(), AppError> {
         let _session = self
             .piper_session
@@ -215,18 +215,10 @@ impl NeuralAudioEngine {
                 detail: "Piper engine not loaded. Check PIPER_MODEL_PATH.".to_string(),
                 help_link: None,
             })?;
-        info!("[NeuralAudio] Streaming synthesis for: {}", text);
-
-        let mut full_audio = Vec::new();
-        for _ in 0..10 {
-            let chunk = vec![0u8; 1024];
-            full_audio.extend_from_slice(&chunk);
-            let _ = sender.send(chunk);
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-
-        let _ = cache.set(text, full_audio).await;
-        Ok(())
+        info!("[NeuralAudio] Piper ONNX streaming requested ({} chars), phonemizer pipeline not compiled.", text.len());
+        Err(AppError::NotImplemented(
+            "Local Piper ONNX tensor inference is not yet implemented in this build. Set LOCAL_TTS_URL (e.g. http://127.0.0.1:8880) or use 'browser'/'openai' TTS.".to_string(),
+        ))
     }
 
     /// Synthesize text to speech using Piper (Full).
@@ -240,8 +232,10 @@ impl NeuralAudioEngine {
                 detail: "Piper engine not loaded".to_string(),
                 help_link: None,
             })?;
-        info!("[NeuralAudio] Synthesizing text: {}", text);
-        Ok(vec![0; 1024])
+        info!("[NeuralAudio] Piper ONNX synthesis requested ({} chars), phonemizer pipeline not compiled.", text.len());
+        Err(AppError::NotImplemented(
+            "Local Piper ONNX tensor inference is not yet implemented in this build. Set LOCAL_TTS_URL or use 'browser'/'openai' TTS.".to_string(),
+        ))
     }
 
     /// Transcribe audio to text using Whisper.
@@ -255,10 +249,12 @@ impl NeuralAudioEngine {
                 help_link: None,
             })?;
         info!(
-            "[NeuralAudio] Transcribing {} bytes of audio via Whisper ONNX",
+            "[NeuralAudio] Whisper ONNX transcription requested ({} bytes), mel-spectrogram decoder not compiled.",
             audio_data.len()
         );
-        Ok("Processed transcription".to_string())
+        Err(AppError::NotImplemented(
+            "Local Whisper ONNX tensor inference is not yet implemented in this build. Set LOCAL_WHISPER_URL (e.g. http://127.0.0.1:8001) or use Groq STT.".to_string(),
+        ))
     }
 
     /// Detect voice activity using VAD.

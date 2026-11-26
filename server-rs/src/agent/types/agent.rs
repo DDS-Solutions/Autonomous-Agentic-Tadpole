@@ -517,6 +517,7 @@ impl EngineAgent {
             workspace_root: workspace_root.clone(),
             fs_adapter: crate::adapter::filesystem::FilesystemAdapter::new(workspace_root),
             safe_mode: false,
+            execution_mode: crate::agent::types::ExecutionMode::Swarm,
             analysis: false,
             traceparent: None,
             trace_id: uuid::Uuid::new_v4().to_string(),

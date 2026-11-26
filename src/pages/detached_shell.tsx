@@ -18,6 +18,7 @@ import { useDashboardData } from '../hooks/use_dashboard_data';
 import { get_route_by_path } from '../constants/routes';
 import Error_Boundary from '../components/Error_Boundary';
 import { tadpole_os_socket } from '../services/socket';
+import { use_sovereign_store } from '../stores/sovereign_store';
 
 // lazy-loaded components to match the main app's architecture
 const System_Log = lazy(() => import('../components/dashboard/System_Log').then(module => ({ default: module.System_Log })));
@@ -107,9 +108,13 @@ export default function Detached_Shell() {
     const tab_id = search_params.get('tabId');
     const path = search_params.get('path');
 
-    // Ensure live WebSocket telemetry is connected in detached windows
+    // Ensure live WebSocket telemetry and cross-window chat replication are active in detached windows
     useEffect(() => {
         tadpole_os_socket.connect();
+        const release_chat_sync = use_sovereign_store.getState().initialize_sync_listeners();
+        return () => {
+            release_chat_sync();
+        };
     }, []);
 
     // Mapping of types to components

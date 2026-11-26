@@ -315,18 +315,44 @@ impl AgentRunner {
 
         // Acquire write ownership before identity/version reads; deferred
         // read-to-write upgrades can deadlock simultaneous initializations.
+        let execution_mode = payload.resolved_execution_mode();
         let mut tx = self.state.resources.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let mut mission = crate::agent::mission::create_mission_in_tx(
-            &mut tx,
-            agent_id,
-            &mission_title,
-            mission_budget,
-        )
-        .await?;
+        let mission = if execution_mode.creates_mission() {
+            let mut m = crate::agent::mission::create_mission_in_tx(
+                &mut tx,
+                agent_id,
+                &mission_title,
+                mission_budget,
+            )
+            .await?;
 
-        sqlx::query("UPDATE mission_history SET status = 'active' WHERE id = ?")
-            .bind(&mission.id).execute(&mut *tx).await?;
-        mission.status = crate::agent::types::MissionStatus::Active;
+            sqlx::query("UPDATE mission_history SET status = 'active' WHERE id = ?")
+                .bind(&m.id)
+                .execute(&mut *tx)
+                .await?;
+            m.status = crate::agent::types::MissionStatus::Active;
+            m
+        } else {
+            let prefix = match execution_mode {
+                crate::agent::types::ExecutionMode::Chat => "chat",
+                crate::agent::types::ExecutionMode::Plan => "plan",
+                crate::agent::types::ExecutionMode::Swarm => "mission",
+            };
+            let now = chrono::Utc::now();
+            crate::agent::types::Mission {
+                id: format!("{}-{}", prefix, uuid::Uuid::new_v4()),
+                agent_id: agent_id.to_string(),
+                title: mission_title,
+                status: crate::agent::types::MissionStatus::Active,
+                created_at: now,
+                updated_at: now,
+                budget_usd: mission_budget,
+                cost_usd: 0.0,
+                is_degraded: Some(false),
+                is_pinned: false,
+                active_node_id: None,
+            }
+        };
 
         agent.state.active_mission = Some(serde_json::json!({
             "id": mission.id, "title": mission.title
@@ -338,6 +364,8 @@ impl AgentRunner {
         self.state.registry.agents.insert(agent_id.to_string(), agent.clone());
         let mut recovery_ctx = agent.resolve_provider_context(self.state.base_dir.clone());
         recovery_ctx.mission_id = mission.id.clone();
+        recovery_ctx.execution_mode = execution_mode;
+        recovery_ctx.safe_mode = execution_mode.is_safe_mode() || payload.safe_mode.unwrap_or(false);
         let task_id = execution_id;
         let job_run_id = self.state.comms.active_runners.get(agent_id)
             .filter(|handle| Some(handle.task_id) == task_id)
@@ -409,6 +437,100 @@ mod tests {
         let result = runner.validate_input("some-agent", &payload);
         assert!(result.is_err());
         assert!(format!("{}", result.unwrap_err()).contains("message too long"));
+    }
+
+    #[tokio::test]
+    async fn test_execution_mode_chat_and_plan_skip_mission_history_and_swarm_persists() {
+        let state = crate::test_support::state_with_agent("mode-agent", "http://127.0.0.1:9/v1").await;
+        let runner = AgentRunner::new(state.clone());
+
+        // 1. Chat mode: ephemeral chat-* ID, zero mission_history rows, clean terminal commit
+        let chat_payload = TaskPayload {
+            message: "Brainstorm architecture".to_string(),
+            execution_mode: Some(crate::agent::types::ExecutionMode::Chat),
+            ..Default::default()
+        };
+        let chat_mission = runner
+            .initialize_mission_state("mode-agent", &chat_payload, None)
+            .await
+            .unwrap();
+        assert!(chat_mission.id.starts_with("chat-"));
+        let count_after_chat: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM mission_history WHERE agent_id = 'mode-agent'",
+        )
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap();
+        assert_eq!(count_after_chat, 0);
+
+        let chat_ctx = state
+            .comms
+            .mission_contexts
+            .get(&chat_mission.id)
+            .unwrap()
+            .clone();
+        assert_eq!(chat_ctx.execution_mode, crate::agent::types::ExecutionMode::Chat);
+        // Zero tools exposed in Chat mode
+        let chat_tools = runner.build_tools(&chat_ctx).await;
+        assert!(chat_tools.function_declarations.is_empty());
+        // Finalizing ephemeral chat run must not fail FK constraints or insert mission_logs
+        runner
+            .persist_terminal_state(&chat_ctx, &None, false, "Chat reply")
+            .await
+            .unwrap();
+        assert_eq!(
+            state.registry.agents.get("mode-agent").unwrap().health.status,
+            "idle"
+        );
+
+        // 2. Plan mode: ephemeral plan-* ID, zero mission_history rows
+        let plan_payload = TaskPayload {
+            message: "Inspect modules".to_string(),
+            execution_mode: Some(crate::agent::types::ExecutionMode::Plan),
+            ..Default::default()
+        };
+        let plan_mission = runner
+            .initialize_mission_state("mode-agent", &plan_payload, None)
+            .await
+            .unwrap();
+        assert!(plan_mission.id.starts_with("plan-"));
+        let count_after_plan: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM mission_history WHERE agent_id = 'mode-agent'",
+        )
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap();
+        assert_eq!(count_after_plan, 0);
+        let plan_ctx = state
+            .comms
+            .mission_contexts
+            .get(&plan_mission.id)
+            .unwrap()
+            .clone();
+        runner
+            .persist_terminal_state(&plan_ctx, &None, false, "Plan reply")
+            .await
+            .unwrap();
+
+        // 3. Swarm mode: persists a real mission_history row
+        let swarm_payload = TaskPayload {
+            message: "Execute deployment".to_string(),
+            execution_mode: Some(crate::agent::types::ExecutionMode::Swarm),
+            ..Default::default()
+        };
+        let swarm_mission = runner
+            .initialize_mission_state("mode-agent", &swarm_payload, None)
+            .await
+            .unwrap();
+        assert!(!swarm_mission.id.starts_with("chat-"));
+        assert!(!swarm_mission.id.starts_with("plan-"));
+        let count_after_swarm: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM mission_history WHERE agent_id = 'mode-agent'",
+        )
+        .fetch_one(&state.resources.pool)
+        .await
+        .unwrap();
+        assert_eq!(count_after_swarm, 1);
     }
 }
 

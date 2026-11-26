@@ -169,7 +169,7 @@ export const agent_api_service = {
      * SECURITY NOTE: If a local key is available in the vault, it is injected into the payload.
      * The Rust backend is responsible for redacting this key from systemic logs.
      */
-    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string, enabled_skills?: string[], user_id = '0', auto_resume = true, accept_mode?: 'auto' | 'observe', mandate?: Task_Payload['mandate']): Promise<string> => {
+    send_command: async (agent_id: string, message: string, model_id: string, provider: string, cluster_id?: string, department?: string, budget_usd?: number, external_id?: string, safe_mode?: boolean, analysis?: boolean, request_id?: string, parent_node_id?: string, enabled_skills?: string[], user_id = '0', auto_resume = true, accept_mode?: 'auto' | 'observe', mandate?: Task_Payload['mandate'], execution_mode?: Task_Payload['execution_mode'], recent_findings?: string): Promise<string> => {
         const attempt_dispatch = async (current_model_id: string, current_provider: string, attempt_count: number, base_url_override?: string): Promise<string> => {
             return track_operation('AgentAPI', `Dispatching command to agent: ${agent_id.toUpperCase()} (Attempt ${attempt_count + 1})`, async () => {
                 // 🛡️ Resource Guard: Check pressure before dispatch
@@ -186,6 +186,8 @@ export const agent_api_service = {
                     budget_usd,
                     external_id,
                     safe_mode,
+                    ...(execution_mode ? { execution_mode } : {}),
+                    ...(recent_findings ? { recent_findings } : {}),
                     analysis,
                     parent_node_id,
                     enabled_skills,

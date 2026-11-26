@@ -514,7 +514,15 @@ fn build_engine_protected_routes(app_state: Arc<AppState>) -> Router<Arc<AppStat
             "/engine/shutdown",
             post(routes::engine_control::shutdown_engine),
         )
-        .route("/engine/transcribe", post(routes::audio::transcribe_audio))
+        .route(
+            "/engine/audio/capabilities",
+            get(routes::audio::audio_capabilities),
+        )
+        .route(
+            "/engine/transcribe",
+            post(routes::audio::transcribe_audio)
+                .layer(axum::extract::DefaultBodyLimit::max(26 * 1024 * 1024)),
+        )
         .route("/engine/speak", post(routes::audio::text_to_speech))
         .route(
             "/engine/templates/install",

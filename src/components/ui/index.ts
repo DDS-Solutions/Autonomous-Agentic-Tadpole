@@ -13,6 +13,7 @@
 // Barrel export for all UI primitives
 export * from './Confirm_Dialog';
 export * from './Empty_State';
+export * from './Execution_Mode_Selector';
 export * from './Page_Header';
 export * from './Portal_Window';
 export * from './Section_Header';

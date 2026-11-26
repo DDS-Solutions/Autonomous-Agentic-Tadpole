@@ -81,10 +81,12 @@ impl AgentRunner {
         self.broadcast_agent_message(&ctx.agent_id, &ctx.mission_id, &final_delivery);
 
         #[cfg(feature = "vector-memory")]
-        self.archive_lance_db_memory(ctx, output_text);
+        if ctx.execution_mode.creates_mission() {
+            self.archive_lance_db_memory(ctx, output_text);
+        }
 
-        // 🧠 MISSION ANALYSIS TRIGGER
-        if ctx.analysis && ctx.agent_id != "99" {
+        // 🧠 MISSION ANALYSIS TRIGGER (Swarm missions only)
+        if ctx.execution_mode.creates_mission() && ctx.analysis && ctx.agent_id != "99" {
             spawn_post_mission_analysis(self.clone(), ctx.clone(), output_text.to_string());
         }
 

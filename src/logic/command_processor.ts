@@ -19,7 +19,7 @@ import { use_workspace_store } from '../stores/workspace_store';
 import { use_sovereign_store } from '../stores/sovereign_store';
 import { get_settings } from '../stores/settings_store';
 import { use_skill_store } from '../stores/skill_store';
-import type { Agent } from '../types';
+import type { Agent, Execution_Mode } from '../types';
 import { browser_inference_service } from '../services/browser_inference';
 import { use_browser_specialist_store } from '../stores/browser_specialist_store';
 import { use_trace_store } from '../stores/trace_store';
@@ -170,9 +170,12 @@ export async function process_command(
     agents: Agent[],
     is_safe_mode?: boolean,
     active_scope: 'agent' | 'cluster' | 'swarm' = 'swarm',
-    target_node?: string
+    target_node?: string,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     const telemetry_source = '[CommandProcessor]';
+    const effective_safe_mode = execution_mode ? execution_mode !== 'swarm' : is_safe_mode;
 
     // 0. Pre-Flight DLP Shield: Scan & Redact Secrets before processing or cloud forwarding
     const secret_scan = scan_and_redact_secrets(raw_command_text);
@@ -214,29 +217,29 @@ export async function process_command(
 
     // 2. Routing based on command prefix
     if (cmd.startsWith('/')) {
-        return handle_slash_command(cmd, args, safe_agents, find_agent, is_safe_mode);
+        return handle_slash_command(cmd, args, safe_agents, find_agent, effective_safe_mode, execution_mode, recent_findings);
     }
 
     if (cmd.startsWith('@')) {
-        return handle_agent_mention(cmd, args, find_agent, is_safe_mode);
+        return handle_agent_mention(cmd, args, find_agent, effective_safe_mode, execution_mode, recent_findings);
     }
 
     if (cmd.startsWith('#')) {
-        return handle_cluster_mention(cmd, args, safe_agents, is_safe_mode);
+        return handle_cluster_mention(cmd, args, safe_agents, effective_safe_mode, execution_mode, recent_findings);
     }
 
     // 3. Auto-Routing based on active UI scope
     if (active_scope !== 'swarm' && target_node) {
         console.debug(`${telemetry_source} Auto-routing intent to ${active_scope}:${target_node}`);
         if (active_scope === 'cluster') {
-            return handle_cluster_mention(`#${target_node}`, [command_text], safe_agents, is_safe_mode);
+            return handle_cluster_mention(`#${target_node}`, [command_text], safe_agents, effective_safe_mode, execution_mode, recent_findings);
         } else {
-            return handle_agent_mention(`@${target_node}`, [command_text], find_agent, is_safe_mode);
+            return handle_agent_mention(`@${target_node}`, [command_text], find_agent, effective_safe_mode, execution_mode, recent_findings);
         }
     }
 
     // 4. Default Swarm Broadcast
-    return handle_swarm_broadcast(parts, safe_agents, is_safe_mode);
+    return handle_swarm_broadcast(parts, safe_agents, effective_safe_mode, execution_mode, recent_findings);
 }
 
 /**
@@ -250,7 +253,9 @@ async function dispatch_directive(
     scope: 'agent' | 'cluster' = 'agent',
     cluster_id?: string,
     department?: string,
-    display_name?: string
+    display_name?: string,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<void> {
     const settings = get_settings();
     const { model_id, provider } = resolve_agent_model_config(agent, settings.default_model);
@@ -320,7 +325,13 @@ async function dispatch_directive(
             undefined, 
             undefined, 
             active_node_id || undefined, 
-            enabled_skills
+            enabled_skills,
+            '0',
+            true,
+            undefined,
+            undefined,
+            execution_mode,
+            recent_findings
         );
 
         // Clear ack timer on rapid successful resolution to prevent out-of-order acknowledgment logs
@@ -545,7 +556,9 @@ async function handle_agent_lifecycle_command(
 async function handle_send_command(
     args: string[],
     find_agent: Agent_Lookup,
-    is_safe_mode?: boolean
+    is_safe_mode?: boolean,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     if (!args[0]) {
         event_bus.emit_log({
@@ -562,7 +575,7 @@ async function handle_send_command(
     const message = prepare_validated_directive(args.slice(1).join(' '), 'Usage: /send <agent-name> <message>');
     if (!message) return { should_clear_logs: false };
 
-    await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, agent.name);
+    await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, agent.name, execution_mode, recent_findings);
     return { should_clear_logs: false };
 }
 
@@ -663,7 +676,9 @@ async function handle_slash_command(
     args: string[],
     safe_agents: Agent[],
     find_agent: Agent_Lookup,
-    is_safe_mode?: boolean
+    is_safe_mode?: boolean,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     switch (cmd) {
         case '/help': {
@@ -707,7 +722,7 @@ async function handle_slash_command(
         case '/resume':
             return handle_agent_lifecycle_command('resume', args, find_agent);
         case '/send':
-            return handle_send_command(args, find_agent, is_safe_mode);
+            return handle_send_command(args, find_agent, is_safe_mode, execution_mode, recent_findings);
         case '/swarm':
             return handle_swarm_command(args, safe_agents);
         case '/switch':
@@ -730,7 +745,9 @@ async function handle_agent_mention(
     cmd: string,
     args: string[],
     find_agent: Agent_Lookup,
-    is_safe_mode?: boolean
+    is_safe_mode?: boolean,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     const target_name = cmd.substring(1).replace(/:$/, '');
     if (!target_name.trim()) {
@@ -747,7 +764,7 @@ async function handle_agent_mention(
         const message = prepare_validated_directive(args.join(' '), `Usage: @${agent.name} <message>`);
         if (!message) return { should_clear_logs: false };
 
-        await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, `@${agent.name}`);
+        await dispatch_directive(agent, message, !!is_safe_mode, 'agent', undefined, undefined, `@${agent.name}`, execution_mode, recent_findings);
     }
     return { should_clear_logs: false };
 }
@@ -759,7 +776,9 @@ async function handle_cluster_mention(
     cmd: string,
     args: string[],
     safe_agents: Agent[],
-    is_safe_mode?: boolean
+    is_safe_mode?: boolean,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     const cluster_name = cmd.substring(1).toLowerCase();
     if (!cluster_name.trim()) {
@@ -805,7 +824,7 @@ async function handle_cluster_mention(
     const message = prepare_validated_directive(args.join(' '), `Usage: #${cluster.name} <message>`);
     if (!message) return { should_clear_logs: false };
 
-    await dispatch_directive(alpha_agent, message, !!is_safe_mode, 'cluster', cluster.id, cluster.department, `#${cluster.name}`);
+    await dispatch_directive(alpha_agent, message, !!is_safe_mode, 'cluster', cluster.id, cluster.department, `#${cluster.name}`, execution_mode, recent_findings);
     return { should_clear_logs: false };
 }
 
@@ -816,7 +835,9 @@ async function handle_cluster_mention(
 async function handle_swarm_broadcast(
     parts: string[],
     safe_agents: Agent[],
-    is_safe_mode?: boolean
+    is_safe_mode?: boolean,
+    execution_mode?: Execution_Mode,
+    recent_findings?: string
 ): Promise<Command_Result> {
     if (safe_agents.length === 0) {
         event_bus.emit_log({
@@ -852,7 +873,7 @@ async function handle_swarm_broadcast(
     // Find coordinator node to receive the swarm broadcast
     const lead_agent = resolve_lead_coordinator(safe_agents, false);
     if (lead_agent) {
-        await dispatch_directive(lead_agent, message, !!is_safe_mode, 'agent', undefined, undefined, 'Swarm Broadcast');
+        await dispatch_directive(lead_agent, message, !!is_safe_mode, 'agent', undefined, undefined, 'Swarm Broadcast', execution_mode, recent_findings);
     }
 
     return { should_clear_logs: false };

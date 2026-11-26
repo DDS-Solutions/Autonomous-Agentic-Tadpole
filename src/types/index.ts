@@ -27,7 +27,8 @@ import type {
   Agent_Status,
   Agent_Stt_Engine,
   Agent_Voice_Engine,
-  Department
+  Department,
+  Execution_Mode
 } from '../contracts/agent';
 
 export type {
@@ -41,8 +42,35 @@ export type {
   Agent_Status,
   Agent_Stt_Engine,
   Agent_Voice_Engine,
-  Department
+  Department,
+  Execution_Mode
 };
+
+export interface SocraticEnvelope {
+    status: string;
+    scope_contract: {
+        target_paths?: string[];
+        blast_radius_level?: number;
+        mutation_allowed?: boolean;
+        database_mutation_allowed?: boolean;
+        mission_vector?: string;
+        [key: string]: unknown;
+    };
+    performance_threshold: {
+        budget_usd_cap?: number;
+        max_swarm_depth?: number;
+        target_turn_latency_ms?: number;
+        active_model_slot?: number;
+        timeout_seconds?: number;
+        [key: string]: unknown;
+    };
+    architecture_mode: {
+        mode_name?: string;
+        privacy_shield_enforced?: boolean;
+        [key: string]: unknown;
+    };
+    pre_cleared_failure_modes: string[];
+}
 
 export type Message_Part = 
     | { type: 'text', content: string, status?: 'complete' | 'streaming' }
@@ -55,13 +83,21 @@ export type Message_Part =
         context?: string, 
         question_id?: string, 
         selected_option?: string, 
-        status?: 'pending' | 'answered' 
+        status?: 'pending' | 'answered',
+        /** approve_option: the option value that maps to the 'approved' decision.
+         *  If unset, defaults to options[0]. Any other selected option maps to 'rejected'. */
+        approve_option?: string
       }
     | {
         type: 'openui',
         /** The DSL payload describing the UI to render */
         dsl: OpenUI_DSL,
         status?: 'rendering' | 'complete'
+      }
+    | {
+        type: 'socratic',
+        envelope: SocraticEnvelope,
+        status?: 'complete' | 'evaluating'
       };
 
 // ── OpenUI DSL Types ─────────────────────────────────────────

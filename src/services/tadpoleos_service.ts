@@ -78,6 +78,7 @@ export const tadpole_os_service = {
     // System / Engine Domain
     get check_health() { return system_api_service.check_health; },
     get deploy_engine() { return system_api_service.deploy_engine; },
+    get get_audio_capabilities() { return system_api_service.get_audio_capabilities; },
     get speak() { return system_api_service.speak; },
     get kill_agents() { return system_api_service.kill_agents; },
     get shutdown_engine() { return system_api_service.shutdown_engine; },

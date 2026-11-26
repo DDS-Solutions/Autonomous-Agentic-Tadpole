@@ -136,6 +136,8 @@
     },
     "serialize-javascript": "^7.0.4",
     "esbuild": "^0.25.0",
-    "protobufjs": "^8.0.1"
+    "protobufjs": "^8.0.1",
+    "glob": "^14.0.6",
+    "minimatch": "^11.0.9"
   }
 }

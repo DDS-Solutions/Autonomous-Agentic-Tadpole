@@ -1,49 +1,100 @@
 /**
  * @docs ARCHITECTURE:Interface
- * 
+ *
  * ### AI Assist Note
- * **UI Sub-Component**: Extracted message list renderer for the Sovereign Chat.
- * Memoized to prevent re-renders when parent scope/target selectors change.
- * Uses content-visibility: auto for implicit DOM virtualization.
- * 
+ * **UI Sub-Component**: Memoized message list renderer for Sovereign Chat supporting
+ * `text`, `thought`, `tool`, `question`, `openui`, and `socratic` parts, preserved
+ * `ArtifactPromotionCard` (non-global regex — zero lastIndex drift), and hover-discoverable
+ * Multiversal `"Revert to this tip"` actions.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: Message key collisions, or stale rendered_messages reference after scope switch.
- * - **Telemetry Link**: Search for `[Chat_Message_List]` in React DevTools Profiler.
+ * - **Failure Path**: Message key collisions or malformed Socratic JSON (falls back to plain text).
+ * - **Telemetry Link**: Search `[Chat_Message_List]` in React DevTools Profiler.
  */
 
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, User, Zap, GitBranch } from 'lucide-react';
+import { Bot, User, Zap, GitBranch, ShieldCheck, Cpu } from 'lucide-react';
 import clsx from 'clsx';
 import { type Chat_Message } from '../../stores/sovereign_store';
+import { type SocraticEnvelope } from '../../types';
 import { i18n } from '../../i18n';
 import { ArtifactPromotionCard } from './ArtifactPromotionCard';
 import { get_safe_date } from '../../utils/date_utils';
 import { Question_Choice_Pill } from './Question_Choice_Pill';
 import { OpenUI_Renderer } from './OpenUI_Renderer';
 
-const ARTIFACT_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/g;
+/** Non-global regex avoids stateful `lastIndex` mutation across React renders. */
+const ARTIFACT_BLOCK_REGEX = /```(?:python|py|javascript|js|bash|sh|ps1)\n([\s\S]*?)```/;
 
 export type { Chat_Message };
+
+const Socratic_Envelope_Card: React.FC<{ envelope: SocraticEnvelope }> = ({ envelope }) => {
+    return (
+        <div className="flex flex-col gap-2 p-3 bg-zinc-950/70 rounded-xl border border-cyan-500/30 text-xs font-mono">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <div className="flex items-center gap-1.5 text-cyan-400 font-bold tracking-wider text-[11px]">
+                    <ShieldCheck size={14} className="text-cyan-400 shrink-0" />
+                    <span>{envelope.status || 'SOCRATIC_GATE_PASS'}</span>
+                </div>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-bold uppercase">
+                    Slot {String(envelope.performance_threshold?.active_model_slot ?? 2)}
+                </span>
+            </div>
+
+            {envelope.architecture_mode?.mode_name && (
+                <div className="text-[10px] text-zinc-300 font-semibold flex items-center gap-1.5">
+                    <Cpu size={12} className="text-zinc-500 shrink-0" />
+                    <span className="truncate">{String(envelope.architecture_mode.mode_name)}</span>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 text-[10px] bg-zinc-900/60 p-2 rounded-lg border border-zinc-800/60">
+                <div className="flex flex-col gap-0.5">
+                    <span className="text-[8px] uppercase tracking-wider text-zinc-500 font-bold">Scope Vector</span>
+                    <span className="text-zinc-300 truncate" title={String(envelope.scope_contract?.mission_vector || 'Default')}>
+                        {String(envelope.scope_contract?.mission_vector || 'General Execution')}
+                    </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                    <span className="text-[8px] uppercase tracking-wider text-zinc-500 font-bold">Latency Target</span>
+                    <span className="text-zinc-300">
+                        {String(envelope.performance_threshold?.target_turn_latency_ms ?? 1500)}ms
+                    </span>
+                </div>
+            </div>
+
+            {Array.isArray(envelope.pre_cleared_failure_modes) && envelope.pre_cleared_failure_modes.length > 0 && (
+                <div className="flex flex-col gap-1 mt-1">
+                    <span className="text-[8px] uppercase tracking-wider text-zinc-500 font-bold">Pre-Cleared Mitigations</span>
+                    <div className="flex flex-wrap gap-1">
+                        {envelope.pre_cleared_failure_modes.map((mode, i) => (
+                            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700/50">
+                                {mode}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface Chat_Message_Item_Props {
     msg: Chat_Message;
     onRevert?: (node_id: string) => void;
 }
 
-/**
- * Individual message bubble — memoized to avoid re-rendering
- * unchanged messages when the list grows.
- * 
- * NOTE: Using msg object comparison to support streaming updates where the ID 
- * remains constant but content (text/parts) evolves.
- */
 const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }) => {
-    // Robust date parsing for UNIX seconds vs milliseconds vs ISO
     const render_time = useMemo(() => {
         const date = get_safe_date(msg.timestamp);
         return date?.toLocaleTimeString([], { hour12: false, minute: '2-digit' }) || '--:--';
     }, [msg.timestamp]);
+
+    const artifact_match = useMemo(
+        () => (msg.sender_id !== '0' ? ARTIFACT_BLOCK_REGEX.exec(msg.text) : null),
+        [msg.sender_id, msg.text]
+    );
 
     return (
         <motion.div
@@ -51,7 +102,7 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
             animate={{ opacity: 1, x: 0 }}
             style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
             className={clsx(
-                "flex flex-col gap-2 max-w-[90%]",
+                "flex flex-col gap-2 max-w-[90%] group/msg",
                 msg.sender_id === '0' ? "ml-auto items-end" : "items-start"
             )}
         >
@@ -72,7 +123,7 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                     msg.sender_id === '0'
                         ? "bg-zinc-100 text-zinc-900 rounded-tr-sm shadow-[0_5px_20px_-5px_rgba(255,255,255,0.2)]"
                         : "bg-zinc-800/80 text-zinc-200 rounded-tl-sm border-zinc-700/50 shadow-xl",
-                    (msg.text.length > 800 || (msg.parts?.length || 0) > 5) ? "max-h-[400px] overflow-y-auto custom-scrollbar text-xs" : ""
+                    (msg.text.length > 800 || (msg.parts?.length || 0) > 5) ? "text-xs" : ""
                 )}
             >
                 {msg.parts && msg.parts.length > 0 ? (
@@ -82,7 +133,7 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                                 <span className="opacity-90">{part.content}</span>
                             )}
                             {part.type === 'thought' && (
-                                <div className="flex items-start gap-2 py-1 px-2 bg-black/20 rounded-lg border border-white/5 italic text-zinc-400 text-[11px] leading-tight group/thought">
+                                <div className="flex items-start gap-2 py-1 px-2 bg-zinc-950/20 rounded-lg border border-white/5 italic text-zinc-400 text-[11px] leading-tight group/thought">
                                     <div className="mt-1">
                                         {part.status === 'thinking' ? (
                                             <div className="w-2 h-2 rounded-full bg-green-500/50 animate-ping" />
@@ -94,7 +145,7 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                                 </div>
                             )}
                             {part.type === 'tool' && (
-                                <div className="flex flex-col gap-1 py-2 px-3 bg-zinc-900/40 rounded-lg border border-zinc-700/30 group/tool">
+                                <div className="flex flex-col gap-1 py-2 px-3 bg-[color:var(--color-surface)]/40 rounded-lg border border-zinc-700/30 group/tool">
                                     <div className="flex items-center gap-2">
                                         <Zap size={10} className="text-amber-400" />
                                         <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-300">
@@ -121,55 +172,67 @@ const Chat_Message_Item = React.memo<Chat_Message_Item_Props>(({ msg, onRevert }
                             {part.type === 'openui' && (
                                 <OpenUI_Renderer dsl={part.dsl} />
                             )}
+                            {part.type === 'socratic' && (
+                                <Socratic_Envelope_Card envelope={part.envelope} />
+                            )}
                         </div>
                     ))
-                ) : (
-                    msg.text
-                )}
+                ) : (() => {
+                    if (typeof msg.text === 'string' && msg.text.includes('"PRE_CLEARED_GATE_PASS"')) {
+                        try {
+                            const parsed = JSON.parse(msg.text);
+                            if (parsed && parsed.status === 'PRE_CLEARED_GATE_PASS') {
+                                return <Socratic_Envelope_Card envelope={parsed} />;
+                            }
+                        } catch {
+                            // Fall through to plain text
+                        }
+                    }
+                    return msg.text;
+                })()}
                 {msg.scope === 'swarm' && msg.sender_id !== '0' && (
                     <div className="absolute top-0 right-0 p-1">
                         <Zap size={8} className="text-green-400" />
                     </div>
                 )}
-                
-                {/* Artifact Promotion Detection */}
-                {msg.sender_id !== '0' && ARTIFACT_REGEX.test(msg.text) && (
-                    <ArtifactPromotionCard 
+
+                {/* Preserved Artifact Promotion Detection (fixed non-global regex) */}
+                {artifact_match && (
+                    <ArtifactPromotionCard
                         name={`tool_${msg.id.slice(0, 4)}`}
-                        content={msg.text.match(ARTIFACT_REGEX)?.[0].replace(/```.*?\n|```/g, '') || ''}
+                        content={artifact_match[1] || ''}
                         agentId={msg.agent_id || msg.sender_id}
                         missionId={typeof msg.scope === 'string' && msg.scope !== 'global' ? msg.scope : undefined}
                     />
                 )}
             </div>
-            <div className="flex flex-row items-center gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase tracking-tighter whitespace-nowrap group-hover:text-zinc-400 transition-colors">
+            <div className="flex flex-row items-center gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase tracking-tighter whitespace-nowrap group-hover/msg:text-zinc-400 transition-colors">
                 <span>{render_time}</span>
                 <span>•</span>
                 <span className="text-zinc-400">{i18n.t(`chat.scope_${msg.scope}`)}</span>
-                
-                {msg.sender_id !== '0' && (
+
+                {msg.sender_id !== '0' && onRevert && (
                     <>
-                        <span className="hidden group-hover:inline">•</span>
-                        <button 
+                        <span className="hidden group-hover/msg:inline">•</span>
+                        <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onRevert?.(msg.id);
+                                onRevert(msg.id);
                             }}
-                            className="hidden group-hover:flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors"
+                            className="hidden group-hover/msg:flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors"
                         >
                             <GitBranch size={8} />
-                            <span>Revert to this tip</span>
+                            <span>{i18n.t('chat.revert', { defaultValue: 'Revert to this tip' })}</span>
                         </button>
                     </>
                 )}
             </div>
         </motion.div>
     );
-}, (prev, next) => prev.msg === next.msg);
+}, (prev, next) => prev.msg === next.msg && prev.onRevert === next.onRevert);
 
 Chat_Message_Item.displayName = 'Chat_Message_Item';
-
-// ── Exported List Component ──────────────────────────────
 
 interface Chat_Message_List_Props {
     messages: Chat_Message[];
@@ -179,10 +242,6 @@ interface Chat_Message_List_Props {
     onRevert?: (node_id: string) => void;
 }
 
-/**
- * Chat_Message_List
- * Renders the filtered and capped message list for Sovereign Chat.
- */
 export const Chat_Message_List = React.memo<Chat_Message_List_Props>(({
     messages,
     max_rendered,
@@ -214,7 +273,7 @@ export const Chat_Message_List = React.memo<Chat_Message_List_Props>(({
     return (
         <>
             {hidden_count > 0 && (
-                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-zinc-500 bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-center">
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-zinc-500 bg-[color:var(--color-surface)]/50 border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-center">
                     {i18n.t('chat.rendering_capped', { count: max_rendered, hidden: hidden_count })}
                 </div>
             )}

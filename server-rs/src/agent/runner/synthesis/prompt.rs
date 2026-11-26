@@ -21,12 +21,60 @@ pub fn is_orchestrator_identity(agent_id: &str) -> bool {
     agent_id == AGENT_CEO || agent_id == AGENT_COO || agent_id == AGENT_ALPHA
 }
 
+/// Builds a lightweight conversational system prompt for `ExecutionMode::Chat`,
+/// omitting heavy swarm protocols, full skill manuals, workflow fragments, vault dumps,
+/// and repo maps so chat turns stay fast, natural, and concise.
+pub(crate) fn build_chat_system_prompt(ctx: &RunContext) -> String {
+    let mut prompt = format!(
+        "You are {}, {} ({}) in Tadpole OS.\n\n\
+         🔒 CHAT MODE (TOOLS FORBIDDEN): You are in lightweight conversational brainstorming mode.\n\
+         - Do NOT call tools, emit tool syntax, start a mission, or delegate to sub-agents.\n\
+         - Reply naturally, directly, and concisely (typically 1–4 short sentences or brief bullets unless the user explicitly asks for deep detail).\n\
+         - Do NOT output formal Unified Technical Specifications (UTS), Socratic Gate headers, or boilerplate status preambles.\n",
+        ctx.name, ctx.role, ctx.department
+    );
+
+    if let Some(personality) = ctx
+        .model_config
+        .system_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let bounded: String = personality.chars().take(600).collect();
+        prompt.push_str("\n### Persona Context\n");
+        prompt.push_str(&bounded);
+        prompt.push('\n');
+    }
+
+    if let Some(findings) = ctx
+        .recent_findings
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        prompt.push_str("\n### Recent Conversation Context\n");
+        prompt.push_str(findings);
+        prompt.push('\n');
+    }
+
+    prompt
+}
+
 impl AgentRunner {
     /// Constructs the final system prompt for an agent run.
     ///
     /// Synthesizes identity, long-term memory, repo-map, and shared swarm
     /// findings into a single prompt, bounded by the model's context window.
     pub async fn build_system_prompt(&self, ctx: &RunContext, payload_message: &str) -> String {
+        if ctx.execution_mode == crate::agent::types::ExecutionMode::Chat {
+            tracing::info!(
+                "⚡ [Runner] Using compact Chat Mode system prompt for agent '{}'",
+                ctx.agent_id
+            );
+            return build_chat_system_prompt(ctx);
+        }
+
         let prompt_budget = self.compute_prompt_token_budget(ctx);
 
         let (
@@ -495,10 +543,19 @@ impl AgentRunner {
         };
 
         // --- Prefixes ---
-        let safe_mode_prefix = if ctx.safe_mode {
-            "🔒 SAFE MODE ACTIVE: You are in READ-ONLY / INSPECTION mode. State mutations (file writing/deletion, shell execution) and agent recruitment are strictly disabled. You may query repository status, inspect files, or converse with the user.\n".to_string()
-        } else {
-            "🔓 SECURITY: ACTIVE. You have authority to propose and execute mutations within your workspace scope.\n".to_string()
+        let safe_mode_prefix = match ctx.execution_mode {
+            crate::agent::types::ExecutionMode::Chat => {
+                "🔒 CHAT MODE (TOOLS FORBIDDEN): You are in lightweight conversational brainstorm mode. Do NOT attempt to call any tools, do NOT start a mission, and do NOT delegate to sub-agents. Respond directly with clear, concise natural language.\n".to_string()
+            }
+            crate::agent::types::ExecutionMode::Plan => {
+                "🔍 PLAN MODE (READ-ONLY RESEARCH): You are in read-only planning mode. You may use read-only inspection tools to verify codebase facts and formulate a plan, but file mutations, shell execution, and swarm delegation are strictly forbidden.\n".to_string()
+            }
+            crate::agent::types::ExecutionMode::Swarm if ctx.safe_mode => {
+                "🔒 SAFE MODE ACTIVE: You are in READ-ONLY / INSPECTION mode. State mutations (file writing/deletion, shell execution) and agent recruitment are strictly disabled. You may query repository status, inspect files, or converse with the user.\n".to_string()
+            }
+            crate::agent::types::ExecutionMode::Swarm => {
+                "🔓 SECURITY: ACTIVE. You have authority to propose and execute mutations within your workspace scope.\n".to_string()
+            }
         };
 
         let mut tool_mode_prefix = if ctx.analysis {

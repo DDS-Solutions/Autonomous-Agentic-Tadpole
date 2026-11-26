@@ -29,6 +29,9 @@ impl AgentRunner {
     /// Evaluates whether a registered tool is authorized and eligible for the given `RunContext`.
     /// Shared between `format_tool_directory_display` and `build_tools` to guarantee 1:1 parity.
     pub(crate) fn is_registered_tool_eligible(&self, ctx: &RunContext, tool_name: &str) -> bool {
+        if !ctx.execution_mode.allows_tools() {
+            return false;
+        }
         if !self.state.resources.acl.is_tool_allowed(
             &ctx.agent_id,
             &ctx.role,
@@ -83,7 +86,7 @@ impl AgentRunner {
     /// Manifests the agent's toolbelt, enforcing hierarchy-based access control,
     /// dynamic skills, and MCP tools with strict parameter isolation and zero cross-agent cache leaks.
     pub(crate) async fn build_tools(&self, ctx: &RunContext) -> ToolDefinition {
-        if !ctx.model_config.supports_native_tools() {
+        if !ctx.execution_mode.allows_tools() || !ctx.model_config.supports_native_tools() {
             return ToolDefinition {
                 function_declarations: vec![],
             };

@@ -65,7 +65,9 @@ export const Chat_Detached_Portal: React.FC<Chat_Detached_Portal_Props> = ({
                 </AnimatePresence>
                 <Tooltip content={i18n.t('chat.restore_tooltip')} position="top">
                     <button
+                        type="button"
                         onClick={on_restore}
+                        aria-label="Restore window"
                         className="bg-[color:color-mix(in_srgb,var(--color-surface)_80%,transparent)] backdrop-blur-md border border-zinc-700/50 p-4 rounded-full text-zinc-400 hover:text-zinc-100 shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all hover:scale-110 active:scale-95 group"
                     >
                         <Maximize2 size={24} className="group-hover:rotate-12 transition-transform" />
@@ -78,8 +80,8 @@ export const Chat_Detached_Portal: React.FC<Chat_Detached_Portal_Props> = ({
                 title={`${i18n.t('chat.title')} - ${i18n.t(`chat.scope_${active_scope}`)}`}
                 on_close={on_restore}
                 on_popup_block={on_popup_block}
-                width={540}
-                height={740}
+                width={440}
+                height={720}
                 url="/detached/chat"
             >
                 <div className="w-full h-full bg-[color:var(--color-background)] text-white overflow-hidden flex flex-col">

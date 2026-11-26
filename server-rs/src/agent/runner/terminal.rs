@@ -78,11 +78,13 @@ impl AgentRunner {
         }
 
         let mut tx = self.state.resources.pool.begin().await?;
-        let result = sqlx::query("UPDATE mission_history SET status = ?, cost_usd = cost_usd + ?, updated_at = ? WHERE id = ? AND agent_id = ? AND status IN ('pending', 'active')")
-            .bind(if failed { "failed" } else { "completed" }).bind(cost).bind(chrono::Utc::now())
-            .bind(&ctx.mission_id).bind(&ctx.agent_id).execute(&mut *tx).await?;
-        if result.rows_affected() != 1 {
-            return Err(AppError::Conflict("Mission is missing or already terminal".to_string()));
+        if ctx.execution_mode.creates_mission() {
+            let result = sqlx::query("UPDATE mission_history SET status = ?, cost_usd = cost_usd + ?, updated_at = ? WHERE id = ? AND agent_id = ? AND status IN ('pending', 'active')")
+                .bind(if failed { "failed" } else { "completed" }).bind(cost).bind(chrono::Utc::now())
+                .bind(&ctx.mission_id).bind(&ctx.agent_id).execute(&mut *tx).await?;
+            if result.rows_affected() != 1 {
+                return Err(AppError::Conflict("Mission is missing or already terminal".to_string()));
+            }
         }
         agent.version = crate::agent::persistence::save_agent_db_in_tx(&mut tx, &agent).await?;
         if let Some(job_run_id) = job_run_id {
@@ -92,13 +94,15 @@ impl AgentRunner {
                 return Err(AppError::Conflict("Scheduled run is missing or already terminal".to_string()));
             }
         }
-        let mut log_text = serde_json::Value::String(text.to_string());
-        crate::utils::serialization::prune_large_strings(&mut log_text, 2048);
-        sqlx::query("INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(uuid::Uuid::new_v4().to_string()).bind(&ctx.mission_id).bind(&ctx.agent_id)
-            .bind(if failed { "System" } else { "Agent" }).bind(log_text.as_str().unwrap_or_default())
-            .bind(if failed { "error" } else { "success" }).bind(chrono::Utc::now())
-            .execute(&mut *tx).await?;
+        if ctx.execution_mode.creates_mission() {
+            let mut log_text = serde_json::Value::String(text.to_string());
+            crate::utils::serialization::prune_large_strings(&mut log_text, 2048);
+            sqlx::query("INSERT INTO mission_logs (id, mission_id, agent_id, source, text, severity, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(uuid::Uuid::new_v4().to_string()).bind(&ctx.mission_id).bind(&ctx.agent_id)
+                .bind(if failed { "System" } else { "Agent" }).bind(log_text.as_str().unwrap_or_default())
+                .bind(if failed { "error" } else { "success" }).bind(chrono::Utc::now())
+                .execute(&mut *tx).await?;
+        }
         if let (Some(task_id), Some(u)) = (task_id, usage.as_ref()) {
             sqlx::query("UPDATE agent_tasks SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?, cost_usd = cost_usd + ?, provider_id = COALESCE(provider_id, ?) WHERE id = ? AND agent_id = ?")
                 .bind(u.input_tokens as i64).bind(u.output_tokens as i64).bind(cost)

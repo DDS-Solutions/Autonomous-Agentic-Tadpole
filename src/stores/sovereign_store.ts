@@ -1,123 +1,50 @@
 /**
  * @docs ARCHITECTURE:State
- * 
+ *
  * ### AI Assist Note
- * **Zustand State**: High-level swarm consciousness and sovereign decision-making logs. 
- * Orchestrates the persistent feedback loop between the human operator (Sovereign) and the autonomous swarm brain.
- * 
+ * **Zustand State**: High-level swarm consciousness, bounded sovereign chat transcript,
+ * cross-window BroadcastChannel replication, optimistic question decisions, and Multiversal
+ * session history / time-travel actions.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: Chat history buffer overflow, or message delivery failure during heavy backend telemetry pulses.
- * - **Telemetry Link**: Search for `[sovereign_store]` or `MESSAGE_SYNC` in UI logs.
- * 
- * ```mermaid
- * stateDiagram-v2
- *     [*] --> Initializing
- *     Initializing --> Persistence: getItem(tadpole-sovereign-chat)
- *     Persistence --> Migration: migrate(v1 -> v2)
- *     Migration --> Ready: set({messages, index})
- *     Ready --> Message_Flow: add_message(msg)
- *     Message_Flow --> Deduplication: check message_index_by_id
- *     Deduplication --> State_Update: push to array + update index
- *     State_Update --> Sync: BroadcastChannel (ADD_MESSAGE)
- *     Ready --> Part_Append: append_message_part(id, part)
- *     Part_Append --> State_Update
- *     Ready --> Scope_Change: set_scope(scope)
- *     Scope_Change --> Sync: BroadcastChannel (SET_SCOPE)
- *     Ready --> History_Clear: clear_history()
- *     History_Clear --> Sync: BroadcastChannel (CLEAR_HISTORY)
- * ```
+ * - **Failure Path**: Chat history overflow (bounded at 5,000 messages), oversight submission
+ *   failure (automatically rolled back), or Multiversal history fetch failure.
+ * - **Telemetry Link**: Search `[SovereignStore]` in browser logs.
  */
-
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { event_bus } from '../services/event_bus';
 import { sovereign_api_service } from '../services/sovereign_api_service';
 import { use_notification_store } from './notification_store';
+import type {
+    Chat_Message,
+    Sovereign_State,
+    Sovereign_Scope,
+    SessionLeaf,
+    Mission_Execution_Metrics
+} from '../domain/chat/types';
+import {
+    empty_transcript,
+    message_index,
+    reduce_transcript,
+    type Transcript_Action
+} from '../domain/chat/transcript';
+import { create_question_decisions } from '../services/chat/question_decisions';
+import { create_chat_replication } from '../services/chat/replication';
+import type { Message_Part } from '../types';
 
-export interface SessionLeaf {
-    id: string;
-    role: string;
-    content: string;
-    created_at: string;
-}
+export type { Chat_Message, Sovereign_Scope, SessionLeaf, Mission_Execution_Metrics, Message_Part };
 
 const TELEMETRY_SOURCE = '[SovereignStore]';
 
 function report_session_error(error: unknown): void {
     use_notification_store.getState().add_notification({
-        severity: 'error', title: 'Session history',
+        severity: 'error',
+        title: 'Session history',
         message: error instanceof Error ? error.message : 'The session request failed.',
         persistent: false,
     });
-}
-
-export type Sovereign_Scope = 'agent' | 'cluster' | 'swarm';
-
-import type { Message_Part } from '../types';
-export type { Message_Part };
-
-export interface Chat_Message {
-    id: string;
-    sender_id: string;
-    sender_name: string;
-    text: string;
-    parts?: Message_Part[];
-    timestamp: string | number | Date;
-    scope: Sovereign_Scope | string;
-    agent_id?: string;
-    is_sub_agent?: boolean;
-    lineage?: string[];
-    target_node?: string;
-}
-
-export interface Mission_Execution_Metrics {
-    mission_id?: string;
-    agent_id?: string;
-    turns: number;
-    tool_calls_attempted: number;
-    tool_calls_failed: number;
-    cached_reads_hit: number;
-    files_modified_count: number;
-    total_input_tokens: number;
-    total_output_tokens: number;
-    peak_context_tokens: number;
-    total_cost_micro_usd: number;
-    total_summarizations: number;
-    total_sub_agents: number;
-    excessive_summarization_warning: boolean;
-}
-
-interface Sovereign_State {
-    messages: Chat_Message[];
-    message_index_by_id: Record<string, number>;
-    active_scope: Sovereign_Scope;
-    selected_agent_id: string | null;
-    target_agent: string;
-    target_cluster: string;
-    is_detached: boolean;
-    active_node_id: string | null;
-    active_mission_id: string | null;
-    session_leaves: SessionLeaf[];
-    latest_metrics: Mission_Execution_Metrics | null;
-
-    // Actions
-    add_message: (msg: Omit<Chat_Message, 'id' | 'timestamp'> & { id?: string, timestamp?: string }) => void;
-    update_message: (id: string, updates: Partial<Chat_Message>) => void;
-    append_message_part: (id: string, part: Message_Part) => boolean;
-    get_message_by_id: (id: string) => Chat_Message | undefined;
-    set_scope: (scope: Sovereign_Scope) => void;
-    set_selected_agent_id: (agent_id: string | null) => void;
-    set_target_agent: (name: string) => void;
-    set_target_cluster: (name: string) => void;
-    set_detached: (is_detached: boolean) => void;
-    set_active_node: (node_id: string | null) => void;
-    set_active_mission: (mission_id: string | null) => void;
-    fetch_session_history: (mission_id: string, leaf_id: string) => Promise<void>;
-    fetch_mission_leaves: (mission_id: string) => Promise<void>;
-    revert_to_node: (mission_id: string, node_id: string) => Promise<void>;
-    set_execution_metrics: (metrics: Mission_Execution_Metrics, is_remote_sync?: boolean) => void;
-    resolve_user_question: (question_id: string, answer: string) => Promise<void>;
-    clear_history: () => void;
 }
 
 type Persisted_Sovereign_State = Pick<
@@ -125,233 +52,217 @@ type Persisted_Sovereign_State = Pick<
     'active_scope' | 'selected_agent_id' | 'target_agent' | 'target_cluster' | 'is_detached' | 'active_node_id' | 'active_mission_id'
 >;
 
-// Cross-window synchronization
-const chat_channel = typeof window !== 'undefined' ? new BroadcastChannel('tadpole-chat-sync') : null;
-
 export const use_sovereign_store = create<Sovereign_State>()(
     persist(
-        (set, get) => ({
-            messages: [],
-            message_index_by_id: {},
-            active_scope: 'agent',
-            selected_agent_id: null,
-            target_agent: 'Agent of Nine',
-            target_cluster: '',
-            is_detached: false,
-            active_node_id: null,
-            active_mission_id: null,
-            session_leaves: [],
-            latest_metrics: null,
-
-            add_message: (msg) => {
-                const new_msg = {
-                    ...msg,
-                    id: msg.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36)),
-                    timestamp: msg.timestamp || new Date().toISOString(),
-                    parts: msg.parts || (msg.text ? [{ type: 'text', content: msg.text }] : [])
-                } as Chat_Message;
-                let was_added = false;
-                set((state) => {
-                    if (state.message_index_by_id[new_msg.id] !== undefined) {
-                        return state; // Deduplicate
-                    }
-                    was_added = true;
-                    return {
-                        messages: [...state.messages, new_msg],
-                        message_index_by_id: {
-                            ...state.message_index_by_id,
-                            [new_msg.id]: state.messages.length
-                        }
-                    };
+        (set, get) => {
+            const apply = (action: Transcript_Action) => {
+                let changed = false;
+                set(state => {
+                    const next = reduce_transcript(state, action);
+                    changed = next !== state;
+                    return next;
                 });
-                // Sync to other windows
-                if (was_added) {
-                    chat_channel?.postMessage({ type: 'ADD_MESSAGE', payload: new_msg });
-                }
-            },
+                return changed;
+            };
 
-            update_message: (id, updates) => {
-                let updated_msg: Chat_Message | undefined;
-                set((state) => {
-                    const idx = state.message_index_by_id[id];
-                    if (idx === undefined) return state;
+            const remove_message = (id: string) => {
+                apply({ type: 'remove', id });
+            };
 
-                    const next_messages = [...state.messages];
-                    updated_msg = { ...next_messages[idx], ...updates };
-                    next_messages[idx] = updated_msg;
-                    return { messages: next_messages };
-                });
-                if (updated_msg) {
-                    chat_channel?.postMessage({ type: 'UPDATE_MESSAGE', payload: updated_msg });
-                }
-            },
+            const replication = create_chat_replication({
+                get,
+                remove_message,
+                subscribe_logs: listener => event_bus.subscribe_logs(listener)
+            });
 
-            append_message_part: (id, part) => {
-                let updated_msg: Chat_Message | undefined;
-                set((state) => {
-                    const idx = state.message_index_by_id[id];
-                    if (idx === undefined) return state;
-
-                    const current_message = state.messages[idx];
-                    updated_msg = {
-                        ...current_message,
-                        parts: [...(current_message.parts || []), part]
-                    };
-
-                    const next_messages = [...state.messages];
-                    next_messages[idx] = updated_msg;
-                    return { messages: next_messages };
-                });
-
-                if (updated_msg) {
-                    chat_channel?.postMessage({ type: 'UPDATE_MESSAGE', payload: updated_msg });
-                    return true;
-                }
-                return false;
-            },
-
-            get_message_by_id: (id) => {
-                const state = get();
-                const idx = state.message_index_by_id[id];
-                return idx === undefined ? undefined : state.messages[idx];
-            },
-
-            set_scope: (active_scope) => {
-                set({ active_scope });
-                chat_channel?.postMessage({ type: 'SET_SCOPE', payload: active_scope });
-            },
-
-            set_selected_agent_id: (selected_agent_id) => {
-                set({ selected_agent_id });
-                chat_channel?.postMessage({ type: 'SET_AGENT', payload: selected_agent_id });
-            },
-
-            set_target_agent: (target_agent) => {
-                set({ target_agent });
-                chat_channel?.postMessage({ type: 'SET_TARGET_AGENT', payload: target_agent });
-            },
-
-            set_target_cluster: (target_cluster) => {
-                set({ target_cluster });
-                chat_channel?.postMessage({ type: 'SET_TARGET_CLUSTER', payload: target_cluster });
-            },
-
-            set_detached: (is_detached) => {
-                set({ is_detached });
-                chat_channel?.postMessage({ type: 'SET_DETACHED', payload: is_detached });
-            },
-
-            set_active_node: (active_node_id) => {
-                set({ active_node_id });
-                chat_channel?.postMessage({ type: 'SET_ACTIVE_NODE', payload: active_node_id });
-            },
-
-            set_active_mission: (active_mission_id) => {
-                set({ active_mission_id });
-                chat_channel?.postMessage({ type: 'SET_ACTIVE_MISSION', payload: active_mission_id });
-            },
-
-            fetch_session_history: async (mission_id, leaf_id) => {
-                try {
-                    const history = await sovereign_api_service.history(mission_id, leaf_id);
-                    const history_messages: Chat_Message[] = history.map((n) => ({
-                        id: n.id,
-                        sender_id: n.role === 'user' ? '0' : '1',
-                        sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
-                        text: n.content,
-                        timestamp: n.created_at || new Date().toISOString(),
-                        scope: 'agent',
-                        target_node: n.mission_id
-                    }));
-                    set({
-                        messages: history_messages,
-                        message_index_by_id: Object.fromEntries(history_messages.map((message, index) => [message.id, index])),
-                        active_node_id: leaf_id
-                    });
-                } catch (err) {
-                    console.error(`${TELEMETRY_SOURCE} Failed to fetch multiversal history:`, err);
-                    report_session_error(err);
-                    throw err;
-                }
-            },
-
-            fetch_mission_leaves: async (mission_id) => {
-                try {
-                    set({ session_leaves: await sovereign_api_service.leaves(mission_id) });
-                } catch (err) {
-                    console.error(`${TELEMETRY_SOURCE} Failed to fetch mission leaves:`, err);
-                    report_session_error(err);
-                    throw err;
-                }
-            },
-
-            revert_to_node: async (mission_id, node_id) => {
-                try {
-                    await sovereign_api_service.revert(mission_id, node_id);
-                    // Publish node selection and messages together after loading.
-                    await get().fetch_session_history(mission_id, node_id);
-                } catch (err) {
-                    console.error(`${TELEMETRY_SOURCE} Time Travel failure:`, err);
-                    report_session_error(err);
-                    throw err;
-                }
-            },
-
-            set_execution_metrics: (metrics, is_remote_sync) => {
-                set({ latest_metrics: metrics });
-                if (!is_remote_sync) {
-                    chat_channel?.postMessage({ type: 'SET_EXECUTION_METRICS', payload: metrics });
-                }
-            },
-
-            resolve_user_question: async (question_id: string, answer: string) => {
-                let target_agent_id: string | undefined;
-                set((state) => {
-                    let found = false;
-                    const next_messages = state.messages.map((m) => {
-                        if (!m.parts) return m;
-                        let modified = false;
-                        const next_parts = m.parts.map((p) => {
-                            if (p.type === 'question' && (p.question_id === question_id || (!p.question_id && p.status === 'pending'))) {
-                                modified = true;
-                                found = true;
-                                target_agent_id = m.agent_id;
-                                return {
-                                    ...p,
-                                    selected_option: answer,
-                                    status: 'answered' as const,
-                                };
-                            }
-                            return p;
-                        });
-                        return modified ? { ...m, parts: next_parts } : m;
-                    });
-
-                    return found ? { messages: next_messages } : state;
-                });
-
-                get().add_message({
-                    sender_id: '0',
-                    sender_name: 'Operator',
-                    agent_id: target_agent_id,
-                    text: answer,
-                    scope: get().active_scope,
-                    parts: [{ type: 'text', content: answer, status: 'complete' }]
-                });
-
-                try {
+            const resolve_user_question = create_question_decisions({
+                get,
+                remove_message: id => {
+                    remove_message(id);
+                    replication.publish({ type: 'REMOVE_MESSAGE', payload: id });
+                },
+                submit: async (id, decision, answer) => {
                     const { system_api_service } = await import('../services/system_api_service');
-                    await system_api_service.decide_oversight(question_id, 'approved', answer);
-                } catch (err) {
-                    console.error(`${TELEMETRY_SOURCE} Failed to submit user answer to oversight:`, err);
-                }
-            },
+                    return system_api_service.decide_oversight(id, decision, answer);
+                },
+                report_failure: agent_id => event_bus.emit_log({
+                    source: 'System',
+                    severity: 'error',
+                    agent_id,
+                    text: '[Oversight] Failed to submit decision. Please try again.',
+                    metadata: { type: 'log', level: 'error', message: 'Oversight submission failed. Your answer was not recorded.' }
+                })
+            });
 
-            clear_history: () => {
-                set({ messages: [], message_index_by_id: {} });
-                chat_channel?.postMessage({ type: 'CLEAR_HISTORY' });
-            },
-        }),
+            return {
+                ...empty_transcript(),
+                active_scope: 'agent',
+                selected_agent_id: null,
+                target_agent: 'Agent of Nine',
+                target_cluster: '',
+                is_detached: false,
+                active_node_id: null,
+                active_mission_id: null,
+                session_leaves: [],
+                latest_metrics: null,
+
+                add_message: (msg, is_remote_sync) => {
+                    const message: Chat_Message = {
+                        ...msg,
+                        id: msg.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36)),
+                        timestamp: msg.timestamp ?? new Date().toISOString(),
+                        parts: msg.parts || (msg.text ? [{ type: 'text', content: msg.text }] : [])
+                    };
+                    if (apply({ type: 'add', message }) && !is_remote_sync) {
+                        replication.publish({ type: 'ADD_MESSAGE', payload: message });
+                    }
+                },
+
+                update_message: (id, updates, is_remote_sync) => {
+                    if (apply({ type: 'update', id, updates }) && !is_remote_sync) {
+                        replication.publish({ type: 'UPDATE_MESSAGE', payload: get().get_message_by_id(id) });
+                    }
+                },
+
+                append_message_part: (id, part, is_remote_sync) => {
+                    if (message_index(get(), id) === undefined) return false;
+                    if (apply({ type: 'append', id, part }) && !is_remote_sync) {
+                        replication.publish({ type: 'UPDATE_MESSAGE', payload: get().get_message_by_id(id) });
+                    }
+                    return true;
+                },
+
+                get_message_by_id: (id) => {
+                    const index = message_index(get(), id);
+                    return index === undefined ? undefined : get().messages[index];
+                },
+
+                replace_history: (history_messages, active_node_id, is_remote_sync) => {
+                    set(state => ({
+                        ...reduce_transcript(state, { type: 'replace', messages: history_messages }),
+                        active_node_id,
+                    }));
+                    if (!is_remote_sync) {
+                        replication.publish({
+                            type: 'SET_HISTORY',
+                            payload: { messages: history_messages, active_node_id }
+                        });
+                    }
+                },
+
+                set_scope: (active_scope, is_remote_sync) => {
+                    if (active_scope !== 'agent' && active_scope !== 'cluster' && active_scope !== 'swarm') {
+                        console.error(`${TELEMETRY_SOURCE} Invalid scope payload:`, active_scope);
+                        return;
+                    }
+                    set({ active_scope });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_SCOPE', payload: active_scope });
+                    }
+                },
+
+                set_selected_agent_id: (selected_agent_id, is_remote_sync) => {
+                    set({ selected_agent_id });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_AGENT', payload: selected_agent_id });
+                    }
+                },
+
+                set_target_agent: (target_agent, is_remote_sync) => {
+                    set({ target_agent });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_TARGET_AGENT', payload: target_agent });
+                    }
+                },
+
+                set_target_cluster: (target_cluster, is_remote_sync) => {
+                    set({ target_cluster });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_TARGET_CLUSTER', payload: target_cluster });
+                    }
+                },
+
+                set_detached: (is_detached, is_remote_sync) => {
+                    set({ is_detached });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_DETACHED', payload: is_detached });
+                    }
+                },
+
+                set_active_node: (active_node_id, is_remote_sync) => {
+                    set({ active_node_id });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_ACTIVE_NODE', payload: active_node_id });
+                    }
+                },
+
+                set_active_mission: (active_mission_id, is_remote_sync) => {
+                    set({ active_mission_id });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_ACTIVE_MISSION', payload: active_mission_id });
+                    }
+                },
+
+                fetch_session_history: async (mission_id, leaf_id) => {
+                    try {
+                        const history = await sovereign_api_service.history(mission_id, leaf_id);
+                        const history_messages: Chat_Message[] = history.map((n) => ({
+                            id: n.id,
+                            sender_id: n.role === 'user' ? '0' : '1',
+                            sender_name: n.role === 'user' ? 'Overlord' : 'Sovereign Agent',
+                            text: n.content,
+                            timestamp: n.created_at || new Date().toISOString(),
+                            scope: 'agent',
+                            target_node: n.mission_id
+                        }));
+                        get().replace_history(history_messages, leaf_id);
+                    } catch (err) {
+                        console.error(`${TELEMETRY_SOURCE} Failed to fetch multiversal history:`, err);
+                        report_session_error(err);
+                        throw err;
+                    }
+                },
+
+                fetch_mission_leaves: async (mission_id) => {
+                    try {
+                        set({ session_leaves: await sovereign_api_service.leaves(mission_id) });
+                    } catch (err) {
+                        console.error(`${TELEMETRY_SOURCE} Failed to fetch mission leaves:`, err);
+                        report_session_error(err);
+                        throw err;
+                    }
+                },
+
+                revert_to_node: async (mission_id, node_id) => {
+                    try {
+                        await sovereign_api_service.revert(mission_id, node_id);
+                        await get().fetch_session_history(mission_id, node_id);
+                    } catch (err) {
+                        console.error(`${TELEMETRY_SOURCE} Time Travel failure:`, err);
+                        report_session_error(err);
+                        throw err;
+                    }
+                },
+
+                set_execution_metrics: (metrics, is_remote_sync) => {
+                    set({ latest_metrics: metrics });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'SET_EXECUTION_METRICS', payload: metrics });
+                    }
+                },
+
+                resolve_user_question,
+
+                clear_history: (is_remote_sync) => {
+                    apply({ type: 'clear' });
+                    if (!is_remote_sync) {
+                        replication.publish({ type: 'CLEAR_HISTORY' });
+                    }
+                },
+
+                initialize_sync_listeners: () => replication.acquire(),
+            };
+        },
         {
             name: 'tadpole-sovereign-chat',
             version: 2,
@@ -367,71 +278,5 @@ export const use_sovereign_store = create<Sovereign_State>()(
         }
     )
 );
-
-// Listen for sync events
-if (chat_channel) {
-    chat_channel.onmessage = (event: MessageEvent) => {
-        const { type, payload } = event.data as { type: string, payload: unknown };
-        const state = use_sovereign_store.getState();
-
-        switch (type) {
-            case 'ADD_MESSAGE':
-                {
-                    const msg = payload as Chat_Message;
-                    if (state.message_index_by_id[msg.id] === undefined) {
-                        use_sovereign_store.setState({
-                            messages: [...state.messages, msg],
-                            message_index_by_id: {
-                                ...state.message_index_by_id,
-                                [msg.id]: state.messages.length
-                            }
-                        });
-                    }
-                }
-                break;
-            case 'UPDATE_MESSAGE':
-                {
-                    const msg = payload as Chat_Message;
-                    const idx = state.message_index_by_id[msg.id];
-                    if (idx !== undefined) {
-                        const next_messages = [...state.messages];
-                        next_messages[idx] = msg;
-                        use_sovereign_store.setState({ messages: next_messages });
-                    }
-                }
-                break;
-            case 'SET_SCOPE':
-                use_sovereign_store.setState({ active_scope: payload as Sovereign_Scope });
-                break;
-            case 'SET_AGENT':
-                use_sovereign_store.setState({ selected_agent_id: payload as string | null });
-                break;
-            case 'SET_TARGET_AGENT':
-                use_sovereign_store.setState({ target_agent: payload as string });
-                break;
-            case 'SET_TARGET_CLUSTER':
-                use_sovereign_store.setState({ target_cluster: payload as string });
-                break;
-            case 'SET_DETACHED':
-                use_sovereign_store.setState({ is_detached: payload as boolean });
-                break;
-            case 'SET_ACTIVE_NODE':
-                use_sovereign_store.setState({ active_node_id: payload as string | null });
-                break;
-            case 'SET_ACTIVE_MISSION':
-                use_sovereign_store.setState({ active_mission_id: payload as string | null });
-                break;
-            case 'SET_EXECUTION_METRICS':
-                use_sovereign_store.getState().set_execution_metrics(payload as Mission_Execution_Metrics, true);
-                break;
-            case 'CLEAR_HISTORY':
-                use_sovereign_store.setState({ messages: [], message_index_by_id: {} });
-                break;
-        }
-    };
-}
-
-
-
 
 // Metadata: [sovereign_store]

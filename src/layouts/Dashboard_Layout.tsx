@@ -30,6 +30,7 @@ import { use_notification_store } from '../stores/notification_store';
 import { event_bus } from '../services/event_bus';
 import { use_agent_registry_store } from '../stores/agent_store';
 import { use_settings_store } from '../stores/settings_store';
+import { use_sovereign_store } from '../stores/sovereign_store';
 
 const SovereignChat = lazy(() => import('../components/SovereignChat').then(module => ({ default: module.SovereignChat })));
 const Command_Palette = lazy(() => import('../components/Command_Palette').then(module => ({ default: module.Command_Palette })));
@@ -132,8 +133,10 @@ export default function Dashboard_Layout() {
         const unsubscribe_pulse = tadpole_os_socket.subscribe_pulse((pulse) => {
             use_skill_store.getState().handle_pulse(pulse.tool, pulse.status, pulse.latency);
         });
+        const release_chat_sync = use_sovereign_store.getState().initialize_sync_listeners();
         return () => {
             unsubscribe_pulse();
+            release_chat_sync();
         };
     }, []);
 

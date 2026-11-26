@@ -20,6 +20,28 @@ export interface EngineStatus {
     features: string[];
 }
 
+export interface AudioEngineCapability {
+    available: boolean;
+    reason: string | null;
+}
+
+export interface AudioCapabilities {
+    privacy_mode: boolean;
+    tts: Record<string, AudioEngineCapability>;
+    stt: Record<string, AudioEngineCapability>;
+}
+
+function resolve_audio_filename(mime_type?: string): string {
+    const base = (mime_type || '').split(';')[0].trim().toLowerCase();
+    if (base === 'audio/webm' || base === 'video/webm') return 'speech.webm';
+    if (base === 'audio/ogg' || base === 'application/ogg') return 'speech.ogg';
+    if (base === 'audio/mp4' || base === 'audio/x-m4a' || base === 'audio/m4a') return 'speech.m4a';
+    if (base === 'audio/mpeg' || base === 'audio/mp3') return 'speech.mp3';
+    if (base === 'audio/flac') return 'speech.flac';
+    if (base === 'audio/wav' || base === 'audio/x-wav') return 'speech.wav';
+    return 'speech.webm';
+}
+
 export interface InstallTemplateReceipt {
     status: string;
     message: string;
@@ -91,6 +113,23 @@ export const engine_api_service = {
     },
 
     /**
+     * get_audio_capabilities
+     * Reports live runtime TTS/STT availability and Privacy Shield status from the engine.
+     */
+    get_audio_capabilities: async (options: RequestInit = {}): Promise<AudioCapabilities | null> => {
+        try {
+            return await api_request<AudioCapabilities>('/v1/engine/audio/capabilities', {
+                method: 'GET',
+                timeout: 5000,
+                ...options
+            });
+        } catch (err) {
+            console.debug('[engine_api_service] Audio capabilities check failed:', err);
+            return null;
+        }
+    },
+
+    /**
      * speak
      * Synthesizes text to audio using the backend TTS engine.
      */
@@ -128,16 +167,22 @@ export const engine_api_service = {
 
     /**
      * transcribe
-     * Transcribes audio using the backend's high-fidelity Whisper engine.
+     * Transcribes audio using the backend's configured STT engine (Groq or local Whisper).
      * Content-Type is omitted completely to let FormData automatically compute boundaries.
      */
-    transcribe: async (audio_blob: Blob): Promise<string> => {
+    transcribe: async (audio_blob: Blob, options?: { engine?: string; signal?: AbortSignal; timeout?: number }): Promise<string> => {
         const form_data = new FormData();
-        form_data.append('file', audio_blob, 'speech.wav');
+        const filename = resolve_audio_filename(audio_blob.type);
+        form_data.append('file', audio_blob, filename);
+        if (options?.engine) {
+            form_data.append('engine', options.engine);
+        }
 
         const data = await api_request<{ text?: string }>('/v1/engine/transcribe', {
             method: 'POST',
-            body: form_data
+            body: form_data,
+            signal: options?.signal,
+            timeout: options?.timeout
         });
 
         return data.text || '';

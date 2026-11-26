@@ -22,7 +22,8 @@ import type { Swarm_Node } from '../types/index';
 export type { Swarm_Node };
 import { api_request } from './base_api_service';
 
-import { engine_api_service } from './engine_api_service';
+import { engine_api_service, type AudioCapabilities, type AudioEngineCapability } from './engine_api_service';
+export type { AudioCapabilities, AudioEngineCapability };
 import { model_manager_api_service } from './model_manager_api_service';
 import { oversight_api_service } from './oversight_api_service';
 import { continuity_api_service } from './continuity_api_service';
@@ -181,6 +182,7 @@ export const system_api_service = {
     get_engine_status: engine_api_service.get_engine_status,
     check_health: engine_api_service.check_health,
     deploy_engine: engine_api_service.deploy_engine,
+    get_audio_capabilities: engine_api_service.get_audio_capabilities,
     speak: engine_api_service.speak,
     kill_agents: engine_api_service.kill_agents,
     shutdown_engine: engine_api_service.shutdown_engine,

@@ -17,7 +17,8 @@ import type {
     Agent_Metadata,
     Agent_Connector_Config,
     Agent_Voice_Engine,
-    Agent_Stt_Engine
+    Agent_Stt_Engine,
+    Execution_Mode
 } from './shared';
 
 export interface Agent {
@@ -143,6 +144,7 @@ export interface Task_Payload {
     budget_usd?: number;
     external_id?: string;
     safe_mode?: boolean;
+    execution_mode?: Execution_Mode;
     analysis?: boolean;
     swarm_depth?: number;
     swarm_lineage?: string[];

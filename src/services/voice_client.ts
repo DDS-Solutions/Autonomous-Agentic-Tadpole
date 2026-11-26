@@ -1,330 +1,305 @@
 /**
  * @docs ARCHITECTURE:AudioIntelligence
- * 
+ *
  * ### AI Assist Note
- * **Audio Service**: Real-time voice synthesis and transcription orchestrator. 
- * Manages the streaming of binary audio chunks via WebSocket and orchestrates the integration with the `Live_Voice_Hub`.
- * 
+ * **Audio Service Coordinator**: Orchestrates local and cloud speech synthesis, recognition,
+ * exclusive microphone capture leasing, input device selection, mute toggling, and real-time
+ * WebAudio RMS input metering via modular `src/services/voice/*` subsystems.
+ *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: WebSocket buffer underflow (audio stuttering), transcription latency spike, or sample-rate mismatch.
- * - **Telemetry Link**: Search for `[voice_client]` or `audio_stream_chunk` in UI tracing.
- * 
+ * - **Failure Path**: Concurrent mic lease contention (`mic_in_use`), WebView speech unavailability,
+ *   or hardware device denial surfaced through `on_error` (`Mic_Capture_Error`).
+ * - **Telemetry Link**: Search `[VoiceClient]` in browser logs.
+ *
  * @aiContext
- * - **Dependencies**: `socket.ts` (audio sync), `tadpoleos_service.ts` (TTS).
- * - **Side Effects**: Requires Microhone permission. Accesses `AudioContext` and `SpeechRecognition` hardware.
- * - **Mocking**: Mock `window.SpeechRecognition` and `AudioContext` for unit tests.
+ * - **Dependencies**: `system_api_service.ts`, `voice_diagnostics.ts`, `voice/*`.
+ * - **Side Effects**: Requires microphone permission; manages `AudioContext`, `MediaRecorder`, and `SpeechRecognition`.
+ * - **Mocking**: Mock `window.SpeechRecognition`, `navigator.mediaDevices`, and `AudioContext` for unit tests.
  */
 
+import { system_api_service } from './system_api_service';
+import {
+    classify_mic_error,
+    type Mic_Error_Code,
+    type Mic_Capture_Error,
+    type Audio_Input_Device,
+} from './voice_diagnostics';
+import { Pcm_Audio_Player } from './voice/pcm_player';
+import { Mic_Recorder } from './voice/recorder';
+import { Speech_Controller } from './voice/speech_controller';
+import { speak_browser, speak_premium } from './voice/tts_engine';
+import type {
+    Speech_Recognition_Interface,
+    Voice_Status,
+    Voice_Tts_Engine,
+} from './voice/types';
 
-import { tadpole_os_service } from './tadpoleos_service';
-import { tadpole_os_socket } from './socket';
+export { classify_mic_error, type Mic_Error_Code, type Mic_Capture_Error, type Audio_Input_Device };
+export type { Voice_Status, Voice_Tts_Engine };
 
-/** Minimal typed shape for a single SpeechRecognitionAlternative. */
-interface Speech_Alternative {
-    readonly transcript: string;
-}
-
-/** Minimal typed shape for a SpeechRecognitionResult. */
-interface Speech_Result {
-    readonly length: number;
-    [index: number]: Speech_Alternative;
-}
-
-/** Minimal typed shape for SpeechRecognitionResultList. */
-interface Speech_Result_List {
-    readonly length: number;
-    [index: number]: Speech_Result;
-}
-
-/** Cross-browser SpeechRecognition interface abstraction. */
-interface Speech_Recognition_Interface {
-    continuous: boolean;
-    interimResults: boolean;
-    lang: string;
-    onresult: (event: { results: Speech_Result_List }) => void;
-    onerror: (event: { error: string }) => void;
-    onend: () => void;
-    start: () => void;
-    stop: () => void;
-}
-
-/** Voice_Status: Current state of the voice recognition/synthesis system. */
-export type Voice_Status = 'idle' | 'initializing' | 'active' | 'stalled';
-
-/**
- * Voice_Client
- * Orchestrates local and cloud-based speech synthesis and recognition.
- * Refactored for strict snake_case compliance for backend parity.
- */
 export class Voice_Client {
-    private recognition: Speech_Recognition_Interface | null = null;
-    private is_listening = false;
-    private on_transcript_callback: ((text: string) => void) | null = null;
-    private on_status_callback: ((status: Voice_Status) => void) | null = null;
+    private readonly status_callbacks = new Set<(status: Voice_Status) => void>();
+    private readonly error_callbacks = new Set<(error: Mic_Capture_Error) => void>();
     private status: Voice_Status = 'idle';
-    private stall_timer: ReturnType<typeof setTimeout> | null = null;
-    
-    private media_recorder: MediaRecorder | null = null;
-    private audio_chunks: Blob[] = [];
-    private audio_context: AudioContext | null = null;
-    private next_start_time = 0;
+    private is_tts_speaking = false;
+    private tts_generation = 0;
+
+    private last_mic_error: Mic_Capture_Error | null = null;
+    private mic_owner: string | null = null;
+
     private backend_features: string[] = [];
+    private features_detected = false;
+    private is_destroyed = false;
+
+    private readonly pcm_player = new Pcm_Audio_Player();
+    private readonly recorder: Mic_Recorder;
+    private readonly speech: Speech_Controller;
 
     constructor() {
-        this.init_feature_detection();
-        const win = window as unknown as {
-            SpeechRecognition?: new () => Speech_Recognition_Interface,
-            webkitSpeechRecognition?: new () => Speech_Recognition_Interface
-        };
-        const SpeechRecognitionClass = win.SpeechRecognition || win.webkitSpeechRecognition;
-        if (SpeechRecognitionClass) {
-            this.recognition = new SpeechRecognitionClass();
-            this.recognition.continuous = true;
-            this.recognition.interimResults = false; // Set to false to reduce flicker/overhead
-            this.recognition.lang = 'en-US';
-
-            this.recognition.onresult = (event) => {
-                const results = event.results;
-                const transcript = results[results.length - 1][0].transcript.trim();
-                
-                // Clear stall timer on first valid result
-                if (this.status === 'initializing' || this.status === 'stalled') {
-                    if (this.stall_timer) {
-                        clearTimeout(this.stall_timer);
-                        this.stall_timer = null;
-                    }
-                    this.set_status('active');
-                }
-
-                if (transcript && this.on_transcript_callback) {
-                    this.on_transcript_callback(transcript);
-                }
-            };
-
-            this.recognition.onend = () => {
-                if (this.is_listening && this.recognition) {
-                    this.recognition.start(); // Keep listening if we're supposed to be
-                } else if (!this.is_listening) {
-                    this.set_status('idle');
-                }
-            };
-
-            this.recognition.onerror = (event) => {
-                console.error('[VoiceClient] Recognition error:', event.error);
-                if (event.error === 'not-allowed') {
-                    this.is_listening = false;
-                    this.set_status('idle');
-                } else {
-                    this.set_status('stalled');
-                }
-            };
-        } else {
-            console.warn('[VoiceClient] Web Speech API not supported in this browser.');
-        }
-
-        // Initialize streaming audio handler
-        tadpole_os_socket.subscribe_audio_stream((chunk) => {
-            this.handle_audio_chunk(chunk);
+        this.recorder = new Mic_Recorder({
+            acquire_lease: (owner) => this.acquire_and_emit_lease(owner),
+            release_lease: (owner) => this.release_mic_lease(owner),
+            emit_error: (err) => this.emit_error(err),
+            clear_last_error: () => {
+                this.last_mic_error = null;
+            },
+            is_destroyed: () => this.is_destroyed,
         });
+
+        this.speech = new Speech_Controller({
+            acquire_lease: (owner) => this.acquire_and_emit_lease(owner),
+            release_lease: (owner) => this.release_mic_lease(owner),
+            emit_error: (err) => this.emit_error(err),
+            set_status: (status) => this.set_status(status),
+            get_status: () => this.status,
+            ensure_feature_detection: () => this.ensure_feature_detection(),
+            is_tts_speaking: () => this.is_tts_speaking,
+            is_destroyed: () => this.is_destroyed,
+        });
+    }
+
+    /** Internal accessor preserved for unit-test event simulation hooks. */
+    protected get recognition(): Speech_Recognition_Interface | null {
+        return this.speech.get_recognition();
+    }
+
+    /** Internal accessor preserved for unit-test MediaRecorder inspection hooks. */
+    protected get media_recorder(): MediaRecorder | null {
+        return this.recorder.get_media_recorder();
+    }
+
+    // ─── Exclusive Microphone Lease ─────────────────────────────────────────
+
+    public acquire_mic_lease(owner: string): boolean {
+        if (this.mic_owner && this.mic_owner !== owner) {
+            this.last_mic_error = {
+                code: 'mic_in_use',
+                message: `Microphone is already active in another voice session (${this.mic_owner}). Stop that session first.`,
+            };
+            return false;
+        }
+        this.mic_owner = owner;
+        return true;
+    }
+
+    public release_mic_lease(owner: string): void {
+        if (this.mic_owner === owner) {
+            this.mic_owner = null;
+        }
+    }
+
+    public get_mic_owner(): string | null {
+        return this.mic_owner;
+    }
+
+    public get_last_mic_error(): Mic_Capture_Error | null {
+        return this.last_mic_error;
+    }
+
+    public is_speech_recognition_supported(): boolean {
+        return this.speech.is_supported();
+    }
+
+    public set_input_device(device_id: string | null): void {
+        this.recorder.set_input_device(device_id);
+    }
+
+    public get_input_device(): string | null {
+        return this.recorder.get_input_device();
+    }
+
+    public async list_input_devices(): Promise<Audio_Input_Device[]> {
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+            return [];
+        }
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            return devices
+                .filter((d) => d.kind === 'audioinput')
+                .map((d, idx) => ({
+                    device_id: d.deviceId,
+                    label: d.label || `Microphone ${idx + 1}`,
+                }));
+        } catch (err) {
+            console.debug('[VoiceClient] Failed to enumerate audio devices:', err);
+            return [];
+        }
+    }
+
+    public get_muted(): boolean {
+        return this.recorder.get_muted();
+    }
+
+    public set_muted(muted: boolean): boolean {
+        return this.recorder.set_muted(muted);
+    }
+
+    public toggle_mute(): boolean {
+        return this.recorder.set_muted(!this.recorder.get_muted());
+    }
+
+    public get_input_level(): number {
+        return this.recorder.get_input_level();
+    }
+
+    public ensure_audio_subscription(): void {
+        this.pcm_player.ensure_subscription();
     }
 
     public get_status = (): Voice_Status => {
         return this.status;
     };
 
-    private status_listeners: ((status: Voice_Status) => void)[] = [];
-    
-    public on_status_change = (callback: (status: Voice_Status) => void): () => void => {
-        this.status_listeners.push(callback);
+    public on_status_change = (callback: (status: Voice_Status) => void): (() => void) => {
+        this.status_callbacks.add(callback);
         return () => {
-            this.status_listeners = this.status_listeners.filter(cb => cb !== callback);
+            this.status_callbacks.delete(callback);
         };
     };
 
-    private set_status(status: Voice_Status): void {
-        this.status = status;
-        this.status_listeners.forEach(cb => cb(status));
-        if (this.on_status_callback) {
-            this.on_status_callback(status);
-        }
+    public on_error = (callback: (error: Mic_Capture_Error) => void): (() => void) => {
+        this.error_callbacks.add(callback);
+        return () => {
+            this.error_callbacks.delete(callback);
+        };
+    };
+
+    public is_speaking_tts(): boolean {
+        return this.is_tts_speaking;
     }
 
-    start_listening(callback: (text: string) => void): void {
-        if (!this.recognition) {
-            console.error('[VoiceClient] Recognition engine unavailable.');
-            return;
-        }
-
-        console.debug('[VoiceClient] Initializing voice link...');
-        this.on_transcript_callback = callback;
-        this.is_listening = true;
-        this.set_status('initializing');
-
-        // Start 5s stall detection timer
-        if (this.stall_timer) clearTimeout(this.stall_timer);
-        this.stall_timer = setTimeout(() => {
-            if (this.status === 'initializing') {
-                console.warn('[VoiceClient] Voice link stalled: No signal detected after 5s.');
-                this.set_status('stalled');
-            }
-        }, 5000);
-
-        try {
-            this.recognition.start();
-        } catch {
-            // Silently fail if already started
-        }
+    public start_listening(callback: (text: string) => void): boolean {
+        return this.speech.start(callback);
     }
 
-    stop_listening(): void {
-        console.debug('[VoiceClient] Terminating voice link.');
-        this.is_listening = false;
-        this.set_status('idle');
-        if (this.stall_timer) {
-            clearTimeout(this.stall_timer);
-            this.stall_timer = null;
-        }
-        if (this.recognition) {
-            this.recognition.stop();
-        }
+    public stop_listening(): void {
+        this.speech.stop();
     }
 
-    async start_recording(): Promise<void> {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.media_recorder = new MediaRecorder(stream);
-            this.audio_chunks = [];
-
-            this.media_recorder.ondataavailable = (event) => {
-                this.audio_chunks.push(event.data);
-            };
-
-            this.media_recorder.start();
-        } catch (err) {
-            console.error('[VoiceClient] Failed to start recording:', err);
-        }
+    public start_recording(owner: string = 'media-recorder'): Promise<boolean> {
+        return this.recorder.start(owner);
     }
 
-    async stop_recording(): Promise<Blob | null> {
-        return new Promise((resolve) => {
-            if (!this.media_recorder) return resolve(null);
-
-            this.media_recorder.onstop = () => {
-                const audio_blob = new Blob(this.audio_chunks, { type: 'audio/wav' });
-                resolve(audio_blob);
-            };
-
-            this.media_recorder.stop();
-            this.media_recorder.stream.getTracks().forEach(track => track.stop());
-            this.media_recorder = null;
-        });
+    public stop_recording(owner: string = 'media-recorder'): Promise<Blob | null> {
+        return this.recorder.stop(owner);
     }
 
-    async speak(text: string, voice_id?: string, engine: 'browser' | 'openai' | 'groq' | 'piper' | 'gemini-live' = 'browser'): Promise<void> {
+    public async speak(text: string, voice_id?: string, engine: Voice_Tts_Engine = 'browser'): Promise<void> {
         if (!text) return;
 
-        // Cancel any ongoing speech
-        if (window.speechSynthesis) {
+        this.ensure_feature_detection();
+        const generation = ++this.tts_generation;
+        this.is_tts_speaking = true;
+        this.speech.pause_for_tts();
+
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
 
-        const synthesis_engine = this.backend_features.includes('neural-audio') ? engine : 'browser';
-
-        if (synthesis_engine === 'browser') {
-            this.speak_browser(text, voice_id);
-        } else {
-            await this.speak_premium(text, voice_id, synthesis_engine);
-        }
-    }
-
-    private speak_browser(text: string, preferred_voice_name?: string): void {
-        if (!window.speechSynthesis) return;
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        // Try to find the preferred voice or a nice default
-        const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.name === preferred_voice_name) ||
-            voices.find(v => v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Samantha'));
-
-        if (voice) {
-            utterance.voice = voice;
-        }
-
-        window.speechSynthesis.speak(utterance);
-    }
-
-    private async speak_premium(text: string, voice_id?: string, engine: string = 'openai') {
-        try {
-            const audio_blob = await tadpole_os_service.speak(text, voice_id, engine);
-            const audio_url = URL.createObjectURL(audio_blob);
-            const audio = new Audio(audio_url);
-            await audio.play();
-
-            // Cleanup URL after playing
-            audio.onended = () => URL.revokeObjectURL(audio_url);
-        } catch (err) {
-            console.error('[VoiceClient] Premium TTS error:', err);
-            this.speak_browser(text);
-        }
-    }
-
-    private async handle_audio_chunk(chunk: ArrayBuffer): Promise<void> {
-        if (!this.audio_context) {
-            const win = window as unknown as { AudioContext: typeof AudioContext; webkitAudioContext: typeof AudioContext };
-            const AudioContextClass = win.AudioContext || win.webkitAudioContext;
-            this.audio_context = new AudioContextClass();
-            this.next_start_time = this.audio_context.currentTime;
-        }
-
-        if (this.audio_context.state === 'suspended') {
-            await this.audio_context.resume();
-        }
+        const synthesis_engine: 'browser' | 'openai' | 'piper' =
+            engine === 'openai' || engine === 'piper' ? engine : 'browser';
 
         try {
-            // Assume 16-bit PCM at 22050Hz (standard for Piper)
-            const int16_array = new Int16Array(chunk);
-            const float32_array = new Float32Array(int16_array.length);
-            for (let i = 0; i < int16_array.length; i++) {
-                float32_array[i] = int16_array[i] / 32768.0;
+            if (synthesis_engine === 'browser') {
+                await speak_browser(text, voice_id);
+            } else {
+                await speak_premium(text, voice_id, synthesis_engine, () => this.ensure_audio_subscription());
             }
-
-            const buffer = this.audio_context.createBuffer(1, float32_array.length, 22050);
-            buffer.getChannelData(0).set(float32_array);
-
-            const source = this.audio_context.createBufferSource();
-            source.buffer = buffer;
-            source.connect(this.audio_context.destination);
-
-            const start_time = Math.max(this.audio_context.currentTime, this.next_start_time);
-            source.start(start_time);
-            this.next_start_time = start_time + buffer.duration;
-        } catch (err) {
-            console.error('[VoiceClient] Chunk playback failed:', err);
+        } finally {
+            if (generation === this.tts_generation) {
+                this.is_tts_speaking = false;
+                this.speech.schedule_resume_after_tts(450);
+            }
         }
+    }
+
+    public destroy(): void {
+        this.is_destroyed = true;
+        this.stop_listening();
+        void this.stop_recording();
+        this.recorder.teardown_meter();
+        this.status_callbacks.clear();
+        this.error_callbacks.clear();
+        this.mic_owner = null;
+        this.pcm_player.destroy();
+    }
+
+    private acquire_and_emit_lease(owner: string): boolean {
+        if (this.acquire_mic_lease(owner)) {
+            return true;
+        }
+        if (this.last_mic_error) {
+            this.emit_error(this.last_mic_error);
+        }
+        return false;
+    }
+
+    private emit_error(error: Mic_Capture_Error): void {
+        this.last_mic_error = error;
+        this.error_callbacks.forEach((cb) => {
+            try {
+                cb(error);
+            } catch (err) {
+                console.error('[VoiceClient] Error in error callback:', err);
+            }
+        });
+    }
+
+    private set_status(status: Voice_Status): void {
+        this.status = status;
+        this.status_callbacks.forEach((callback) => {
+            try {
+                callback(status);
+            } catch (err) {
+                console.error('[VoiceClient] Error in status callback:', err);
+            }
+        });
+    }
+
+    private ensure_feature_detection(): void {
+        if (this.features_detected) return;
+        this.features_detected = true;
+        void this.init_feature_detection();
     }
 
     private async init_feature_detection(): Promise<void> {
         try {
-            const { system_api_service } = await import('./system_api_service');
+            if (this.is_destroyed) return;
             const status = await system_api_service.get_engine_status();
+            if (this.is_destroyed) return;
             this.backend_features = status?.features || [];
-            
+
             if (!this.backend_features.includes('neural-audio')) {
-                console.debug('[VoiceClient] Backend "neural-audio" feature missing. Defaulting to local browser synthesis.');
+                console.debug('[VoiceClient] Backend "neural-audio" feature missing. Local Piper/Whisper disabled; cloud and browser engines available.');
             }
-        } catch {
-            // Fallback to empty if engine is unreachable
+        } catch (err) {
+            if (!this.is_destroyed) {
+                console.debug('[VoiceClient] Feature detection failed, engine unreachable:', err);
+            }
         }
     }
 }
 
 export const voice_client = new Voice_Client();
-
-
-
 
 // Metadata: [voice_client]

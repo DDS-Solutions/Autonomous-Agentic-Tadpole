@@ -150,21 +150,30 @@ impl AgentRunner {
             }
         }
 
-        let safe_mode = payload.safe_mode.unwrap_or(false);
-        self.apply_security_gates(
-            safe_mode || accept_mode == crate::agent::types::AcceptMode::Observe,
-            &mut skills,
-            &mut workflows,
-        );
+        let execution_mode = payload.resolved_execution_mode();
+        let safe_mode = execution_mode.is_safe_mode() || payload.safe_mode.unwrap_or(false);
+        if !execution_mode.allows_tools() {
+            skills.clear();
+            workflows.clear();
+        } else {
+            self.apply_security_gates(
+                safe_mode || accept_mode == crate::agent::types::AcceptMode::Observe,
+                &mut skills,
+                &mut workflows,
+            );
+        }
 
         // 6. Mission Financials
-        let (budget_usd, current_cost_usd) = if mission_id != "system-internal" && !mission_id.is_empty() {
+        let (budget_usd, current_cost_usd) = if execution_mode.creates_mission()
+            && mission_id != "system-internal"
+            && !mission_id.is_empty()
+        {
             match crate::agent::mission::get_mission_by_id(&self.state.resources.pool, mission_id).await {
                 Ok(Some(m)) => (m.budget_usd, m.cost_usd),
                 _ => (payload.budget_usd.unwrap_or(0.0), 0.0),
             }
         } else {
-            (0.0, 0.0)
+            (payload.budget_usd.unwrap_or(0.0), 0.0)
         };
 
         Ok(RunContext {
@@ -186,6 +195,7 @@ impl AgentRunner {
             workspace_root,
             fs_adapter,
             safe_mode,
+            execution_mode,
             analysis: payload.analysis.unwrap_or(false),
             traceparent: payload.traceparent.clone(),
             trace_id: payload.traceparent.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
@@ -263,11 +273,15 @@ impl AgentRunner {
         ctx.structured_output = payload.structured_output.unwrap_or(false);
         ctx.backlog = None; // Reserved for global backlog injection
 
-        // 1. Process Mission History & Summarization (4k Threshold)
-        self.process_mission_summarization(&mut ctx, mission_id).await;
+        // 1. Process Mission History & Summarization (4k Threshold — Swarm missions only)
+        if ctx.execution_mode.creates_mission() {
+            self.process_mission_summarization(&mut ctx, mission_id).await;
+        }
 
-        // 2. Synchronize Remote Memory (Hybrid RAG)
-        self.synchronize_rag_memory(&ctx, &payload.message).await;
+        // 2. Synchronize Remote Memory (Hybrid RAG — skipped in lightweight Chat Mode)
+        if ctx.execution_mode != crate::agent::types::ExecutionMode::Chat {
+            self.synchronize_rag_memory(&ctx, &payload.message).await;
+        }
 
         Ok(ctx)
     }

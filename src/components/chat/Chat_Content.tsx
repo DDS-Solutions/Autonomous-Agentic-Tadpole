@@ -2,30 +2,29 @@
  * @docs ARCHITECTURE:Interface
  *
  * ### AI Assist Note
- * **UI Assembly Component**: Composes the extracted Sovereign Chat sub-components
- * (Header, Breadcrumb, Scope Selector, Message List, Input Bar, ArtifactWorkspace) into a
- * unified content layout. Used by both the inline and detached (Portal) render paths.
- * Replaces the former inline `SovereignChatContent` that had a 35-prop interface.
+ * **UI Assembly Component**: Composes Sovereign Chat sub-components (Header, Multiversal Branches,
+ * Breadcrumb, Scope Selector, Message List / Transcript, Suspended-Agent Resume Banner, Input Bar,
+ * and ArtifactWorkspace) with RAF streaming scroll-lock backpressure.
  *
  * ### 🔍 Debugging & Observability
- * - **Failure Path**: Scroll container not auto-scrolling (if scroll_ref not attached).
- * - **Telemetry Link**: Search for `[Chat_Content]` in React DevTools Profiler.
+ * - **Failure Path**: Scroll container not auto-scrolling (if scroll_ref not attached) or user scroll lock.
+ * - **Telemetry Link**: Search `[Chat_Content]` in React DevTools Profiler.
  */
 
 import React, { useRef, useEffect } from 'react';
 import { type DragControls, AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
+import { AlertTriangle, Play } from 'lucide-react';
 import { type Voice_Status } from '../../services/voice_client';
 import { i18n } from '../../i18n';
 import { type Sovereign_Scope, type Chat_Message, type SessionLeaf } from '../../stores/sovereign_store';
 import { type Mission_Cluster } from '../../stores/workspace_store';
-import type { Agent } from '../../types';
+import type { Agent, Execution_Mode } from '../../types';
 import { Chat_Header } from './Chat_Header';
 import { Chat_Lineage_Breadcrumb } from './Chat_Lineage_Breadcrumb';
 import { Chat_Scope_Selector } from './Chat_Scope_Selector';
 import { Chat_Message_List } from './Chat_Message_List';
 import { Chat_Input_Bar } from './Chat_Input_Bar';
-import { AlertTriangle, Play } from 'lucide-react';
 import { agent_api_service } from '../../services/agent_api_service';
 import { use_agent_registry_store } from '../../stores/agent_registry_store';
 import { Buffered_Transcript_View } from '../transcript/Buffered_Transcript_View';
@@ -44,6 +43,8 @@ export interface Chat_Content_Props {
     // Voice state
     is_speaking: boolean;
     voice_status: Voice_Status;
+    voice_error?: string | null;
+    on_clear_voice_error?: () => void;
 
     // Transcript toggle
     show_transcript: boolean;
@@ -63,9 +64,13 @@ export interface Chat_Content_Props {
     on_toggle_speech: () => void;
     is_speech_enabled: boolean;
 
-    // Safety
+    // Safety & 3-Mode Execution
     on_toggle_safety: () => void;
     is_safe_mode: boolean;
+    execution_mode?: Execution_Mode;
+    on_change_execution_mode?: (mode: Execution_Mode) => void;
+    can_launch_swarm?: boolean;
+    on_launch_swarm?: () => void;
 
     // Window controls
     on_toggle_detach: () => void;
@@ -82,7 +87,7 @@ export interface Chat_Content_Props {
     set_target_cluster: (name: string) => void;
     clusters: Mission_Cluster[];
 
-    // Multiversal & Workspace props
+    // Preserved Multiversal & Workspace props
     activeNodeId?: string | null;
     activeMissionId?: string | null;
     sessionLeaves?: SessionLeaf[];
@@ -100,12 +105,6 @@ export interface Chat_Content_Props {
     container_props?: React.HTMLAttributes<HTMLDivElement>;
 }
 
-/**
- * Chat_Content
- * Assembly component that composes Header, Breadcrumb, Scope Selector,
- * Message List / Transcript View, and Input Bar.
- * Used by both inline and Portal render paths.
- */
 export const Chat_Content: React.FC<Chat_Content_Props> = ({
     is_detached,
     active_scope,
@@ -115,6 +114,8 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
     selected_agent_id,
     is_speaking,
     voice_status,
+    voice_error,
+    on_clear_voice_error,
     show_transcript,
     set_show_transcript,
     messages,
@@ -127,6 +128,10 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
     is_speech_enabled,
     on_toggle_safety,
     is_safe_mode,
+    execution_mode,
+    on_change_execution_mode,
+    can_launch_swarm,
+    on_launch_swarm,
     on_toggle_detach,
     on_clear_history,
     on_minimize,
@@ -153,14 +158,55 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
     container_props,
 }) => {
     const scroll_ref = useRef<HTMLDivElement>(null);
+    const is_user_scrolled_up_ref = useRef(false);
+    const raf_id_ref = useRef<number | null>(null);
+    const prev_messages_len_ref = useRef(messages.length);
+
+    const handle_scroll = () => {
+        if (!scroll_ref.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = scroll_ref.current;
+        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+        is_user_scrolled_up_ref.current = distanceFromBottom > 80;
+    };
 
     useEffect(() => {
-        if (scroll_ref.current) {
-            scroll_ref.current.scrollTo({
-                top: scroll_ref.current.scrollHeight,
-                behavior: 'auto'
-            });
+        const isNewMessage = messages.length > prev_messages_len_ref.current;
+        prev_messages_len_ref.current = messages.length;
+
+        if (isNewMessage) {
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.sender_id === '0') {
+                is_user_scrolled_up_ref.current = false;
+            }
         }
+
+        if (is_user_scrolled_up_ref.current) {
+            return;
+        }
+
+        if (raf_id_ref.current !== null) {
+            cancelAnimationFrame(raf_id_ref.current);
+        }
+
+        raf_id_ref.current = requestAnimationFrame(() => {
+            if (scroll_ref.current) {
+                if (isNewMessage && typeof scroll_ref.current.scrollTo === 'function') {
+                    scroll_ref.current.scrollTo({
+                        top: scroll_ref.current.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                } else {
+                    scroll_ref.current.scrollTop = scroll_ref.current.scrollHeight;
+                }
+            }
+            raf_id_ref.current = null;
+        });
+
+        return () => {
+            if (raf_id_ref.current !== null) {
+                cancelAnimationFrame(raf_id_ref.current);
+            }
+        };
     }, [messages]);
 
     const targeted_agent = active_scope === 'agent'
@@ -172,7 +218,7 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
             {!is_detached && <div className="neural-grid opacity-[0.05] absolute inset-0 pointer-events-none" />}
 
             {setWorkspaceOpen && (
-                <ArtifactWorkspace 
+                <ArtifactWorkspace
                     agentId={selected_agent_id || 'ceo'}
                     missionId={activeMissionId || 'global'}
                     isOpen={isWorkspaceOpen}
@@ -201,7 +247,7 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                 onFetchLeaves={onFetchLeaves}
             />
 
-            {/* Branch Selector Dropdown - color changed to cyan */}
+            {/* Preserved Multiversal Branch Selector Dropdown */}
             <AnimatePresence>
                 {showBranches && (
                     <motion.div
@@ -220,13 +266,13 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                                         <button
                                             key={leaf.id}
                                             onClick={() => {
-                                                if (activeMissionId && onFetchHistory) onFetchHistory(activeMissionId, leaf.id);
+                                                if (activeMissionId && onFetchHistory) void onFetchHistory(activeMissionId, leaf.id);
                                                 setShowBranches?.(false);
                                             }}
                                             className={clsx(
                                                 "text-left p-2 rounded border transition-all flex items-center justify-between group",
-                                                activeNodeId === leaf.id 
-                                                    ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400" 
+                                                activeNodeId === leaf.id
+                                                    ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
                                                     : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
                                             )}
                                         >
@@ -266,7 +312,8 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
             {/* Messages Window */}
             <div
                 ref={scroll_ref}
-                className="relative z-10 flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar"
+                onScroll={handle_scroll}
+                className="relative z-10 flex-1 min-h-0 overflow-y-auto p-5 space-y-6 custom-scrollbar"
             >
                 {show_transcript ? (
                     <Buffered_Transcript_View agent_id={selected_agent_id || undefined} />
@@ -281,6 +328,7 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                 )}
             </div>
 
+            {/* Preserved Suspended-Agent Resume Banner */}
             {active_scope === 'agent' && targeted_agent?.status === 'suspended' && (
                 <div className="mx-4 mb-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs text-amber-300 relative z-20 animate-in fade-in slide-in-from-bottom-2 duration-200">
                     <span className="flex items-center gap-1.5">
@@ -288,6 +336,7 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                         <span>Agent <strong>{targeted_agent.name}</strong> is administratively suspended.</span>
                     </span>
                     <button
+                        type="button"
                         onClick={async () => {
                             if (targeted_agent.id) {
                                 try {
@@ -309,6 +358,10 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
             <Chat_Input_Bar
                 active_scope={active_scope}
                 is_safe_mode={is_safe_mode}
+                execution_mode={execution_mode}
+                on_change_execution_mode={on_change_execution_mode}
+                can_launch_swarm={can_launch_swarm}
+                on_launch_swarm={on_launch_swarm}
                 is_speech_enabled={is_speech_enabled}
                 is_speaking={is_speaking}
                 input_value={input_text}
@@ -318,6 +371,8 @@ export const Chat_Content: React.FC<Chat_Content_Props> = ({
                 on_toggle_speech={on_toggle_speech}
                 on_toggle_safety={on_toggle_safety}
                 is_listening={voice_status !== 'idle'}
+                voice_error={voice_error}
+                on_clear_voice_error={on_clear_voice_error}
             />
         </div>
     );

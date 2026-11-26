@@ -172,6 +172,7 @@ pub(crate) fn spawn_post_mission_analysis(
                 swarm_lineage: Some(vec![ctx_agent_id.clone()]),
                 external_id: None,
                 safe_mode: Some(false),
+                execution_mode: Some(crate::agent::types::ExecutionMode::Swarm),
                 analysis: Some(false),
                 traceparent: traceparent.clone(),
                 user_id: None,

@@ -18,6 +18,9 @@ export type Agent_Voice_Engine = 'browser' | 'openai' | 'groq' | 'piper' | 'gemi
 
 export type Agent_Stt_Engine = 'groq' | 'whisper';
 
+/** Execution mode controlling tool exposure and Mission persistence. */
+export type Execution_Mode = 'chat' | 'plan' | 'swarm';
+
 export type Agent_Metadata = Record<string, unknown>;
 
 export interface Agent_Connector_Config {

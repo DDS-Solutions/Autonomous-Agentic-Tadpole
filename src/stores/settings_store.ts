@@ -21,6 +21,18 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { Execution_Mode } from '../contracts/agent';
+
+export type { Execution_Mode };
+
+export function resolve_execution_mode(
+    settings?: Pick<Tadpole_Settings, 'execution_mode' | 'is_safe_mode'> | null
+): Execution_Mode {
+    if (settings?.execution_mode === 'chat' || settings?.execution_mode === 'plan' || settings?.execution_mode === 'swarm') {
+        return settings.execution_mode;
+    }
+    return settings?.is_safe_mode ? 'plan' : 'swarm';
+}
 
 const SETTINGS_KEY = 'tadpole_settings';
 /** 
@@ -118,6 +130,7 @@ export interface Tadpole_Settings {
     max_task_length: number;
     default_budget_usd: number;
     is_safe_mode: boolean;
+    execution_mode?: Execution_Mode;
     privacy_mode: boolean;
     browser_specialist_model_id: string;
     computer_architect_url: string;
@@ -292,6 +305,26 @@ export const use_settings_store = create<Settings_State>()(
                     final_value = Math.min(10, Math.max(1, Math.floor(value))) as unknown as Tadpole_Settings[K];
                 } else if (key === 'default_budget_usd' && typeof value === 'number') {
                     final_value = Math.max(0, value) as unknown as Tadpole_Settings[K];
+                } else if (key === 'execution_mode' && typeof value === 'string') {
+                    const mode = value as Execution_Mode;
+                    set({
+                        settings: {
+                            ...current,
+                            execution_mode: mode,
+                            is_safe_mode: mode !== 'swarm',
+                        }
+                    });
+                    return;
+                } else if (key === 'is_safe_mode' && typeof value === 'boolean') {
+                    const next_mode: Execution_Mode = value ? 'chat' : 'swarm';
+                    set({
+                        settings: {
+                            ...current,
+                            is_safe_mode: value,
+                            execution_mode: next_mode,
+                        }
+                    });
+                    return;
                 }
 
                 set({ settings: { ...current, [key]: final_value } });

@@ -132,6 +132,12 @@ describe('process_command', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            '0',
+            true,
+            undefined,
+            undefined,
+            undefined,
             undefined
         );
     });
@@ -150,6 +156,12 @@ describe('process_command', () => {
             undefined,
             undefined,
             false,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            '0',
+            true,
             undefined,
             undefined,
             undefined,
@@ -174,6 +186,12 @@ describe('process_command', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            '0',
+            true,
+            undefined,
+            undefined,
+            undefined,
             undefined
         );
     });
@@ -195,7 +213,39 @@ describe('process_command', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            '0',
+            true,
+            undefined,
+            undefined,
+            undefined,
             undefined
+        );
+    });
+
+    it('should forward execution_mode and recent_findings to send_command', async () => {
+        await process_command('brainstorm caching', mock_agents, true, 'agent', 'CEO', 'chat', 'Prior note');
+
+        expect(agent_api_service.send_command).toHaveBeenCalledWith(
+            '1',
+            'brainstorm caching',
+            'gpt-4',
+            'openai',
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            true,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            '0',
+            true,
+            undefined,
+            undefined,
+            'chat',
+            'Prior note'
         );
     });
 
@@ -251,6 +301,12 @@ describe('process_command', () => {
                 undefined,
                 undefined,
                 undefined,
+                undefined,
+                '0',
+                true,
+                undefined,
+                undefined,
+                undefined,
                 undefined
             );
         });
@@ -290,6 +346,12 @@ describe('process_command', () => {
                 undefined,
                 undefined,
                 false,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                '0',
+                true,
                 undefined,
                 undefined,
                 undefined,

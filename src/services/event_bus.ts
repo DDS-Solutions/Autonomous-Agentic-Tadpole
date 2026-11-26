@@ -78,7 +78,10 @@ export interface telemetry_message {
     sender_id: string;
 }
 
-type Listener = (entry: log_entry) => void;
+/** Delivery origin for log subscribers so projections avoid cross-tab echo loops. */
+export type Log_Origin = 'local' | 'remote' | 'sync';
+
+type Listener = (entry: log_entry, origin?: Log_Origin) => void;
 
 /**
  * Lightweight pub/sub event bus.
@@ -126,7 +129,7 @@ class event_bus_service {
 
                     switch (msg.topic) {
                         case 'LOG':
-                            this.internal_emit(msg.payload as log_entry, false);
+                            this.internal_emit(msg.payload as log_entry, false, 'remote');
                             break;
                         case 'TRACE':
                             this.internal_emit_trace(msg.payload, false);
@@ -229,7 +232,7 @@ class event_bus_service {
                     const log = logs_to_notify[index];
                     this.listeners.forEach(listener => {
                         try {
-                            listener(log);
+                            listener(log, 'sync');
                         } catch (error) {
                             console.error('[event_bus] Error in listener during sync:', error);
                         }
@@ -296,7 +299,7 @@ class event_bus_service {
         this.internal_emit_pulse(pulse, true);
     }
 
-    private internal_emit(full_entry: log_entry, broadcast: boolean): void {
+    private internal_emit(full_entry: log_entry, broadcast: boolean, origin: Log_Origin = 'local'): void {
         if (this.processed_ids.has(full_entry.id)) {
             return;
         }
@@ -310,7 +313,7 @@ class event_bus_service {
 
         this.listeners.forEach(listener => {
             try {
-                listener(full_entry);
+                listener(full_entry, origin);
             } catch (error) {
                 console.error('[event_bus] Error in listener:', error);
             }
