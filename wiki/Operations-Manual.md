@@ -29,7 +29,7 @@ Key fields to monitor:
 
 | Field | Alert Threshold |
 |-------|----------------|
-| `database.wal_size_bytes` | > 100MB → trigger backup |
+| `database.wal_size_mb` | > 100 MB → trigger backup |
 | `budget.total_spent_usd` | > 80% of limit |
 | `uptime_seconds` | Unexpected reset = crash |
 
@@ -45,7 +45,7 @@ python execution/backup_sqlite.py
 
 # Backups are written to:
 # data/backups/tadpole_YYYYMMDD_HHMMSS.db
-# data/backups/tadpole_YYYYMMDD_HHMMSS.sha256
+# data/backups/tadpole_YYYYMMDD_HHMMSS.meta.json
 ```
 
 Recommended schedule: daily via cron or Windows Task Scheduler.
@@ -61,22 +61,17 @@ ls data/backups/
 ### Restore
 
 ```bash
-# List available backups
-python execution/restore_sqlite.py --list
-
-# Restore from a specific backup (dry-run first)
-python execution/restore_sqlite.py --backup data/backups/tadpole_20260626_020000.db --dry-run
-
-# Execute restore (stops engine first)
-python execution/restore_sqlite.py --backup data/backups/tadpole_20260626_020000.db
+# Stop the engine first, then restore from a specific backup path or filename:
+python execution/restore_sqlite.py data/backups/tadpole_20260626_020000.db
+# Optional flags: --allow-unverified (skip .meta.json SHA-256 check), --force (bypass live-engine check)
 ```
 
 The restore script:
-1. Stops the engine if running
-2. Verifies SHA-256 hash matches manifest
+1. Checks that the engine is not actively running (aborts unless `--force` is passed)
+2. Verifies the SHA-256 hash matches the companion `.meta.json` manifest
 3. Runs `PRAGMA integrity_check` on the backup
-4. Replaces `data/tadpole.db` atomically
-5. Restarts the engine
+4. Backs up the active `data/tadpole.db` to `tadpole.db.bak`, restores via SQLite `.backup()`, and cleans stale `-wal`/`-shm` sidecars
+5. Verifies table row-count parity (automatically rolling back from `tadpole.db.bak` on mismatch)
 
 ---
 
@@ -111,7 +106,9 @@ npm run engine
 Or use the automated script:
 
 ```bash
-python execution/rotate_token.py --new-token "new-token-value"
+python execution/rotate_token.py                  # generates a secure 64-hex token & sets 300s grace window
+# Restart engine, migrate clients, then confirm:
+python execution/rotate_token.py --confirm
 ```
 
 ---
@@ -158,25 +155,17 @@ The dashboard includes:
 
 ## 🗑️ GDPR / Data Deletion
 
-To perform a cascading deletion of all data for a specific agent:
-
-```sql
--- Run in SQLite (engine must be stopped first)
-DELETE FROM agent_memories WHERE agent_id = 'AGENT_ID';
-DELETE FROM agent_tasks WHERE agent_id = 'AGENT_ID';
-DELETE FROM audit_trail WHERE agent_id = 'AGENT_ID';
-DELETE FROM knowledge_store_meta WHERE source_agent_id = 'AGENT_ID';
-DELETE FROM agents WHERE id = 'AGENT_ID';
-```
-
-Or via the API:
+Delete an agent and its dependent operational records via the API:
 
 ```bash
 curl -X DELETE http://127.0.0.1:8000/v1/agents/AGENT_ID \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 ```
 
-The API cascade-deletes all associated memories, tasks, and oversight entries.
+`delete_agent_cascade` (`server-rs/src/agent/persistence.rs`) executes an atomic `BEGIN IMMEDIATE` transaction:
+- Rejects agents with `a2a_ledger` counterparty history (`409 Conflict` — suspend instead).
+- Preserves the append-only `audit_trail` Merkle chain intact and detaches `oversight_log.mission_id` (`SET NULL`).
+- Deletes child-first across `mission_logs`, `swarm_context`, `agent_directives`, `peer_reviews`, `mission_nodes`, `mission_quotas`, `file_revisions`, `mission_history`, `agent_economics_meta`, `agent_quotas`, `sync_manifest`, `fallback_memories`, `agent_hires`, `skill_subscriptions`, `agent_tasks`, and `agents`.
 
 ---
 
@@ -185,6 +174,7 @@ The API cascade-deletes all associated memories, tasks, and oversight entries.
 ### Normal Shutdown (4-Phase)
 
 ```bash
+# Uses NEURAL_TOKEN_ADMIN when tiered RBAC is configured
 curl -X POST http://127.0.0.1:8000/v1/engine/shutdown \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 ```
@@ -198,6 +188,7 @@ The 4-phase sequence:
 ### Emergency Kill
 
 ```bash
+# Uses NEURAL_TOKEN_ADMIN when tiered RBAC is configured
 curl -X POST http://127.0.0.1:8000/v1/engine/kill \
   -H "Authorization: Bearer $NEURAL_TOKEN"
 

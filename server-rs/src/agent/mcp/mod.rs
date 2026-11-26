@@ -1,16 +1,10 @@
 //! @docs ARCHITECTURE:Agent
 //!
 //! ### AI Assist Note
-//! **Model Context Protocol (MCP) Host**: Orchestrates the sovereign
-//! tool execution and environment interaction for the Tadpole OS
-//! engine. Features **Sovereign Permission Isolation**: every
-//! `call_tool` request passes through a `PermissionPolicy` gateway,
-//! preventing unauthorized access to filesystem or network resources.
-//! Implements **Dynamic Tool Registration**: supports both native Rust
-//! handlers (e.g., `RecruitSpecialist`) and external MCP servers
-//! defined in `mcp_config.json`. AI agents must check the `stats`
-//! telemetry (TPM/Latency) before dispatching high-frequency tool
-//! calls to avoid system throttling (MCP-01).
+//! **Model Context Protocol (MCP) Host**: Orchestrates sovereign tool execution,
+//! permission policy gates, telemetry stats/pulses, and secret scrubbing across
+//! native Hydra-RS tools (`builtins`), legacy sandboxed skills, and external MCP
+//! servers (`external`, `env`).
 //!
 //! ### 🔍 Debugging & Observability
 //! - **Failure Path**: Permission denied due to `Deny` policy mode,
@@ -20,56 +14,41 @@
 //!   `tracing` logs for real-time tool performance tracking.
 //! - **Trace Scope**: `server-rs::agent::mcp`
 
-pub mod registry;
+pub mod builtins;
 pub mod client;
-pub mod transport;
+pub mod env;
+pub mod external;
 pub mod ipc_bridge;
+pub mod registry;
+pub mod transport;
 
+#[cfg(test)]
+mod tests;
+
+pub use builtins::{
+    get_blast_radius, get_current_time, get_symbol_body, list_file_symbols, recruit_specialist,
+    run_integrity_check, GetBlastRadiusHandler, GetCurrentTimeHandler, GetSymbolBodyHandler,
+    InspectEngineHealthHandler, ListFileSymbolsHandler, RecruitSpecialistHandler,
+    RunIntegrityCheckHandler,
+};
+pub use env::{
+    floor_utf8_char_boundary, resolve_mcp_env, resolve_mcp_env_with, truncate_mcp_reply,
+    McpConfig, McpServerConfig, MAX_MCP_REPLY_BYTES,
+};
 pub use ipc_bridge::IpcBridge;
 
-#[allow(unused_imports)]
-use self::registry::{McpRegistry, ToolHandler};
+use self::registry::McpRegistry;
 use crate::agent::script_skills::SkillDefinition;
-use crate::security::permissions::{PermissionMode, PermissionPolicy, PermissionPrompter};
-use crate::secret_redactor::SecretRedactor;
-use crate::utils::parser::SymbolExtractor;
 use crate::error::AppError;
+use crate::secret_redactor::SecretRedactor;
+use crate::security::permissions::{PermissionMode, PermissionPolicy, PermissionPrompter};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use server_rs_macros::agent_tool;
-use dashmap::DashMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
-
-pub const MAX_MCP_REPLY_BYTES: usize = 2 * 1024 * 1024;
-
-/// Finds the largest valid UTF-8 character boundary `<= max_bytes`.
-/// Prevents panics when truncating strings containing multi-byte UTF-8 sequences.
-pub fn floor_utf8_char_boundary(s: &str, max_bytes: usize) -> usize {
-    if max_bytes >= s.len() {
-        return s.len();
-    }
-    let mut idx = max_bytes;
-    while idx > 0 && !s.is_char_boundary(idx) {
-        idx -= 1;
-    }
-    idx
-}
-
-/// Safely truncates an MCP/skill reply string at a valid UTF-8 character boundary.
-pub fn truncate_mcp_reply(raw: &str, max_bytes: usize, label: &str) -> String {
-    if raw.len() <= max_bytes {
-        return raw.to_string();
-    }
-    let safe_end = floor_utf8_char_boundary(raw, max_bytes);
-    format!(
-        "{}\n\n[TRUNCATED: {} exceeded 2MB limit]",
-        &raw[..safe_end],
-        label
-    )
-}
 
 /// Operational statistics for a specific tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
@@ -104,16 +83,23 @@ impl From<SkillDefinition> for McpToolHub {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(tag = "type", content = "data")]
+pub enum McpResult {
+    Raw(String),
+    SystemDelegate(String, serde_json::Value),
+}
+
 type CachedConfigEntry = Option<(std::time::SystemTime, Arc<McpConfig>)>;
 
 /// The primary host for managing tool registration and execution.
 pub struct McpHost {
     pub registry: Arc<Mutex<McpRegistry>>,
-    pub stats: Arc<dashmap::DashMap<String, McpToolStats>>,
+    pub stats: Arc<DashMap<String, McpToolStats>>,
     event_tx: broadcast::Sender<serde_json::Value>,
-    mcp_config_path: Option<PathBuf>,
+    pub(super) mcp_config_path: Option<PathBuf>,
     pub workspace_root: PathBuf,
-    cached_config: Arc<parking_lot::RwLock<CachedConfigEntry>>,
+    pub(super) cached_config: Arc<parking_lot::RwLock<CachedConfigEntry>>,
     pub policy: Arc<PermissionPolicy>,
     pub prompter: Arc<parking_lot::RwLock<Option<Arc<dyn PermissionPrompter>>>>,
     pub clients: Arc<Mutex<HashMap<String, Arc<Mutex<client::McpClient>>>>>,
@@ -139,19 +125,10 @@ impl McpHost {
             });
 
         let mut registry = McpRegistry::new();
-        let stats = Arc::new(dashmap::DashMap::new());
+        let stats = Arc::new(DashMap::new());
         let clients = Arc::new(Mutex::new(HashMap::new()));
 
-        // Register native Hydra-RS tools
-        registry.register(Arc::new(RecruitSpecialistHandler));
-        registry.register(Arc::new(ListFileSymbolsHandler));
-        registry.register(Arc::new(GetSymbolBodyHandler));
-        registry.register(Arc::new(RunIntegrityCheckHandler));
-        registry.register(Arc::new(GetCurrentTimeHandler));
-        registry.register(Arc::new(GetBlastRadiusHandler));
-        registry.register(Arc::new(InspectEngineHealthHandler {
-            stats: stats.clone(),
-        }));
+        builtins::register_native_tools(&mut registry, stats.clone());
 
         Self {
             registry: Arc::new(Mutex::new(registry)),
@@ -174,57 +151,6 @@ impl McpHost {
     pub fn with_prompter(self, prompter: Arc<dyn PermissionPrompter>) -> Self {
         *self.prompter.write() = Some(prompter);
         self
-    }
-
-    /// Loads and caches mcp_config.json anchored to workspace_root with mtime validation and size bounds.
-    pub async fn get_config(&self) -> Result<Arc<McpConfig>, AppError> {
-        let config_path = self.mcp_config_path.as_ref()
-            .ok_or_else(|| AppError::NotFound("MCP config path not configured".to_string()))?;
-
-        let safe_path = crate::utils::security::validate_path(&self.workspace_root, &config_path.to_string_lossy())
-            .map_err(|e| {
-                tracing::warn!("⚠️ [McpHost] MCP config path outside workspace: {}", e);
-                AppError::Forbidden(format!("MCP config path outside workspace: {}", e))
-            })?;
-
-        let metadata = tokio::fs::metadata(&safe_path).await.map_err(|e| {
-            tracing::warn!("⚠️ [McpHost] Failed to stat MCP config file at {:?}: {}", safe_path, e);
-            AppError::Io(e)
-        })?;
-
-        let mtime = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-
-        {
-            let cache = self.cached_config.read();
-            if let Some((cached_mtime, ref cfg)) = *cache {
-                if cached_mtime == mtime {
-                    return Ok(cfg.clone());
-                }
-            }
-        }
-
-        // Bounded read (1 MB max)
-        if metadata.len() > 1_000_000 {
-            return Err(AppError::BadRequest("MCP config file exceeds 1MB limit".to_string()));
-        }
-
-        let content = tokio::fs::read_to_string(&safe_path).await.map_err(|e| {
-            tracing::error!("❌ [McpHost] Failed to read MCP config at {:?}: {}", safe_path, e);
-            AppError::Io(e)
-        })?;
-
-        let config: McpConfig = serde_json::from_str(&content).map_err(|e| {
-            tracing::error!("❌ [McpHost] Malformed MCP config JSON at {:?}: {}", safe_path, e);
-            AppError::BadRequest(format!("Malformed MCP config: {}", e))
-        })?;
-
-        let config_arc = Arc::new(config);
-        {
-            let mut cache = self.cached_config.write();
-            *cache = Some((mtime, config_arc.clone()));
-        }
-
-        Ok(config_arc)
     }
 
     pub async fn list_tools(
@@ -262,7 +188,8 @@ impl McpHost {
 
         // 3. External MCP tools
         if let Ok(config) = self.get_config().await {
-            let skill_set: std::collections::HashSet<&str> = agent_skills.iter().map(|s| s.as_str()).collect();
+            let skill_set: std::collections::HashSet<&str> =
+                agent_skills.iter().map(|s| s.as_str()).collect();
 
             for server_name in config.mcp_servers.keys() {
                 if let Ok(client) = self.get_or_spawn_client(server_name).await {
@@ -276,14 +203,17 @@ impl McpHost {
                                 let namespaced = format!("{}:{}", server_name, name);
                                 let canonical_mcp = format!("mcp_{}_{}", server_name, name);
 
-                                // External tool is visible only if explicitly granted
                                 if (skill_set.contains(name)
                                     || skill_set.contains(namespaced.as_str())
                                     || skill_set.contains(canonical_mcp.as_str()))
                                     && seen_names.insert(name.to_string())
                                 {
-                                    let schema = t_val.get("inputSchema").cloned().unwrap_or(serde_json::json!({}));
-                                    let stats = self.stats.get(name).map(|s| s.clone()).unwrap_or_default();
+                                    let schema = t_val
+                                        .get("inputSchema")
+                                        .cloned()
+                                        .unwrap_or(serde_json::json!({}));
+                                    let stats =
+                                        self.stats.get(name).map(|s| s.clone()).unwrap_or_default();
                                     tools.push(McpToolHub {
                                         name: name.to_string(),
                                         description: desc.to_string(),
@@ -301,55 +231,6 @@ impl McpHost {
         }
 
         tools
-    }
-
-    /// Resolves a prefixed external MCP tool name (`server::tool`, `server:tool`, or `mcp_server_tool`)
-    /// purely against the configured server names without spawning subprocesses.
-    pub(crate) fn match_prefixed_external_tool(
-        tool_name: &str,
-        config: &McpConfig,
-    ) -> Option<(String, String)> {
-        if let Some((srv, tool)) = tool_name
-            .split_once("::")
-            .or_else(|| tool_name.split_once(':'))
-        {
-            if config.mcp_servers.contains_key(srv) && !tool.is_empty() {
-                return Some((srv.to_string(), tool.to_string()));
-            }
-        } else if let Some(rest) = tool_name.strip_prefix("mcp_") {
-            for srv in config.mcp_servers.keys() {
-                let prefix = format!("{}_", srv);
-                if let Some(actual) = rest.strip_prefix(&prefix) {
-                    if !actual.is_empty() {
-                        return Some((srv.clone(), actual.to_string()));
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// Resolves a tool name to `(server_name, actual_tool_name)` across configured MCP servers.
-    async fn resolve_external_mcp_tool(&self, tool_name: &str) -> Option<(String, String)> {
-        let config = self.get_config().await.ok()?;
-        if let Some(matched) = Self::match_prefixed_external_tool(tool_name, &config) {
-            return Some(matched);
-        }
-
-        for srv in config.mcp_servers.keys() {
-            if let Ok(client) = self.get_or_spawn_client(srv).await {
-                let mut client_lock = client.lock().await;
-                if let Ok(tools) = client_lock.list_tools().await {
-                    if tools
-                        .iter()
-                        .any(|t| t.get("name").and_then(|v| v.as_str()) == Some(tool_name))
-                    {
-                        return Some((srv.clone(), tool_name.to_string()));
-                    }
-                }
-            }
-        }
-        None
     }
 
     async fn tool_exists(
@@ -408,8 +289,6 @@ impl McpHost {
                             | "research_orchestrator"
                     )
                 {
-                    // 🛡️ [Headless Auto-Approval] Diagnostic & parity guard tools under Plane 1 (EngineMaintenance)
-                    // represent safe read/audit operations allowed when running headlessly without an interactive UI prompter.
                     tracing::info!(
                         tool = %clean_name,
                         agent_id = %ctx.agent_id,
@@ -443,7 +322,10 @@ impl McpHost {
         // 1. Sanitize tool name
         let clean_name = tool_name.trim();
         if clean_name.is_empty() || clean_name.len() > 128 || clean_name.contains('\0') {
-            return Err(AppError::BadRequest(format!("Invalid tool name '{}'", tool_name)));
+            return Err(AppError::BadRequest(format!(
+                "Invalid tool name '{}'",
+                tool_name
+            )));
         }
 
         // 2. Fast-fail if tool is not registered across native, skill, or configured MCP servers
@@ -452,7 +334,8 @@ impl McpHost {
         }
 
         // 3. Permission policy gate (fail closed)
-        self.check_permission_gate(clean_name, &arguments, ctx).await?;
+        self.check_permission_gate(clean_name, &arguments, ctx)
+            .await?;
 
         let result = self
             .execute_tool_internal(clean_name, arguments, ctx, all_skills)
@@ -472,18 +355,20 @@ impl McpHost {
                 self.scrub_json_value(&mut v);
                 Ok(McpResult::SystemDelegate(k, v))
             }
-            Err(AppError::InfrastructureError { provider_id, detail, help_link }) => {
-                Err(AppError::InfrastructureError {
-                    provider_id,
-                    detail: self.redactor.scrub(&detail),
-                    help_link,
-                })
-            }
+            Err(AppError::InfrastructureError {
+                provider_id,
+                detail,
+                help_link,
+            }) => Err(AppError::InfrastructureError {
+                provider_id,
+                detail: self.redactor.scrub(&detail),
+                help_link,
+            }),
             Err(e) => Err(e),
         }
     }
 
-    fn scrub_json_value(&self, val: &mut serde_json::Value) {
+    pub(super) fn scrub_json_value(&self, val: &mut serde_json::Value) {
         match val {
             serde_json::Value::String(s) => *s = self.redactor.scrub(s),
             serde_json::Value::Array(arr) => {
@@ -498,62 +383,6 @@ impl McpHost {
             }
             _ => {}
         }
-    }
-
-    /// Checks whether the calling agent's capability allow-list grants access to an external MCP tool.
-    fn is_agent_authorized_for_external_tool(
-        ctx: &crate::agent::types::ToolContext,
-        tool_name: &str,
-        server_name: &str,
-        actual_tool_name: &str,
-    ) -> bool {
-        if ctx.agent_id == "system" || ctx.agent_id == "admin" {
-            return true;
-        }
-        let Some(agent_entry) = ctx.state.registry.agents.get(&ctx.agent_id) else {
-            return true;
-        };
-        let granted = &agent_entry.capabilities.skills;
-        let namespaced_colon = format!("{}:{}", server_name, actual_tool_name);
-        let namespaced_double_colon = format!("{}::{}", server_name, actual_tool_name);
-        let legacy_mcp = format!("mcp_{}_{}", server_name, actual_tool_name);
-
-        granted.iter().any(|s| {
-            s == tool_name
-                || s == actual_tool_name
-                || s == &namespaced_colon
-                || s == &namespaced_double_colon
-                || s == &legacy_mcp
-        })
-    }
-
-    /// Formats a raw JSON-RPC MCP tool result into a bounded `McpResult::Raw` payload.
-    fn format_external_mcp_result(result: &serde_json::Value) -> Result<McpResult, AppError> {
-        if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-            let mut output = String::new();
-            for item in content {
-                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                    if output.len().saturating_add(text.len()) > MAX_MCP_REPLY_BYTES {
-                        let remaining = MAX_MCP_REPLY_BYTES.saturating_sub(output.len());
-                        let safe_end = floor_utf8_char_boundary(text, remaining);
-                        output.push_str(&text[..safe_end]);
-                        output.push_str("\n\n[TRUNCATED: MCP response exceeded 2MB limit]");
-                        break;
-                    } else {
-                        output.push_str(text);
-                    }
-                }
-            }
-            return Ok(McpResult::Raw(output));
-        }
-
-        let serialized = serde_json::to_string_pretty(result)
-            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-        Ok(McpResult::Raw(truncate_mcp_reply(
-            &serialized,
-            MAX_MCP_REPLY_BYTES,
-            "MCP response",
-        )))
     }
 
     async fn execute_tool_internal(
@@ -583,7 +412,9 @@ impl McpHost {
         }
 
         // 3. Resolve External MCP Server tool
-        if let Some((server_name, actual_tool_name)) = self.resolve_external_mcp_tool(tool_name).await {
+        if let Some((server_name, actual_tool_name)) =
+            self.resolve_external_mcp_tool(tool_name).await
+        {
             if !actual_tool_name
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
@@ -594,7 +425,6 @@ impl McpHost {
                 )));
             }
 
-            // SEC: Enforce allow-list against agent's granted skills
             if !Self::is_agent_authorized_for_external_tool(
                 ctx,
                 tool_name,
@@ -603,7 +433,9 @@ impl McpHost {
             ) {
                 tracing::warn!(
                     "🚫 [McpHost] Access denied: tool '{}:{}' is not in granted skills for agent '{}'",
-                    server_name, actual_tool_name, ctx.agent_id
+                    server_name,
+                    actual_tool_name,
+                    ctx.agent_id
                 );
                 return Err(AppError::Forbidden(format!(
                     "External tool '{}:{}' is not granted to agent '{}'",
@@ -618,7 +450,6 @@ impl McpHost {
             let result = match call_result {
                 Ok(r) => r,
                 Err(e) => {
-                    // Transport or process failure: evict from cache so subsequent calls can recover
                     self.clients.lock().await.remove(&server_name);
                     return Err(AppError::InfrastructureError {
                         provider_id: format!("mcp:{}", server_name),
@@ -632,58 +463,6 @@ impl McpHost {
         }
 
         Err(AppError::NotFound(format!("Tool '{}' not found", tool_name)))
-    }
-
-    async fn get_or_spawn_client(&self, server_name: &str) -> Result<Arc<Mutex<client::McpClient>>, AppError> {
-        // Double-checked locking fast path: return cached client if already live
-        {
-            let clients = self.clients.lock().await;
-            if let Some(client) = clients.get(server_name) {
-                return Ok(client.clone());
-            }
-        }
-
-        let config = self.get_config().await?;
-        let server_config = config.mcp_servers.get(server_name)
-            .ok_or_else(|| AppError::NotFound(format!("MCP server '{}' not found in config", server_name)))?;
-
-        // Validate command binary and all configured arguments against zero-trust policy
-        crate::utils::security::validate_shell_command(&server_config.command)?;
-        crate::utils::security::validate_tokenized_command(
-            &server_config.command,
-            &server_config.args,
-        )?;
-
-        let resolved_env = server_config.env.as_ref().map(resolve_mcp_env).transpose()?;
-
-        // Slow path: spawn and initialize outside the clients lock
-        let mut client = client::McpClient::spawn(
-            &server_config.command,
-            &server_config.args,
-            resolved_env.as_ref(),
-        ).await
-        .map_err(|e| AppError::InfrastructureError {
-            provider_id: format!("mcp:{}", server_name),
-            detail: format!("Failed to spawn MCP server: {}", e),
-            help_link: None,
-        })?;
-
-        client.initialize().await.map_err(|e| AppError::InfrastructureError {
-            provider_id: format!("mcp:{}", server_name),
-            detail: format!("Failed to initialize MCP client: {}", e),
-            help_link: None,
-        })?;
-
-        let client_arc = Arc::new(Mutex::new(client));
-        {
-            let mut clients = self.clients.lock().await;
-            if let Some(existing) = clients.get(server_name) {
-                return Ok(existing.clone());
-            }
-            clients.insert(server_name.to_string(), client_arc.clone());
-        }
-
-        Ok(client_arc)
     }
 
     fn update_stats(&self, tool_name: &str, is_success: bool, latency: u64) {
@@ -710,428 +489,6 @@ impl McpHost {
             "latency": latency
         });
         let _ = self.event_tx.send(pulse);
-    }
-
-    async fn execute_legacy_skill(
-        &self,
-        skill: &SkillDefinition,
-        arguments: serde_json::Value,
-        workspace_root: std::path::PathBuf,
-    ) -> Result<String, AppError> {
-        let args_json = serde_json::to_string(&arguments).unwrap_or_default();
-        
-        let config = crate::security::sandbox::SandboxConfig::default();
-        let raw_output = crate::security::sandbox::execute_sandboxed(
-            &skill.execution_command,
-            &args_json,
-            &workspace_root,
-            &config,
-        )
-        .await?;
-
-        // SEC-04: Cap response payload with UTF-8 boundary safety and proactively scrub stdout
-        let bounded_output = truncate_mcp_reply(&raw_output, MAX_MCP_REPLY_BYTES, "Skill reply");
-        let scrubbed_stdout = self.redactor.scrub(&bounded_output);
-        Ok(scrubbed_stdout)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct McpConfig {
-    #[serde(rename = "mcpServers", default)]
-    pub mcp_servers: std::collections::HashMap<String, McpServerConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct McpServerConfig {
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: Option<std::collections::HashMap<String, String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(tag = "type", content = "data")]
-pub enum McpResult {
-    Raw(String),
-    SystemDelegate(String, serde_json::Value),
-}
-
-// --- Native Tool Handlers ---
-
-#[agent_tool]
-pub async fn recruit_specialist(
-    args: serde_json::Value,
-    _ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    Ok(McpResult::SystemDelegate(
-        "recruit_specialist".to_string(),
-        args,
-    ))
-}
-
-#[agent_tool]
-pub async fn get_current_time(
-    _args: serde_json::Value,
-    _ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    let now = chrono::Local::now();
-    Ok(McpResult::Raw(format!("Current System Time: {}", now.format("%Y-%m-%d %H:%M:%S"))))
-}
-
-#[agent_tool]
-pub async fn list_file_symbols(
-    args: serde_json::Value,
-    ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    let path_str = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
-    let full_path = crate::utils::security::validate_path(&ctx.workspace_root, path_str)
-        .map_err(|e| AppError::Forbidden(e.to_string()))?;
-    let content = tokio::fs::read_to_string(&full_path).await.map_err(AppError::Io)?;
-    let mut extractor = SymbolExtractor::new();
-    let symbols = extractor.extract_symbols(&full_path, &content);
-    let outline: Vec<String> = symbols
-        .iter()
-        .map(|s| format!("{} {} -> {}", s.kind, s.name, s.signature))
-        .collect();
-    Ok(McpResult::Raw(outline.join("\n")))
-}
-
-#[agent_tool]
-pub async fn get_symbol_body(
-    args: serde_json::Value,
-    ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    let path_str = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
-    let symbol_name = args
-        .get("symbol_name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::BadRequest("Missing 'symbol_name'".to_string()))?;
-    let full_path = crate::utils::security::validate_path(&ctx.workspace_root, path_str)
-        .map_err(|e| AppError::Forbidden(e.to_string()))?;
-
-    let meta = tokio::fs::metadata(&full_path).await.map_err(AppError::Io)?;
-    if meta.len() > 5_000_000 {
-        return Err(AppError::BadRequest("File exceeds 5MB size limit".to_string()));
-    }
-
-    let content = tokio::fs::read_to_string(&full_path).await.map_err(AppError::Io)?;
-    let mut extractor = SymbolExtractor::new();
-    let symbols = extractor.extract_symbols(&full_path, &content);
-    if let Some(symbol) = symbols.into_iter().find(|s| s.name == symbol_name) {
-        Ok(McpResult::Raw(symbol.body))
-    } else {
-        Err(AppError::NotFound(format!("Symbol '{}' not found", symbol_name)))
-    }
-}
-
-#[agent_tool]
-pub async fn run_integrity_check(
-    _args: serde_json::Value,
-    ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    let script_path = crate::utils::security::validate_path(&ctx.workspace_root, "execution/self_audit_tool.py")
-        .map_err(|e| AppError::Forbidden(e.to_string()))?;
-
-    let mut cmd = tokio::process::Command::new("python");
-    cmd.arg(script_path.as_path());
-    cmd.current_dir(&ctx.workspace_root);
-    cmd.kill_on_drop(true);
-
-    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
-        .map_err(|_| AppError::InfrastructureError {
-            provider_id: "integrity_check".to_string(),
-            detail: "Integrity check timed out after 60s".to_string(),
-            help_link: None,
-        })?
-        .map_err(AppError::Io)?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-
-    if output.status.success() {
-        Ok(McpResult::Raw(stdout))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(AppError::InfrastructureError {
-            provider_id: "integrity_check".to_string(),
-            detail: format!("Integrity Audit Failed: {}\n{}", stdout, stderr),
-            help_link: None,
-        })
-    }
-}
-
-pub struct InspectEngineHealthHandler {
-    pub stats: Arc<dashmap::DashMap<String, McpToolStats>>,
-}
-
-#[async_trait::async_trait]
-impl ToolHandler for InspectEngineHealthHandler {
-    async fn execute(
-        &self,
-        _args: serde_json::Value,
-        _ctx: &crate::agent::types::ToolContext,
-    ) -> Result<McpResult, AppError> {
-        let stats_vec: Vec<serde_json::Value> = self.stats
-            .iter()
-            .map(|kv| {
-                let name = kv.key();
-                let stats = kv.value();
-                serde_json::json!({
-                    "tool": name,
-                    "invocations": stats.invocations,
-                    "success_rate": if stats.invocations > 0 { stats.success_count as f64 / stats.invocations as f64 } else { 0.0 },
-                    "avg_latency_ms": stats.avg_latency_ms
-                })
-            })
-            .collect();
-
-        Ok(McpResult::Raw(serde_json::to_string_pretty(&stats_vec)
-            .map_err(|e| AppError::InternalServerError(e.to_string()))?))
-    }
-
-    fn metadata(&self) -> McpToolHub {
-        McpToolHub {
-            name: "inspect_engine_health".to_string(),
-            description: "Retrieves real-time execution statistics for all registered MCP tools."
-                .to_string(),
-            input_schema: serde_json::json!({}),
-            source: "native".to_string(),
-            stats: McpToolStats::default(),
-            category: "introspection".to_string(),
-        }
-    }
-}
-
-/// Calculates the "Blast Radius" of a symbol. 
-/// Identifies all symbols that directly or indirectly depend on the target.
-#[agent_tool]
-pub async fn get_blast_radius(
-    args: serde_json::Value,
-    ctx: &crate::agent::types::ToolContext,
-) -> Result<McpResult, AppError> {
-    let symbol_name = args.get("symbol_name").and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::BadRequest("Missing 'symbol_name'".to_string()))?;
-    let path = args.get("path").and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::BadRequest("Missing 'path'".to_string()))?;
-
-    let graph_swap = ctx.state.resources.get_symbol_graph().await?;
-    let graph = graph_swap.load();
-    let affected = graph.calculate_blast_radius(symbol_name, path);
-    
-    let serialized = serde_json::to_string_pretty(&affected)
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-    Ok(McpResult::Raw(serialized))
-}
-
-/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values
-/// using a caller-supplied lookup function (enabling race-free deterministic unit testing).
-pub fn resolve_mcp_env_with<F>(
-    env: &std::collections::HashMap<String, String>,
-    mut lookup: F,
-) -> Result<std::collections::HashMap<String, String>, AppError>
-where
-    F: FnMut(&str) -> Option<String>,
-{
-    let mut resolved_map = std::collections::HashMap::new();
-
-    for (key, value) in env {
-        let mut resolved = String::new();
-        let mut remainder = value.as_str();
-
-        while let Some(start) = remainder.find("${") {
-            resolved.push_str(&remainder[..start]);
-            let placeholder_rest = &remainder[start + 2..];
-            let Some(end) = placeholder_rest.find('}') else {
-                resolved.push_str(&remainder[start..]);
-                remainder = "";
-                break;
-            };
-
-            let inner = &placeholder_rest[..end];
-            if inner.is_empty() {
-                resolved.push_str("${}");
-                remainder = &placeholder_rest[end + 1..];
-                continue;
-            }
-
-            // Support ${VAR:-default} syntax
-            let (var_name, default_val) = if let Some((var, def)) = inner.split_once(":-") {
-                (var, Some(def))
-            } else {
-                (inner, None)
-            };
-
-            if !var_name.is_empty()
-                && var_name
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-            {
-                match lookup(var_name) {
-                    Some(val) => resolved.push_str(&val),
-                    None => {
-                        if let Some(def) = default_val {
-                            resolved.push_str(def);
-                        } else {
-                            return Err(AppError::BadRequest(format!(
-                                "Missing required environment variable '{}' for MCP config key '{}'",
-                                var_name, key
-                            )));
-                        }
-                    }
-                }
-                remainder = &placeholder_rest[end + 1..];
-            } else {
-                resolved.push_str("${");
-                remainder = placeholder_rest;
-            }
-        }
-
-        resolved.push_str(remainder);
-        resolved_map.insert(key.clone(), resolved);
-    }
-
-    Ok(resolved_map)
-}
-
-/// Resolves documented ${NAME} or ${NAME:-default} placeholders in MCP environment values.
-/// Returns an explicit configuration error if a required placeholder (without a default) is not set in the environment.
-pub fn resolve_mcp_env(
-    env: &std::collections::HashMap<String, String>,
-) -> Result<std::collections::HashMap<String, String>, AppError> {
-    resolve_mcp_env_with(env, |var_name| std::env::var(var_name).ok())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_mcp_env_success_and_fallback() {
-        let mut env = std::collections::HashMap::new();
-        env.insert("AUTH_HEADER".to_string(), "Bearer ${TADPOLE_TEST_MCP_KEY}".to_string());
-        env.insert("FALLBACK_VAR".to_string(), "${UNSET_VAR_12345:-http://localhost:8000}".to_string());
-        env.insert("STATIC_VAR".to_string(), "plain_value".to_string());
-
-        let resolved = resolve_mcp_env_with(&env, |k| {
-            if k == "TADPOLE_TEST_MCP_KEY" {
-                Some("secret-token-value".to_string())
-            } else {
-                None
-            }
-        })
-        .expect("env resolution should succeed");
-        assert_eq!(resolved.get("AUTH_HEADER").unwrap(), "Bearer secret-token-value");
-        assert_eq!(resolved.get("FALLBACK_VAR").unwrap(), "http://localhost:8000");
-        assert_eq!(resolved.get("STATIC_VAR").unwrap(), "plain_value");
-    }
-
-    #[test]
-    fn test_resolve_mcp_env_missing_required_variable_errors() {
-        let mut env = std::collections::HashMap::new();
-        env.insert("API_TOKEN".to_string(), "${COMPLETELY_UNSET_REQUIRED_VAR}".to_string());
-
-        let result = resolve_mcp_env_with(&env, |_| None);
-        assert!(result.is_err(), "Expected missing variable without fallback to return an error");
-        if let Err(AppError::BadRequest(msg)) = result {
-            assert!(msg.contains("COMPLETELY_UNSET_REQUIRED_VAR"));
-        } else {
-            panic!("Expected BadRequest error for missing required credential");
-        }
-    }
-
-    #[test]
-    fn test_truncate_mcp_reply_and_external_matching_happy_failure_and_edge() {
-        // (a) Happy Path: Payload under limit is returned unchanged; prefixed external tools resolve cleanly
-        let short = "hello sovereign world";
-        assert_eq!(truncate_mcp_reply(short, 100, "Tool response"), short);
-
-        let mut servers = HashMap::new();
-        servers.insert(
-            "brave-search".to_string(),
-            McpServerConfig {
-                command: "npx".to_string(),
-                args: vec![],
-                env: None,
-            },
-        );
-        let cfg = McpConfig { mcp_servers: servers };
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("brave-search:web_search", &cfg),
-            Some(("brave-search".to_string(), "web_search".to_string()))
-        );
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("brave-search::local_search", &cfg),
-            Some(("brave-search".to_string(), "local_search".to_string()))
-        );
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("mcp_brave-search_web_search", &cfg),
-            Some(("brave-search".to_string(), "web_search".to_string()))
-        );
-
-        // (b) Failure Path: Unknown server prefixes or empty tool suffixes return None
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("unknown-server:web_search", &cfg),
-            None
-        );
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("brave-search:", &cfg),
-            None
-        );
-        assert_eq!(
-            McpHost::match_prefixed_external_tool("mcp_brave-search_", &cfg),
-            None
-        );
-
-        // (c) Edge Case Path: Multi-byte UTF-8 boundary (4-byte emoji '🦀' at bytes 3..7) never panics
-        let multibyte = "abc🦀def";
-        // Byte 4, 5, and 6 fall inside '🦀' (bytes 3..7); floor_utf8_char_boundary must step back to 3
-        assert_eq!(floor_utf8_char_boundary(multibyte, 4), 3);
-        assert_eq!(floor_utf8_char_boundary(multibyte, 5), 3);
-        assert_eq!(floor_utf8_char_boundary(multibyte, 6), 3);
-        assert_eq!(floor_utf8_char_boundary(multibyte, 7), 7);
-        let truncated = truncate_mcp_reply(multibyte, 5, "Tool response");
-        assert!(truncated.starts_with("abc\n\n[TRUNCATED: Tool response exceeded 2MB limit]"));
-    }
-
-    #[tokio::test]
-    async fn test_structured_mcp_spawning_preserves_arguments_and_env() {
-        // Child-process test proving spaces, empty arguments, literal quotes, and environment variables survive unchanged
-        let args = vec![
-            "-c".to_string(),
-            r#"import sys, os, json; print(json.dumps({"args": sys.argv[1:], "env_val": os.environ.get("MCP_TEST_KEY")}))"#.to_string(),
-            "first arg with spaces".to_string(),
-            "".to_string(),
-            r#"literal"quote"arg"#.to_string(),
-        ];
-
-        let mut env = std::collections::HashMap::new();
-        env.insert("MCP_TEST_KEY".to_string(), "configured_secret_value".to_string());
-
-        let mut client = client::McpClient::spawn("python", &args, Some(&env))
-            .await
-            .expect("Failed to spawn python child process");
-
-        // Read stdout line produced by child
-        use tokio::io::AsyncBufReadExt;
-        let mut line = String::new();
-        client.stdout.read_line(&mut line).await.expect("Failed to read child stdout");
-
-        let output: serde_json::Value = serde_json::from_str(&line).expect("Child process did not emit valid JSON");
-        let parsed_args = output["args"].as_array().expect("args should be an array");
-        assert_eq!(parsed_args.len(), 3);
-        assert_eq!(parsed_args[0], "first arg with spaces");
-        assert_eq!(parsed_args[1], "");
-        assert_eq!(parsed_args[2], r#"literal"quote"arg"#);
-        assert_eq!(output["env_val"], "configured_secret_value");
     }
 }
 

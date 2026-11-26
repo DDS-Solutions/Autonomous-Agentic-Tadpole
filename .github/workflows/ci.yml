@@ -33,7 +33,6 @@ on:
       - 'docker-compose.yml'
       - 'eslint.config.js'
       - 'playwright.config.ts'
-      - 'wasm-codec/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -67,7 +66,6 @@ on:
       - 'docker-compose.yml'
       - 'eslint.config.js'
       - 'playwright.config.ts'
-      - 'wasm-codec/**'
       - '.github/workflows/ci.yml'
 
 concurrency:
@@ -219,6 +217,9 @@ jobs:
       - name: Cargo Test (wasm-codec)
         working-directory: crates/wasm-codec
         run: cargo test
+
+      - name: Cargo Test (workspace crates)
+        run: cargo test -p tadpole-types -p tadpole-intelligence -p tadpole-guard -p tadpole-sec
 
       - name: Cargo Clippy
         working-directory: server-rs

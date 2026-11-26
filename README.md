@@ -51,7 +51,7 @@ The result is a desktop-ready agent operations platform that can run missions, m
 | **Model Routing** | Single model per request | **Tiered Cascade Router (Flash → Reasoning Escalation)** | **2x–5x Cost Reduction on Routine Turns** |
 | **Mutation Safety** | Trust-the-agent / no verification | **Aletheia Zero-Trust Verification Gate** | **Independent Verifier Blast-Radius Audit** |
 | **Financial Safety** | Loose per-call limits / unconstrained loops | **A2E-01 2PC Ledger + 24h Rolling Cap + Lock Awareness** | **Zero Risk of Runaway API Overruns** |
-| **Self-Healing** | Uncaught exceptions / endless loops | **`tool_loop_guard.py` + Boot DB Reconciler + Annealing** | **Deterministic Circuit Breakers** |
+| **Self-Healing** | Uncaught exceptions / endless loops | **`execution/tool_loop_guard.py` + Boot DB Reconciler + Annealing** | **Deterministic Circuit Breakers** |
 
 ## What It Does
 
@@ -81,7 +81,7 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **Autonomous Browser Sentinel Daemon**: Background idle loop (~25s interval) executing non-intrusive DOM entropy audits, automated client-side health checks, and self-healing with triple circuit breakers (tab visibility, VRAM critical pressure, and pipeline concurrency locks).
 - **In-Browser ONNX/WebGPU Inference & DLP Shield**: Zero-cloud in-browser reasoning with quantized 4-bit ONNX models (`SmolLM-360M-Instruct`) via `@huggingface/transformers`, WebGPU hardware acceleration with WASM fallback, explicit WebGPU buffer disposal, and zero-leakage regex DLP pre-flight screening for high-entropy secrets and keys.
 - **Autonomous-Agentic Cognition Spine**: Enforces hard pre-turn budget cap checks prior to LLM invocation, single-pass grounded refinement with structured tool diagnostic feedback (`retryable`, `suggested_action`), and balanced-brace function call recovery for open-source models (`<function=...>`, hallucinated brackets/parentheses).
-- **Pinned-Tail Context Compactor & Tool Overflow**: Permanently pins the system prompt and the last 3 conversational turns uncompressed while offloading large tool payloads (>2,000 characters) to `.tmp/tool_overflow/<call_id>.txt` with a disk pointer URI, preserving tool failure visibility verbatim.
+- **Pinned-Tail Context Compactor & Tool Overflow**: Permanently pins the system prompt and the last 3 conversational turns uncompressed while offloading large tool payloads (default `24,000` characters, configurable via `TOOL_OBSERVATION_THRESHOLD_CHARS`) to `.tmp/tool_overflow/tool_output_<timestamp>_<id>.txt` with a disk pointer URI, preserving tool failure visibility verbatim.
 - **Lock-Free Atomic Execution Metrics**: Real-time per-mission accounting (turns, token throughput, USD cost, tool failures) via lock-free `AtomicU64` counters, warning operators if summarizations loop ($\ge 3$).
 - **Concurrent Edit Conflict Manager & Dependency Guard**: 30-second TTL file write lease locks preventing multi-agent race conditions during concurrent file writes, paired with thread-safe cached cross-platform binary discovery (`git`, `python`, `node`, `docker`, `cargo`).
 - **RFC 9457 Problem Details & Auto-Pruning Telemetry**: Standardized error responses (`application/problem+json`) with W3C `traceparent` propagation, alongside a 7-day auto-rotating JSONL telemetry file sink.
@@ -102,9 +102,9 @@ The result is a desktop-ready agent operations platform that can run missions, m
 - **SpanWatchdog with Provider-Aware Leaked Span Reaping**: Background telemetry watchdog sweeping open spans with provider-specific TTLs (60s cloud, 300s local Ollama), emitting synthetic timeout events to prevent orphan spans from corrupting mission observability.
 - **Mission Benchmark Harness**: 5-scenario reproducible benchmark test harness (`tests/mission_bench/run.py` and `tests/mission_bench/judge.py`) asserting tool caching, loop prevention, monologue compression, SSRF security, and span watchdog timeout tracking.
 - **System Event Bus**: Combines Tokio channels with system triggers (file modifications, system load, webhooks) to spawn Continuity Jobs proactively.
-- **Git Worktree Sandboxing**: Lightweight VCS-level disk isolation (server-rs/src/adapter/worktree.rs) spawning temporary worktrees in .tmp/worktrees/<task_id>, ensuring collision-free concurrent agent branch editing, instantaneous rollbacks, and atomic diff-based review before merge.
-- **Actor Idle Reaping & Hibernation**: Automated periodic sweep (server-rs/src/agent/reaper.rs) transitioning inactive swarm agents (>300s) from idle to suspended/hibernating state, reclaiming Tokio scheduler slots and in-memory caches.
-- **Decoupled Background Context Compaction**: Dispatches Tier 1 & Tier 2 context compaction onto background worker tasks (server-rs/src/agent/context_manager.rs), eliminating turn latency spikes during operator sessions.
+- **Git Worktree Sandboxing**: Lightweight VCS-level disk isolation (`server-rs/src/adapter/worktree.rs`) spawning temporary worktrees in `.tmp/worktrees/<task_id>`, ensuring collision-free concurrent agent branch editing, instantaneous rollbacks, and atomic diff-based review before merge.
+- **Actor Idle Reaping & Hibernation**: Automated periodic sweep (`server-rs/src/agent/reaper.rs`) transitioning inactive swarm agents (>300s) from idle to suspended/hibernating state, reclaiming Tokio scheduler slots and in-memory caches.
+- **Decoupled Background Context Compaction**: Dispatches Tier 1 & Tier 2 context compaction onto background worker tasks (`server-rs/src/agent/context_manager.rs`), eliminating turn latency spikes during operator sessions.
 - **Keeps optional heavy features explicit**: vector memory and neural audio are Cargo features, disabled by default for lightweight local builds.
 
 ## System At A Glance
@@ -222,11 +222,11 @@ The engine boot path starts in `server-rs/src/main.rs`, initializes environment 
 | `directives/` | Governance, identity, orchestration, and provider operating instructions |
 | `docs/` | Architecture, operations, API reference, OpenAPI, and security docs |
 | `data/` | Local runtime data (initialized on first boot with SQLite database `tadpole.db` and agent/model seed configs) |
-| `crates/` | Workspace crates: WASM binary pulse codec (`crates/wasm-codec`), Rust AST guard (`crates/tadpole-guard`), `.gitleaks.toml`-backed secret scanner (`crates/tadpole-sec`), and experimental unwired graph physics prototype (`crates/wasm-graph-physics`) |
+| `crates/` | Workspace crates: domain DTOs (`crates/tadpole-types`), AST/graph intelligence (`crates/tadpole-intelligence`), WASM binary pulse codec (`crates/wasm-codec`), Rust AST guard (`crates/tadpole-guard`), and `.gitleaks.toml`-backed secret scanner (`crates/tadpole-sec`) |
 | `starter_kits/` | Ready-to-deploy multi-agent swarms and domain workflows |
-| `scripts/` | Database backup, recovery, and persistence verification utilities |
+| `scripts/` | Cargo runner, deployment/rollback scripts, database backup/recovery, and persistence verification utilities |
 | `dist/` | Production dashboard build served by the Rust engine |
-| `tests/` | Shared frontend test setup and e2e support |
+| `tests/` | Shared test setup (`tests/setup.ts`), Playwright e2e (`tests/e2e/`), executable invariant gates (`tests/invariants/`), Python unit tests (`tests/unit/`), and mission benchmark harness (`tests/mission_bench/`) |
 
 ## Dashboard Surface
 
@@ -274,7 +274,7 @@ Protected route groups and WebSocket streams:
 | `/v1/engine/ws` | Live mission telemetry WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
 | `/v1/engine/live-voice` | Live voice audio WebSocket stream (`Sec-WebSocket-Protocol: bearer.<token>`) |
 | `/v1/agents` | Agent CRUD, graph, tasks, pause/resume, memory, ledger, claims, receipts |
-| `/v1/a2a` | Agent-to-Agent communication protocols and inter-agent delegation |
+| `/v1/a2a` | Agent-to-Agent Two-Phase Commit (2PC) budget transfer ledger (`prepare`, `commit`, `rollback`) |
 | `/v1/oversight` | Decisions, governance settings, ledger, quotas, audit trail, health, policy, token burn |
 | `/v1/infra` | Node discovery and infrastructure nodes |
 | `/v1/model-manager` | Providers, models, catalog, pulls, provider tests |
@@ -294,7 +294,8 @@ Protected route groups and WebSocket streams:
 | `/v1/memory/search/bm25` | High-speed BM25 lexical repository and doc search |
 | `/v1/memory/search/hybrid` | Hybrid RAG Triad RRF fusion (Vector + BM25 + TrustGraph) |
 | `/v1/env-schema` | Runtime environment schema |
-| `/v1/engine/*` | Deploy, kill, shutdown, transcribe, speak, template install |
+| `/v1/engine/*` | Deploy, pre-PR, kill, shutdown, audio capabilities, transcribe, speak, template catalog/install/uninstall |
+| `/v1/api/pull` | Authenticated Ollama model pull proxy |
 | `/v1/mcp/*` | MCP SSE and message bridge |
 
 Protected routes require:
@@ -309,12 +310,13 @@ For WebSocket connections (`/v1/engine/ws`, `/v1/engine/live-voice`), pass the t
 Sec-WebSocket-Protocol: bearer.<NEURAL_TOKEN>
 ```
 
-BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and SQLite fallback memories are active by default. Semantic vector k-NN search and LanceDB embeddings return `501 Not Implemented` unless the Rust `vector-memory` Cargo feature is enabled.
+BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and SQLite fallback memories (`/v1/agents/{id}/memories`, `/v1/search/memory`) are active by default. Semantic vector k-NN search (`GET /v1/knowledge/search`) and LanceDB embeddings are disabled at compile time (`404 Not Found`) unless the Rust `vector-memory` Cargo feature is enabled.
 
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
+| `npm run init` | Secret-safe Day-1 workspace bootstrapper (`execution/tadpole_init.py`) |
 | `npm run dev` | Start Vite on port 5173 |
 | `npm run engine` | Run the Rust engine via Cargo |
 | `npm run build` | Type-check and build the frontend |
@@ -338,6 +340,8 @@ BM25 lexical search (`/v1/memory/search/bm25`), TrustGraph entity traversal, and
 | `npm run context:verify` | Verify AI assist tags (`@docs`) across entire repository |
 | `npm run tauri:dev` | Start Tauri dev mode |
 | `npm run tauri:build` | Build Tauri app |
+| `npm run tauri:icon` | Generate Tauri application icon assets |
+| `npm run deploy:linuxlite66` | Deploy bundle to Linux Lite target host (`scripts/deploy-linuxlite.ps1`) |
 | `npm run docs:dev` | Start VitePress docs |
 | `npm run docs:build` | Build VitePress docs |
 | `npm run docs:preview` | Preview built docs |
@@ -349,7 +353,9 @@ Common environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NEURAL_TOKEN` | Required | Bearer token for protected API routes |
+| `NEURAL_TOKEN` | Required | Bearer token for protected API routes (Operator scope when `NEURAL_TOKEN_ADMIN` is set) |
+| `NEURAL_TOKEN_ADMIN` | Optional | Dedicated Admin-scope token required for destructive host/deploy/script-mutation routes |
+| `NEURAL_TOKEN_READONLY` | Optional | Read-only scope token restricted to `GET`/`HEAD` observability endpoints |
 | `NEURAL_TOKEN_OLD` | Optional | Previous token kept valid during zero-downtime rotation |
 | `NEURAL_TOKEN_NEW` | Optional | Replacement token staged during rotation grace window |
 | `NEURAL_ENGINE_ACCESS_TOKEN` | Required alternative | Alternate auth token accepted by the engine |
@@ -362,7 +368,7 @@ Common environment variables:
 | `RESOURCE_ROOT` | Optional | Static/model resource root |
 | `HEARTBEAT_INTERVAL_SECS` | `3` | Engine health heartbeat cadence |
 | `SKIP_DB_SEED` | `false` | Skip baseline database seeding |
-| `PRIVACY_MODE` | `true` | Restrict execution toward local-only providers (zero-trust sovereign mode) |
+| `PRIVACY_MODE` | `false` (`true` in `.env.example`) | Restrict execution toward local-only providers (zero-trust sovereign mode) |
 | `AUTO_APPROVE_SAFE_SKILLS` | `false` | When `false`, enforces human oversight for all skill executions |
 | `ALLOW_HOST_SKILL_EXECUTION` | `false` | When `false`, denies bare-metal host execution if container sandboxes are unavailable |
 | `USE_SANDBOX_DOCKER` | `false` | Run dynamic agent skills in isolated Docker micro-containers |
@@ -482,7 +488,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 | [🏠 Home](wiki/Home.md) | Overview, system diagram, quick-start TL;DR |
 | [🚀 Getting Started](wiki/Getting-Started.md) | Prerequisites, install, first run, Windows shortcuts |
 | [🏗️ Architecture](wiki/Architecture.md) | Engine boot, AppState hubs, router stack, agent pipeline, repo map |
-| [📡 API Reference](wiki/API-Reference.md) | All 50+ REST/WebSocket endpoints with schemas |
+| [📡 API Reference](wiki/API-Reference.md) | REST/WebSocket endpoint catalog and schemas (145 routes across `/v1`, `/health`, `/metrics`) |
 | [⚙️ Configuration](wiki/Configuration.md) | Every env var, Cargo feature flag, and provider key |
 | [🔐 Security Model](wiki/Security-Model.md) | Auth, token rotation, MCP sandboxing, audit trail, budget guard |
 | [🏥 Operations Manual](wiki/Operations-Manual.md) | Backup/restore, token rotation runbook, Grafana, GDPR, shutdown |
@@ -497,9 +503,9 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **FR-11 Permission Firewall** (`server-rs/src/agent/runner/tools/security.rs`, `server-rs/src/agent/types/mod.rs`): Enforces zero-trust execution boundaries. Agents operating under Plane 2 (`SmbDigitalTwin`) are strictly prohibited from host shell tool execution (`execute_shell`, `run_command`, `terminal`) and prohibited from mutating engine codebase paths (`server-rs/`, `src/`, `execution/`, `directives/`, `.agent/`).
 
 ### 🛡️ Swarm Execution & Token Safeguards
-- **24KB Tool Observation Compactor** (`server-rs/src/agent/runner/turn_compactor.rs`, `server-rs/src/agent/runner/intelligence.rs`): Automatically bounds inline tool observations. Outputs exceeding 24KB (24,000 characters) are flushed to `.tmp/tool_overflow/` with safe UTF-8 codepoint boundary slicing, preserving a 300-character preview and exact file reference pointer to eliminate context window overflow crashes.
+- **24KB Tool Observation Compactor** (`server-rs/src/agent/runner/turn_compactor.rs`, `server-rs/src/agent/runner/intelligence/mod.rs`): Automatically bounds inline tool observations. Outputs exceeding 24KB (24,000 characters) are flushed to `.tmp/tool_overflow/` with safe UTF-8 codepoint boundary slicing, preserving a 300-character preview and exact file reference pointer to eliminate context window overflow crashes.
 - **Sliding-Window Cyclic Loop Detector** (`server-rs/src/agent/runner/loop_detector.rs`): `DoomLoopDetector` tracks a 16-signature history of SHA-256 normalized tool calls across periods 1 to 4. Features a 2-stage defensive circuit breaker: `LoopCheckResult::Warning` injects steering advisories, and `LoopCheckResult::Terminal` immediately halts repetitive execution loops to prevent runaway token exhaustion.
-- **Pre-Commit UI Quality Guard** (`execution/ui_quality_guard.py`): Static zero-dependency pre-commit scanner auditing all 134 frontend TSX components against `DESIGN.md` contracts (pure black avoidance, untinted grays, low-contrast badge text, missing button/SVG `aria-label` accessibility, and card inception).
+- **Pre-Commit UI Quality Guard** (`execution/ui_quality_guard.py`): Static zero-dependency pre-commit scanner auditing all 152 frontend TSX components against `docs/design.md` contracts (pure black avoidance, untinted grays, low-contrast badge text, missing button/SVG `aria-label` accessibility, and card inception).
 
 ### 🔍 Error Reporting & Telemetry Resilience
 - **Persistent Telemetry Event Bridging** (`server-rs/src/telemetry/mod.rs`, `server-rs/src/telemetry/bridge.rs`): `TelemetryLayer::on_event` broadcasts structured `trace:event` signals to `TELEMETRY_TX`, which persists error events to SQLite `mission_logs`.
@@ -507,7 +513,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **WAL Concurrency Lock Timeout** (`execution/mission_diagnose.py`, `execution/verify_telemetry.py`): Added 30.0-second SQLite timeout and `PRAGMA busy_timeout = 30000;` preventing lock contention with active server writers during diagnostic scans.
 
 ### 🧩 Modular Engine Architecture & Kernel Concurrency Hardening
-- **Monolith Decomposition**: Decomposed legacy multi-thousand-line monoliths into clean, cohesive sub-packages: `server-rs/src/routes/oversight/` (12 modules), `server-rs/src/routes/templates/` (7 modules), `server-rs/src/routes/missions/` (7 modules), and `server-rs/src/agent/runner/synthesis/` (6 modules).
+- **Monolith Decomposition**: Decomposed legacy multi-thousand-line monoliths into clean, cohesive sub-packages: `server-rs/src/routes/oversight/` (9 modules), `server-rs/src/routes/templates/` (8 modules), `server-rs/src/routes/missions/` (8 modules), `server-rs/src/agent/runner/synthesis/` (7 modules), `server-rs/src/agent/runner/intelligence/` (5 modules), `server-rs/src/agent/runner/tools/` (14 modules), `server-rs/src/agent/mcp/` (9 modules), `src/logic/commands/` (3 modules + unit test), and `src/components/oversight/` (5 components + hotkey hook + unit test).
 - **Convoy-Free Agent Persistence** (`server-rs/src/state/persist.rs`): Replaced global 64-stripe mutex lock acquisition with lock-free `DashMap` snapshotting during 30-second periodic flushes, eliminating swarm-wide convoy stalling while preserving SQLite OCC safety (`WHERE agents.id = excluded.id AND agents.version = ?`).
 - **Zeroized Thread-Safe Key Management** (`server-rs/src/security/audit.rs`): Removed process-level `std::env::set_var` key exports, preventing multi-threaded libc memory races and eliminating Ed25519 private key leakage to child subprocesses and `/proc/self/environ`.
 - **Bounded AST Traversal Ceilings & Cooperative Cancellation** (`crates/tadpole-intelligence/src/graph/engine/analysis.rs`, `server-rs/src/intelligence/service.rs`): Implemented cooperative `AtomicBool` cancellation and traversal step ceilings (`MAX_TRAVERSAL_STEPS`) in BFS blast radius analysis, preventing CPU runaway and thread pool starvation in Tokio `spawn_blocking` workers during dense graph traversals.
@@ -542,7 +548,7 @@ The `wiki/` directory contains a comprehensive knowledge base designed for devel
 - **Oversight Ledger Pagination Fix**: Resolved a critical double-pagination bug in `/v1/oversight/ledger` and `/v1/oversight/security/audit-trail` that capped the approved card count in the dashboard at 100 entries.
 - **SHA-256 Hashing for Code Review Graph**: Replaced MD5 hashing with SHA-256 in `graph_store::scan_files::file_hash` and bumped the schema version to 10 with a dual-write `file_hash_sha256` migration window.
 - **Git Resolution at Boot**: Cached `git` executable absolute path at boot via `which` to ensure hermetic and safe execution of sub-processes.
-- **Axum Request Limit**: Added a global 16 MiB default request limit in router (`DefaultBodyLimit::max(16 * 1024 * 1024)`) to safely accommodate large AST code-graph payloads while preventing Denial-of-Service attacks.
+- **Axum Request Limit**: Enforces a hardened global 256 KiB default request limit in `server-rs/src/router.rs` (`DefaultBodyLimit::max(256 * 1024)`) with scoped overrides for `/v1/skills` (2 MiB), `/v1/engine/*` (10 MiB), and `/v1/engine/transcribe` (26 MiB) to accommodate large payloads while preventing Denial-of-Service attacks.
 - **Robustness Cap Warning and Truncation**: Demoted `MAX_NODES` and `MAX_EDGES` exceeding checks from fatal errors to early-termination warning logs, leaving the previous graph intact, and resolved workspace-wide file bloat via `MAX_DISCOVERED_FILES` truncation.
 
 ### 🗄️ Database Reliability

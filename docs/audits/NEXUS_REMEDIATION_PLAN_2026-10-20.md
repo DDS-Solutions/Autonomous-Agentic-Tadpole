@@ -1,4 +1,4 @@
-# Nexus Deep Audit: Remediation & Verification Plan (2026-10-20)
+al# Nexus Deep Audit: Remediation & Verification Plan (2026-10-20)
 
 > [!IMPORTANT]
 > **AI Assist Note (Knowledge Heritage)**:
@@ -142,7 +142,7 @@ flowchart TD
 
 4. **S04 (P1): Authorize Tool Cache & Scope Invalidation**
    - **Target Files**:
-     - [`server-rs/src/agent/runner/intelligence.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/intelligence.rs#L629)
+     - [`server-rs/src/agent/runner/intelligence/mod.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/intelligence/mod.rs)
      - [`server-rs/src/agent/runner/tools/cache.rs`](file:///G:/Autonomous-Agentic-Tadpole/server-rs/src/agent/runner/tools/cache.rs#L29)
    - **Remediation**:
      - Execute authorization and policy checks *prior* to cache lookup.

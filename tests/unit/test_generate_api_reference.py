@@ -52,10 +52,11 @@ fn sample_routes() -> Router {
         routes = generate_api_reference.discover_routes()
         route_keys = {(route.method, route.path, route.handler) for route in routes}
 
-        self.assertEqual(len(routes), 144)
+        self.assertEqual(len(routes), 145)
         self.assertIn(("GET", "/v1/agents/{id}/context-packet", "routes::agentic_engine::get_context_packet"), route_keys)
         self.assertIn(("POST", "/v1/engine/deploy", "routes::deploy::trigger_deploy"), route_keys)
         self.assertIn(("POST", "/v1/benchmarks/readiness", "routes::benchmarks::run_readiness_probe"), route_keys)
+        self.assertIn(("GET", "/v1/engine/live-voice", "routes::ws::live_voice_handler"), route_keys)
 
 
 if __name__ == "__main__":

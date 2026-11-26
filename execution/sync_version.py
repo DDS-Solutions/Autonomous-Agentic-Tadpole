@@ -59,6 +59,8 @@ PATHS = {
     "scripts/deploy-linuxlite.ps1": r'version\s*=\s*"([^"]+)"',
     "src-tauri/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     "crates/wasm-codec/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "crates/tadpole-guard/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
+    "crates/tadpole-sec/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     "crates/tadpole-types/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     "crates/tadpole-intelligence/Cargo.toml": r'^version\s*=\s*"([^"]+)"',
     "server-rs/src/error.rs": r'TadpoleOS/([0-9.]+)',

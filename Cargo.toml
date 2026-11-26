@@ -8,7 +8,6 @@ members = [
     "crates/tadpole-sec",
     "crates/tadpole-types",
     "crates/tadpole-intelligence",
-    "crates/wasm-graph-physics",
 ]
 
 [profile.release]

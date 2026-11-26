@@ -43,19 +43,14 @@ pub struct RegistryHub {
     /// Available LLM models catalog.
     pub models: DashMap<String, ModelEntry>,
     /// Discovery registry for infrastructure nodes in the swarm.
-    #[allow(dead_code)]
     pub nodes: DashMap<String, SwarmNode>,
     /// Registry for dynamic file-based Skills and Workflows.
-    #[allow(dead_code)]
     pub skills: Arc<ScriptSkillsRegistry>,
     /// Manager for dynamic Skill Manifests (skill.json).
-    #[allow(dead_code)]
     pub skill_registry: Arc<SkillRegistry>,
     /// Host for Model Context Protocol (MCP) tool aggregation.
-    #[allow(dead_code)]
     pub mcp_host: Arc<McpHost>,
     /// Manager for Lifecycle Hooks (Pre/Post tool execution).
-    #[allow(dead_code)]
     pub hooks: Arc<HooksManager>,
     /// Unified registry for all builtin and categorical tools.
     pub tool_registry: Arc<crate::agent::runner::tools::registry::ToolRegistry>,

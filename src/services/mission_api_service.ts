@@ -140,22 +140,6 @@ export const mission_api_service = {
         return track_operation('MissionAPI', 'Triggering autonomous workspace skill scan', async () => {
             return api_request<{ ingested_count: number }>('/v1/skills/scan', { method: 'POST' });
         });
-    },
-
-    /**
-     * Fetches all active directives (sub-tasks) for a mission.
-     * Used for Synchronicity Guard to prevent premature mission completion.
-     */
-    get_mission_directives: async (mission_id: string): Promise<Record<string, unknown>[]> => {
-        return api_request<Record<string, unknown>[]>(`/v1/missions/${mission_id}/directives`, { method: 'GET' });
-    },
-
-    /**
-     * Fetches the final audit report for a mission.
-     * Ensures that 'SUCCESS' in the archive matches the actual audit findings.
-     */
-    get_mission_audit_report: async (mission_id: string): Promise<{ status: string; findings: string }> => {
-        return api_request<{ status: string; findings: string }>(`/v1/missions/${mission_id}/audit`, { method: 'GET' });
     }
 };
 

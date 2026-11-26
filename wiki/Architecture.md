@@ -210,7 +210,12 @@ Autonomous-Agentic-Tadpole/
 │   │   └── types/                Shared Rust types
 │   └── migrations/               SQLite schema migration files
 │
-├── crates/wasm-codec/            Clean-room MIT WASM Postcard pulse codec
+├── crates/
+│   ├── tadpole-types/            Core agent, model, mission DTOs & RAG scoring
+│   ├── tadpole-intelligence/     Tree-sitter AST parser & petgraph blast-radius engine
+│   ├── tadpole-guard/            Rust syn AST invariant & scheduler scanner
+│   ├── tadpole-sec/              .gitleaks.toml-backed RegexSet secret scanner
+│   └── wasm-codec/               Clean-room MIT WASM Postcard pulse codec
 ├── starter_kits/                 Plug-and-play multi-agent starter kits
 ├── execution/                    Python execution layer
 │   ├── tadpole_mcp_server.py     MCP server (sandboxed subprocess host)

@@ -66,6 +66,8 @@ pub struct UninstallTemplateResponse {
     pub status: String,
     pub message: String,
     pub uninstalled_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retained_agents: Vec<String>,
 }
 
 // Metadata: [templates_models]

@@ -18,7 +18,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig } from 'eslint/config'
 
 export default defineConfig([
-  { ignores: ['dist', 'server/dist', 'node_modules', '.tmp', 'coverage', 'src-tauri', 'playwright-report', 'test-results'] },
+  { ignores: ['dist', 'node_modules', '.tmp', 'coverage', 'target', 'server-rs', 'crates', 'src-tauri', 'scratch', 'reports', '.fallow', '.code-review-graph', 'playwright-report', 'test-results'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

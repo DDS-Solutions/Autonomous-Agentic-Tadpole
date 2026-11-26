@@ -42,8 +42,8 @@ static PATTERNS: Lazy<(RegexSet, Vec<Regex>)> = Lazy::new(|| {
         r"(?i)authorization:\s*[^\s,]+",
         // 2. JSON keys: "apiKey": "...", "token": "...", etc.
         r#"(?i)("?(?:api_key|secret|password|token|key|credential)"?\s*[:=]\s*)(["'])(?:\\.|[^"'])*(["'])"#,
-        // 3. OpenAI
-        r"(?i)sk-[a-zA-Z0-9]{20,}",
+        // 3. OpenAI (legacy sk-... and modern sk-proj-/sk-svcacct-/sk-admin- keys)
+        r"(?i)sk-(?:proj-|svcacct-|admin-)?[a-zA-Z0-9\-_]{20,}",
         // 4. Google Gemini
         r"(?i)AIza[0-9A-Za-z-_]{30,}",
         // 5. GitHub Classic PAT
@@ -101,6 +101,8 @@ impl SecretRedactor {
     pub fn from_env() -> Self {
         let sensitive_vars = [
             "NEURAL_TOKEN",
+            "NEURAL_TOKEN_ADMIN",
+            "NEURAL_TOKEN_READONLY",
             "NEURAL_TOKEN_OLD",
             "NEURAL_TOKEN_NEW",
             "NEURAL_ENGINE_ACCESS_TOKEN",
@@ -290,6 +292,49 @@ mod tests {
         let json_output = redactor.scrub(&json_input);
         assert!(json_output.contains(r#""api_key": "[REDACTED]""#));
         assert!(!json_output.contains(&sk_token));
+    }
+
+    #[test]
+    fn test_modern_hyphenated_openai_keys_and_short_benign_tokens() {
+        let redactor = SecretRedactor::empty();
+        let proj_key = format!("{}-proj-{}", "sk", "a1B2c3D4e5F6g7H8i9J0k1L2_m3N4");
+        let svcacct_key = format!("{}-svcacct-{}", "sk", "Z9y8X7w6V5u4T3s2R1q0P9o8-N7m6");
+
+        let scrubbed_proj = redactor.scrub(&format!("provider key: {}", proj_key));
+        assert_eq!(scrubbed_proj, "provider key: [REDACTED]");
+        assert!(!scrubbed_proj.contains("proj-"));
+
+        let scrubbed_svc = redactor.scrub(&format!("svc key: {}", svcacct_key));
+        assert_eq!(scrubbed_svc, "svc key: [REDACTED]");
+
+        // Edge case: short benign tokens must not be over-redacted
+        let benign = "task id sk-123 and disk-01 completed";
+        assert_eq!(redactor.scrub(benign), benign);
+    }
+
+    #[test]
+    fn test_from_env_registers_tiered_rbac_tokens() {
+        // Verify tiered RBAC vars are registered by from_env() without leaking across tests
+        let admin_val = format!("admin-tok-{}", "0123456789abcdef0123456789");
+        let ro_val = format!("ro-tok-{}", "fedcba9876543210fedcba9876");
+        let prev_admin = std::env::var("NEURAL_TOKEN_ADMIN").ok();
+        let prev_ro = std::env::var("NEURAL_TOKEN_READONLY").ok();
+
+        std::env::set_var("NEURAL_TOKEN_ADMIN", &admin_val);
+        std::env::set_var("NEURAL_TOKEN_READONLY", &ro_val);
+        let redactor = SecretRedactor::from_env();
+
+        match prev_admin {
+            Some(v) => std::env::set_var("NEURAL_TOKEN_ADMIN", v),
+            None => std::env::remove_var("NEURAL_TOKEN_ADMIN"),
+        }
+        match prev_ro {
+            Some(v) => std::env::set_var("NEURAL_TOKEN_READONLY", v),
+            None => std::env::remove_var("NEURAL_TOKEN_READONLY"),
+        }
+
+        let scrubbed = redactor.scrub(&format!("panic dump admin={} ro={}", admin_val, ro_val));
+        assert_eq!(scrubbed, "panic dump admin=[REDACTED] ro=[REDACTED]");
     }
 }
 

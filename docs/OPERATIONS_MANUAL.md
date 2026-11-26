@@ -9,7 +9,7 @@
 > Core technical resource for the Tadpole OS Sovereign infrastructure.
 >
 > ### 🔍 Debugging & Observability
-> Traceability via `parity_guard.py`.
+> Traceability via `execution/parity_guard.py`.
 
 # Tadpole OS Operations Manual
 
@@ -52,18 +52,16 @@ The engine entry point is `server-rs/src/main.rs`.
 
 Operational phases:
 
-1. Panic hook registration.
-2. Optional `WORKSPACE_ROOT` directory switch.
-3. Tokio runtime creation.
-4. Fast-path CLI handling for `--version`, `--help`, and `--status`.
-5. Environment loading and tracing initialization.
+1. Fast-path CLI handling for `--version`, `--help`, and `--status` (before env/schema validation).
+2. Emergency panic hook registration (`sidecar_panic.log` with secret redaction).
+3. `Config::load()` (`.env` loading + `.env.schema` validation) and optional `WORKSPACE_ROOT` directory switch.
+4. Custom Tokio runtime creation (`startup::build_custom_runtime`).
+5. Tracing initialization and environment loading.
 6. `AppState` creation.
-7. Background worker startup.
-8. Actor registry startup.
-9. Orchestrator startup.
-10. Axum router binding.
-11. Boot gate notification.
-12. Graceful shutdown and registry flush.
+7. Axum router assembly and TCP listener bind (`SO_REUSEADDR`).
+8. Background workers, OTP actor supervisor/registry, and orchestrator startup.
+9. Boot gate notification.
+10. Graceful shutdown and registry flush.
 
 If startup fails before tracing is fully available, check:
 
@@ -98,18 +96,20 @@ All other operational routes are protected and require `Authorization: Bearer <t
 
 ### Token Rotation Runbook
 
-To execute zero-downtime key rotation, run the `rotate_token.py` script:
+To execute zero-downtime key rotation, run `execution/rotate_token.py`:
 
 ```bash
-python execution/rotate_token.py
+python execution/rotate_token.py              # default --grace-secs 300
+# Restart the engine, migrate clients, then finalize:
+python execution/rotate_token.py --confirm    # pass --force to revoke before grace expires
 ```
 
 This will automatically:
 1. Generate a new cryptographically secure 32-byte hexadecimal token.
-2. Add the new token to `.env` as `NEURAL_TOKEN` and `NEURAL_TOKEN_NEW`.
-3. Set the previous token as `NEURAL_TOKEN_OLD`.
-4. During this rotation grace period, the engine accepts requests with any of these three tokens (using constant-time timing-attack proof comparison).
-5. The grace period is strictly bounded by `NEURAL_TOKEN_ROTATED_AT` and `NEURAL_TOKEN_GRACE_SECS`. If either timestamp or grace seconds configuration is omitted or expired, `NEURAL_TOKEN_OLD` is rejected immediately (fail-closed).
+2. Write the new token to `.env` as `NEURAL_TOKEN` and `NEURAL_TOKEN_NEW`.
+3. Preserve the previous token as `NEURAL_TOKEN_OLD` and record `NEURAL_TOKEN_ROTATED_AT` + `NEURAL_TOKEN_GRACE_SECS`.
+4. After restarting the engine, the grace window accepts `NEURAL_TOKEN`, `NEURAL_TOKEN_NEW`, and `NEURAL_TOKEN_OLD` (using constant-time SHA-256 digest comparison).
+5. The grace period is strictly bounded by `NEURAL_TOKEN_ROTATED_AT` and `NEURAL_TOKEN_GRACE_SECS`. If either value is omitted or expired, `NEURAL_TOKEN_OLD` is rejected immediately (fail-closed). Running `--confirm` strips the rotation variables so only `NEURAL_TOKEN` remains active.
 
 ### Model Slot Routing & Local Privacy Optimizer Runbook
 
@@ -161,7 +161,7 @@ The Browser Sentinel is managed and monitored directly through the **Governance*
    - **Reset**: Purges all WebGPU buffers, cleans pipeline caches, and forces re-initialization of the model runtime without reloading the browser tab.
 
 4. **Deterministic Pre-Flight DLP Shield**:
-   - Runs automatically on every command in `command_processor.ts` and on every DOM scrape.
+   - Runs automatically on every command in `src/logic/command_processor.ts` (dispatching through `src/logic/commands/`) and on every DOM scrape.
    - All known API keys (`sk-proj-...`, `sk-ant-...`, `AIzaSy...`, `ghp_...`, Bearer tokens, private keys) are scrubbed to `[REDACTED_*]` before local reasoning or network transmission.
 
 ## Agent And Swarm Management
@@ -180,21 +180,21 @@ Supported operations include:
 - pause agents
 - resume agents
 - sync missions
-- read/write/delete agent memories when `vector-memory` is enabled
+- read/write/delete agent memories (LanceDB when `vector-memory` is enabled, or SQLite `fallback_memories` by default)
 
 Agent data is loaded from SQLite during `AppState::new` and persisted on graceful shutdown through batched writes.
 
 ### GDPR Cascading Deletion
 
-When an agent is removed via `DELETE /v1/agents/:id`, the engine executes an atomic database transaction (`delete_agent_cascade`) to perform cascading cleanup of all dependent records, preventing residual PII.
-*   **Cascade Target Tables**:
-    *   `agents`: Removes the core agent identity and configuration.
-    *   `agent_quotas`: Revokes systemic CPU, memory, and token budgets.
-    *   `sync_manifests`: Clears filesystem sync states and cached files.
-    *   `fallback_memories`: Clears non-vector memory storage.
-    *   `agent_hires`: Cancels/removes sub-agent communication contracts.
-    *   `audit_trail`: Anonymizes/purges audit history logs associated with the agent.
-*   **Durable State Persistence**: The registry state is saved to the SQLite database instantly on deletion to ensure consistency.
+When an agent is removed via `DELETE /v1/agents/{id}`, the engine executes an atomic `BEGIN IMMEDIATE` transaction (`delete_agent_cascade` in `server-rs/src/agent/persistence.rs`) that enforces financial and forensic invariants before cleaning up dependent records:
+*   **Ledger Counterparty Guard**: If the agent appears in `a2a_ledger` (`debit_agent_id` or `credit_agent_id`), deletion is rejected with `409 Conflict` to preserve financial counterparty history (suspend the agent instead).
+*   **Forensic & Oversight Preservation**:
+    *   `audit_trail`: **Preserved intact** — it is an append-only cryptographic Merkle chain (`prev_hash -> current_hash`), so historical entries are never deleted.
+    *   `oversight_log`: Preserves oversight evidence while detaching its optional mission FK (`SET mission_id = NULL`).
+*   **Cascade Target Tables (Deleted Child-First)**:
+    *   Mission artifacts & logs: `mission_logs`, `swarm_context`, `agent_directives`, `peer_reviews`, `mission_nodes`, `mission_quotas`, `file_revisions`, and `mission_history`.
+    *   Agent state & contracts: `agent_economics_meta`, `agent_quotas`, `sync_manifest`, `fallback_memories`, `agent_hires`, `skill_subscriptions`, `agent_tasks`, and finally `agents`.
+*   **Runtime Cleanup**: After the SQLite transaction commits, any active runner handle is aborted and the agent + mission contexts are evicted from the in-memory registry.
 
 ## Oversight And Governance
 
@@ -246,7 +246,7 @@ Provider keys are read from `.env` and supported by `.env.example`.
 ### Token & Context Optimization Engines (`GTK-01`)
 
 The engine integrates two high-performance token optimization modules to accelerate monologue turns and prevent context window overflows:
-1. **Model-Aware `TokenizerService`** (`server-rs/src/agent/tokenizer.rs`): Sub-microsecond (`< 1.0 µs`) BPE token counter powered by `tiktoken-rs` and a bounded 4,096-entry `DashMap` LRU cache. Adjusts counts using model-aware multipliers (`Qwen`: 1.05x, `Llama 3`/`DeepSeek`: 1.02x, `Gemma`: 0.95x, `OpenAI`: 1.0x).
+1. **Model-Aware `TokenizerService`** (`server-rs/src/agent/tokenizer.rs`): Sub-microsecond (`< 1.0 µs`) BPE token counter powered by `tiktoken-rs` and a bounded 4,096-entry `moka::sync::Cache` (lock-free LRU/TinyLFU). Adjusts counts using model-aware multipliers (`Qwen`: 1.05x, `Llama 3`/`DeepSeek`: 1.02x, `Gemma`: 0.95x, `OpenAI`: 1.0x).
 2. **2-Tier `ContextManager`** (`server-rs/src/agent/context_manager.rs`):
    - **Tier 1 (Zero-Cost Heuristic Compaction)**: Automatically collapses redundant CLI output and consecutive success logs (`tool_result: Success`) at **$0 cost and 0ms latency** with fact-preservation guards.
    - **Tier 2 (Semantic LLM Summarization)**: Automatically synthesizes a dense "Condensed State" when history reaches 80% context window saturation.
@@ -294,11 +294,11 @@ MCP bridge endpoints:
 
 ### MCP Subprocess Security Hardening
 
-The MCP server (`tadpole_mcp_server.py`) enforces strict sandboxing limits on legacy execution tools:
+The MCP server (`execution/tadpole_mcp_server.py`) enforces strict sandboxing limits on legacy execution tools:
 1. **Shell-Free Execution**: Subprocesses are spawned without intermediate shells using argument-splitting (`asyncio.create_subprocess_exec`) to prevent Command Injection.
 2. **Command Compliance**: Command patterns undergo Shell Scanner filtering, rejecting forbidden operators (`|`, `&`, `;`, `>` etc).
 3. **Type-Safe Validation**: Parameter schemas are validated at the host boundary (zero-dependency custom validation).
-4. **Limits & Timeouts**: Subprocesses are constrained by a hard 30s timeout and set resource limits (`setrlimit` on CPU time and virtual memory address space where supported) to mitigate Denials of Service.
+4. **Limits & Timeouts**: Subprocesses are constrained by a hard 30s timeout and set resource limits (`RLIMIT_CPU=30s`, `RLIMIT_AS=256 MiB` where supported) to mitigate Denials of Service.
 
 ## Continuity Jobs
 
@@ -327,21 +327,22 @@ Signals and diagnostics:
 
 ### Health & Observability Metrics
 
-The endpoint `GET /v1/engine/health` returns detailed JSON telemetry for monitoring:
-*   `status`: Global health indicator (`healthy` | `failed`).
-*   `database`: Connection pool size, idle count, WAL file size, and busy timeout config.
-*   `budget`: Total daily USD spent by agents, limits, and percentage used.
-*   `swarm`: Total active agents, connected bunkers, and max depth bounds.
+The endpoint `GET /v1/engine/health` returns detailed JSON telemetry for loopback monitoring (`server-rs/src/routes/health.rs`):
+*   `status`: Global liveness indicator (`"tadpole_online_rust"` on loopback; `"ok"` on non-loopback `MinimalHealthResponse`).
+*   `database`: `status` (`"healthy"` | `"failed"`), `pool_size`, `pool_idle`, `wal_size_mb`, and `busy_timeout_ms`.
+*   `budget`: `total_spent_usd`, `daily_limit_usd`, `percent_used`, and `status` (`"ok"` | `"warning"` | `"critical"` | `"unmetered"`).
+*   `swarm`: `connected_bunkers`, `total_agents`, `max_swarm_depth`, and `status` (`"healthy"` | `"empty"`).
 *   `uptime_seconds`: Engine server runtime duration.
 *   `GET /metrics`: Standard Prometheus metrics export (secured via `Authorization: Bearer <NEURAL_TOKEN>`).
 
 ### Alerting & Monitoring Configuration
 
 *   **Prometheus Rules**: Configured in `monitoring/alerts.yml`. Triggers alerts on:
-    *   `EngineDown`: Heartbeat endpoint fails for >30s.
-    *   `HighLatency`: Endpoint response latency (p99) exceeds 500ms.
-    *   `BudgetExhausted`: Swarm budget usage exceeds 80%.
-    *   `SQLiteLocked`: Database busy/lock wait time exceeds 10s.
+    *   `EngineDown` (critical): Scrape target offline for `>30s`.
+    *   `EngineDegraded` (critical): `tadpole_health_state == 0` for `>1m`.
+    *   `HighLatency` (warning): API or tool execution latency (p99) exceeds `500ms` for `>2m`.
+    *   `BudgetExhausted` (critical): Swarm budget usage exceeds `80%` (or `oversight_cost_usd > 100`) for `>1m`.
+    *   `SQLiteLocked` (warning): Database busy/lock wait time exceeds `10s` for `>30s`.
 *   **Grafana Dashboard**: Configured in `monitoring/grafana/dashboards/tadpole_dashboard.json` for live status visualization.
 
 ### Telemetry Watchdog & Execution Resilience
@@ -434,13 +435,13 @@ python execution/snapshot_state.py --restore <snapshot_name>
 
 ## Feature-Gated Operations
 
-Memory search and agent memory routes depend on:
+LanceDB semantic vector search and vector-backed agent memories depend on:
 
 ```bash
 cargo run --manifest-path server-rs/Cargo.toml --features vector-memory
 ```
 
-Without `vector-memory`, memory routes return `501 Not Implemented`.
+Without `vector-memory`, `/v1/agents/{id}/memories` (`GET`/`POST`/`DELETE`) and `GET /v1/search/memory` fall back transparently to SQLite `fallback_memories` (`200 OK`), while `/v1/memory/search/bm25` and `/v1/memory/search/hybrid` remain active via BM25 + TrustGraph + SQLite fallback. Semantic knowledge vector search (`GET /v1/knowledge/search`) is omitted at compile time (`404 Not Found`) unless compiled with `--features vector-memory`.
 
 Optional audio/native dependencies are enabled with:
 
@@ -482,10 +483,10 @@ npm run version:sync
 
 The engine uses configurable Tokio runtime thread and stack parameters. See [CAPACITY_PLANNING.md](./CAPACITY_PLANNING.md) for full capacity limits.
 
-These parameters can be overridden via environment variables at startup:
-*   `TOKIO_WORKER_THREADS`: Number of OS threads spawned for the multi-threaded event loop.
-*   `TOKIO_MAX_BLOCKING_THREADS`: Max threads allowed for blocking I/O tasks.
-*   `TOKIO_THREAD_STACK_SIZE`: Stack size (in bytes) allocated for each worker thread.
+These parameters can be overridden via environment variables at startup (`server-rs/src/config.rs`):
+*   `TOKIO_WORKER_THREADS`: Number of OS threads spawned for the multi-threaded event loop (default: available CPUs, min `4`).
+*   `TOKIO_MAX_BLOCKING_THREADS`: Max threads allowed for blocking I/O tasks (default: `32`).
+*   `TOKIO_THREAD_STACK_SIZE_MB`: Stack size (in megabytes, default: `4`) allocated for each worker thread.
 
 ## Rollback & Recovery Automation
 
@@ -496,14 +497,14 @@ Automated scripts for Windows/PowerShell recovery and deployment are located in 
 
 ## Local Debug Endpoints
 
-The engine provides local diagnostic endpoints under `/v1/system/debug` for analyzing execution state (exposed only when running in development/local mode):
-*   `GET /v1/system/debug/services`: Returns a list of active system services, their runtime status, and loop telemetry.
-*   `GET /v1/system/debug/queues`: Returns oversight queues, sequence IDs, and active channel capacities to locate bottlenecks.
+The engine provides authenticated diagnostic endpoints under `/v1/system/debug` (`server-rs/src/routes/system.rs`, protected by `NEURAL_TOKEN` middleware):
+*   `GET /v1/system/debug/services`: Returns subsystem initialization phases (`phases`) and `uptime_seconds`.
+*   `GET /v1/system/debug/queues`: Returns `active_runners_count`, `ingestion_queue_depth`, `continuity_jobs_pending`, and `mcp_message_queue` to locate bottlenecks.
 
 ## Sovereign Engine Hardening
 
 - **Self-Annealing Intelligence & Open-Model Recovery**: The `PolyglotParser` incorporates balanced-brace function call extraction for open models (`<function=...>`, hallucinated brackets/parentheses) and appends `[STRUCTURED_ERROR_FEEDBACK]` (`retryable`, `suggested_action`) on tool failures to guide single-turn refinement.
-- **Pinned-Tail Compaction & Disk Spill**: `TurnCompactor` permanently pins the system prompt and the last 3 conversational turns uncompressed. Tool observations exceeding 2,000 characters are offloaded to `.tmp/tool_overflow/<call_id>.txt` with a disk pointer URI, while tool failure observations and warnings are preserved verbatim.
+- **Pinned-Tail Compaction & Disk Spill**: `TurnCompactor` (`server-rs/src/agent/runner/turn_compactor.rs`) permanently pins the system prompt and the last 3 conversational turns uncompressed. Tool observations exceeding `24,000` characters (`DEFAULT_OVERFLOW_THRESHOLD_CHARS`, configurable via `TOOL_OBSERVATION_THRESHOLD_CHARS`) are offloaded to `.tmp/tool_overflow/tool_output_<timestamp>_<id>.txt` with a disk pointer URI and 300-character preview, while tool failure observations and warnings are preserved verbatim.
 - **Lock-Free Atomic Execution Telemetry**: `ExecutionMetricsRollup` maintains mission turn counts, token throughput, USD cost, and tool success/failure tallies using lock-free `AtomicU64` primitives, warning operators if summarizations loop ($\ge 3$).
 - **Concurrent Workspace Edit Leases**: `ConflictManager` issues 30-second TTL leases on workspace file paths to prevent multi-agent race conditions during parallel modifications.
 - **Panic Remediation**: Critical paths in the bridge, parser, and security modules use safe error propagation (via `Result` and `AppError`) rather than non-recoverable panics.
@@ -596,9 +597,12 @@ When an agent repeats identical tool calls:
 
 ### Tiered Operator Authentication (`OperatorScope`)
 The engine enforces server-authoritative token scopes in `server-rs/src/middleware/auth.rs`:
-- **`NEURAL_TOKEN_ADMIN` (`Admin`)**: Required for destructive host/deploy/script mutation routes (`/v1/engine/deploy`, `/v1/engine/pre-pr`, `/v1/engine/kill`, `/v1/engine/shutdown`, `PUT`/`DELETE` `/v1/skills/{scripts,workflows,hooks}/*`, `POST /v1/skills/register`) when configured.
-- **`NEURAL_TOKEN` (`Operator`, or `Admin` when `NEURAL_TOKEN_ADMIN` is unset)**: Standard swarm, agent, mission, and oversight operations; preserves zero-breaking local development when only `NEURAL_TOKEN` is set.
-- **`NEURAL_TOKEN_READONLY` (`ReadOnly`)**: Restricted to safe `GET`/`HEAD`/`OPTIONS` observability endpoints; mutating requests and WebSocket upgrades return HTTP 403 (`Insufficient Scope`).
+- **`NEURAL_TOKEN_ADMIN` (`Admin`)**: Required when configured for:
+  - Host & template control: `/v1/engine/{deploy,pre-pr,kill,shutdown}`, `/v1/engine/templates/install`, and mutating `/v1/engine/templates/*`.
+  - Skill/script mutations & execution: mutating `/v1/skills/{scripts,workflows,hooks}/*`, `POST /v1/skills/{register,promote}`, `POST /v1/skills/proposals/{id}/resolve`, and `POST /v1/skills/mcp-tools/{name}/execute`.
+  - Governance, provider, continuity & MCP mutations: mutating `/v1/oversight/settings`, `/v1/oversight/security/*`, `/v1/model-manager/*`, `/v1/api/pull`, `/v1/governance/blueprints*`, `/v1/continuity/*`, `/v1/mcp/message`, and `POST /v1/agents/{id}/skills/{skill_id}/approve`.
+- **`NEURAL_TOKEN` (`Operator`, or `Admin` when `NEURAL_TOKEN_ADMIN` is unset)**: Standard swarm, agent, mission, oversight decisions, and WebSocket/SSE stream operations; preserves zero-breaking local development when only `NEURAL_TOKEN` is set.
+- **`NEURAL_TOKEN_READONLY` (`ReadOnly`)**: Restricted to safe `GET`/`HEAD`/`OPTIONS` observability endpoints; mutating requests, WebSocket upgrades, and `GET /v1/mcp/sse` return HTTP 403 (`Insufficient Scope`).
 
 ### Day-1 Bootstrap & Progressive Cockpit Operations
 - **Automated Bootstrap (`npm run init`)**: Runs `execution/tadpole_init.py` to generate a 64-hex `NEURAL_TOKEN` (plus optional Admin/ReadOnly tokens), detect Ollama/Docker availability, and write a hardened `.env` without echoing raw credentials. `start_AA_tadpole.bat` invokes it automatically when `.env` is missing.

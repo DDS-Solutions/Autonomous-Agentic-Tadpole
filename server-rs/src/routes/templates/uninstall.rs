@@ -119,6 +119,7 @@ pub async fn uninstall_template(
     let safe_id = crate::utils::security::sanitize_id(&id.replace('/', "_"));
     let target_folder = resolve_installed_template_folder(&installed_dir, &id, &safe_id).await?;
 
+    let mut retained_agents: Vec<String> = Vec::new();
     let receipt_path = target_folder.join("install_receipt.json");
     if receipt_path.exists() {
         if let Ok(c) = tokio::fs::read_to_string(&receipt_path).await {
@@ -129,12 +130,29 @@ pub async fn uninstall_template(
                     if let Some((_, runner)) = state.comms.active_runners.remove(agent_id) {
                         runner.abort();
                     }
-                    let _ = crate::agent::persistence::delete_agent_cascade(
+                    match crate::agent::persistence::delete_agent_cascade(
                         &state.resources.pool,
                         agent_id,
                     )
-                    .await;
-                    state.registry.agents.remove(agent_id);
+                    .await
+                    {
+                        Ok(()) => {
+                            state.registry.agents.remove(agent_id);
+                            state
+                                .comms
+                                .mission_contexts
+                                .retain(|_, ctx| ctx.agent_id != *agent_id);
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                "⚠️ [templates_uninstall] Retaining agent '{}' during uninstall of '{}': {}",
+                                agent_id,
+                                id,
+                                err
+                            );
+                            retained_agents.push(agent_id.clone());
+                        }
+                    }
                 }
 
                 // Delete file assets safely using digests
@@ -218,12 +236,22 @@ pub async fn uninstall_template(
         )
         .await;
 
+    let message = if retained_agents.is_empty() {
+        format!("Successfully uninstalled template '{id}'")
+    } else {
+        format!(
+            "Uninstalled template '{id}'; retained {} ledger-linked or protected agent(s)",
+            retained_agents.len()
+        )
+    };
+
     Ok((
         StatusCode::OK,
         Json(UninstallTemplateResponse {
             status: "success".to_string(),
-            message: format!("Successfully uninstalled template '{id}'"),
+            message,
             uninstalled_id: id,
+            retained_agents,
         }),
     ))
 }

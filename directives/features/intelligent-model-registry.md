@@ -391,8 +391,7 @@ When a user selects a model for an agent:
 - [ ] Add `tokio::time::timeout` to all provider pings (10s max)
 
 ### Sprint 3: Frontend Types & UI
-- [ ] Update `ModelEntry` and `ModelCapabilities` types in `src/types/index.ts`
-- [ ] Update TS frontend type (`src/types/tadpoleos.ts` if separate)
+- [ ] Update `ModelEntry` and `ModelCapabilities` types in `src/types/index.ts` and `src/contracts/agent/`
 - [ ] Add capability badges to Model Manager model cards
 - [ ] Add "Sync" button to provider entries in Model Manager
 - [ ] Implement `POST /api/providers/:id/sync` call in `model_store.ts`

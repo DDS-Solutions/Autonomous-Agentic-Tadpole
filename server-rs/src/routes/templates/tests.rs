@@ -166,6 +166,116 @@ mod suite {
         assert_eq!(parsed.agent_ids.len(), 1);
         assert_eq!(parsed.file_digests.get("skill.py").unwrap(), "abc123hash");
     }
+
+    #[tokio::test]
+    async fn test_uninstall_retains_ledger_linked_agent_in_registry_and_db() {
+        use super::super::models::UninstallTemplateResponse;
+        use super::super::principal::TemplatePrincipal;
+        use super::super::uninstall::uninstall_template;
+        use crate::agent::persistence::create_agent_db;
+        use crate::agent::types::EngineAgent;
+        use crate::state::AppState;
+        use axum::{
+            extract::{Path, State},
+            response::IntoResponse,
+        };
+        use std::sync::Arc;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = AppState::new_minimal_mock().await;
+        state.base_dir = tmp.path().to_path_buf();
+        let state = Arc::new(state);
+
+        // Create two agents: one unencumbered, one linked to an a2a_ledger entry
+        let mut free_agent = EngineAgent::default();
+        free_agent.identity.id = "tmpl-free-agent".to_string();
+        free_agent.version = create_agent_db(&state.resources.pool, &free_agent)
+            .await
+            .unwrap();
+        state
+            .registry
+            .agents
+            .insert(free_agent.identity.id.clone(), free_agent.clone());
+
+        let mut ledger_agent = EngineAgent::default();
+        ledger_agent.identity.id = "tmpl-ledger-agent".to_string();
+        ledger_agent.version = create_agent_db(&state.resources.pool, &ledger_agent)
+            .await
+            .unwrap();
+        state
+            .registry
+            .agents
+            .insert(ledger_agent.identity.id.clone(), ledger_agent.clone());
+
+        sqlx::query(
+            "INSERT INTO a2a_ledger (tx_id, debit_agent_id, credit_agent_id, amount_micros, status, lock_id) \
+             VALUES ('tx-tmpl-1', 'tmpl-ledger-agent', 'tmpl-ledger-agent', 500, 'COMMITTED', 'lock-tmpl-1')",
+        )
+        .execute(&state.resources.pool)
+        .await
+        .unwrap();
+
+        // Write an installed template directory + receipt referencing both agents
+        let tmpl_dir = tmp
+            .path()
+            .join("data/swarm_config/installed/demo-template");
+        tokio::fs::create_dir_all(&tmpl_dir).await.unwrap();
+        let receipt = InstallReceipt {
+            template_id: "demo-template".to_string(),
+            template_path: "demo".to_string(),
+            installed_at: "2026-11-26T00:00:00Z".to_string(),
+            agents: vec![],
+            agent_ids: vec![
+                "tmpl-free-agent".to_string(),
+                "tmpl-ledger-agent".to_string(),
+            ],
+            workflows: vec![],
+            skills: vec![],
+            knowledge: vec![],
+            mcp_servers: vec![],
+            file_digests: HashMap::new(),
+        };
+        tokio::fs::write(
+            tmpl_dir.join("install_receipt.json"),
+            serde_json::to_string_pretty(&receipt).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let resp = uninstall_template(
+            TemplatePrincipal::new("admin-test"),
+            State(state.clone()),
+            Path("demo-template".to_string()),
+        )
+        .await
+        .unwrap()
+        .into_response();
+
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: UninstallTemplateResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed.retained_agents, vec!["tmpl-ledger-agent".to_string()]);
+
+        // Unencumbered agent deleted from BOTH SQLite and RAM
+        assert!(!state.registry.agents.contains_key("tmpl-free-agent"));
+        let free_db_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = 'tmpl-free-agent'")
+                .fetch_one(&state.resources.pool)
+                .await
+                .unwrap();
+        assert_eq!(free_db_count, 0);
+
+        // Ledger-linked agent retained in BOTH SQLite and RAM (no split-brain)
+        assert!(state.registry.agents.contains_key("tmpl-ledger-agent"));
+        let ledger_db_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM agents WHERE id = 'tmpl-ledger-agent'")
+                .fetch_one(&state.resources.pool)
+                .await
+                .unwrap();
+        assert_eq!(ledger_db_count, 1);
+    }
 }
 
 // Metadata: [templates_tests]

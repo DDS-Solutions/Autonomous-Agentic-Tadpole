@@ -2,7 +2,7 @@
  * @docs ARCHITECTURE:TestSuites
  *
  * ### AI Assist Note
- * **Layout Chrome & System Log Tests**: Verifies `Tab_Bar`, `Tab_Item`, `Page_Header`,
+ * **Layout Chrome & System Log Tests**: Verifies `Tab_Bar`, `Tab_Item`,
  * `Observability_Sidebar` detachment hiding, and `System_Log` severity rendering.
  *
  * ### 🔍 Debugging & Observability
@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Tab_Bar } from './Tab_Bar';
-import { Page_Header } from './Page_Header';
 import { Observability_Sidebar } from './Observability_Sidebar';
 import { System_Log } from '../dashboard/System_Log';
 import { use_tab_store } from '../../stores/tab_store';
@@ -44,19 +43,6 @@ describe('Layout Chrome & System_Log Components', () => {
             is_trace_stream_detached: false,
             is_lineage_stream_detached: false,
         });
-    });
-
-    it('renders Page_Header with title, subtitle, and actions', () => {
-        render(
-            <Page_Header
-                title="Overlord Ops"
-                subtitle="Sovereign Control"
-                actions={<button type="button">Deploy</button>}
-            />
-        );
-        expect(screen.getByText('Overlord Ops')).toBeInTheDocument();
-        expect(screen.getByText('Sovereign Control')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Deploy' })).toBeInTheDocument();
     });
 
     it('switches, activates via keyboard, detaches, and closes tabs in Tab_Bar', () => {

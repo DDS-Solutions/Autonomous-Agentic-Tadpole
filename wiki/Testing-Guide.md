@@ -55,6 +55,8 @@ cargo test --manifest-path server-rs/Cargo.toml -- --nocapture
 |----------------|-------|
 | `crates/tadpole-types` (`cargo test -p tadpole-types`) | Core enums, model capabilities, mission DTOs, MFS RAG scoring |
 | `crates/tadpole-intelligence` (`cargo test -p tadpole-intelligence`) | Tree-sitter Rust/TS parser, `CodeSymbolGraph`, blast-radius & incremental caching |
+| `crates/tadpole-guard` (`cargo test -p tadpole-guard`) | `syn`-based Rust router AST extraction & scheduler invariant checks |
+| `crates/tadpole-sec` (`cargo test -p tadpole-sec`) | `.gitleaks.toml` single-source-of-truth `RegexSet` secret scanner |
 | `server-rs` (`cargo test -p server-rs --lib`) | Routes (`agent`, `auth`, `benchmarks` readiness probe, `intelligence`, `deploy`, `skills`, `shutdown`, `token_rotation`), middleware (`auth` tiered scopes, rate limit, CORS), security (Merkle audit, budget metering, shell scanner, `validate_tokenized_command`), swarm decomposition |
 | `crates/wasm-codec` (`npm run test:wasm`) | Binary MessagePack / WASM telemetry framing |
 

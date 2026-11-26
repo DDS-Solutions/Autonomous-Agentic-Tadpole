@@ -130,7 +130,49 @@ def check_env_vars(root):
         else:
             print_result("ENV-VAR", False, f"std::env::var(\"{var}\") used in code but missing from .env.example")
             errors += 1
-            
+
+    # Also enforce .env.schema <-> .env.example key parity (excluding OS host vars)
+    env_schema_path = root / ".env.schema"
+    if env_schema_path.exists():
+        schema_vars = set(
+            re.findall(r'^([A-Z][A-Z0-9_]+)=', env_schema_path.read_text(encoding='utf-8'), re.M)
+        )
+        missing_in_schema = sorted((env_example_vars - SYSTEM_HOST_VARS) - schema_vars)
+        missing_in_example = sorted((schema_vars - SYSTEM_HOST_VARS) - env_example_vars)
+        if not missing_in_schema and not missing_in_example:
+            print_result("ENV-SCHEMA", True, f".env.schema and .env.example are synchronized ({len(schema_vars)} vars)")
+        else:
+            for var in missing_in_schema:
+                print_result("ENV-SCHEMA", False, f"{var} present in .env.example but missing from .env.schema")
+                errors += 1
+            for var in missing_in_example:
+                print_result("ENV-SCHEMA", False, f"{var} present in .env.schema but missing from .env.example")
+                errors += 1
+
+    return errors
+
+def check_readme_scripts(root):
+    print(f"\nChecking README Scripts Parity...")
+    pkg_path = root / "package.json"
+    readme_path = root / "README.md"
+    if not pkg_path.exists() or not readme_path.exists():
+        return 0
+    pkg_scripts = set(json.loads(pkg_path.read_text(encoding='utf-8')).get("scripts", {}).keys())
+    readme_text = readme_path.read_text(encoding='utf-8')
+    scripts_sec = re.search(r"## Scripts\s*\n(.*?)\n## ", readme_text, re.S)
+    if not scripts_sec:
+        print_result("README-SCRIPTS", False, "README.md missing '## Scripts' section")
+        return 1
+    table_scripts = set(re.findall(r"`npm run ([a-zA-Z0-9:_-]+)`", scripts_sec.group(1)))
+    errors = 0
+    for s in sorted(pkg_scripts - table_scripts):
+        print_result("README-SCRIPTS", False, f"package.json script 'npm run {s}' missing from README.md Scripts table")
+        errors += 1
+    for s in sorted(table_scripts - pkg_scripts):
+        print_result("README-SCRIPTS", False, f"README.md documents nonexistent script 'npm run {s}'")
+        errors += 1
+    if errors == 0:
+        print_result("README-SCRIPTS", True, f"All {len(pkg_scripts)} package.json scripts synchronized in README.md")
     return errors
 
 def check_version_sync(root):
@@ -546,6 +588,7 @@ def check_parity(root_dir=None, fix=False):
             print_result("ADG-TAG", True, f"{tag} synchronized")
 
     errors += check_readme_routes(root, code_routes)
+    errors += check_readme_scripts(root)
     errors += check_env_vars(root)
     errors += check_version_sync(root)
     errors += check_doc_file_refs(root)
